@@ -1,0 +1,111 @@
+<Window
+    x:Class="Deskdrop.WinUI.QuickAccessWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Dashboard">
+
+    <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Custom TitleBar -->
+        <Border x:Name="AppTitleBar" Height="32" Grid.Row="0" Background="Transparent" />
+
+        <!-- Main Content -->
+        <ScrollViewer Grid.Row="1" Padding="16" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="16">
+                
+                <!-- Header Card -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <Border Grid.Column="0" CornerRadius="20" Background="#34C759" Width="40" Height="40" Margin="0,0,12,0">
+                            <FontIcon Glyph="&#xE896;" Foreground="White" />
+                        </Border>
+                        
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Deskdrop Active" FontSize="15" FontWeight="Bold"/>
+                            <TextBlock Text="Mesh Active" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                        
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                            <Button Style="{ThemeResource TransparentButtonStyle}" Click="BtnHeaderDiagnostics_Click" ToolTipService.ToolTip="Diagnostics">
+                                <FontIcon Glyph="&#xE9D9;" />
+                            </Button>
+                            <Button Style="{ThemeResource TransparentButtonStyle}" Click="BtnHeaderQuit_Click" ToolTipService.ToolTip="Quit">
+                                <FontIcon Glyph="&#xE711;" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                
+                <!-- Search Box -->
+                <AutoSuggestBox x:Name="TxtSearch" PlaceholderText="Search clipboard..." TextChanged="TxtSearch_TextChanged" />
+
+                <!-- Devices List -->
+                <TextBlock Text="DEVICES" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" CharacterSpacing="50" Margin="0,8,0,0"/>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="DeviceTargetsList">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="8"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="0" CornerRadius="8" Padding="12,8">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE896;" Foreground="#0A84FF" />
+                                        <TextBlock Text="{Binding friendly_name}" FontSize="13" FontWeight="Medium"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Timeline / Clipboard History -->
+                <TextBlock Text="TIMELINE" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" CharacterSpacing="50" Margin="0,8,0,0"/>
+                <ItemsControl x:Name="TimelineList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="12" Margin="0,0,0,8" Padding="12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding Summary}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Source}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12"/>
+                                    </StackPanel>
+                                    
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding RelativeTime}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11"/>
+                                        <Button Style="{ThemeResource TransparentButtonStyle}" Click="BtnPinItem_Click" Padding="4">
+                                            <FontIcon Glyph="&#xE718;" FontSize="14"/>
+                                        </Button>
+                                        <Button Style="{ThemeResource TransparentButtonStyle}" Click="BtnDeleteItem_Click" Padding="4" Foreground="#FF3B30">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>
