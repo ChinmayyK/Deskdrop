@@ -5,9 +5,9 @@ using Microsoft.UI.Composition.SystemBackdrops;
 
 namespace Deskdrop.WinUI
 {
-    public sealed partial class IncomingCallBannerWindow : Window
+    public sealed partial class IncomingFileBannerWindow : Window
     {
-        public IncomingCallBannerWindow()
+        public IncomingFileBannerWindow()
         {
             this.InitializeComponent();
 
@@ -29,11 +29,6 @@ namespace Deskdrop.WinUI
                 presenter.SetBorderAndTitleBar(false, false);
             }
             appWindow.Resize(new Windows.Graphics.SizeInt32(360, 100));
-        }
-
-        private void BtnDecline_Click(object sender, RoutedEventArgs e)
-        {
-            this.Close();
         }
 
         private void BtnAccept_Click(object sender, RoutedEventArgs e)
