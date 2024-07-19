@@ -1,0 +1,39 @@
+<Window
+    x:Class="Deskdrop.WinUI.QRPairingWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Pair Device">
+
+    <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Custom TitleBar -->
+        <Border x:Name="AppTitleBar" Height="32" Grid.Row="0" Background="Transparent" />
+
+        <!-- Main Content -->
+        <StackPanel Grid.Row="1" Padding="20" Spacing="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+            
+            <TextBlock Text="Pair Device" 
+                       HorizontalAlignment="Center" 
+                       FontWeight="SemiBold" 
+                       FontSize="18"/>
+
+            <Border Background="White" CornerRadius="16" Padding="12" HorizontalAlignment="Center">
+                <Image x:Name="QrCodeImage" Width="180" Height="180" Stretch="Uniform" />
+            </Border>
+            
+            <TextBlock Text="Scan with Deskdrop on your other device to connect." 
+                       TextWrapping="WrapWholeWords" 
+                       TextAlignment="Center" 
+                       FontSize="13" 
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                       Width="200"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,40 +1,49 @@
-﻿using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using System.Collections.ObjectModel;
+using WinRT.Interop;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Composition.SystemBackdrops;
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
-
-namespace Deskdrop.WinUI;
-
-/// <summary>
-/// The application window. This hosts a Frame that displays pages. Add your
-/// UI and logic to MainPage.xaml / MainPage.xaml.cs instead of here so you
-/// can use Page features such as navigation events and the Loaded lifecycle.
-/// </summary>
-public sealed partial class MainWindow : Window
+namespace Deskdrop.WinUI
 {
-    public MainWindow()
+    public sealed partial class MainWindow : Window
     {
-        InitializeComponent();
+        public ObservableCollection<string> RecentTransfers { get; set; } = new();
 
-        ExtendsContentIntoTitleBar = true;
-        // SetTitleBar(AppTitleBar);
+        public MainWindow()
+        {
+            this.InitializeComponent();
 
-        AppWindow.SetIcon("Assets/AppIcon.ico");
+            // Set Premium Desktop Acrylic Backdrop to match macOS deep blur
+            this.SystemBackdrop = new DesktopAcrylicBackdrop();
 
-        // Navigate the root frame to the main page on startup.
-        // RootFrame.Navigate(typeof(MainPage));
+            // Optional: Hide default title bar to mimic macOS frameless look
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
+
+            // Resize the window
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+            appWindow.Resize(new Windows.Graphics.SizeInt32(380, 480));
+
+            // Populate some dummy data for now
+            RecentTransfers.Add("screenshot.png - Sent to iPhone");
+            RecentTransfers.Add("document.pdf - Received from Mac");
+        }
+
+        private void PairDevice_Click(object sender, RoutedEventArgs e)
+        {
+            var qrWindow = new QRPairingWindow();
+            qrWindow.Activate();
+        }
+
+        private void BtnOpenDashboard_Click(object sender, RoutedEventArgs e)
+        {
+            var dashboard = new QuickAccessWindow();
+            dashboard.Activate();
+        }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
