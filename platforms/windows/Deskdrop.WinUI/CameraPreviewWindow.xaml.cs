@@ -1,15 +1,31 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Xaml.Media;
 
 namespace Deskdrop.WinUI
 {
-    public partial class CameraPreviewWindow : Window
+    public sealed partial class CameraPreviewWindow : Window
     {
-        public CameraPreviewWindow(string peerId)
+        public CameraPreviewWindow()
         {
-            // InitializeComponent();
+            this.InitializeComponent();
+
+            this.SystemBackdrop = new DesktopAcrylicBackdrop();
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+            
+            // Set window size
+            appWindow.Resize(new Windows.Graphics.SizeInt32(640, 480));
+        }
+
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
         }
     }
 }
-
-
-

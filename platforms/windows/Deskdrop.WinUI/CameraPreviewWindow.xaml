@@ -1,0 +1,33 @@
+<Window
+    x:Class="Deskdrop.WinUI.CameraPreviewWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Camera Preview">
+
+    <Grid Background="Transparent">
+        <Border x:Name="AppTitleBar" Height="1" VerticalAlignment="Top" Background="Transparent" />
+        
+        <Border CornerRadius="12" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Margin="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <Grid>
+                <!-- Title Bar for Dragging / Actions -->
+                <Grid VerticalAlignment="Top" Padding="12">
+                    <Button Width="28" Height="28" CornerRadius="14" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Background="Transparent" BorderThickness="0" Click="BtnClose_Click" Padding="0">
+                        <FontIcon Glyph="&#xE711;" FontSize="12" />
+                    </Button>
+                </Grid>
+
+                <Grid Margin="16,48,16,16">
+                    <Border CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="Black">
+                        <Grid>
+                            <Image x:Name="CameraImage" Stretch="Uniform" />
+                            <TextBlock x:Name="StatusText" Text="Waiting for stream..." Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="16" FontWeight="Medium" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
