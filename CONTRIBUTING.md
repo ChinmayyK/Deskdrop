@@ -162,3 +162,4 @@ cargo cyclonedx --format json
 ## Code of Conduct
 
 Be excellent to each other. We follow the [Contributor Covenant](https://www.contributor-covenant.org/) v2.1.
+
