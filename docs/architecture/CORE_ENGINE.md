@@ -58,3 +58,4 @@ The background daemon exposes a local UNIX Domain Socket (macOS/Linux) or Named 
 - `ForgetDevice { device_id }`
 - `SetAutoConnect { device_id, enabled }`
 - `GetMetrics` and `GetHistory`
+
