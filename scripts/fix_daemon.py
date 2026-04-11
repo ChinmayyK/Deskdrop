@@ -27,3 +27,4 @@ daemon_content = daemon_content.replace("state.engine.active_file_transfers().aw
 
 with open("deskdrop-core/src/bin/daemon.rs", "w") as f:
     f.write(daemon_content)
+
