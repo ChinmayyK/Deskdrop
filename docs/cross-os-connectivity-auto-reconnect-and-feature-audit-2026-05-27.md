@@ -456,3 +456,4 @@ Today:
 - Windows is the platform where connectivity confidence drops the most because shell behavior and engine behavior have drifted apart.
 
 If the goal is "trusted devices should just come back automatically and users should never wonder why they did or did not reconnect," the next big unlock is platform consistency, especially on Windows, not new core reconnect logic.
+
