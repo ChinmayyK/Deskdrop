@@ -229,3 +229,4 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 
 with open("deskdrop-core/src/crypto.rs", "w") as f:
     f.write(new_crypto)
+
