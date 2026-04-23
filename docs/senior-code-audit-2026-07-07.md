@@ -113,3 +113,4 @@ Results:
 1. Add CI coverage for non-Rust platform wrappers so Android, macOS, and Windows regressions are caught before release.
 2. Add a small integration test that exercises embedded IPC settings commands and verifies both persistence and `GetSettings` consistency.
 3. Promote the settings file path into `EngineConfig` so embedded runtimes, tests, and portable builds do not rely on implicit defaults.
+
