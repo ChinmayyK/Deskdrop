@@ -499,4 +499,3 @@ Repo files reviewed:
 - `platforms/macos/Deskdrop/DeskdropStore.swift`
 - `platforms/windows/Deskdrop.Windows/MainWindow.xaml.cs`
 - `platforms/windows/Deskdrop.Windows/Program.cs`
-
