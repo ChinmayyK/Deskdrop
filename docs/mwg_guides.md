@@ -760,4 +760,3 @@ if (!CSS.supports('(animation-timeline: view()) and (animation-range: entry)')) 
   onScroll();
 }
 ```
-
