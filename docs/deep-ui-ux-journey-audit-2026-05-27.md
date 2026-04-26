@@ -823,3 +823,4 @@ UX theory and heuristics:
 - [Laws of UX: Hick’s Law](https://lawsofux.com/hicks-law/)
 - [Laws of UX: Tesler’s Law](https://lawsofux.com/teslers-law/)
 - [Laws of UX: Onboarding for Active Users](https://lawsofux.com/articles/2024/onboarding-for-active-users/)
+
