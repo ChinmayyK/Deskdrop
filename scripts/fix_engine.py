@@ -45,4 +45,3 @@ content = content.replace(old_rx_match, new_rx_match)
 
 with open("deskdrop-core/src/engine.rs", "w") as f:
     f.write(content)
-
