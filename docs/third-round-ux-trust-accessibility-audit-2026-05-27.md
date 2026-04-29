@@ -473,3 +473,4 @@ Usability heuristics:
 
 - [Nielsen Norman Group: Ten usability heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/)
 - [NN/g heuristic summary PDF](https://media.nngroup.com/media/articles/attachments/Heuristic_Summary_Letter_compressed.pdf)
+
