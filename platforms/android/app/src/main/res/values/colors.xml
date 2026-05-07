@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pb_primary">#11B8C8</color>
+    <color name="pb_primary_dark">#0A6D78</color>
+    <color name="pb_secondary">#96C43B</color>
+    <color name="pb_canvas_top">#0D1113</color>
+    <color name="pb_canvas_bottom">#142224</color>
+    <color name="pb_surface">#F3F0E7</color>
+    <color name="pb_surface_alt">#E8E4D8</color>
+    <color name="pb_ink">#131718</color>
+    <color name="pb_muted">#5B6365</color>
+    <color name="pb_heat">#D36A34</color>
+    <color name="pb_outline">#2A3335</color>
+</resources>

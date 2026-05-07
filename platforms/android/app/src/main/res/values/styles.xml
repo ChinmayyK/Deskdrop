@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ClipRelay" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/pb_primary</item>
+        <item name="colorPrimaryVariant">@color/pb_primary_dark</item>
+        <item name="colorSecondary">@color/pb_secondary</item>
+        <item name="android:statusBarColor">@color/pb_canvas_top</item>
+        <item name="android:navigationBarColor">@color/pb_canvas_top</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

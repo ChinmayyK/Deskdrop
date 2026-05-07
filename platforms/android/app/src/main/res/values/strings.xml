@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">ClipRelay</string>
+    <string name="service_description">ClipRelay keeps your clipboard in sync across devices on your local network.</string>
+    <string name="notif_channel_service">ClipRelay</string>
+    <string name="notif_channel_alerts">ClipRelay Alerts</string>
+    <string name="trust_prompt_title">Trust this device?</string>
+    <string name="file_received_title">File received</string>
+    <string name="sync_paused">Sync paused</string>
+    <string name="ready">Ready</string>
+    <string name="connected_devices">%d devices connected</string>
+</resources>

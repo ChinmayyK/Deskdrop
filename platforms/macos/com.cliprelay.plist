@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ClipRelay macOS LaunchAgent
+  ============================
+  Installs ClipRelay as a login item via launchd (the preferred method
+  for background agents on macOS 13+; SMAppService wraps this).
+
+  Manual install:
+    cp com.cliprelay.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/com.cliprelay.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.cliprelay.plist
+    rm ~/Library/LaunchAgents/com.cliprelay.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cliprelay</string>
+
+    <!-- The .app bundle wraps the Swift AppDelegate which starts the engine. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/ClipRelay.app/Contents/MacOS/ClipRelay</string>
+    </array>
+
+    <!-- Start immediately when loaded. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart automatically if it crashes. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <!-- Throttle rapid restart loops. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Log to unified logging. -->
+    <key>StandardOutPath</key>
+    <string>/tmp/cliprelay.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/cliprelay.err.log</string>
+
+    <!-- Environment: set log level. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>CLIPRELAY_LOG</key>
+        <string>info</string>
+    </dict>
+
+    <!-- Process type: interactive so the app can access the pasteboard. -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <!-- Require network before starting. -->
+    <key>LaunchOnlyOnce</key>
+    <false/>
+</dict>
+</plist>

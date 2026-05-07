@@ -1,0 +1,338 @@
+use anyhow::{Context, Result};
+use if_addrs::{get_if_addrs, IfAddr};
+use serde::{Deserialize, Serialize};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tracing::warn;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NetworkInterfaceInfo {
+    pub name: String,
+    pub ip: IpAddr,
+    pub is_primary: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetworkSnapshot {
+    pub active_interface: Option<NetworkInterfaceInfo>,
+    pub bind_addr: SocketAddr,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetworkChangeKind {
+    IpChanged,
+    InterfaceChanged,
+    NetworkLost,
+    NetworkRestored,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetworkChangeEvent {
+    pub previous: NetworkSnapshot,
+    pub current: NetworkSnapshot,
+    pub kinds: Vec<NetworkChangeKind>,
+}
+
+pub fn list_interfaces() -> Result<Vec<NetworkInterfaceInfo>> {
+    let primary_ip = detect_primary_outbound_ip().ok();
+    let mut interfaces = Vec::new();
+
+    for iface in get_if_addrs().context("enumerating network interfaces")? {
+        let ip = match iface.addr {
+            IfAddr::V4(v4) if is_candidate_v4(v4.ip) => IpAddr::V4(v4.ip),
+            IfAddr::V6(v6) if is_candidate_v6(v6.ip) => IpAddr::V6(v6.ip),
+            _ => continue,
+        };
+
+        interfaces.push(NetworkInterfaceInfo {
+            name: iface.name,
+            ip,
+            is_primary: Some(ip) == primary_ip,
+        });
+    }
+
+    Ok(interfaces)
+}
+
+pub fn get_active_interface() -> Result<NetworkInterfaceInfo> {
+    let interfaces = list_interfaces()?;
+
+    if let Some(primary) = interfaces.iter().find(|iface| iface.is_primary) {
+        return Ok(primary.clone());
+    }
+
+    interfaces
+        .into_iter()
+        .next()
+        .context("no active LAN interface found")
+}
+
+pub fn get_local_ip() -> Result<IpAddr> {
+    Ok(get_active_interface()?.ip)
+}
+
+pub fn bind_address(port: u16) -> Result<SocketAddr> {
+    Ok(SocketAddr::new(get_local_ip()?, port))
+}
+
+pub fn resolve_snapshot(bind_ip: Option<IpAddr>, port: u16) -> Result<NetworkSnapshot> {
+    if let Some(ip) = bind_ip {
+        let active_interface = list_interfaces()
+            .ok()
+            .and_then(|interfaces| interfaces.into_iter().find(|iface| iface.ip == ip));
+        return Ok(NetworkSnapshot {
+            active_interface,
+            bind_addr: SocketAddr::new(ip, port),
+        });
+    }
+
+    match get_active_interface() {
+        Ok(interface) => Ok(NetworkSnapshot {
+            active_interface: Some(interface.clone()),
+            bind_addr: SocketAddr::new(interface.ip, port),
+        }),
+        Err(err) => {
+            warn!(error = %err, "no active LAN interface found, falling back to wildcard bind");
+            Ok(NetworkSnapshot {
+                active_interface: None,
+                bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+            })
+        }
+    }
+}
+
+pub fn detect_change(
+    previous: &NetworkSnapshot,
+    current: &NetworkSnapshot,
+) -> Option<NetworkChangeEvent> {
+    let mut kinds = Vec::new();
+
+    let previous_name = previous
+        .active_interface
+        .as_ref()
+        .map(|iface| iface.name.as_str());
+    let current_name = current
+        .active_interface
+        .as_ref()
+        .map(|iface| iface.name.as_str());
+    if previous_name != current_name {
+        kinds.push(NetworkChangeKind::InterfaceChanged);
+    }
+
+    if previous.bind_addr.ip() != current.bind_addr.ip() {
+        kinds.push(NetworkChangeKind::IpChanged);
+    }
+
+    match (
+        previous.active_interface.as_ref(),
+        current.active_interface.as_ref(),
+    ) {
+        (Some(_), None) => kinds.push(NetworkChangeKind::NetworkLost),
+        (None, Some(_)) => kinds.push(NetworkChangeKind::NetworkRestored),
+        _ => {}
+    }
+
+    if kinds.is_empty() {
+        None
+    } else {
+        Some(NetworkChangeEvent {
+            previous: previous.clone(),
+            current: current.clone(),
+            kinds,
+        })
+    }
+}
+
+pub fn spawn_network_monitor(
+    bind_ip: Option<IpAddr>,
+    port: u16,
+    poll_interval: Duration,
+) -> Result<mpsc::Receiver<NetworkChangeEvent>> {
+    let mut previous = resolve_snapshot(bind_ip, port)?;
+    let (change_tx, change_rx) = mpsc::channel(16);
+    let (hint_tx, mut hint_rx) = mpsc::channel::<()>(16);
+
+    spawn_platform_change_hints(hint_tx);
+
+    tokio::spawn(async move {
+        let mut poll = tokio::time::interval(poll_interval);
+
+        loop {
+            tokio::select! {
+                _ = poll.tick() => {}
+                maybe_hint = hint_rx.recv() => {
+                    if maybe_hint.is_none() {
+                        break;
+                    }
+                }
+            }
+
+            match resolve_snapshot(bind_ip, port) {
+                Ok(current) => {
+                    if let Some(change) = detect_change(&previous, &current) {
+                        previous = current;
+                        if change_tx.send(change).await.is_err() {
+                            break;
+                        }
+                    } else {
+                        previous = current;
+                    }
+                }
+                Err(err) => {
+                    warn!(error = %err, "failed to refresh network snapshot");
+                }
+            }
+        }
+    });
+
+    Ok(change_rx)
+}
+
+fn detect_primary_outbound_ip() -> Result<IpAddr> {
+    let socket = UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))
+        .context("binding route-probe socket")?;
+    socket
+        .connect(SocketAddr::from(([8, 8, 8, 8], 80)))
+        .context("probing primary outbound route")?;
+    Ok(socket
+        .local_addr()
+        .context("reading probed local addr")?
+        .ip())
+}
+
+fn is_candidate_v4(ip: Ipv4Addr) -> bool {
+    !ip.is_loopback()
+        && !ip.is_unspecified()
+        && !ip.is_multicast()
+        && (ip.is_private() || ip.is_link_local())
+}
+
+fn is_candidate_v6(ip: std::net::Ipv6Addr) -> bool {
+    !ip.is_loopback()
+        && !ip.is_unspecified()
+        && !ip.is_multicast()
+        && (ip.is_unique_local() || ip.is_unicast_link_local())
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_platform_change_hints(tx: mpsc::Sender<()>) {
+    tokio::task::spawn_blocking(move || {
+        if let Err(err) = linux_netlink_change_hints(tx) {
+            warn!(
+                error = %err,
+                "linux netlink watcher stopped; continuing with polling fallback"
+            );
+        }
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn spawn_platform_change_hints(_tx: mpsc::Sender<()>) {}
+
+#[cfg(target_os = "linux")]
+fn linux_netlink_change_hints(tx: mpsc::Sender<()>) -> Result<()> {
+    use std::mem;
+
+    let fd = unsafe { libc::socket(libc::AF_NETLINK, libc::SOCK_RAW, libc::NETLINK_ROUTE) };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error()).context("opening netlink socket");
+    }
+
+    let result = (|| -> Result<()> {
+        let mut addr: libc::sockaddr_nl = unsafe { mem::zeroed() };
+        addr.nl_family = libc::AF_NETLINK as libc::sa_family_t;
+        addr.nl_groups =
+            (libc::RTMGRP_LINK | libc::RTMGRP_IPV4_IFADDR | libc::RTMGRP_IPV6_IFADDR) as u32;
+
+        let bind_rc = unsafe {
+            libc::bind(
+                fd,
+                &addr as *const _ as *const libc::sockaddr,
+                mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
+            )
+        };
+        if bind_rc < 0 {
+            return Err(std::io::Error::last_os_error()).context("binding netlink socket");
+        }
+
+        let mut buf = [0u8; 4096];
+        loop {
+            let recv_len = unsafe { libc::recv(fd, buf.as_mut_ptr() as *mut _, buf.len(), 0) };
+            if recv_len < 0 {
+                return Err(std::io::Error::last_os_error())
+                    .context("reading netlink change event");
+            }
+            if recv_len == 0 {
+                continue;
+            }
+            if tx.blocking_send(()).is_err() {
+                break;
+            }
+        }
+
+        Ok(())
+    })();
+
+    unsafe {
+        libc::close(fd);
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn candidate_ipv4_filter_rejects_loopback() {
+        assert!(!is_candidate_v4(Ipv4Addr::LOCALHOST));
+        assert!(is_candidate_v4(Ipv4Addr::new(192, 168, 1, 10)));
+    }
+
+    #[test]
+    fn detects_ip_and_interface_change() {
+        let previous = NetworkSnapshot {
+            active_interface: Some(NetworkInterfaceInfo {
+                name: "en0".into(),
+                ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10)),
+                is_primary: true,
+            }),
+            bind_addr: SocketAddr::from(([192, 168, 1, 10], 47823)),
+        };
+        let current = NetworkSnapshot {
+            active_interface: Some(NetworkInterfaceInfo {
+                name: "bridge0".into(),
+                ip: IpAddr::V4(Ipv4Addr::new(172, 20, 10, 4)),
+                is_primary: true,
+            }),
+            bind_addr: SocketAddr::from(([172, 20, 10, 4], 47823)),
+        };
+
+        let change = detect_change(&previous, &current).unwrap();
+        assert!(change.kinds.contains(&NetworkChangeKind::InterfaceChanged));
+        assert!(change.kinds.contains(&NetworkChangeKind::IpChanged));
+    }
+
+    #[test]
+    fn detects_network_loss() {
+        let previous = NetworkSnapshot {
+            active_interface: Some(NetworkInterfaceInfo {
+                name: "en0".into(),
+                ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10)),
+                is_primary: true,
+            }),
+            bind_addr: SocketAddr::from(([192, 168, 1, 10], 47823)),
+        };
+        let current = NetworkSnapshot {
+            active_interface: None,
+            bind_addr: SocketAddr::from(([0, 0, 0, 0], 47823)),
+        };
+
+        let change = detect_change(&previous, &current).unwrap();
+        assert!(change.kinds.contains(&NetworkChangeKind::NetworkLost));
+        assert!(change.kinds.contains(&NetworkChangeKind::InterfaceChanged));
+        assert!(change.kinds.contains(&NetworkChangeKind::IpChanged));
+    }
+}

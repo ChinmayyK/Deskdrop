@@ -1,0 +1,210 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Rust core ──────────────────────────────────────────────────────────────
+  rust-core:
+    name: Rust Core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install Linux system deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            libdbus-1-dev \
+            libudev-dev \
+            pkg-config \
+            libssl-dev \
+            avahi-daemon \
+            libavahi-client-dev
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        working-directory: cliprelay-core
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: cliprelay-core
+
+      - name: Build
+        run: cargo build --release
+        working-directory: cliprelay-core
+
+      - name: Run unit tests
+        run: cargo test --lib
+        working-directory: cliprelay-core
+
+      - name: Run doc tests
+        run: cargo test --doc
+        working-directory: cliprelay-core
+
+  # ── Integration tests (Linux only — requires mDNS) ────────────────────────
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev avahi-daemon
+          sudo systemctl start avahi-daemon || true
+      - name: Run integration tests
+        run: cargo test --tests
+        working-directory: cliprelay-core
+        timeout-minutes: 2
+
+  # ── Benchmarks (compile check only, no execution) ────────────────────────
+  bench-check:
+    name: Benchmark Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update -q && sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev
+      - run: cargo bench --no-run
+        working-directory: cliprelay-core
+
+  # ── Cross-compile for Android ABIs ───────────────────────────────────────
+  android:
+    name: Android cross-compile
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - aarch64-linux-android
+          - armv7-linux-androideabi
+          - x86_64-linux-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager "ndk;26.1.10909125"
+
+      - name: Build for ${{ matrix.target }}
+        run: |
+          cargo ndk -t ${{ matrix.target }} build --release
+        working-directory: cliprelay-core
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
+
+  # ── macOS dylib + Swift bridging header check ─────────────────────────────
+  macos-platform:
+    name: macOS platform build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build macOS dylib
+        run: cargo build --release
+        working-directory: cliprelay-core
+
+      - name: Check Swift files compile
+        run: |
+          swiftc \
+            -typecheck \
+            platforms/macos/ClipRelay/AppDelegate.swift \
+            platforms/macos/ClipRelay/PreferencesView.swift \
+            -import-objc-header platforms/macos/ClipRelay/ClipRelayBridge.h \
+            -sdk $(xcrun --sdk macosx --show-sdk-path) \
+            -target arm64-apple-macos13.0 \
+        continue-on-error: true   # Xcodeproj required for full build
+
+  # ── Windows C# build ──────────────────────────────────────────────────────
+  windows-platform:
+    name: Windows platform build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Windows DLL
+        run: cargo build --release
+        working-directory: cliprelay-core
+
+      - name: Build C# project
+        run: |
+          # Create a stub DLL so the csproj can resolve the native ref.
+          New-Item -ItemType Directory -Force -Path platforms\windows\ClipRelay.Windows\
+          Copy-Item cliprelay-core\target\release\cliprelay_core.dll `
+                    platforms\windows\ClipRelay.Windows\cliprelay_core.dll `
+                    -ErrorAction SilentlyContinue
+          dotnet build platforms\windows\ClipRelay.Windows\ClipRelay.Windows.csproj `
+            -c Release --no-restore
+
+  # ── Security audit ────────────────────────────────────────────────────────
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+        working-directory: cliprelay-core
+
+  # ── SBOM generation ───────────────────────────────────────────────────────
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-cyclonedx --locked
+      - run: cargo cyclonedx --format json
+        working-directory: cliprelay-core
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: cliprelay-core/bom.json

@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string (e.g. 0.1.0)'
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── macOS universal binary + DMG ──────────────────────────────────────────
+  release-macos:
+    name: macOS Release
+    runs-on: macos-14   # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            cliprelay-core/target
+          key: macos-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build arm64
+        run: cargo build --release --target aarch64-apple-darwin
+        working-directory: cliprelay-core
+
+      - name: Build x86_64
+        run: cargo build --release --target x86_64-apple-darwin
+        working-directory: cliprelay-core
+
+      - name: Create universal dylib
+        run: |
+          lipo -create \
+            cliprelay-core/target/aarch64-apple-darwin/release/libcliprelay_core.dylib \
+            cliprelay-core/target/x86_64-apple-darwin/release/libcliprelay_core.dylib \
+            -output libcliprelay_core.dylib
+
+      - name: Build Swift app (Release)
+        run: |
+          mkdir -p platforms/macos/build
+          # Full Xcode build would go here; CI produces a zip of the dylib for now.
+          zip -j cliprelay-macos.zip libcliprelay_core.dylib
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cliprelay-macos
+          path: cliprelay-macos.zip
+
+  # ── Windows x64 installer ─────────────────────────────────────────────────
+  release-windows:
+    name: Windows Release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            cliprelay-core/target
+          key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build Rust DLL
+        run: cargo build --release
+        working-directory: cliprelay-core
+
+      - name: Build C# app
+        run: |
+          Copy-Item cliprelay-core\target\release\cliprelay_core.dll `
+                    platforms\windows\ClipRelay.Windows\
+          dotnet publish platforms\windows\ClipRelay.Windows\ClipRelay.Windows.csproj `
+            -c Release -r win-x64 --self-contained false `
+            -o publish\windows
+
+      - name: Install WiX
+        run: dotnet tool install -g wix
+
+      - name: Build MSI installer
+        run: |
+          Copy-Item publish\windows\*.* platforms\windows\installer\bin\ -Force -ErrorAction SilentlyContinue
+          # wix build platforms\windows\installer\ClipRelay.wxs -o publish\ClipRelay.msi
+          # (WiX build stubbed pending full icon + binary paths)
+          Compress-Archive -Path publish\windows\* -DestinationPath cliprelay-windows.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cliprelay-windows
+          path: cliprelay-windows.zip
+
+  # ── Android APK ───────────────────────────────────────────────────────────
+  release-android:
+    name: Android Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK + cargo-ndk
+        run: |
+          sdkmanager "ndk;26.1.10909125"
+          cargo install cargo-ndk --locked
+
+      - name: Build native libs
+        run: |
+          cargo ndk \
+            -t aarch64-linux-android \
+            -t armv7-linux-androideabi \
+            -t x86_64-linux-android \
+            -o platforms/android/app/src/main/jniLibs \
+            build --release
+        working-directory: cliprelay-core
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
+
+      - name: Build APK
+        run: ./gradlew assembleRelease
+        working-directory: platforms/android
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cliprelay-android
+          path: platforms/android/app/build/outputs/apk/release/*.apk
+
+  # ── Linux x86_64 binary + deb ─────────────────────────────────────────────
+  release-linux:
+    name: Linux Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev pkg-config
+
+      - name: Build daemon + CLI
+        run: |
+          cargo build --release --bin cliprelay-daemon
+          cargo build --release --bin cliprelay-cli
+        working-directory: cliprelay-core
+
+      - name: Package .tar.gz
+        run: |
+          mkdir -p dist/cliprelay/usr/local/bin
+          cp cliprelay-core/target/release/cliprelay-daemon dist/cliprelay/usr/local/bin/
+          cp cliprelay-core/target/release/cliprelay-cli    dist/cliprelay/usr/local/bin/
+          cp platforms/linux/cliprelay.service dist/cliprelay/
+          cp platforms/linux/cliprelay.desktop dist/cliprelay/
+          cp README.md LICENSE dist/cliprelay/
+          tar czf cliprelay-linux-x86_64.tar.gz -C dist cliprelay
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cliprelay-linux
+          path: cliprelay-linux-x86_64.tar.gz
+
+  # ── Create GitHub Release ─────────────────────────────────────────────────
+  create-release:
+    name: Create GitHub Release
+    needs: [release-macos, release-windows, release-android, release-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "ClipRelay ${{ github.ref_name }}"
+          body: |
+            ## ClipRelay ${{ github.ref_name }}
+
+            Proximity-Based Shared Clipboard — no account, no cloud, no setup.
+
+            ### Downloads
+            | Platform | File |
+            |---|---|
+            | macOS (Universal) | `cliprelay-macos.zip` |
+            | Windows 10/11 x64 | `cliprelay-windows.zip` |
+            | Android 8.0+      | `cliprelay-*.apk` |
+            | Linux x86_64      | `cliprelay-linux-x86_64.tar.gz` |
+
+            ### What's new
+            See [CHANGELOG.md](CHANGELOG.md).
+          files: |
+            release-artifacts/**/*.zip
+            release-artifacts/**/*.apk
+            release-artifacts/**/*.tar.gz
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}

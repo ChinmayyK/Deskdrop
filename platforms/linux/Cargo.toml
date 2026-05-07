@@ -1,0 +1,21 @@
+[package]
+name = "cliprelay-linux"
+version = "0.1.0"
+edition = "2021"
+description = "ClipRelay Linux GTK4 / Wayland / X11 client"
+
+[[bin]]
+name = "cliprelay-gtk"
+path = "src/main.rs"
+
+[dependencies]
+cliprelay-core = { path = "../../cliprelay-core" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+arboard = "3"
+dirs = "5"
+
+# GTK4 tray (optional — comment out for headless daemon mode)
+# gtk4 = "0.7"
+# libappindicator = { package = "libappindicator", version = "0.8", features = ["gtk"] }

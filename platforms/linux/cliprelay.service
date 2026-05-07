@@ -1,0 +1,44 @@
+# ClipRelay systemd user service
+#
+# Install: cp cliprelay.service ~/.config/systemd/user/
+#          systemctl --user daemon-reload
+#          systemctl --user enable --now cliprelay
+#
+# Logs:    journalctl --user -u cliprelay -f
+
+[Unit]
+Description=ClipRelay — Proximity-Based Shared Clipboard
+Documentation=https://github.com/cliprelay/cliprelay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cliprelay-gtk
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cliprelay
+
+# Resource limits
+MemoryMax=128M
+CPUQuota=10%
+
+# Security hardening
+NoNewPrivileges=true
+ProtectHome=read-only
+ProtectSystem=strict
+PrivateTmp=true
+PrivateDevices=true
+# Network access required for LAN discovery
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+# Allow binding to our port
+AmbientCapabilities=
+CapabilityBoundingSet=
+
+Environment=CLIPRELAY_LOG=info
+Environment=RUST_BACKTRACE=0
+
+[Install]
+WantedBy=default.target

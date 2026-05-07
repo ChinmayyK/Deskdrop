@@ -1,0 +1,18 @@
+# ClipRelay Linux distribution files
+
+# ── .desktop file (freedesktop.org) ──────────────────────────────────────────
+# Install to: ~/.local/share/applications/cliprelay.desktop
+#             /usr/share/applications/cliprelay.desktop (system-wide)
+
+[Desktop Entry]
+Type=Application
+Name=ClipRelay
+GenericName=Clipboard Sync
+Comment=Proximity-Based Shared Clipboard — sync across your devices on LAN
+Exec=/usr/local/bin/cliprelay-gtk
+Icon=edit-paste
+Categories=Utility;Network;
+Keywords=clipboard;sync;copy;paste;LAN;
+StartupNotify=false
+# Run in background (no window)
+NoDisplay=true
