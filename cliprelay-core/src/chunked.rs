@@ -60,10 +60,7 @@ pub fn maybe_chunk(content: &ClipboardContent) -> Option<Vec<ChunkMessage>> {
     let mut id = [0u8; 16];
     id.copy_from_slice(Uuid::new_v4().as_bytes());
 
-    let chunks: Vec<Bytes> = raw
-        .chunks(CHUNK_SIZE)
-        .map(Bytes::copy_from_slice)
-        .collect();
+    let chunks: Vec<Bytes> = raw.chunks(CHUNK_SIZE).map(Bytes::copy_from_slice).collect();
     let total_chunks = chunks.len() as u32;
     let total_bytes = raw.len() as u64;
 

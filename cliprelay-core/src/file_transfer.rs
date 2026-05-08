@@ -305,7 +305,10 @@ impl InboundTransfer {
 
     /// Should we send a chunk ack now?
     pub fn should_ack(&self) -> bool {
-        self.last_confirmed_chunk > 0 && self.last_confirmed_chunk.is_multiple_of(FILE_ACK_EVERY_N_CHUNKS)
+        self.last_confirmed_chunk > 0
+            && self
+                .last_confirmed_chunk
+                .is_multiple_of(FILE_ACK_EVERY_N_CHUNKS)
     }
 }
 
@@ -550,7 +553,9 @@ mod tests {
         // Feed chunks directly from the data slice.
         let transfer = mgr.get_inbound_mut(&tid).unwrap();
         for (chunk_idx, chunk) in data.chunks(FILE_CHUNK_SIZE).enumerate() {
-            transfer.receive_chunk(chunk_idx as u32, chunk.to_vec()).unwrap();
+            transfer
+                .receive_chunk(chunk_idx as u32, chunk.to_vec())
+                .unwrap();
         }
         let dest = transfer.finalize().unwrap();
         let written = std::fs::read(&dest).unwrap();

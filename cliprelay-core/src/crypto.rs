@@ -36,14 +36,20 @@ impl IdentityKey {
     pub fn generate() -> Self {
         let secret = StaticSecret::random_from_rng(rand::thread_rng());
         let public = PublicKey::from(&secret);
-        Self { _secret: secret, public }
+        Self {
+            _secret: secret,
+            public,
+        }
     }
 
     /// Load from 32 raw bytes (e.g. read from disk).
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
         let secret = StaticSecret::from(bytes);
         let public = PublicKey::from(&secret);
-        Self { _secret: secret, public }
+        Self {
+            _secret: secret,
+            public,
+        }
     }
 
     /// Export 32 raw bytes for storage.

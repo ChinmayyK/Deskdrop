@@ -39,7 +39,10 @@ pub struct ClipRelayHandle {
 /// - `device_name`: UTF-8 C string; use NULL for auto-detected hostname.
 /// - `port`: 0 → use default port (47823).
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_start(device_name: *const c_char, port: u16) -> *mut ClipRelayHandle {
+pub unsafe extern "C" fn cliprelay_start(
+    device_name: *const c_char,
+    port: u16,
+) -> *mut ClipRelayHandle {
     let name = if device_name.is_null() {
         whoami::devicename()
     } else {

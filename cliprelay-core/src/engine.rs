@@ -1,6 +1,5 @@
 use crate::activity::ActivityFeed;
 use crate::dedup::hash_content;
-use std::path::Path;
 use crate::discovery::{Discovery, PeerEvent, PeerInfo};
 use crate::file_transfer::{default_save_dir, FileTransferManager, FileTransferMessage};
 use crate::identity::IdentityStore;
@@ -19,6 +18,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};

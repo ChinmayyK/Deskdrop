@@ -24,6 +24,10 @@ platforms/windows/**/bin/
 platforms/windows/**/obj/
 *.msi
 
+# Allow Rust source bins under cliprelay-core
+!cliprelay-core/src/bin/
+!cliprelay-core/src/bin/**
+
 # Android
 *.apk
 *.aab

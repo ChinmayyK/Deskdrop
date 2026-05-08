@@ -20,7 +20,6 @@ pub enum SyncMode {
     Manual,
 }
 
-
 // ── Settings struct ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
