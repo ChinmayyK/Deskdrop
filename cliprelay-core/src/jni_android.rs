@@ -208,8 +208,18 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventType(
     use crate::engine::EngineEvent::*;
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     match ev {
-        ClipboardReceived { content, auto_applied, .. } => match content {
-            ClipboardContent::Text(_) => if *auto_applied { 1 } else { 11 }, // 11 = available but not applied
+        ClipboardReceived {
+            content,
+            auto_applied,
+            ..
+        } => match content {
+            ClipboardContent::Text(_) => {
+                if *auto_applied {
+                    1
+                } else {
+                    11
+                }
+            } // 11 = available but not applied
             ClipboardContent::Image { .. } => 2,
             ClipboardContent::File { .. } => 3,
         },
@@ -399,10 +409,16 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventAutoApplied(
     _class: JClass,
     event: jlong,
 ) -> jint {
-    if event == 0 { return 0; }
+    if event == 0 {
+        return 0;
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     if let crate::engine::EngineEvent::ClipboardReceived { auto_applied, .. } = ev {
-        if *auto_applied { 1 } else { 0 }
+        if *auto_applied {
+            1
+        } else {
+            0
+        }
     } else {
         0
     }
@@ -418,7 +434,9 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventActivityId(
     _class: JClass,
     event: jlong,
 ) -> jlong {
-    if event == 0 { return -1; }
+    if event == 0 {
+        return -1;
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     if let crate::engine::EngineEvent::ClipboardReceived { activity_id, .. } = ev {
         *activity_id as jlong
@@ -435,13 +453,23 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferId(
     _class: JClass,
     event: jlong,
 ) -> jstring {
-    if event == 0 { return std::ptr::null_mut(); }
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     let tid = match ev {
-        crate::engine::EngineEvent::FileTransferIncoming { transfer_id, .. } => Some(hex::encode(transfer_id)),
-        crate::engine::EngineEvent::FileTransferProgress { transfer_id, .. } => Some(hex::encode(transfer_id)),
-        crate::engine::EngineEvent::FileTransferComplete { transfer_id, .. } => Some(hex::encode(transfer_id)),
-        crate::engine::EngineEvent::FileTransferFailed { transfer_id, .. } => Some(hex::encode(transfer_id)),
+        crate::engine::EngineEvent::FileTransferIncoming { transfer_id, .. } => {
+            Some(hex::encode(transfer_id))
+        }
+        crate::engine::EngineEvent::FileTransferProgress { transfer_id, .. } => {
+            Some(hex::encode(transfer_id))
+        }
+        crate::engine::EngineEvent::FileTransferComplete { transfer_id, .. } => {
+            Some(hex::encode(transfer_id))
+        }
+        crate::engine::EngineEvent::FileTransferFailed { transfer_id, .. } => {
+            Some(hex::encode(transfer_id))
+        }
         _ => None,
     };
     tid.and_then(|s| env.new_string(s).ok())
@@ -457,12 +485,20 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferFileName(
     _class: JClass,
     event: jlong,
 ) -> jstring {
-    if event == 0 { return std::ptr::null_mut(); }
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     let name = match ev {
-        crate::engine::EngineEvent::FileTransferIncoming { file_name, .. } => Some(file_name.as_str()),
-        crate::engine::EngineEvent::FileTransferProgress { file_name, .. } => Some(file_name.as_str()),
-        crate::engine::EngineEvent::FileTransferComplete { file_name, .. } => Some(file_name.as_str()),
+        crate::engine::EngineEvent::FileTransferIncoming { file_name, .. } => {
+            Some(file_name.as_str())
+        }
+        crate::engine::EngineEvent::FileTransferProgress { file_name, .. } => {
+            Some(file_name.as_str())
+        }
+        crate::engine::EngineEvent::FileTransferComplete { file_name, .. } => {
+            Some(file_name.as_str())
+        }
         _ => None,
     };
     name.and_then(|s| env.new_string(s).ok())
@@ -478,7 +514,9 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferProgressPer
     _class: JClass,
     event: jlong,
 ) -> jint {
-    if event == 0 { return -1; }
+    if event == 0 {
+        return -1;
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     if let crate::engine::EngineEvent::FileTransferProgress { percent, .. } = ev {
         *percent as jint
@@ -495,11 +533,15 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferTotalBytes(
     _class: JClass,
     event: jlong,
 ) -> jlong {
-    if event == 0 { return -1; }
+    if event == 0 {
+        return -1;
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     match ev {
         crate::engine::EngineEvent::FileTransferIncoming { file_bytes, .. } => *file_bytes as jlong,
-        crate::engine::EngineEvent::FileTransferProgress { total_bytes, .. } => *total_bytes as jlong,
+        crate::engine::EngineEvent::FileTransferProgress { total_bytes, .. } => {
+            *total_bytes as jlong
+        }
         _ => -1,
     }
 }
@@ -512,7 +554,9 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferDestPath(
     _class: JClass,
     event: jlong,
 ) -> jstring {
-    if event == 0 { return std::ptr::null_mut(); }
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     if let crate::engine::EngineEvent::FileTransferComplete { dest_path, .. } = ev {
         env.new_string(dest_path.to_string_lossy())
@@ -534,7 +578,9 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_applyClipboardByHash(
     engine_ptr: jlong,
     hash_jstr: jstring,
 ) -> jint {
-    if engine_ptr == 0 { return 0; }
+    if engine_ptr == 0 {
+        return 0;
+    }
     let hash = {
         let jstr = unsafe { JString::from_raw(hash_jstr) };
         match env.get_string(&jstr) {
@@ -559,7 +605,9 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_acceptFileTransfer(
     engine_ptr: jlong,
     transfer_id_hex: jstring,
 ) -> jint {
-    if engine_ptr == 0 { return 0; }
+    if engine_ptr == 0 {
+        return 0;
+    }
     let hex_str: String = {
         let jstr = unsafe { JString::from_raw(transfer_id_hex) };
         match env.get_string(&jstr) {
@@ -567,8 +615,12 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_acceptFileTransfer(
             Err(_) => return 0,
         }
     };
-    let Ok(bytes) = hex::decode(&hex_str) else { return 0; };
-    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else { return 0; };
+    let Ok(bytes) = hex::decode(&hex_str) else {
+        return 0;
+    };
+    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else {
+        return 0;
+    };
     let engine_ref = unsafe { &*(engine_ptr as *const crate::engine::Engine) };
     let rt = tokio::runtime::Handle::current();
     match rt.block_on(engine_ref.accept_file_transfer(tid)) {
@@ -586,7 +638,9 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_rejectFileTransfer(
     engine_ptr: jlong,
     transfer_id_hex: jstring,
 ) -> jint {
-    if engine_ptr == 0 { return 0; }
+    if engine_ptr == 0 {
+        return 0;
+    }
     let hex_str: String = {
         let jstr = unsafe { JString::from_raw(transfer_id_hex) };
         match env.get_string(&jstr) {
@@ -594,8 +648,12 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_rejectFileTransfer(
             Err(_) => return 0,
         }
     };
-    let Ok(bytes) = hex::decode(&hex_str) else { return 0; };
-    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else { return 0; };
+    let Ok(bytes) = hex::decode(&hex_str) else {
+        return 0;
+    };
+    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else {
+        return 0;
+    };
     let engine_ref = unsafe { &*(engine_ptr as *const crate::engine::Engine) };
     let rt = tokio::runtime::Handle::current();
     match rt.block_on(engine_ref.reject_file_transfer(tid, "user rejected".into())) {

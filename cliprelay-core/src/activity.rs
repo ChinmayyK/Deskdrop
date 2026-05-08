@@ -88,7 +88,13 @@ pub struct ActivityEntry {
 }
 
 impl ActivityEntry {
-    fn new(id: u64, device_id: Uuid, device_name: String, kind: ActivityKind, summary: String) -> Self {
+    fn new(
+        id: u64,
+        device_id: Uuid,
+        device_name: String,
+        kind: ActivityKind,
+        summary: String,
+    ) -> Self {
         Self {
             id,
             timestamp_ms: now_ms(),
@@ -154,9 +160,19 @@ impl ActivityFeed {
         } else {
             text.to_string()
         };
-        let summary = format!("[{}] copied text: {}", device_name, &preview[..preview.len().min(40)]);
+        let summary = format!(
+            "[{}] copied text: {}",
+            device_name,
+            &preview[..preview.len().min(40)]
+        );
         let id = self.alloc_id();
-        let mut entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::RemoteClipboardAvailable, summary);
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::RemoteClipboardAvailable,
+            summary,
+        );
         entry.content_hash = Some(content_hash);
         entry.text_preview = Some(preview);
         entry.relay_path = relay_path;
@@ -174,9 +190,20 @@ impl ActivityFeed {
         content_hash: String,
         relay_path: Vec<String>,
     ) -> u64 {
-        let summary = format!("[{}] copied image ({}, {} KB)", device_name, mime, bytes / 1024);
+        let summary = format!(
+            "[{}] copied image ({}, {} KB)",
+            device_name,
+            mime,
+            bytes / 1024
+        );
         let id = self.alloc_id();
-        let mut entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::RemoteClipboardAvailable, summary);
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::RemoteClipboardAvailable,
+            summary,
+        );
         entry.content_hash = Some(content_hash);
         entry.file_bytes = Some(bytes);
         entry.relay_path = relay_path;
@@ -185,27 +212,56 @@ impl ActivityFeed {
     }
 
     /// Record that a remote clipboard item was applied to local clipboard.
-    pub fn record_clipboard_applied(&mut self, device_id: Uuid, device_name: String, content_hash: String) -> u64 {
+    pub fn record_clipboard_applied(
+        &mut self,
+        device_id: Uuid,
+        device_name: String,
+        content_hash: String,
+    ) -> u64 {
         // Mark the original "available" entry as applied.
         for e in self.entries.iter_mut() {
-            if e.content_hash.as_deref() == Some(&content_hash) && e.kind == ActivityKind::RemoteClipboardAvailable {
+            if e.content_hash.as_deref() == Some(&content_hash)
+                && e.kind == ActivityKind::RemoteClipboardAvailable
+            {
                 e.applied_locally = true;
             }
         }
         let summary = format!("Applied clipboard from [{}]", device_name);
         let id = self.alloc_id();
-        let mut entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::ClipboardApplied, summary);
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::ClipboardApplied,
+            summary,
+        );
         entry.content_hash = Some(content_hash);
         self.push(entry);
         id
     }
 
     /// Record a local clipboard copy (sent to peers).
-    pub fn record_local_clipboard_text(&mut self, device_id: Uuid, device_name: String, text: &str, content_hash: String) -> u64 {
-        let preview = if text.len() > 40 { format!("{}…", &text[..40]) } else { text.to_string() };
+    pub fn record_local_clipboard_text(
+        &mut self,
+        device_id: Uuid,
+        device_name: String,
+        text: &str,
+        content_hash: String,
+    ) -> u64 {
+        let preview = if text.len() > 40 {
+            format!("{}…", &text[..40])
+        } else {
+            text.to_string()
+        };
         let summary = format!("[{}] copied text", device_name);
         let id = self.alloc_id();
-        let mut entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::ClipboardText, summary);
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::ClipboardText,
+            summary,
+        );
         entry.content_hash = Some(content_hash);
         entry.text_preview = Some(preview);
         self.push(entry);
@@ -228,7 +284,13 @@ impl ActivityFeed {
             format!("[{}] receiving file: {}", device_name, file_name)
         };
         let id = self.alloc_id();
-        let mut entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::FileTransferStarted, summary);
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::FileTransferStarted,
+            summary,
+        );
         entry.file_name = Some(file_name);
         entry.file_bytes = Some(file_bytes);
         entry.transfer_id = Some(transfer_id);
@@ -247,14 +309,32 @@ impl ActivityFeed {
     ) -> u64 {
         // Mark the corresponding FileTransferStarted entry.
         for e in self.entries.iter_mut() {
-            if e.transfer_id.as_deref() == Some(&transfer_id) && e.kind == ActivityKind::FileTransferStarted {
+            if e.transfer_id.as_deref() == Some(&transfer_id)
+                && e.kind == ActivityKind::FileTransferStarted
+            {
                 e.kind = ActivityKind::FileTransferComplete;
-                e.summary = format!("[{}] received file: {} ({} KB)", device_name, file_name, file_bytes / 1024);
+                e.summary = format!(
+                    "[{}] received file: {} ({} KB)",
+                    device_name,
+                    file_name,
+                    file_bytes / 1024
+                );
             }
         }
-        let summary = format!("[{}] file ready: {} ({} KB)", device_name, file_name, file_bytes / 1024);
+        let summary = format!(
+            "[{}] file ready: {} ({} KB)",
+            device_name,
+            file_name,
+            file_bytes / 1024
+        );
         let id = self.alloc_id();
-        let mut entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::FileTransferComplete, summary);
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::FileTransferComplete,
+            summary,
+        );
         entry.file_name = Some(file_name);
         entry.file_bytes = Some(file_bytes);
         entry.transfer_id = Some(transfer_id);
@@ -277,9 +357,18 @@ impl ActivityFeed {
             }
         }
         let name_part = file_name.as_deref().unwrap_or("unknown file");
-        let summary = format!("[{}] transfer failed: {} — {}", device_name, name_part, reason);
+        let summary = format!(
+            "[{}] transfer failed: {} — {}",
+            device_name, name_part, reason
+        );
         let id = self.alloc_id();
-        let mut entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::FileTransferFailed, summary);
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::FileTransferFailed,
+            summary,
+        );
         entry.file_name = file_name;
         entry.transfer_id = Some(transfer_id);
         self.push(entry);
@@ -290,19 +379,36 @@ impl ActivityFeed {
     pub fn record_peer_connected(&mut self, device_id: Uuid, device_name: String) -> u64 {
         let summary = format!("[{}] connected", device_name);
         let id = self.alloc_id();
-        let entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::PeerConnected, summary);
+        let entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::PeerConnected,
+            summary,
+        );
         self.push(entry);
         id
     }
 
     /// Record a peer disconnecting.
-    pub fn record_peer_disconnected(&mut self, device_id: Uuid, device_name: String, reason: Option<String>) -> u64 {
+    pub fn record_peer_disconnected(
+        &mut self,
+        device_id: Uuid,
+        device_name: String,
+        reason: Option<String>,
+    ) -> u64 {
         let summary = match &reason {
             Some(r) => format!("[{}] disconnected: {}", device_name, r),
             None => format!("[{}] disconnected", device_name),
         };
         let id = self.alloc_id();
-        let entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::PeerDisconnected, summary);
+        let entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::PeerDisconnected,
+            summary,
+        );
         self.push(entry);
         id
     }
@@ -311,7 +417,13 @@ impl ActivityFeed {
     pub fn record_sync_paused(&mut self, device_id: Uuid, device_name: String) -> u64 {
         let summary = format!("[{}] sync paused", device_name);
         let id = self.alloc_id();
-        let entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::SyncPaused, summary);
+        let entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::SyncPaused,
+            summary,
+        );
         self.push(entry);
         id
     }
@@ -320,7 +432,13 @@ impl ActivityFeed {
     pub fn record_sync_resumed(&mut self, device_id: Uuid, device_name: String) -> u64 {
         let summary = format!("[{}] sync resumed", device_name);
         let id = self.alloc_id();
-        let entry = ActivityEntry::new(id, device_id, device_name, ActivityKind::SyncResumed, summary);
+        let entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::SyncResumed,
+            summary,
+        );
         self.push(entry);
         id
     }
@@ -375,7 +493,13 @@ mod tests {
         let mut feed = ActivityFeed::new(50);
         let id = Uuid::new_v4();
         feed.record_peer_connected(id, "Pixel 8".into());
-        feed.record_remote_clipboard_text(id, "Pixel 8".into(), "hello world", "abc123".into(), vec![]);
+        feed.record_remote_clipboard_text(
+            id,
+            "Pixel 8".into(),
+            "hello world",
+            "abc123".into(),
+            vec![],
+        );
         assert_eq!(feed.len(), 2);
         let pending = feed.pending_remote_clipboards();
         assert_eq!(pending.len(), 1);

@@ -123,10 +123,7 @@ impl OutboundTransfer {
         let mut id = [0u8; 16];
         id.copy_from_slice(Uuid::new_v4().as_bytes());
 
-        let chunks: Vec<Vec<u8>> = data
-            .chunks(FILE_CHUNK_SIZE)
-            .map(|c| c.to_vec())
-            .collect();
+        let chunks: Vec<Vec<u8>> = data.chunks(FILE_CHUNK_SIZE).map(|c| c.to_vec()).collect();
         let total_chunks = chunks.len() as u32;
 
         Self {
@@ -197,7 +194,8 @@ pub struct InboundTransfer {
 
 impl InboundTransfer {
     pub fn new(meta: FileTransferMetadata, from_device: Uuid, from_device_name: String) -> Self {
-        let total_chunks = ((meta.size_bytes as usize).saturating_add(FILE_CHUNK_SIZE - 1) / FILE_CHUNK_SIZE) as u32;
+        let total_chunks = ((meta.size_bytes as usize).saturating_add(FILE_CHUNK_SIZE - 1)
+            / FILE_CHUNK_SIZE) as u32;
         Self {
             transfer_id: meta.transfer_id,
             meta,
@@ -230,7 +228,9 @@ impl InboundTransfer {
     pub fn receive_chunk(&mut self, chunk_index: u32, data: Vec<u8>) -> Result<TransferProgress> {
         anyhow::ensure!(
             chunk_index < self.total_chunks,
-            "chunk {} out of range (total {})", chunk_index, self.total_chunks
+            "chunk {} out of range (total {})",
+            chunk_index,
+            self.total_chunks
         );
         let len = data.len() as u64;
         self.received_chunks.entry(chunk_index).or_insert_with(|| {
@@ -239,7 +239,8 @@ impl InboundTransfer {
         });
         self.last_confirmed_chunk = chunk_index;
 
-        let percent = ((self.received_chunks.len() as f64 / self.total_chunks as f64) * 100.0) as u8;
+        let percent =
+            ((self.received_chunks.len() as f64 / self.total_chunks as f64) * 100.0) as u8;
         let elapsed = self.started_at.map(|s| s.elapsed()).unwrap_or_default();
         let speed_bps = if elapsed.as_secs() > 0 {
             Some(self.bytes_received / elapsed.as_secs())
@@ -277,7 +278,9 @@ impl InboundTransfer {
         // Reassemble in order.
         let mut buf: Vec<u8> = Vec::with_capacity(self.meta.size_bytes as usize);
         for i in 0..self.total_chunks {
-            let chunk = self.received_chunks.get(&i)
+            let chunk = self
+                .received_chunks
+                .get(&i)
                 .with_context(|| format!("missing chunk {}", i))?;
             buf.extend_from_slice(chunk);
         }
@@ -440,11 +443,17 @@ impl FileTransferManager {
     }
 
     pub fn active_inbound_count(&self) -> usize {
-        self.inbound.values().filter(|t| t.status == TransferStatus::Transferring).count()
+        self.inbound
+            .values()
+            .filter(|t| t.status == TransferStatus::Transferring)
+            .count()
     }
 
     pub fn active_outbound_count(&self) -> usize {
-        self.outbound.values().filter(|t| t.status == TransferStatus::Transferring).count()
+        self.outbound
+            .values()
+            .filter(|t| t.status == TransferStatus::Transferring)
+            .count()
     }
 
     pub fn all_inbound(&self) -> Vec<&InboundTransfer> {
@@ -487,7 +496,10 @@ fn unique_dest_path(dir: &Path, file_name: &str) -> PathBuf {
 }
 
 fn now_unix() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 /// Default save directory for received files.
@@ -559,7 +571,9 @@ mod tests {
 
         let transfer = mgr.get_inbound_mut(&tid).unwrap();
         // Feed corrupted chunk
-        transfer.receive_chunk(0, b"CORRUPTED DATA".to_vec()).unwrap();
+        transfer
+            .receive_chunk(0, b"CORRUPTED DATA".to_vec())
+            .unwrap();
         transfer.receive_chunk(1, b"more data".to_vec()).unwrap();
         // finalize should fail due to SHA-256 mismatch
         let result = transfer.finalize();

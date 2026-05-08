@@ -1,7 +1,7 @@
 use crate::activity::ActivityFeed;
 use crate::dedup::hash_content;
 use crate::discovery::{Discovery, PeerEvent, PeerInfo};
-use crate::file_transfer::{default_save_dir, FileTransferManager};
+use crate::file_transfer::{default_save_dir, FileTransferManager, FileTransferMessage};
 use crate::identity::IdentityStore;
 use crate::mesh::{ClipboardApplyPolicy, MeshRouter};
 use crate::network::{self, PeerSession, Server};
@@ -482,17 +482,38 @@ impl Engine {
 
     /// Get recent activity feed entries (up to `limit`).
     pub async fn activity_recent(&self, limit: usize) -> Vec<crate::activity::ActivityEntry> {
-        self.shared.activity.lock().await.recent(limit).into_iter().cloned().collect()
+        self.shared
+            .activity
+            .lock()
+            .await
+            .recent(limit)
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     /// Get activity feed entries added after `since_id`.
     pub async fn activity_since(&self, since_id: u64) -> Vec<crate::activity::ActivityEntry> {
-        self.shared.activity.lock().await.since(since_id).into_iter().cloned().collect()
+        self.shared
+            .activity
+            .lock()
+            .await
+            .since(since_id)
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     /// Get pending remote clipboard items not yet applied locally.
     pub async fn pending_remote_clipboards(&self) -> Vec<crate::activity::ActivityEntry> {
-        self.shared.activity.lock().await.pending_remote_clipboards().into_iter().cloned().collect()
+        self.shared
+            .activity
+            .lock()
+            .await
+            .pending_remote_clipboards()
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     /// Explicitly apply a remote clipboard item by its content hash.
@@ -506,7 +527,9 @@ impl Engine {
                 .find(|e| e.content_hash.as_deref() == Some(&content_hash))
                 .cloned()
         };
-        let Some(entry) = entry else { return Ok(false); };
+        let Some(entry) = entry else {
+            return Ok(false);
+        };
         let from_device = entry.device_id;
         let from_name = entry.device_name.clone();
         {
@@ -514,14 +537,18 @@ impl Engine {
             feed.record_clipboard_applied(from_device, from_name.clone(), content_hash);
         }
         // Emit event so the platform layer writes to local clipboard.
-        let _ = self.shared.event_tx.send(EngineEvent::ClipboardReceived {
-            from_device,
-            from_name,
-            content: ClipboardContent::Text(entry.text_preview.unwrap_or_default()),
-            auto_applied: true,
-            relay_path: entry.relay_path,
-            activity_id: entry.id,
-        }).await;
+        let _ = self
+            .shared
+            .event_tx
+            .send(EngineEvent::ClipboardReceived {
+                from_device,
+                from_name,
+                content: ClipboardContent::Text(entry.text_preview.unwrap_or_default()),
+                auto_applied: true,
+                relay_path: entry.relay_path,
+                activity_id: entry.id,
+            })
+            .await;
         Ok(true)
     }
 
@@ -553,7 +580,7 @@ impl Engine {
         let transfer_id = transfer.transfer_id;
         let meta = transfer.meta.clone();
         let size_bytes = meta.size_bytes;
-        drop(transfer); // release immutable borrow before mutable use
+        let _ = transfer; // release immutable borrow before mutable use
 
         // Announce to target peer(s).
         let announce = AppMessage::FileTransferAnnounce { meta };
@@ -620,7 +647,8 @@ impl Engine {
     pub async fn reject_file_transfer(&self, transfer_id: [u8; 16], reason: String) -> Result<()> {
         let from_device = {
             let mut mgr = self.shared.file_transfers.lock().await;
-            let dev = mgr.all_inbound()
+            let dev = mgr
+                .all_inbound()
                 .iter()
                 .find(|t| t.transfer_id == transfer_id)
                 .map(|t| t.from_device);
@@ -813,7 +841,9 @@ impl Engine {
 
     /// Set auto-connect for a device.
     pub async fn set_auto_connect(&self, device_id: Uuid, enabled: bool) -> Result<bool> {
-        self.shared.peer_manager.set_auto_connect(device_id, enabled)
+        self.shared
+            .peer_manager
+            .set_auto_connect(device_id, enabled)
     }
 
     /// Returns the number of currently connected peers.
@@ -1604,8 +1634,22 @@ fn register_session(
                                     }
                                 }; // lock released here
 
-                                for chunk in chunks_to_send {
-                                    if let Err(e) = sess.send(&chunk).await {
+                                for chunk_msg in chunks_to_send {
+                                    let wire_msg = match chunk_msg {
+                                        FileTransferMessage::Chunk {
+                                            transfer_id,
+                                            chunk_index,
+                                            total_chunks,
+                                            data,
+                                        } => AppMessage::FileChunk {
+                                            transfer_id,
+                                            chunk_index,
+                                            total_chunks,
+                                            data,
+                                        },
+                                        _ => continue,
+                                    };
+                                    if let Err(e) = sess.send(&wire_msg).await {
                                         warn!("file chunk send error: {}", e);
                                         break;
                                     }
@@ -1788,7 +1832,9 @@ fn register_session(
                 let name = peer_name.clone();
                 let disc_reason = reason.clone();
                 tokio::spawn(async move {
-                    feed.lock().await.record_peer_disconnected(peer_id, name, disc_reason);
+                    feed.lock()
+                        .await
+                        .record_peer_disconnected(peer_id, name, disc_reason);
                 });
 
                 if shared

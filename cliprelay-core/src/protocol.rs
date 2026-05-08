@@ -7,16 +7,22 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;   // 4 MB
+pub const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024; // 4 MB
 pub const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024; // 32 MB
 pub const MAX_FILE_BYTES: usize = 512 * 1024 * 1024; // 512 MB (chunked)
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ClipboardContent {
     Text(String),
-    Image { mime: String, data: Vec<u8> },
+    Image {
+        mime: String,
+        data: Vec<u8>,
+    },
     /// File payload — delivered as clipboard and also saved to Downloads/ClipRelay.
-    File { name: String, data: Vec<u8> },
+    File {
+        name: String,
+        data: Vec<u8>,
+    },
 }
 
 impl ClipboardContent {
@@ -63,17 +69,24 @@ impl HistoryMetadata {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        Self { hash, timestamp, source_device, kind, bytes, pinned }
+        Self {
+            hash,
+            timestamp,
+            source_device,
+            kind,
+            bytes,
+            pinned,
+        }
     }
 
     /// Human-readable summary shown in timeline.
     /// Uses friendly device name, NOT internal ID.
     pub fn summary(&self) -> String {
         match self.kind.as_str() {
-            "text"  => format!("[{}] copied text", self.source_device),
+            "text" => format!("[{}] copied text", self.source_device),
             "image" => format!("[{}] copied image", self.source_device),
-            "file"  => format!("[{}] received file", self.source_device),
-            _       => format!("[{}] clipboard item", self.source_device),
+            "file" => format!("[{}] received file", self.source_device),
+            _ => format!("[{}] clipboard item", self.source_device),
         }
     }
 }

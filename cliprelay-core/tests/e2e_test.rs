@@ -217,7 +217,10 @@ fn dedup_prevents_echo_storm() {
     assert!(alice_dedup.should_send(hash), "first send should pass");
 
     // Same content comes back as an echo — alice should suppress.
-    assert!(!alice_dedup.should_apply(uuid::Uuid::new_v4(), hash), "echo should be suppressed");
+    assert!(
+        !alice_dedup.should_apply(uuid::Uuid::new_v4(), hash),
+        "echo should be suppressed"
+    );
 
     // New content from a third device should pass.
     let new_content = ClipboardContent::Text("different content".into());

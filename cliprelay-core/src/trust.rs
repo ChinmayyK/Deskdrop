@@ -116,7 +116,13 @@ impl TrustStore {
     ) -> Result<TrustRecord> {
         let fingerprint = fingerprint_of(public_key);
         let now = now_secs();
-        self.migrate_matching_identity(device_id, device_name.clone(), public_key, fingerprint, now)?;
+        self.migrate_matching_identity(
+            device_id,
+            device_name.clone(),
+            public_key,
+            fingerprint,
+            now,
+        )?;
         let record = self
             .data
             .devices
@@ -163,17 +169,13 @@ impl TrustStore {
             return Ok(());
         }
 
-        let previous_id = self
-            .data
-            .devices
-            .iter()
-            .find_map(|(existing_id, record)| {
-                if record.public_key == *public_key || record.key_fingerprint == fingerprint {
-                    Some(*existing_id)
-                } else {
-                    None
-                }
-            });
+        let previous_id = self.data.devices.iter().find_map(|(existing_id, record)| {
+            if record.public_key == *public_key || record.key_fingerprint == fingerprint {
+                Some(*existing_id)
+            } else {
+                None
+            }
+        });
 
         let Some(previous_id) = previous_id else {
             return Ok(());

@@ -209,7 +209,11 @@ pub unsafe extern "C" fn cliprelay_event_type(event: *const PbEvent) -> c_int {
         return PB_EVENT_NONE;
     }
     match &(*event).inner {
-        EngineEvent::ClipboardReceived { content, auto_applied, .. } => {
+        EngineEvent::ClipboardReceived {
+            content,
+            auto_applied,
+            ..
+        } => {
             if *auto_applied {
                 match content {
                     ClipboardContent::Text(_) => PB_EVENT_CLIPBOARD_TEXT,
@@ -280,9 +284,15 @@ pub unsafe extern "C" fn cliprelay_event_device_name(event: *mut PbEvent) -> *co
 /// Returns 1 if this ClipboardReceived was auto-applied; 0 if timeline-first.
 #[no_mangle]
 pub unsafe extern "C" fn cliprelay_event_auto_applied(event: *const PbEvent) -> c_int {
-    if event.is_null() { return 0; }
+    if event.is_null() {
+        return 0;
+    }
     if let EngineEvent::ClipboardReceived { auto_applied, .. } = &(*event).inner {
-        if *auto_applied { 1 } else { 0 }
+        if *auto_applied {
+            1
+        } else {
+            0
+        }
     } else {
         0
     }
@@ -291,7 +301,9 @@ pub unsafe extern "C" fn cliprelay_event_auto_applied(event: *const PbEvent) -> 
 /// Returns the activity feed entry ID for a ClipboardReceived event (-1 if not applicable).
 #[no_mangle]
 pub unsafe extern "C" fn cliprelay_event_activity_id(event: *const PbEvent) -> i64 {
-    if event.is_null() { return -1; }
+    if event.is_null() {
+        return -1;
+    }
     if let EngineEvent::ClipboardReceived { activity_id, .. } = &(*event).inner {
         *activity_id as i64
     } else {
@@ -302,7 +314,9 @@ pub unsafe extern "C" fn cliprelay_event_activity_id(event: *const PbEvent) -> i
 /// Get the transfer ID (hex string) for file transfer events.
 #[no_mangle]
 pub unsafe extern "C" fn cliprelay_event_transfer_id(event: *mut PbEvent) -> *const c_char {
-    if event.is_null() { return std::ptr::null(); }
+    if event.is_null() {
+        return std::ptr::null();
+    }
     let e = &mut *event;
     let tid = match &e.inner {
         EngineEvent::FileTransferIncoming { transfer_id, .. } => Some(hex::encode(transfer_id)),
@@ -323,7 +337,9 @@ pub unsafe extern "C" fn cliprelay_event_transfer_id(event: *mut PbEvent) -> *co
 /// Get file name for file transfer events.
 #[no_mangle]
 pub unsafe extern "C" fn cliprelay_event_transfer_file_name(event: *mut PbEvent) -> *const c_char {
-    if event.is_null() { return std::ptr::null(); }
+    if event.is_null() {
+        return std::ptr::null();
+    }
     let e = &mut *event;
     let name = match &e.inner {
         EngineEvent::FileTransferIncoming { file_name, .. } => Some(file_name.as_str()),
@@ -343,7 +359,9 @@ pub unsafe extern "C" fn cliprelay_event_transfer_file_name(event: *mut PbEvent)
 /// Get progress percentage (0-100) for FileTransferProgress events; -1 otherwise.
 #[no_mangle]
 pub unsafe extern "C" fn cliprelay_event_transfer_percent(event: *const PbEvent) -> c_int {
-    if event.is_null() { return -1; }
+    if event.is_null() {
+        return -1;
+    }
     if let EngineEvent::FileTransferProgress { percent, .. } = &(*event).inner {
         *percent as c_int
     } else {
@@ -354,7 +372,9 @@ pub unsafe extern "C" fn cliprelay_event_transfer_percent(event: *const PbEvent)
 /// Get total bytes for FileTransferIncoming/Progress events; -1 otherwise.
 #[no_mangle]
 pub unsafe extern "C" fn cliprelay_event_transfer_total_bytes(event: *const PbEvent) -> i64 {
-    if event.is_null() { return -1; }
+    if event.is_null() {
+        return -1;
+    }
     match &(*event).inner {
         EngineEvent::FileTransferIncoming { file_bytes, .. } => *file_bytes as i64,
         EngineEvent::FileTransferProgress { total_bytes, .. } => *total_bytes as i64,
@@ -365,7 +385,9 @@ pub unsafe extern "C" fn cliprelay_event_transfer_total_bytes(event: *const PbEv
 /// Get the destination path for FileTransferComplete events.
 #[no_mangle]
 pub unsafe extern "C" fn cliprelay_event_transfer_dest_path(event: *mut PbEvent) -> *const c_char {
-    if event.is_null() { return std::ptr::null(); }
+    if event.is_null() {
+        return std::ptr::null();
+    }
     let e = &mut *event;
     if let EngineEvent::FileTransferComplete { dest_path, .. } = &e.inner {
         let s = dest_path.to_string_lossy().into_owned();
@@ -404,7 +426,9 @@ pub unsafe extern "C" fn cliprelay_apply_clipboard(
     handle: *mut ClipRelayHandle,
     hash_ptr: *const c_char,
 ) -> c_int {
-    if handle.is_null() || hash_ptr.is_null() { return 0; }
+    if handle.is_null() || hash_ptr.is_null() {
+        return 0;
+    }
     let hash = match std::ffi::CStr::from_ptr(hash_ptr).to_str() {
         Ok(s) => s.to_string(),
         Err(_) => return 0,
@@ -425,13 +449,19 @@ pub unsafe extern "C" fn cliprelay_accept_file_transfer(
     handle: *mut ClipRelayHandle,
     transfer_id_hex: *const c_char,
 ) -> c_int {
-    if handle.is_null() || transfer_id_hex.is_null() { return 0; }
+    if handle.is_null() || transfer_id_hex.is_null() {
+        return 0;
+    }
     let hex_str = match std::ffi::CStr::from_ptr(transfer_id_hex).to_str() {
         Ok(s) => s.to_string(),
         Err(_) => return 0,
     };
-    let Ok(bytes) = hex::decode(&hex_str) else { return 0; };
-    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else { return 0; };
+    let Ok(bytes) = hex::decode(&hex_str) else {
+        return 0;
+    };
+    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else {
+        return 0;
+    };
     let h = &*handle;
     match runtime().block_on(h.engine.accept_file_transfer(tid)) {
         Ok(()) => 1,
@@ -447,13 +477,19 @@ pub unsafe extern "C" fn cliprelay_reject_file_transfer(
     handle: *mut ClipRelayHandle,
     transfer_id_hex: *const c_char,
 ) -> c_int {
-    if handle.is_null() || transfer_id_hex.is_null() { return 0; }
+    if handle.is_null() || transfer_id_hex.is_null() {
+        return 0;
+    }
     let hex_str = match std::ffi::CStr::from_ptr(transfer_id_hex).to_str() {
         Ok(s) => s.to_string(),
         Err(_) => return 0,
     };
-    let Ok(bytes) = hex::decode(&hex_str) else { return 0; };
-    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else { return 0; };
+    let Ok(bytes) = hex::decode(&hex_str) else {
+        return 0;
+    };
+    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else {
+        return 0;
+    };
     let h = &*handle;
     match runtime().block_on(h.engine.reject_file_transfer(tid, "user rejected".into())) {
         Ok(()) => 1,

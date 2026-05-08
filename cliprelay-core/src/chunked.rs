@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 pub const CHUNK_THRESHOLD: usize = 128 * 1024; // 128 KB
-pub const CHUNK_SIZE: usize = 64 * 1024;        // 64 KB per chunk
+pub const CHUNK_SIZE: usize = 64 * 1024; // 64 KB per chunk
 
 pub type TransferId = [u8; 16];
 
@@ -60,7 +60,8 @@ pub fn maybe_chunk(content: &ClipboardContent) -> Option<Vec<ChunkMessage>> {
     let mut id = [0u8; 16];
     id.copy_from_slice(Uuid::new_v4().as_bytes());
 
-    let chunks: Vec<Bytes> = raw.chunks(CHUNK_SIZE)
+    let chunks: Vec<Bytes> = raw
+        .chunks(CHUNK_SIZE)
         .map(|c| Bytes::copy_from_slice(c))
         .collect();
     let total_chunks = chunks.len() as u32;
@@ -140,56 +141,88 @@ pub enum ReassemblerOutput {
 impl Reassembler {
     pub fn feed(&mut self, msg: ChunkMessage) -> Result<Option<ReassemblerOutput>> {
         match msg {
-            ChunkMessage::Start { transfer_id, total_chunks, total_bytes, checksum, kind } => {
-                self.in_flight.insert(transfer_id, Transfer {
-                    kind,
-                    total_chunks,
-                    total_bytes,
-                    expected_checksum: checksum,
-                    chunks: HashMap::new(),
-                });
+            ChunkMessage::Start {
+                transfer_id,
+                total_chunks,
+                total_bytes,
+                checksum,
+                kind,
+            } => {
+                self.in_flight.insert(
+                    transfer_id,
+                    Transfer {
+                        kind,
+                        total_chunks,
+                        total_bytes,
+                        expected_checksum: checksum,
+                        chunks: HashMap::new(),
+                    },
+                );
                 Ok(None)
             }
 
-            ChunkMessage::Chunk { transfer_id, index, data } => {
-                let transfer = self.in_flight.get_mut(&transfer_id)
+            ChunkMessage::Chunk {
+                transfer_id,
+                index,
+                data,
+            } => {
+                let transfer = self
+                    .in_flight
+                    .get_mut(&transfer_id)
                     .context("chunk for unknown transfer")?;
 
                 anyhow::ensure!(
                     index < transfer.total_chunks,
-                    "chunk index {} out of range (total {})", index, transfer.total_chunks
+                    "chunk index {} out of range (total {})",
+                    index,
+                    transfer.total_chunks
                 );
                 anyhow::ensure!(
                     data.len() <= CHUNK_SIZE + 16,
-                    "chunk {} too large ({})", index, data.len()
+                    "chunk {} too large ({})",
+                    index,
+                    data.len()
                 );
 
                 transfer.chunks.insert(index, data);
                 let received = transfer.chunks.len() as u32;
                 let bytes_so_far: u64 = transfer.chunks.values().map(|c| c.len() as u64).sum();
                 let percent = ((received as f64 / transfer.total_chunks as f64) * 100.0) as u8;
-                Ok(Some(ReassemblerOutput::InProgress { received, total: transfer.total_chunks, bytes_so_far, percent }))
+                Ok(Some(ReassemblerOutput::InProgress {
+                    received,
+                    total: transfer.total_chunks,
+                    bytes_so_far,
+                    percent,
+                }))
             }
 
             ChunkMessage::End { transfer_id } => {
-                let transfer = self.in_flight.remove(&transfer_id)
+                let transfer = self
+                    .in_flight
+                    .remove(&transfer_id)
                     .context("ChunkEnd for unknown transfer")?;
 
                 anyhow::ensure!(
                     transfer.chunks.len() as u32 == transfer.total_chunks,
-                    "missing chunks: got {} of {}", transfer.chunks.len(), transfer.total_chunks
+                    "missing chunks: got {} of {}",
+                    transfer.chunks.len(),
+                    transfer.total_chunks
                 );
 
                 let mut buf = Vec::with_capacity(transfer.total_bytes as usize);
                 for i in 0..transfer.total_chunks {
-                    let chunk = transfer.chunks.get(&i)
+                    let chunk = transfer
+                        .chunks
+                        .get(&i)
                         .context(format!("missing chunk {}", i))?;
                     buf.extend_from_slice(chunk);
                 }
 
                 anyhow::ensure!(
                     buf.len() as u64 == transfer.total_bytes,
-                    "size mismatch: got {} expected {}", buf.len(), transfer.total_bytes
+                    "size mismatch: got {} expected {}",
+                    buf.len(),
+                    transfer.total_bytes
                 );
 
                 // ── SHA-256 integrity verification ────────────────────────────
@@ -275,7 +308,9 @@ mod tests {
         let mut corrupted = false;
         for msg in msgs {
             match r.feed(msg).unwrap() {
-                Some(ReassemblerOutput::ChecksumMismatch { .. }) => { corrupted = true; }
+                Some(ReassemblerOutput::ChecksumMismatch { .. }) => {
+                    corrupted = true;
+                }
                 _ => {}
             }
         }

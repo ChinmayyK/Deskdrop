@@ -34,12 +34,12 @@
 
 #[cfg(fuzzing)]
 pub mod targets {
-    use libfuzzer_sys::fuzz_target;
     use cliprelay_core::{
         chunked::{ChunkMessage, Reassembler},
         filter::{ExtensionFilter, FilterChain, SizeFilter},
         protocol::AppMessage,
     };
+    use libfuzzer_sys::fuzz_target;
 
     // ── Fuzz 1: Protocol deserializer ─────────────────────────────────────────
 

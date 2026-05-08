@@ -194,7 +194,7 @@ jobs:
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
       - run: cargo install cargo-cyclonedx --locked
-      - run: cargo cyclonedx --format json -p cliprelay-core
+      - run: cargo cyclonedx --format json --all
       - uses: actions/upload-artifact@v4
         with:
           name: sbom

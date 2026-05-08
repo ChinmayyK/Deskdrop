@@ -14,9 +14,9 @@ use cliprelay_core::peer_manager::{DiscoverySource, PeerConnectionState, PeerMan
 use cliprelay_core::protocol::ClipboardContent;
 use std::net::SocketAddr;
 use tempfile::NamedTempFile;
-use uuid::Uuid;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
+use uuid::Uuid;
 
 fn peer_addr(n: u8) -> SocketAddr {
     SocketAddr::from(([192, 168, 1, n], 47823))
@@ -38,10 +38,18 @@ fn three_device_fanout_all_receive() {
     let mut txs = vec![];
 
     for (i, &id) in device_ids.iter().enumerate() {
-        mgr.upsert_peer(id, format!("Device {}", i+1), peer_addr(10 + i as u8), true, DiscoverySource::Mdns).unwrap();
+        mgr.upsert_peer(
+            id,
+            format!("Device {}", i + 1),
+            peer_addr(10 + i as u8),
+            true,
+            DiscoverySource::Mdns,
+        )
+        .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(10 + i as u8), tx.clone(), stop).unwrap();
+        mgr.replace_live_session(id, peer_addr(10 + i as u8), tx.clone(), stop)
+            .unwrap();
         txs.push(tx);
     }
 
@@ -58,17 +66,29 @@ fn pause_sync_removes_one_from_fanout() {
     let ids: Vec<Uuid> = (0..4).map(|_| Uuid::new_v4()).collect();
 
     for (i, &id) in ids.iter().enumerate() {
-        mgr.upsert_peer(id, format!("Dev{}", i), peer_addr(20 + i as u8), true, DiscoverySource::Mdns).unwrap();
+        mgr.upsert_peer(
+            id,
+            format!("Dev{}", i),
+            peer_addr(20 + i as u8),
+            true,
+            DiscoverySource::Mdns,
+        )
+        .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(20 + i as u8), tx, stop).unwrap();
+        mgr.replace_live_session(id, peer_addr(20 + i as u8), tx, stop)
+            .unwrap();
     }
 
     assert_eq!(mgr.active_senders().len(), 4);
 
     // Pause device[2]
     mgr.set_sync_enabled(ids[2], false).unwrap();
-    assert_eq!(mgr.active_senders().len(), 3, "paused device must be excluded");
+    assert_eq!(
+        mgr.active_senders().len(),
+        3,
+        "paused device must be excluded"
+    );
 
     // Disconnect device[0] — remaining: device[1], device[3]
     mgr.shutdown_peer_session(ids[0]).unwrap();
@@ -76,7 +96,11 @@ fn pause_sync_removes_one_from_fanout() {
 
     // Resume device[2]
     mgr.set_sync_enabled(ids[2], true).unwrap();
-    assert_eq!(mgr.active_senders().len(), 3, "resumed device must re-enter fanout");
+    assert_eq!(
+        mgr.active_senders().len(),
+        3,
+        "resumed device must re-enter fanout"
+    );
 }
 
 // ── Test: One peer disconnects, others continue ───────────────────────────────
@@ -87,14 +111,23 @@ fn peer_disconnect_does_not_cascade() {
     let ids: Vec<Uuid> = (0..3).map(|_| Uuid::new_v4()).collect();
 
     for (i, &id) in ids.iter().enumerate() {
-        mgr.upsert_peer(id, format!("Node{}", i), peer_addr(30 + i as u8), true, DiscoverySource::Mdns).unwrap();
+        mgr.upsert_peer(
+            id,
+            format!("Node{}", i),
+            peer_addr(30 + i as u8),
+            true,
+            DiscoverySource::Mdns,
+        )
+        .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(30 + i as u8), tx, stop).unwrap();
+        mgr.replace_live_session(id, peer_addr(30 + i as u8), tx, stop)
+            .unwrap();
     }
 
     // Device 1 disconnects
-    mgr.mark_disconnected(ids[1], Some("peer closed session".into())).unwrap();
+    mgr.mark_disconnected(ids[1], Some("peer closed session".into()))
+        .unwrap();
 
     let senders = mgr.active_senders();
     assert_eq!(senders.len(), 2, "remaining 2 devices unaffected");
@@ -109,17 +142,30 @@ fn peer_disconnect_does_not_cascade() {
 fn auto_connect_toggle_controls_reconnect_eligibility() {
     let (mgr, _f) = make_manager();
     let id = Uuid::new_v4();
-    mgr.upsert_peer(id, "Phone".into(), peer_addr(50), true, DiscoverySource::Mdns).unwrap();
+    mgr.upsert_peer(
+        id,
+        "Phone".into(),
+        peer_addr(50),
+        true,
+        DiscoverySource::Mdns,
+    )
+    .unwrap();
 
     let record = mgr.get(id).unwrap();
     assert!(record.should_auto_reconnect(), "default: auto_connect=true");
 
     mgr.set_auto_connect(id, false).unwrap();
     let record = mgr.get(id).unwrap();
-    assert!(!record.should_auto_reconnect(), "auto_connect disabled: no reconnect");
+    assert!(
+        !record.should_auto_reconnect(),
+        "auto_connect disabled: no reconnect"
+    );
 
     mgr.set_auto_connect(id, true).unwrap();
-    assert!(mgr.get(id).unwrap().should_auto_reconnect(), "re-enabled: auto reconnect");
+    assert!(
+        mgr.get(id).unwrap().should_auto_reconnect(),
+        "re-enabled: auto reconnect"
+    );
 }
 
 // ── Test: Forget device prevents auto-reconnect ───────────────────────────────
@@ -128,13 +174,23 @@ fn auto_connect_toggle_controls_reconnect_eligibility() {
 fn forget_device_prevents_auto_reconnect() {
     let (mgr, _f) = make_manager();
     let id = Uuid::new_v4();
-    mgr.upsert_peer(id, "Tablet".into(), peer_addr(60), true, DiscoverySource::Mdns).unwrap();
+    mgr.upsert_peer(
+        id,
+        "Tablet".into(),
+        peer_addr(60),
+        true,
+        DiscoverySource::Mdns,
+    )
+    .unwrap();
     mgr.forget_device(id).unwrap();
 
     let record = mgr.get(id).unwrap();
     assert!(!record.remembered, "device must not be remembered");
     assert!(!record.auto_connect, "auto_connect must be false");
-    assert!(!record.should_auto_reconnect(), "forgotten device must not auto-reconnect");
+    assert!(
+        !record.should_auto_reconnect(),
+        "forgotten device must not auto-reconnect"
+    );
     assert!(record.trusted, "trust is preserved after forget");
 }
 
@@ -151,11 +207,20 @@ fn mesh_dedup_per_peer_windows() {
     let peer_c = Uuid::new_v4();
 
     // Peer A delivers first — should apply
-    assert!(dedup.should_apply(peer_a, hash), "first delivery must apply");
+    assert!(
+        dedup.should_apply(peer_a, hash),
+        "first delivery must apply"
+    );
 
     // Peers B and C deliver same content — should be deduped (already applied)
-    assert!(!dedup.should_apply(peer_b, hash), "duplicate from B suppressed");
-    assert!(!dedup.should_apply(peer_c, hash), "duplicate from C suppressed");
+    assert!(
+        !dedup.should_apply(peer_b, hash),
+        "duplicate from B suppressed"
+    );
+    assert!(
+        !dedup.should_apply(peer_c, hash),
+        "duplicate from C suppressed"
+    );
 }
 
 #[test]
@@ -185,8 +250,14 @@ fn history_metadata_uses_friendly_name() {
 
     // Summary must show friendly name, not a UUID
     let summary = meta.summary();
-    assert!(summary.contains("Chinmay's Pixel 8"), "summary must contain friendly name");
-    assert!(!summary.contains('-') || summary.contains("Chinmay"), "raw UUID must not appear");
+    assert!(
+        summary.contains("Chinmay's Pixel 8"),
+        "summary must contain friendly name"
+    );
+    assert!(
+        !summary.contains('-') || summary.contains("Chinmay"),
+        "raw UUID must not appear"
+    );
 }
 
 // ── Test: Platform metadata attached to peer records ─────────────────────────
@@ -196,9 +267,14 @@ fn peer_platform_metadata_stored() {
     let (mgr, _f) = make_manager();
     let id = Uuid::new_v4();
     mgr.upsert_peer_ext(
-        id, "Chinmay's Pixel 8".into(), peer_addr(70), true, DiscoverySource::Mdns,
-        Some("Android".into())
-    ).unwrap();
+        id,
+        "Chinmay's Pixel 8".into(),
+        peer_addr(70),
+        true,
+        DiscoverySource::Mdns,
+        Some("Android".into()),
+    )
+    .unwrap();
 
     let record = mgr.get(id).unwrap();
     assert_eq!(record.friendly_name, "Chinmay's Pixel 8");

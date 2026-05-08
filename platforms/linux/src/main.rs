@@ -107,6 +107,7 @@ fn handle_event(event: EngineEvent) {
         ),
         EngineEvent::PeerDisconnected { .. } => {}
         EngineEvent::Warning(w) => tracing::warn!("{}", w),
+        _ => {}
     }
 }
 

@@ -110,6 +110,7 @@ pub async fn handshake_initiator(
         identity_pubkey: my_identity_pubkey,
         ecdh_pubkey: ephemeral.public_bytes,
         nonce: my_nonce,
+        metadata_json: None,
     };
 
     send_frame(stream, &hello).await.context("sending Hello")?;
@@ -175,6 +176,7 @@ pub async fn handshake_responder(
         ecdh_pubkey: ephemeral.public_bytes,
         nonce_response,
         trusted: peer_is_trusted,
+        metadata_json: None,
     };
 
     send_frame(stream, &ack).await.context("sending HelloAck")?;

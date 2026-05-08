@@ -37,7 +37,10 @@ impl RelayRecord {
     fn new(origin: Uuid) -> Self {
         let mut seen_by = HashSet::new();
         seen_by.insert(origin);
-        Self { seen_by, created_at: Instant::now() }
+        Self {
+            seen_by,
+            created_at: Instant::now(),
+        }
     }
 
     fn is_expired(&self) -> bool {
@@ -94,7 +97,13 @@ impl MeshRouter {
     /// - The peer IS the origin (echo suppression)
     /// - The peer has already seen this content (duplicate suppression)
     /// - The relay path is too long (storm prevention)
-    pub fn should_relay_to(&mut self, hash: ContentHash, origin: Uuid, target: Uuid, relay_path: &[String]) -> bool {
+    pub fn should_relay_to(
+        &mut self,
+        hash: ContentHash,
+        origin: Uuid,
+        target: Uuid,
+        relay_path: &[String],
+    ) -> bool {
         // Storm prevention: cap relay depth.
         if relay_path.len() >= MAX_RELAY_HOPS {
             return false;
@@ -108,7 +117,10 @@ impl MeshRouter {
             return false;
         }
         // Check relay dedup record.
-        let record = self.relay_records.entry(hash).or_insert_with(|| RelayRecord::new(origin));
+        let record = self
+            .relay_records
+            .entry(hash)
+            .or_insert_with(|| RelayRecord::new(origin));
         if record.already_seen(target) {
             return false;
         }
@@ -119,7 +131,10 @@ impl MeshRouter {
     /// Register that we are originating content (prevents echo back to us).
     pub fn register_local_send(&mut self, hash: ContentHash) {
         self.evict_expired();
-        let record = self.relay_records.entry(hash).or_insert_with(|| RelayRecord::new(self.local_device_id));
+        let record = self
+            .relay_records
+            .entry(hash)
+            .or_insert_with(|| RelayRecord::new(self.local_device_id));
         record.mark_seen(self.local_device_id);
     }
 
@@ -165,7 +180,14 @@ impl MeshRouter {
                     device_id: sender.device_id,
                     device_name: sender.device_name.clone(),
                     delivered: false,
-                    skip_reason: Some(if !sender.trusted { "not trusted" } else { "sync paused" }.into()),
+                    skip_reason: Some(
+                        if !sender.trusted {
+                            "not trusted"
+                        } else {
+                            "sync paused"
+                        }
+                        .into(),
+                    ),
                 });
                 continue;
             }
@@ -189,7 +211,11 @@ impl MeshRouter {
                 device_id: sender.device_id,
                 device_name: sender.device_name.clone(),
                 delivered,
-                skip_reason: if delivered { None } else { Some("queue full".into()) },
+                skip_reason: if delivered {
+                    None
+                } else {
+                    Some("queue full".into())
+                },
             });
         }
         results
@@ -208,15 +234,19 @@ pub struct FanoutResult {
 /// Other message types pass through unchanged.
 fn inject_relay_path(msg: AppMessage, path: Vec<String>) -> AppMessage {
     match msg {
-        AppMessage::ClipboardPush { seq, content, origin_device, origin_device_name, .. } => {
-            AppMessage::ClipboardPush {
-                seq,
-                content,
-                origin_device,
-                origin_device_name,
-                relay_path: path,
-            }
-        }
+        AppMessage::ClipboardPush {
+            seq,
+            content,
+            origin_device,
+            origin_device_name,
+            ..
+        } => AppMessage::ClipboardPush {
+            seq,
+            content,
+            origin_device,
+            origin_device_name,
+            relay_path: path,
+        },
         other => other,
     }
 }
@@ -238,7 +268,12 @@ pub struct ClipboardApplyPolicy {
 }
 
 impl ClipboardApplyPolicy {
-    pub fn new(timeline_first: bool, auto_apply: bool, allowed: Vec<Uuid>, debounce_ms: u64) -> Self {
+    pub fn new(
+        timeline_first: bool,
+        auto_apply: bool,
+        allowed: Vec<Uuid>,
+        debounce_ms: u64,
+    ) -> Self {
         Self {
             timeline_first,
             auto_apply,

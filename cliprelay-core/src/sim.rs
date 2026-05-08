@@ -54,6 +54,8 @@ impl SimNode {
             seq,
             content,
             origin_device: self.device_id,
+            origin_device_name: self.device_name.clone(),
+            relay_path: Vec::new(),
         };
 
         if self.artificial_latency > Duration::ZERO {
@@ -80,7 +82,7 @@ impl SimNode {
                     return None; // echo
                 }
                 let hash = hash_content(&content);
-                if self.dedup.should_apply(hash) {
+                if self.dedup.should_apply(origin_device, hash) {
                     Some(content)
                 } else {
                     None

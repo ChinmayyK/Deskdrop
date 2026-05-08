@@ -419,7 +419,9 @@ impl PeerManager {
                 false
             }
         };
-        if found { self.save()?; }
+        if found {
+            self.save()?;
+        }
         Ok(found)
     }
 
@@ -433,7 +435,9 @@ impl PeerManager {
                 false
             }
         };
-        if found { self.save()?; }
+        if found {
+            self.save()?;
+        }
         Ok(found)
     }
 
@@ -449,7 +453,9 @@ impl PeerManager {
                 false
             }
         };
-        if found { self.save()?; }
+        if found {
+            self.save()?;
+        }
         Ok(found)
     }
 
@@ -463,7 +469,11 @@ impl PeerManager {
             .unwrap()
             .iter()
             .filter(|(id, _)| {
-                store.peers.get(*id).map(|p| p.is_sync_eligible()).unwrap_or(false)
+                store
+                    .peers
+                    .get(*id)
+                    .map(|p| p.is_sync_eligible())
+                    .unwrap_or(false)
             })
             .map(|(id, session)| (*id, session.sender.clone()))
             .collect()
@@ -484,7 +494,11 @@ impl PeerManager {
     }
 
     pub fn live_endpoint(&self, device_id: Uuid) -> Option<SocketAddr> {
-        self.live.read().unwrap().get(&device_id).map(|s| s.endpoint)
+        self.live
+            .read()
+            .unwrap()
+            .get(&device_id)
+            .map(|s| s.endpoint)
     }
 
     pub fn endpoint_for(&self, device_id: Uuid) -> Option<SocketAddr> {
@@ -492,11 +506,20 @@ impl PeerManager {
     }
 
     pub fn note_manual_target(&self, endpoint: SocketAddr) {
-        self.manual_targets.lock().unwrap().entry(endpoint).or_insert(0);
+        self.manual_targets
+            .lock()
+            .unwrap()
+            .entry(endpoint)
+            .or_insert(0);
     }
 
     pub fn record_manual_failure(&self, endpoint: SocketAddr) {
-        *self.manual_targets.lock().unwrap().entry(endpoint).or_insert(0) += 1;
+        *self
+            .manual_targets
+            .lock()
+            .unwrap()
+            .entry(endpoint)
+            .or_insert(0) += 1;
     }
 
     pub fn clear_manual_target(&self, endpoint: SocketAddr) {
@@ -504,7 +527,12 @@ impl PeerManager {
     }
 
     pub fn manual_targets(&self) -> Vec<SocketAddr> {
-        self.manual_targets.lock().unwrap().keys().copied().collect()
+        self.manual_targets
+            .lock()
+            .unwrap()
+            .keys()
+            .copied()
+            .collect()
     }
 
     pub fn shutdown_all_sessions(&self, reason: &str) -> Result<Vec<ReplacedSession>> {
@@ -520,11 +548,14 @@ impl PeerManager {
             }
         }
         self.save()?;
-        Ok(sessions.into_values().map(|s| ReplacedSession {
-            session_id: s.session_id,
-            endpoint: s.endpoint,
-            shutdown_tx: s.shutdown_tx,
-        }).collect())
+        Ok(sessions
+            .into_values()
+            .map(|s| ReplacedSession {
+                session_id: s.session_id,
+                endpoint: s.endpoint,
+                shutdown_tx: s.shutdown_tx,
+            })
+            .collect())
     }
 
     pub fn shutdown_peer_session(&self, device_id: Uuid) -> Result<Option<ReplacedSession>> {
@@ -545,7 +576,13 @@ impl PeerManager {
     }
 
     pub fn last_sync_at(&self) -> Option<u64> {
-        self.store.read().unwrap().peers.values().filter_map(|p| p.last_sync).max()
+        self.store
+            .read()
+            .unwrap()
+            .peers
+            .values()
+            .filter_map(|p| p.last_sync)
+            .max()
     }
 
     pub fn connected_count(&self) -> usize {
@@ -565,7 +602,15 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let manager = PeerManager::load(file.path()).unwrap();
         let id = Uuid::new_v4();
-        manager.upsert_peer(id, "Desk".into(), SocketAddr::from(([192,168,1,8], 47823)), true, DiscoverySource::Manual).unwrap();
+        manager
+            .upsert_peer(
+                id,
+                "Desk".into(),
+                SocketAddr::from(([192, 168, 1, 8], 47823)),
+                true,
+                DiscoverySource::Manual,
+            )
+            .unwrap();
         let manager2 = PeerManager::load(file.path()).unwrap();
         let peers = manager2.list();
         assert_eq!(peers.len(), 1);
@@ -577,10 +622,20 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let manager = PeerManager::load(file.path()).unwrap();
         let id = Uuid::new_v4();
-        manager.upsert_peer(id, "Phone".into(), SocketAddr::from(([192,168,1,10], 47823)), true, DiscoverySource::Mdns).unwrap();
+        manager
+            .upsert_peer(
+                id,
+                "Phone".into(),
+                SocketAddr::from(([192, 168, 1, 10], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
         let (tx, _rx) = mpsc::channel(1);
         let (stop, _stop_rx) = oneshot::channel();
-        manager.replace_live_session(id, SocketAddr::from(([192,168,1,10], 47823)), tx, stop).unwrap();
+        manager
+            .replace_live_session(id, SocketAddr::from(([192, 168, 1, 10], 47823)), tx, stop)
+            .unwrap();
         assert_eq!(manager.active_senders().len(), 1);
         manager.set_sync_enabled(id, false).unwrap();
         assert_eq!(manager.active_senders().len(), 0);
@@ -593,7 +648,15 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let manager = PeerManager::load(file.path()).unwrap();
         let id = Uuid::new_v4();
-        manager.upsert_peer(id, "Tablet".into(), SocketAddr::from(([192,168,1,20], 47823)), true, DiscoverySource::Mdns).unwrap();
+        manager
+            .upsert_peer(
+                id,
+                "Tablet".into(),
+                SocketAddr::from(([192, 168, 1, 20], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
         manager.forget_device(id).unwrap();
         let record = manager.get(id).unwrap();
         assert!(!record.remembered);
@@ -606,18 +669,37 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let manager = PeerManager::load(file.path()).unwrap();
         let id = Uuid::new_v4();
-        manager.upsert_peer(id, "Desk".into(), SocketAddr::from(([192,168,1,8], 47823)), true, DiscoverySource::Mdns).unwrap();
+        manager
+            .upsert_peer(
+                id,
+                "Desk".into(),
+                SocketAddr::from(([192, 168, 1, 8], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
         let (tx1, _rx1) = mpsc::channel(1);
         let (stop1, _stop1_rx) = oneshot::channel();
-        let (first_session_id, _) = manager.replace_live_session(id, SocketAddr::from(([192,168,1,8], 47823)), tx1, stop1).unwrap();
+        let (first_session_id, _) = manager
+            .replace_live_session(id, SocketAddr::from(([192, 168, 1, 8], 47823)), tx1, stop1)
+            .unwrap();
         let (tx2, _rx2) = mpsc::channel(1);
         let (stop2, _stop2_rx) = oneshot::channel();
-        let (second_session_id, replaced) = manager.replace_live_session(id, SocketAddr::from(([172,20,10,4], 47823)), tx2, stop2).unwrap();
+        let (second_session_id, replaced) = manager
+            .replace_live_session(id, SocketAddr::from(([172, 20, 10, 4], 47823)), tx2, stop2)
+            .unwrap();
         let replaced = replaced.unwrap();
         assert_eq!(replaced.session_id, first_session_id);
-        assert!(!manager.mark_disconnected_if_current(id, first_session_id, Some("stale".into())).unwrap());
-        assert!(manager.mark_disconnected_if_current(id, second_session_id, Some("closed".into())).unwrap());
+        assert!(!manager
+            .mark_disconnected_if_current(id, first_session_id, Some("stale".into()))
+            .unwrap());
+        assert!(manager
+            .mark_disconnected_if_current(id, second_session_id, Some("closed".into()))
+            .unwrap());
         assert_eq!(manager.list().len(), 1);
-        assert_eq!(manager.get(id).unwrap().ip, Some(IpAddr::V4(Ipv4Addr::new(172,20,10,4))));
+        assert_eq!(
+            manager.get(id).unwrap().ip,
+            Some(IpAddr::V4(Ipv4Addr::new(172, 20, 10, 4)))
+        );
     }
 }

@@ -30,14 +30,18 @@ fn addr(n: u8) -> SocketAddr {
 fn paused_peer_never_receives_clipboard_push() {
     let (mgr, _f) = mgr();
     let id = Uuid::new_v4();
-    mgr.upsert_peer(id, "Phone".into(), addr(10), true, DiscoverySource::Mdns).unwrap();
+    mgr.upsert_peer(id, "Phone".into(), addr(10), true, DiscoverySource::Mdns)
+        .unwrap();
     let (tx, _rx) = mpsc::channel(4);
     let (stop, _) = oneshot::channel();
     mgr.replace_live_session(id, addr(10), tx, stop).unwrap();
 
     // Pause sync — peer must not appear in active_senders
     mgr.set_sync_enabled(id, false).unwrap();
-    assert!(mgr.active_senders().is_empty(), "paused peer must not receive clipboard push");
+    assert!(
+        mgr.active_senders().is_empty(),
+        "paused peer must not receive clipboard push"
+    );
 
     // Resume — reappears
     mgr.set_sync_enabled(id, true).unwrap();
@@ -50,7 +54,7 @@ fn paused_peer_never_receives_clipboard_push() {
 fn originating_device_does_not_echo_to_own_feed() {
     let mut dedup = Deduplicator::new();
     let content = ClipboardContent::Text("my own copy".into());
-    let hash    = hash_content(&content);
+    let hash = hash_content(&content);
 
     // We send this — mark as sent
     assert!(dedup.should_send(hash));
@@ -60,7 +64,8 @@ fn originating_device_does_not_echo_to_own_feed() {
     for peer in &peers {
         assert!(
             !dedup.should_apply(*peer, hash),
-            "echo from {} must be suppressed", peer
+            "echo from {} must be suppressed",
+            peer
         );
     }
 }
@@ -71,12 +76,13 @@ fn originating_device_does_not_echo_to_own_feed() {
 fn forgotten_peer_not_in_auto_reconnect_list() {
     let (mgr, _f) = mgr();
 
-    let auto  = Uuid::new_v4();
+    let auto = Uuid::new_v4();
     let manual = Uuid::new_v4();
     let forgotten = Uuid::new_v4();
 
     for (id, name) in [(auto, "Auto"), (manual, "Manual"), (forgotten, "Forgotten")] {
-        mgr.upsert_peer(id, name.into(), addr(20), true, DiscoverySource::Mdns).unwrap();
+        mgr.upsert_peer(id, name.into(), addr(20), true, DiscoverySource::Mdns)
+            .unwrap();
     }
 
     mgr.forget_device(forgotten).unwrap();
@@ -84,7 +90,10 @@ fn forgotten_peer_not_in_auto_reconnect_list() {
     let peers = mgr.list();
     for p in &peers {
         if p.id == forgotten {
-            assert!(!p.should_auto_reconnect(), "forgotten peer must not auto-reconnect");
+            assert!(
+                !p.should_auto_reconnect(),
+                "forgotten peer must not auto-reconnect"
+            );
             assert!(p.trusted, "forgotten peer trust must be preserved");
         } else {
             assert!(p.should_auto_reconnect(), "other peers must auto-reconnect");
@@ -100,10 +109,18 @@ fn four_device_mesh_respects_pause() {
 
     let ids: Vec<Uuid> = (0..4).map(|_| Uuid::new_v4()).collect();
     for (i, &id) in ids.iter().enumerate() {
-        mgr.upsert_peer(id, format!("Dev{i}"), addr(30 + i as u8), true, DiscoverySource::Mdns).unwrap();
+        mgr.upsert_peer(
+            id,
+            format!("Dev{i}"),
+            addr(30 + i as u8),
+            true,
+            DiscoverySource::Mdns,
+        )
+        .unwrap();
         let (tx, _) = mpsc::channel(4);
         let (stop, _) = oneshot::channel();
-        mgr.replace_live_session(id, addr(30 + i as u8), tx, stop).unwrap();
+        mgr.replace_live_session(id, addr(30 + i as u8), tx, stop)
+            .unwrap();
     }
 
     assert_eq!(mgr.active_senders().len(), 4);
@@ -121,7 +138,8 @@ fn four_device_mesh_respects_pause() {
     mgr.set_sync_enabled(ids[1], true).unwrap();
     let (tx2, _) = mpsc::channel(4);
     let (stop2, _) = oneshot::channel();
-    mgr.replace_live_session(ids[1], addr(31), tx2, stop2).unwrap();
+    mgr.replace_live_session(ids[1], addr(31), tx2, stop2)
+        .unwrap();
     assert_eq!(mgr.active_senders().len(), 2);
 }
 
@@ -131,12 +149,17 @@ fn four_device_mesh_respects_pause() {
 fn all_connected_senders_includes_paused_peers() {
     let (mgr, _f) = mgr();
     let id = Uuid::new_v4();
-    mgr.upsert_peer(id, "Tablet".into(), addr(50), true, DiscoverySource::Mdns).unwrap();
+    mgr.upsert_peer(id, "Tablet".into(), addr(50), true, DiscoverySource::Mdns)
+        .unwrap();
     let (tx, _) = mpsc::channel(4);
     let (stop, _) = oneshot::channel();
     mgr.replace_live_session(id, addr(50), tx, stop).unwrap();
 
     mgr.set_sync_enabled(id, false).unwrap();
     assert_eq!(mgr.active_senders().len(), 0, "paused: no clipboard push");
-    assert_eq!(mgr.all_connected_senders().len(), 1, "paused: heartbeat still flows");
+    assert_eq!(
+        mgr.all_connected_senders().len(),
+        1,
+        "paused: heartbeat still flows"
+    );
 }

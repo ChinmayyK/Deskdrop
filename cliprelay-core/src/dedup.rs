@@ -47,12 +47,15 @@ struct PeerWindow {
 
 impl PeerWindow {
     fn new() -> Self {
-        Self { hashes: HashMap::new() }
+        Self {
+            hashes: HashMap::new(),
+        }
     }
 
     fn seen_recently(&mut self, hash: ContentHash) -> bool {
         let now = Instant::now();
-        self.hashes.retain(|_, t| now.duration_since(*t) < PEER_DEDUP_WINDOW);
+        self.hashes
+            .retain(|_, t| now.duration_since(*t) < PEER_DEDUP_WINDOW);
         if self.hashes.contains_key(&hash) {
             return true;
         }
@@ -92,7 +95,8 @@ impl Deduplicator {
 
     fn evict_stale_sent(&mut self) {
         let now = Instant::now();
-        let stale: Vec<ContentHash> = self.sent_at
+        let stale: Vec<ContentHash> = self
+            .sent_at
             .iter()
             .filter(|(_, t)| now.duration_since(**t) > SENT_HASH_TTL)
             .map(|(h, _)| *h)
@@ -131,7 +135,10 @@ impl Deduplicator {
         }
 
         // Per-peer duplicate within the dedup window
-        let window = self.peer_windows.entry(from_peer).or_insert_with(PeerWindow::new);
+        let window = self
+            .peer_windows
+            .entry(from_peer)
+            .or_insert_with(PeerWindow::new);
         if window.seen_recently(hash) {
             return false;
         }
@@ -168,7 +175,12 @@ struct TokenBucket {
 
 impl TokenBucket {
     fn new(rate: f64, capacity: f64) -> Self {
-        Self { tokens: capacity, last_refill: Instant::now(), rate, capacity }
+        Self {
+            tokens: capacity,
+            last_refill: Instant::now(),
+            rate,
+            capacity,
+        }
     }
 
     fn try_consume(&mut self) -> bool {
@@ -194,11 +206,18 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     pub fn new(rate_per_sec: f64, burst: f64) -> Self {
-        Self { buckets: HashMap::new(), rate_per_sec, burst, violations: HashMap::new() }
+        Self {
+            buckets: HashMap::new(),
+            rate_per_sec,
+            burst,
+            violations: HashMap::new(),
+        }
     }
 
     pub fn check(&mut self, peer_id: Uuid) -> bool {
-        let bucket = self.buckets.entry(peer_id)
+        let bucket = self
+            .buckets
+            .entry(peer_id)
             .or_insert_with(|| TokenBucket::new(self.rate_per_sec, self.burst));
         if bucket.try_consume() {
             true
