@@ -636,13 +636,13 @@ fn incoming_payload_json(id: u64, content: &ClipboardContent) -> serde_json::Val
             "id": id,
             "type": "image",
             "mime": mime,
-            "data_base64": base64::encode(data),
+            "data_base64": base64::engine::general_purpose::STANDARD.encode(data),
         }),
         ClipboardContent::File { name, data } => json!({
             "id": id,
             "type": "file",
             "name": name,
-            "data_base64": base64::encode(data),
+            "data_base64": base64::engine::general_purpose::STANDARD.encode(data),
         }),
     }
 }
@@ -652,7 +652,8 @@ fn parse_uuid(value: &str) -> Result<Uuid> {
 }
 
 fn decode_base64(value: &str) -> Result<Vec<u8>> {
-    base64::decode(value).map_err(|error| anyhow!("invalid base64 payload: {error}"))
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.decode(value).map_err(|error| anyhow!("invalid base64 payload: {error}"))
 }
 
 fn parse_transfer_id(value: &str) -> Result<[u8; 16]> {

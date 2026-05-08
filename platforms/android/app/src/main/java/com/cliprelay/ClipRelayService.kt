@@ -24,6 +24,8 @@ import android.util.Log
 import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
@@ -93,6 +95,12 @@ object ClipRelayJni {
     @JvmStatic external fun acceptFileTransfer(engineHandle: Long, transferIdHex: String): Int
     /** Reject an incoming file transfer. */
     @JvmStatic external fun rejectFileTransfer(engineHandle: Long, transferIdHex: String): Int
+
+    /**
+     * Connect to a peer discovered via Android NSD.
+     * Returns 0 on success, -1 on error.
+     */
+    @JvmStatic external fun connectToPeer(handle: Long, ip: String, port: Int): Int
 }
 
 // ── Activity feed model ───────────────────────────────────────────────────────
@@ -194,6 +202,10 @@ class ClipRelayService : Service() {
         private const val CLIP_REDUCED_MS   = 500L   // clipboard check interval (reduced)
         private const val ACTIVITY_FEED_MAX = 100
 
+        // NSD (Network Service Discovery) — mirrors the mDNS service type used by the Rust engine
+        private const val NSD_SERVICE_TYPE       = "_cliprelay._tcp."
+        private const val DEFAULT_CLIPRELAY_PORT = 47823
+
         // Global activity feed — readable by UI without binding to the service
         @JvmField val activityFeed = ArrayDeque<ActivityEntry>()
         @JvmField val feedLock     = Any()
@@ -219,6 +231,10 @@ class ClipRelayService : Service() {
     private val connectedPeerNames = linkedSetOf<String>()
     private val engineStarted = AtomicBoolean(false)
     private val notificationManager by lazy { getSystemService(NotificationManager::class.java) }
+
+    // NSD — peer discovery on Android (replaces stubbed Rust mDNS)
+    private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
+    private var nsdDiscoveryListener: NsdManager.DiscoveryListener? = null
 
     // WakeLock — held ONLY during active event drain, released immediately after.
     // NOT a permanent wakelock; the foreground service itself keeps us alive.
@@ -310,6 +326,7 @@ class ClipRelayService : Service() {
                 Log.i(TAG, "Engine started — $deviceName")
                 scheduleEventDrain()
                 scheduleClipboardWatch()
+                startNsdDiscovery()   // advertise + browse so the Mac can find us
                 persistStatus()
             }
 
@@ -339,6 +356,7 @@ class ClipRelayService : Service() {
     }
 
     override fun onDestroy() {
+        stopNsdDiscovery()
         handler.removeCallbacksAndMessages(null)
         if (engineHandle != 0L) {
             ClipRelayJni.stop(engineHandle)
@@ -946,6 +964,110 @@ class ClipRelayService : Service() {
     private sealed interface OutgoingPayload {
         data class Image(val mime: String, val data: ByteArray) : OutgoingPayload
         data class File(val name: String, val data: ByteArray) : OutgoingPayload
+    }
+
+    // ── NSD (Network Service Discovery) ────────────────────────────────────────────────
+    //
+    // Android does not support Rust’s mdns-sd crate, so we use the
+    // platform NSD API here to:
+    //   1. Advertise our service (“_cliprelay._tcp”) so the Mac discovers us.
+    //   2. Browse for the Mac’s _cliprelay._tcp advertisement.
+    //   3. When resolved, call connectToPeer() via JNI so the Rust engine
+    //      initiates a TCP handshake.
+
+    private fun startNsdDiscovery() {
+        val nm = runCatching { getSystemService(NSD_SERVICE) as NsdManager }.getOrNull()
+            ?: run { Log.w(TAG, "NSD: NsdManager unavailable"); return }
+
+        // ── 1. Register our own service so the Mac can find us ───────────────────
+        val safeName = resolvedDeviceName()
+            .take(20)
+            .replace(Regex("[^A-Za-z0-9\\-]"), "-")
+            .trimEnd('-')
+        val serviceInfo = NsdServiceInfo().apply {
+            serviceName = "cliprelay-$safeName"
+            serviceType = NSD_SERVICE_TYPE
+            port        = DEFAULT_CLIPRELAY_PORT
+        }
+
+        val regListener = object : NsdManager.RegistrationListener {
+            override fun onServiceRegistered(info: NsdServiceInfo) {
+                Log.i(TAG, "NSD: registered '${info.serviceName}'")
+            }
+            override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {
+                Log.w(TAG, "NSD: registration failed (code=$code)")
+            }
+            override fun onServiceUnregistered(info: NsdServiceInfo) {
+                Log.i(TAG, "NSD: unregistered '${info.serviceName}'")
+            }
+            override fun onUnregistrationFailed(info: NsdServiceInfo, code: Int) {
+                Log.w(TAG, "NSD: unregistration failed (code=$code)")
+            }
+        }
+        nsdRegistrationListener = regListener
+        runCatching { nm.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, regListener) }
+            .onFailure { Log.w(TAG, "NSD: registerService error", it) }
+
+        // ── 2. Browse for ClipRelay peers (the Mac, other desktops) ──────────────
+        val discListener = object : NsdManager.DiscoveryListener {
+            override fun onStartDiscoveryFailed(serviceType: String, code: Int) {
+                Log.w(TAG, "NSD: discovery start failed (code=$code)")
+            }
+            override fun onStopDiscoveryFailed(serviceType: String, code: Int) {
+                Log.w(TAG, "NSD: discovery stop failed (code=$code)")
+            }
+            override fun onDiscoveryStarted(serviceType: String) {
+                Log.i(TAG, "NSD: discovery started for $serviceType")
+            }
+            override fun onDiscoveryStopped(serviceType: String) {
+                Log.i(TAG, "NSD: discovery stopped")
+            }
+            override fun onServiceFound(info: NsdServiceInfo) {
+                Log.i(TAG, "NSD: found '${info.serviceName}'")
+                // Each resolve call requires a fresh listener instance.
+                runCatching { nm.resolveService(info, makeResolveListener()) }
+                    .onFailure { Log.w(TAG, "NSD: resolveService error", it) }
+            }
+            override fun onServiceLost(info: NsdServiceInfo) {
+                Log.i(TAG, "NSD: lost '${info.serviceName}'")
+            }
+        }
+        nsdDiscoveryListener = discListener
+        runCatching { nm.discoverServices(NSD_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discListener) }
+            .onFailure { Log.w(TAG, "NSD: discoverServices error", it) }
+    }
+
+    /** Creates a one-shot resolve listener. NSD requires a unique instance per call. */
+    private fun makeResolveListener(): NsdManager.ResolveListener {
+        return object : NsdManager.ResolveListener {
+            override fun onResolveFailed(info: NsdServiceInfo, code: Int) {
+                Log.w(TAG, "NSD: resolve failed for '${info.serviceName}' (code=$code)")
+            }
+            override fun onServiceResolved(info: NsdServiceInfo) {
+                val ip   = info.host?.hostAddress ?: return
+                val port = info.port
+                Log.i(TAG, "NSD: resolved peer at $ip:$port")
+                // Skip loopback addresses (self-discovery)
+                if (ip.startsWith("127.") || ip == "::1") return
+                val h = engineHandle
+                if (h != 0L) {
+                    val result = ClipRelayJni.connectToPeer(h, ip, port)
+                    if (result == 0) {
+                        Log.i(TAG, "NSD: connectToPeer($ip:$port) queued")
+                    } else {
+                        Log.w(TAG, "NSD: connectToPeer($ip:$port) failed")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopNsdDiscovery() {
+        val nm = runCatching { getSystemService(NSD_SERVICE) as NsdManager }.getOrNull() ?: return
+        nsdDiscoveryListener?.let  { runCatching { nm.stopServiceDiscovery(it) } }
+        nsdRegistrationListener?.let { runCatching { nm.unregisterService(it) } }
+        nsdDiscoveryListener    = null
+        nsdRegistrationListener = null
     }
 
     // ── Device name ───────────────────────────────────────────────────────────

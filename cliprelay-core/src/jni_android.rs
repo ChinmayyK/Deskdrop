@@ -33,7 +33,7 @@ struct AndroidHandle {
 // ── start ─────────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_start(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_start(
     mut env: JNIEnv,
     _class: JClass,
     device_name: JString,
@@ -94,7 +94,7 @@ fn config_with_android_paths(config: EngineConfig, data_root: Option<PathBuf>) -
 // ── stop ──────────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_stop(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_stop(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -107,7 +107,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_stop(
 // ── pushText ──────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_pushText(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_pushText(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -127,7 +127,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_pushText(
 // ── pushImage ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_pushImage(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_pushImage(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -153,7 +153,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_pushImage(
 // ── pushFile ──────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_pushFile(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_pushFile(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -179,7 +179,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_pushFile(
 // ── pollEvent ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_pollEvent(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_pollEvent(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -197,7 +197,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_pollEvent(
 // ── eventType ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventType(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventType(
     _env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -241,7 +241,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventType(
 // ── eventText ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventText(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventText(
     mut env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -266,7 +266,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventText(
 // ── eventBinaryData ───────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventBinaryData(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventBinaryData(
     env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -296,7 +296,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventBinaryData(
 // ── eventDeviceName ───────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventDeviceName(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventDeviceName(
     mut env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -324,7 +324,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventDeviceName(
 // ── eventMimeType ─────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventMimeType(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventMimeType(
     mut env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -350,7 +350,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventMimeType(
 // ── eventFileName ─────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventFileName(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventFileName(
     mut env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -376,7 +376,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventFileName(
 // ── eventFingerprint ──────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventFingerprint(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventFingerprint(
     mut env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -404,7 +404,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventFingerprint(
 /// clipboard, or 0 if it was only recorded in the activity feed (timeline-first).
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventAutoApplied(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventAutoApplied(
     _env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -429,7 +429,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventAutoApplied(
 /// The Kotlin layer uses this to show the "Apply" button in the timeline.
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventActivityId(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventActivityId(
     _env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -448,7 +448,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventActivityId(
 // ── eventTransferId ──────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferId(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferId(
     mut env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -480,7 +480,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferId(
 // ── eventTransferFileName ────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferFileName(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferFileName(
     mut env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -509,7 +509,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferFileName(
 // ── eventTransferProgressPercent ─────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferProgressPercent(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferProgressPercent(
     _env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -528,7 +528,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferProgressPer
 // ── eventTransferTotalBytes ──────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferTotalBytes(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferTotalBytes(
     _env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -549,7 +549,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferTotalBytes(
 // ── eventTransferDestPath ────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferDestPath(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferDestPath(
     mut env: JNIEnv,
     _class: JClass,
     event: jlong,
@@ -572,7 +572,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_eventTransferDestPath(
 /// Called from Kotlin when the user taps "Apply" on a timeline entry.
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_applyClipboardByHash(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_applyClipboardByHash(
     mut env: JNIEnv,
     _class: JClass,
     engine_ptr: jlong,
@@ -600,7 +600,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_applyClipboardByHash(
 // ── acceptFileTransfer ───────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_acceptFileTransfer(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_acceptFileTransfer(
     mut env: JNIEnv,
     _class: JClass,
     engine_ptr: jlong,
@@ -634,7 +634,7 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_acceptFileTransfer(
 // ── rejectFileTransfer ───────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_rejectFileTransfer(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_rejectFileTransfer(
     mut env: JNIEnv,
     _class: JClass,
     engine_ptr: jlong,
@@ -665,10 +665,36 @@ pub extern "system" fn Java_com_proxiboard_ClipRelayJni_rejectFileTransfer(
     }
 }
 
+// ── connectToPeer ───────────────────────────────────────────────────────────────
+/// Called from Kotlin when Android NSD resolves a ClipRelay peer on the LAN.
+/// Returns 0 on success, -1 on error.
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_connectToPeer(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    ip: JString,
+    port: jint,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let ip_str: String = match env.get_string(&ip) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.connect_to_peer(ip_str, port as u16)) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
 // ── freeEvent ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_proxiboard_ClipRelayJni_freeEvent(
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_freeEvent(
     _env: JNIEnv,
     _class: JClass,
     event: jlong,
