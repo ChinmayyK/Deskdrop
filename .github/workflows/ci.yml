@@ -28,16 +28,14 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          workspaces: |
+            .
+            cliprelay-core
+            cliprelay-cli
+            platforms/linux
 
       - name: Install Linux system deps
         if: matrix.os == 'ubuntu-latest'
@@ -53,23 +51,18 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --all -- --check
-        working-directory: cliprelay-core
 
       - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets --all-features -- -D warnings
-        working-directory: cliprelay-core
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Build
-        run: cargo build --release
-        working-directory: cliprelay-core
+        run: cargo build --release --workspace
 
       - name: Run unit tests
-        run: cargo test --lib
-        working-directory: cliprelay-core
+        run: cargo test --workspace --lib
 
       - name: Run doc tests
-        run: cargo test --doc
-        working-directory: cliprelay-core
+        run: cargo test --workspace --doc
 
   # ── Integration tests (Linux only — requires mDNS) ────────────────────────
   integration:
@@ -78,15 +71,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
       - name: Install deps
         run: |
           sudo apt-get update -q
           sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev avahi-daemon
           sudo systemctl start avahi-daemon || true
       - name: Run integration tests
-        run: cargo test --tests
-        working-directory: cliprelay-core
-        timeout-minutes: 2
+        run: cargo test --workspace --tests
+        timeout-minutes: 5
 
   # ── Benchmarks (compile check only, no execution) ────────────────────────
   bench-check:
@@ -94,10 +88,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
       - run: sudo apt-get update -q && sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev
-      - run: cargo bench --no-run
-        working-directory: cliprelay-core
+      - run: cargo bench --no-run --workspace
 
   # ── Cross-compile for Android ABIs ───────────────────────────────────────
   android:
@@ -132,8 +126,7 @@ jobs:
 
       - name: Build for ${{ matrix.target }}
         run: |
-          cargo ndk -t ${{ matrix.target }} build --release
-        working-directory: cliprelay-core
+          cargo ndk -t ${{ matrix.target }} build --release -p cliprelay-core
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
 
@@ -146,19 +139,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build macOS dylib
-        run: cargo build --release
-        working-directory: cliprelay-core
+        run: cargo build --release -p cliprelay-core
 
       - name: Check Swift files compile
         run: |
           swiftc \
             -typecheck \
-            platforms/macos/ClipRelay/AppDelegate.swift \
-            platforms/macos/ClipRelay/PreferencesView.swift \
-            -import-objc-header platforms/macos/ClipRelay/ClipRelayBridge.h \
+            platforms/macos/ProxiBoard/AppDelegate.swift \
+            platforms/macos/ProxiBoard/PreferencesView.swift \
+            -import-objc-header platforms/macos/ProxiBoard/ProxiBoardBridge.h \
             -sdk $(xcrun --sdk macosx --show-sdk-path) \
             -target arm64-apple-macos13.0 \
-        continue-on-error: true   # Xcodeproj required for full build
+        continue-on-error: true
 
   # ── Windows C# build ──────────────────────────────────────────────────────
   windows-platform:
@@ -169,17 +161,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build Windows DLL
-        run: cargo build --release
-        working-directory: cliprelay-core
+        run: cargo build --release -p cliprelay-core
 
       - name: Build C# project
         run: |
           # Create a stub DLL so the csproj can resolve the native ref.
-          New-Item -ItemType Directory -Force -Path platforms\windows\ClipRelay.Windows\
-          Copy-Item cliprelay-core\target\release\cliprelay_core.dll `
-                    platforms\windows\ClipRelay.Windows\cliprelay_core.dll `
+          New-Item -ItemType Directory -Force -Path platforms\windows\ProxiBoard.Windows\
+          Copy-Item target\release\cliprelay_core.dll `
+                    platforms\windows\ProxiBoard.Windows\cliprelay_core.dll `
                     -ErrorAction SilentlyContinue
-          dotnet build platforms\windows\ClipRelay.Windows\ClipRelay.Windows.csproj `
+          dotnet build platforms\windows\ProxiBoard.Windows\ProxiBoard.Windows.csproj `
             -c Release --no-restore
 
   # ── Security audit ────────────────────────────────────────────────────────
@@ -200,11 +191,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
       - run: cargo install cargo-cyclonedx --locked
-      - run: cargo cyclonedx --format json
-        working-directory: cliprelay-core
+      - run: cargo cyclonedx --format json -p cliprelay-core
       - uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: cliprelay-core/bom.json
+          path: bom.json

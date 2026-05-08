@@ -24,33 +24,25 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            cliprelay-core/target
-          key: macos-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
 
       - name: Build arm64
-        run: cargo build --release --target aarch64-apple-darwin
-        working-directory: cliprelay-core
+        run: cargo build --release --target aarch64-apple-darwin -p cliprelay-core
 
       - name: Build x86_64
-        run: cargo build --release --target x86_64-apple-darwin
-        working-directory: cliprelay-core
+        run: cargo build --release --target x86_64-apple-darwin -p cliprelay-core
 
       - name: Create universal dylib
         run: |
           lipo -create \
-            cliprelay-core/target/aarch64-apple-darwin/release/libcliprelay_core.dylib \
-            cliprelay-core/target/x86_64-apple-darwin/release/libcliprelay_core.dylib \
+            target/aarch64-apple-darwin/release/libcliprelay_core.dylib \
+            target/x86_64-apple-darwin/release/libcliprelay_core.dylib \
             -output libcliprelay_core.dylib
 
       - name: Build Swift app (Release)
         run: |
-          mkdir -p platforms/macos/build
+          mkdir -p platforms/macos/ProxiBoard/build
           # Full Xcode build would go here; CI produces a zip of the dylib for now.
           zip -j cliprelay-macos.zip libcliprelay_core.dylib
 
@@ -68,24 +60,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            cliprelay-core/target
-          key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
 
       - name: Build Rust DLL
-        run: cargo build --release
-        working-directory: cliprelay-core
+        run: cargo build --release -p cliprelay-core
 
       - name: Build C# app
         run: |
-          Copy-Item cliprelay-core\target\release\cliprelay_core.dll `
-                    platforms\windows\ClipRelay.Windows\
-          dotnet publish platforms\windows\ClipRelay.Windows\ClipRelay.Windows.csproj `
+          Copy-Item target\release\cliprelay_core.dll `
+                    platforms\windows\ProxiBoard.Windows\
+          dotnet publish platforms\windows\ProxiBoard.Windows\ProxiBoard.Windows.csproj `
             -c Release -r win-x64 --self-contained false `
             -o publish\windows
 
@@ -134,8 +119,7 @@ jobs:
             -t armv7-linux-androideabi \
             -t x86_64-linux-android \
             -o platforms/android/app/src/main/jniLibs \
-            build --release
-        working-directory: cliprelay-core
+            build --release -p cliprelay-core
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
 
@@ -164,15 +148,14 @@ jobs:
 
       - name: Build daemon + CLI
         run: |
-          cargo build --release --bin cliprelay-daemon
-          cargo build --release --bin cliprelay-cli
-        working-directory: cliprelay-core
+          cargo build --release --bin cliprelay-daemon -p cliprelay-core
+          cargo build --release --bin cliprelay-cli -p cliprelay-cli
 
       - name: Package .tar.gz
         run: |
           mkdir -p dist/cliprelay/usr/local/bin
-          cp cliprelay-core/target/release/cliprelay-daemon dist/cliprelay/usr/local/bin/
-          cp cliprelay-core/target/release/cliprelay-cli    dist/cliprelay/usr/local/bin/
+          cp target/release/cliprelay-daemon dist/cliprelay/usr/local/bin/
+          cp target/release/cliprelay-cli    dist/cliprelay/usr/local/bin/
           cp platforms/linux/cliprelay.service dist/cliprelay/
           cp platforms/linux/cliprelay.desktop dist/cliprelay/
           cp README.md LICENSE dist/cliprelay/
