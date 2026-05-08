@@ -91,6 +91,87 @@ final class ClipRelayIPCClient {
         _ = try await send(cmd: ["cmd": "reject_peer", "device_id": deviceId])
     }
 
+    // ── Activity Feed ─────────────────────────────────────────────────────────
+
+    func activityRecent(limit: Int = 50) async throws -> [IpcActivityEntry] {
+        let raw = try await send(cmd: ["cmd": "activity_recent", "limit": limit])
+        let resp = try JSONDecoder().decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
+        return resp.data ?? []
+    }
+
+    func activitySince(sinceId: Int64) async throws -> [IpcActivityEntry] {
+        let raw = try await send(cmd: ["cmd": "activity_since", "since_id": sinceId])
+        let resp = try JSONDecoder().decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
+        return resp.data ?? []
+    }
+
+    func pendingRemoteClipboards() async throws -> [IpcActivityEntry] {
+        let raw = try await send(cmd: ["cmd": "pending_remote_clipboards"])
+        let resp = try JSONDecoder().decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
+        return resp.data ?? []
+    }
+
+    // ── Timeline-first clipboard ──────────────────────────────────────────────
+
+    /// Apply a remote clipboard item from the activity feed by its content hash.
+    /// The engine writes the item to the local clipboard and marks it applied.
+    func applyClipboard(contentHash: String) async throws {
+        _ = try await send(cmd: ["cmd": "apply_clipboard", "content_hash": contentHash])
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+
+    func setTimelineFirstMode(enabled: Bool) async throws {
+        _ = try await send(cmd: ["cmd": "set_timeline_first_mode", "enabled": enabled])
+    }
+
+    func setAutoApplyClipboard(enabled: Bool) async throws {
+        _ = try await send(cmd: ["cmd": "set_auto_apply_clipboard", "enabled": enabled])
+    }
+
+    // ── File Transfer ─────────────────────────────────────────────────────────
+
+    /// Send a file to a specific peer, or all peers when targetDevice is nil.
+    func sendFile(url: URL, targetDeviceId: String? = nil) async throws -> String {
+        let data = try Data(contentsOf: url)
+        var cmd: [String: Any] = [
+            "cmd":        "send_file",
+            "name":       url.lastPathComponent,
+            "mime":       mimeType(for: url),
+            "data_base64": data.base64EncodedString()
+        ]
+        if let t = targetDeviceId { cmd["target_device"] = t }
+        let raw = try await send(cmd: cmd)
+        let resp = try JSONDecoder().decode(IpcResponse<String>.self, from: raw)
+        return resp.data ?? ""
+    }
+
+    func acceptFileTransfer(transferId: String) async throws {
+        _ = try await send(cmd: ["cmd": "accept_file_transfer", "transfer_id": transferId])
+    }
+
+    func rejectFileTransfer(transferId: String, reason: String = "user rejected") async throws {
+        _ = try await send(cmd: ["cmd": "reject_file_transfer",
+                                 "transfer_id": transferId, "reason": reason])
+    }
+
+    func cancelFileTransfer(transferId: String) async throws {
+        _ = try await send(cmd: ["cmd": "cancel_file_transfer", "transfer_id": transferId])
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private func mimeType(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        let map: [String: String] = [
+            "pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg",
+            "jpeg": "image/jpeg", "gif": "image/gif", "txt": "text/plain",
+            "zip": "application/zip", "tar": "application/x-tar",
+            "gz": "application/gzip", "mp4": "video/mp4", "mov": "video/quicktime"
+        ]
+        return map[ext] ?? "application/octet-stream"
+    }
+
     // ── Transport ─────────────────────────────────────────────────────────────
 
     private func send(cmd: [String: Any]) async throws -> Data {

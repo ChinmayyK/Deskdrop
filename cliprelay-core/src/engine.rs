@@ -1,5 +1,9 @@
+use crate::activity::ActivityFeed;
+use crate::dedup::hash_content;
 use crate::discovery::{Discovery, PeerEvent, PeerInfo};
+use crate::file_transfer::{default_save_dir, FileTransferManager};
 use crate::identity::IdentityStore;
+use crate::mesh::{ClipboardApplyPolicy, MeshRouter};
 use crate::network::{self, PeerSession, Server};
 use crate::network_manager::{self, NetworkChangeEvent, NetworkInterfaceInfo};
 use crate::peer_manager::{
@@ -7,7 +11,7 @@ use crate::peer_manager::{
 };
 use crate::protocol::{AppMessage, ClipboardContent, HistoryMetadata, DEFAULT_PORT};
 use crate::retry::Backoff;
-use crate::settings::{default_peer_store_path, default_trust_store_path};
+use crate::settings::{default_peer_store_path, default_trust_store_path, Settings};
 use crate::trust::{format_fingerprint, TrustRecord, TrustState, TrustStore};
 use anyhow::{Context, Result};
 use serde::Serialize;
@@ -32,10 +36,19 @@ fn now_secs() -> u64 {
 
 #[derive(Debug)]
 pub enum EngineEvent {
+    /// A remote clipboard item arrived and was added to the activity feed.
+    /// If `auto_applied` is true it was also written to the local clipboard.
     ClipboardReceived {
         from_device: Uuid,
         from_name: String,
         content: ClipboardContent,
+        /// True when the engine auto-applied it to the local clipboard.
+        /// False when timeline-first mode is active (user must apply manually).
+        auto_applied: bool,
+        /// Relay path that brought this item here.
+        relay_path: Vec<String>,
+        /// Activity feed entry ID for this event.
+        activity_id: u64,
     },
     HistoryMetadataReceived {
         from_device: Uuid,
@@ -68,6 +81,44 @@ pub enum EngineEvent {
         device_id: Uuid,
         device_name: Option<String>,
         reason: Option<String>,
+    },
+    /// A remote device wants to send a file — UI should prompt user to accept.
+    FileTransferIncoming {
+        transfer_id: [u8; 16],
+        from_device: Uuid,
+        from_name: String,
+        file_name: String,
+        file_bytes: u64,
+        mime_type: String,
+    },
+    /// File transfer progress update.
+    FileTransferProgress {
+        transfer_id: [u8; 16],
+        from_device: Uuid,
+        file_name: String,
+        percent: u8,
+        bytes_received: u64,
+        total_bytes: u64,
+        speed_bps: Option<u64>,
+        eta_secs: Option<u64>,
+    },
+    /// File transfer completed and is ready at `dest_path`.
+    FileTransferComplete {
+        transfer_id: [u8; 16],
+        from_device: Uuid,
+        from_name: String,
+        file_name: String,
+        dest_path: PathBuf,
+    },
+    /// File transfer failed or was cancelled.
+    FileTransferFailed {
+        transfer_id: [u8; 16],
+        from_device: Uuid,
+        reason: String,
+    },
+    /// Activity feed snapshot (full or incremental). Used to update the UI.
+    ActivityFeedUpdated {
+        entries: Vec<crate::activity::ActivityEntry>,
     },
     Warning(String),
 }
@@ -174,6 +225,17 @@ struct EngineShared {
     listener_tx: mpsc::Sender<ListenerCommand>,
     discovery_tx: Option<mpsc::Sender<DiscoveryCommand>>,
     network_reconcile: Arc<Mutex<()>>,
+    // ── New: mesh-aware shared state ─────────────────────────────────────────
+    /// Mesh fanout router + relay dedup (shared, lock-protected).
+    mesh_router: Arc<Mutex<MeshRouter>>,
+    /// Cross-device activity feed.
+    activity: Arc<Mutex<ActivityFeed>>,
+    /// File transfer manager.
+    file_transfers: Arc<Mutex<FileTransferManager>>,
+    /// Clipboard apply policy (timeline-first vs auto-apply).
+    apply_policy: Arc<Mutex<ClipboardApplyPolicy>>,
+    /// Settings snapshot for policy decisions (updated lazily).
+    settings: Arc<Mutex<Settings>>,
 }
 
 pub struct Engine {
@@ -210,7 +272,7 @@ impl Engine {
         };
 
         let shared = EngineShared {
-            config,
+            config: config.clone(),
             trust,
             peer_manager,
             event_tx: event_tx.clone(),
@@ -222,6 +284,14 @@ impl Engine {
             listener_tx: listener_tx.clone(),
             discovery_tx: discovery_pair.as_ref().map(|(tx, _)| tx.clone()),
             network_reconcile: Arc::new(Mutex::new(())),
+            mesh_router: Arc::new(Mutex::new(MeshRouter::new(
+                config.device_id,
+                config.device_name.clone(),
+            ))),
+            activity: Arc::new(Mutex::new(ActivityFeed::new(200))),
+            file_transfers: Arc::new(Mutex::new(FileTransferManager::new(default_save_dir()))),
+            apply_policy: Arc::new(Mutex::new(ClipboardApplyPolicy::default())),
+            settings: Arc::new(Mutex::new(Settings::default())),
         };
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
@@ -268,11 +338,36 @@ impl Engine {
             *guard += 1;
             *guard
         };
+
+        // Hash for dedup + activity recording.
+        let hash = hash_content(&content);
+
+        // Register in mesh router so we never echo back to ourselves.
+        {
+            let mut router = self.shared.mesh_router.lock().await;
+            router.register_local_send(hash);
+        }
+
+        // Record in activity feed.
+        {
+            let mut feed = self.shared.activity.lock().await;
+            if let ClipboardContent::Text(ref text) = content {
+                feed.record_local_clipboard_text(
+                    self.shared.config.device_id,
+                    self.shared.config.device_name.clone(),
+                    text,
+                    hex::encode(hash),
+                );
+            }
+        }
+
+        let relay_path = vec![self.shared.config.device_name.clone()];
         let msg = AppMessage::ClipboardPush {
             seq,
             content: content.clone(),
             origin_device: self.shared.config.device_id,
             origin_device_name: self.shared.config.device_name.clone(),
+            relay_path: relay_path.clone(),
         };
         let metadata =
             HistoryMetadata::from_content(&content, self.shared.config.device_name.clone(), false);
@@ -300,10 +395,38 @@ impl Engine {
                 continue;
             }
 
+            if !peer.is_sync_eligible() {
+                report.peers.push(SyncDispatchPeer {
+                    device_id: peer_id,
+                    device_name: peer.friendly_name,
+                    delivered: false,
+                    metadata_only: false,
+                    reason: Some("sync paused for this peer".into()),
+                });
+                continue;
+            }
+
             let is_target = match target {
                 SyncTarget::All => true,
                 SyncTarget::Device(target_id) => target_id == peer_id,
             };
+
+            // Mesh router dedup check.
+            let should_relay = {
+                let mut router = self.shared.mesh_router.lock().await;
+                router.should_relay_to(hash, self.shared.config.device_id, peer_id, &relay_path)
+            };
+
+            if !should_relay {
+                report.peers.push(SyncDispatchPeer {
+                    device_id: peer_id,
+                    device_name: peer.friendly_name,
+                    delivered: false,
+                    metadata_only: false,
+                    reason: Some("mesh dedup: already delivered".into()),
+                });
+                continue;
+            }
 
             let app_message = if is_target {
                 msg.clone()
@@ -353,6 +476,193 @@ impl Engine {
         }
 
         report
+    }
+
+    // ── Activity Feed ─────────────────────────────────────────────────────────
+
+    /// Get recent activity feed entries (up to `limit`).
+    pub async fn activity_recent(&self, limit: usize) -> Vec<crate::activity::ActivityEntry> {
+        self.shared.activity.lock().await.recent(limit).into_iter().cloned().collect()
+    }
+
+    /// Get activity feed entries added after `since_id`.
+    pub async fn activity_since(&self, since_id: u64) -> Vec<crate::activity::ActivityEntry> {
+        self.shared.activity.lock().await.since(since_id).into_iter().cloned().collect()
+    }
+
+    /// Get pending remote clipboard items not yet applied locally.
+    pub async fn pending_remote_clipboards(&self) -> Vec<crate::activity::ActivityEntry> {
+        self.shared.activity.lock().await.pending_remote_clipboards().into_iter().cloned().collect()
+    }
+
+    /// Explicitly apply a remote clipboard item by its content hash.
+    /// Marks it applied in the feed and emits `ClipboardReceived { auto_applied: true }`.
+    pub async fn apply_clipboard_by_hash(&self, content_hash: String) -> Result<bool> {
+        // Find the matching pending entry.
+        let entry = {
+            let feed = self.shared.activity.lock().await;
+            feed.pending_remote_clipboards()
+                .into_iter()
+                .find(|e| e.content_hash.as_deref() == Some(&content_hash))
+                .cloned()
+        };
+        let Some(entry) = entry else { return Ok(false); };
+        let from_device = entry.device_id;
+        let from_name = entry.device_name.clone();
+        {
+            let mut feed = self.shared.activity.lock().await;
+            feed.record_clipboard_applied(from_device, from_name.clone(), content_hash);
+        }
+        // Emit event so the platform layer writes to local clipboard.
+        let _ = self.shared.event_tx.send(EngineEvent::ClipboardReceived {
+            from_device,
+            from_name,
+            content: ClipboardContent::Text(entry.text_preview.unwrap_or_default()),
+            auto_applied: true,
+            relay_path: entry.relay_path,
+            activity_id: entry.id,
+        }).await;
+        Ok(true)
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+
+    /// Apply new settings to the engine at runtime (no restart needed).
+    pub async fn apply_settings(&self, new_settings: Settings) {
+        let mut policy = self.shared.apply_policy.lock().await;
+        policy.update_from_settings(&new_settings);
+        *self.shared.settings.lock().await = new_settings;
+    }
+
+    pub async fn current_settings(&self) -> Settings {
+        self.shared.settings.lock().await.clone()
+    }
+
+    // ── File Transfer ─────────────────────────────────────────────────────────
+
+    /// Send a file to a specific peer (or all if `target_device` is None).
+    pub async fn send_file(
+        &self,
+        data: Vec<u8>,
+        file_name: String,
+        mime_type: String,
+        target_device: Option<Uuid>,
+    ) -> Result<[u8; 16]> {
+        let mut mgr = self.shared.file_transfers.lock().await;
+        let transfer = mgr.start_outbound(data, file_name.clone(), mime_type, target_device)?;
+        let transfer_id = transfer.transfer_id;
+        let meta = transfer.meta.clone();
+        let size_bytes = meta.size_bytes;
+        drop(transfer); // release immutable borrow before mutable use
+
+        // Announce to target peer(s).
+        let announce = AppMessage::FileTransferAnnounce { meta };
+        let peers = self.shared.peer_manager.active_senders();
+        for (peer_id, tx) in peers {
+            let should_send = match target_device {
+                Some(t) => t == peer_id,
+                None => true,
+            };
+            if should_send {
+                let _ = tx.try_send(announce.clone());
+            }
+        }
+        drop(mgr);
+
+        // Record in activity feed.
+        {
+            let mut feed = self.shared.activity.lock().await;
+            feed.record_file_transfer_started(
+                self.shared.config.device_id,
+                self.shared.config.device_name.clone(),
+                file_name,
+                size_bytes,
+                hex::encode(transfer_id),
+                true,
+            );
+        }
+        Ok(transfer_id)
+    }
+
+    /// Accept an incoming file transfer.
+    pub async fn accept_file_transfer(&self, transfer_id: [u8; 16]) -> Result<()> {
+        let resume_from = {
+            let mut mgr = self.shared.file_transfers.lock().await;
+            mgr.accept_inbound_or_resume(&transfer_id)?
+        };
+        // Find which peer sent this transfer and reply.
+        let from_device = {
+            let mgr = self.shared.file_transfers.lock().await;
+            mgr.all_inbound()
+                .iter()
+                .find(|t| t.transfer_id == transfer_id)
+                .map(|t| t.from_device)
+        };
+        if let Some(from_device) = from_device {
+            let accept_msg = AppMessage::FileTransferAccept {
+                transfer_id,
+                accepted: true,
+                resume_from_chunk: resume_from,
+                reject_reason: None,
+            };
+            let peers = self.shared.peer_manager.active_senders();
+            for (peer_id, tx) in peers {
+                if peer_id == from_device {
+                    let _ = tx.try_send(accept_msg);
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Reject an incoming file transfer.
+    pub async fn reject_file_transfer(&self, transfer_id: [u8; 16], reason: String) -> Result<()> {
+        let from_device = {
+            let mut mgr = self.shared.file_transfers.lock().await;
+            let dev = mgr.all_inbound()
+                .iter()
+                .find(|t| t.transfer_id == transfer_id)
+                .map(|t| t.from_device);
+            mgr.reject_inbound(&transfer_id);
+            dev
+        };
+        if let Some(from_device) = from_device {
+            let reject_msg = AppMessage::FileTransferAccept {
+                transfer_id,
+                accepted: false,
+                resume_from_chunk: 0,
+                reject_reason: Some(reason),
+            };
+            let peers = self.shared.peer_manager.active_senders();
+            for (peer_id, tx) in peers {
+                if peer_id == from_device {
+                    let _ = tx.try_send(reject_msg);
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Cancel an active file transfer (inbound or outbound).
+    pub async fn cancel_file_transfer(&self, transfer_id: [u8; 16]) -> Result<()> {
+        let cancel_msg = AppMessage::FileTransferCancel {
+            transfer_id,
+            reason: "user cancelled".into(),
+        };
+        // Cancel in manager.
+        {
+            let mut mgr = self.shared.file_transfers.lock().await;
+            mgr.cancel_inbound(&transfer_id, "user cancelled");
+            mgr.cancel_outbound(&transfer_id);
+        }
+        // Notify all peers.
+        let peers = self.shared.peer_manager.active_senders();
+        for (_, tx) in peers {
+            let _ = tx.try_send(cancel_msg.clone());
+        }
+        Ok(())
     }
 
     pub async fn connect_to_peer(&self, ip: String, port: u16) -> Result<()> {
@@ -1090,6 +1400,15 @@ fn register_session(
         trusted,
     });
 
+    // Record in activity feed.
+    {
+        let feed = shared.activity.clone();
+        let name = peer_name.clone();
+        tokio::spawn(async move {
+            feed.lock().await.record_peer_connected(peer_id, name);
+        });
+    }
+
     tokio::spawn(async move {
         let mut sess = PeerSession {
             stream,
@@ -1130,28 +1449,288 @@ fn register_session(
                 }
                 result = sess.recv() => {
                     match result {
-                        Ok(AppMessage::ClipboardPush { seq, content, origin_device, origin_device_name }) => {
+                        Ok(AppMessage::ClipboardPush { seq, content, origin_device, origin_device_name, relay_path }) => {
                             last_seen = Instant::now();
                             if shared.peer_manager.get(peer_id).map(|peer| peer.is_sync_eligible()).unwrap_or(false) {
                                 let _ = shared.peer_manager.update_last_sync(peer_id);
-                                // Use the human-readable name from the message, not the raw device ID
                                 let display_name = if origin_device_name.is_empty() {
                                     peer_name.clone()
                                 } else {
-                                    origin_device_name
+                                    origin_device_name.clone()
                                 };
+
+                                // ── Timeline-first clipboard UX ───────────────
+                                let hash = hash_content(&content);
+                                let hash_hex = hex::encode(hash);
+                                let auto_apply = shared.apply_policy.lock().await
+                                    .should_auto_apply(origin_device);
+
+                                // Record in activity feed.
+                                let activity_id = {
+                                    let mut feed = shared.activity.lock().await;
+                                    if let ClipboardContent::Text(ref text) = content {
+                                        feed.record_remote_clipboard_text(
+                                            origin_device,
+                                            display_name.clone(),
+                                            text,
+                                            hash_hex.clone(),
+                                            relay_path.clone(),
+                                        )
+                                    } else {
+                                        feed.record_remote_clipboard_image(
+                                            origin_device,
+                                            display_name.clone(),
+                                            "image",
+                                            0,
+                                            hash_hex.clone(),
+                                            relay_path.clone(),
+                                        )
+                                    }
+                                };
+
+                                // If auto-applying, mark immediately applied.
+                                if auto_apply {
+                                    let mut feed = shared.activity.lock().await;
+                                    feed.record_clipboard_applied(origin_device, display_name.clone(), hash_hex.clone());
+                                }
+
                                 let _ = shared.event_tx.send(EngineEvent::ClipboardReceived {
                                     from_device: origin_device,
-                                    from_name: display_name,
-                                    content,
+                                    from_name: display_name.clone(),
+                                    content: content.clone(),
+                                    auto_applied: auto_apply,
+                                    relay_path: relay_path.clone(),
+                                    activity_id,
                                 }).await;
                                 let _ = sess.send(&AppMessage::ClipboardAck { seq }).await;
+
+                                // ── Mesh fanout relay ──────────────────────────
+                                // If we received from a direct peer but there are other
+                                // peers in the mesh, relay onwards (excluding origin + seen).
+                                let fanout_peers = shared.peer_manager.active_senders();
+                                let mut router = shared.mesh_router.lock().await;
+                                for (fp_id, fp_tx) in fanout_peers {
+                                    if fp_id == peer_id { continue; }
+                                    let Some(fp) = shared.peer_manager.get(fp_id) else { continue; };
+                                    if !fp.is_sync_eligible() { continue; }
+                                    if !router.should_relay_to(hash, origin_device, fp_id, &relay_path) { continue; }
+                                    let mut extended_path = relay_path.clone();
+                                    extended_path.push(shared.config.device_name.clone());
+                                    let _ = fp_tx.try_send(AppMessage::ClipboardPush {
+                                        seq,
+                                        content: content.clone(),
+                                        origin_device,
+                                        origin_device_name: display_name.clone(),
+                                        relay_path: extended_path,
+                                    });
+                                }
                             } else {
                                 let _ = shared.event_tx.send(EngineEvent::Warning(format!(
                                     "ignoring clipboard payload from untrusted/paused peer {}",
                                     peer_name
                                 ))).await;
                             }
+                        }
+                        Ok(AppMessage::FileTransferAnnounce { meta }) => {
+                            last_seen = Instant::now();
+                            let transfer_id = meta.transfer_id;
+                            let file_name = meta.file_name.clone();
+                            let file_bytes = meta.size_bytes;
+                            let mime_type = meta.mime_type.clone();
+
+                            // Register inbound transfer.
+                            shared.file_transfers.lock().await
+                                .register_inbound(meta, peer_id, peer_name.clone());
+
+                            // Check auto-accept policy.
+                            let settings = shared.settings.lock().await.clone();
+                            let auto_accept = settings.auto_accept_file_transfers
+                                && (settings.auto_accept_max_bytes == 0 || file_bytes <= settings.auto_accept_max_bytes)
+                                && shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false);
+
+                            if auto_accept {
+                                let resume_from = shared.file_transfers.lock().await
+                                    .accept_inbound_or_resume(&transfer_id).unwrap_or(0);
+                                let _ = sess.send(&AppMessage::FileTransferAccept {
+                                    transfer_id,
+                                    accepted: true,
+                                    resume_from_chunk: resume_from,
+                                    reject_reason: None,
+                                }).await;
+                                // Record in feed.
+                                shared.activity.lock().await.record_file_transfer_started(
+                                    peer_id,
+                                    peer_name.clone(),
+                                    file_name.clone(),
+                                    file_bytes,
+                                    hex::encode(transfer_id),
+                                    false,
+                                );
+                            } else {
+                                // Prompt the user via event.
+                                let _ = shared.event_tx.send(EngineEvent::FileTransferIncoming {
+                                    transfer_id,
+                                    from_device: peer_id,
+                                    from_name: peer_name.clone(),
+                                    file_name,
+                                    file_bytes,
+                                    mime_type,
+                                }).await;
+                            }
+                        }
+                        Ok(AppMessage::FileTransferAccept { transfer_id, accepted, resume_from_chunk, reject_reason }) => {
+                            last_seen = Instant::now();
+                            if !accepted {
+                                shared.file_transfers.lock().await.cancel_outbound(&transfer_id);
+                                let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
+                                    transfer_id,
+                                    from_device: peer_id,
+                                    reason: reject_reason.unwrap_or_else(|| "rejected".into()),
+                                }).await;
+                            } else {
+                                // Collect chunks while holding the lock, then drop lock before sending.
+                                let (chunks_to_send, all_sent) = {
+                                    let mut mgr = shared.file_transfers.lock().await;
+                                    if let Some(transfer) = mgr.get_outbound_mut(&transfer_id) {
+                                        transfer.resume_from(resume_from_chunk);
+                                        let mut chunks = Vec::new();
+                                        while let Some(chunk_msg) = transfer.next_chunk_message() {
+                                            chunks.push(chunk_msg);
+                                        }
+                                        let done = transfer.is_all_sent();
+                                        (chunks, done)
+                                    } else {
+                                        (Vec::new(), false)
+                                    }
+                                }; // lock released here
+
+                                for chunk in chunks_to_send {
+                                    if let Err(e) = sess.send(&chunk).await {
+                                        warn!("file chunk send error: {}", e);
+                                        break;
+                                    }
+                                }
+                                if all_sent {
+                                    let _ = sess.send(&AppMessage::FileTransferComplete { transfer_id }).await;
+                                }
+                            }
+                        }
+                        Ok(AppMessage::FileChunk { transfer_id, chunk_index, total_chunks: _, data }) => {
+                            last_seen = Instant::now();
+                            let (progress, should_ack) = {
+                                let mut mgr = shared.file_transfers.lock().await;
+                                if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
+                                    let prog = transfer.receive_chunk(chunk_index, data).ok();
+                                    let ack = transfer.should_ack();
+                                    (prog, ack)
+                                } else {
+                                    (None, false)
+                                }
+                            };
+                            if let Some(prog) = progress {
+                                let from_device = peer_id;
+                                let file_name = shared.file_transfers.lock().await
+                                    .get_inbound_mut(&transfer_id)
+                                    .map(|t| t.meta.file_name.clone())
+                                    .unwrap_or_default();
+                                let _ = shared.event_tx.send(EngineEvent::FileTransferProgress {
+                                    transfer_id,
+                                    from_device,
+                                    file_name,
+                                    percent: prog.percent,
+                                    bytes_received: prog.bytes_received,
+                                    total_bytes: prog.total_bytes,
+                                    speed_bps: prog.speed_bps,
+                                    eta_secs: prog.eta_secs,
+                                }).await;
+                            }
+                            if should_ack {
+                                let last_confirmed = shared.file_transfers.lock().await
+                                    .get_inbound_mut(&transfer_id)
+                                    .map(|t| t.last_confirmed_chunk)
+                                    .unwrap_or(0);
+                                let _ = sess.send(&AppMessage::FileChunkAck {
+                                    transfer_id,
+                                    last_confirmed_chunk: last_confirmed,
+                                }).await;
+                            }
+                        }
+                        Ok(AppMessage::FileChunkAck { transfer_id, last_confirmed_chunk }) => {
+                            last_seen = Instant::now();
+                            if let Some(transfer) = shared.file_transfers.lock().await.get_outbound_mut(&transfer_id) {
+                                transfer.on_chunk_ack(last_confirmed_chunk);
+                            }
+                        }
+                        Ok(AppMessage::FileTransferComplete { transfer_id }) => {
+                            last_seen = Instant::now();
+                            // Finalize: verify SHA-256 and write to disk.
+                            let result = {
+                                let mut mgr = shared.file_transfers.lock().await;
+                                if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
+                                    let file_name = transfer.meta.file_name.clone();
+                                    let file_bytes = transfer.meta.size_bytes;
+                                    match transfer.finalize() {
+                                        Ok(dest) => Ok((dest, file_name, file_bytes)),
+                                        Err(e) => Err(e.to_string()),
+                                    }
+                                } else {
+                                    Err("transfer not found".into())
+                                }
+                            };
+                            match result {
+                                Ok((dest, file_name, file_bytes)) => {
+                                    shared.file_transfers.lock().await.remove_inbound(&transfer_id);
+                                    let hex_tid = hex::encode(transfer_id);
+                                    shared.activity.lock().await.record_file_transfer_complete(
+                                        peer_id, peer_name.clone(), file_name.clone(), file_bytes, hex_tid
+                                    );
+                                    let _ = sess.send(&AppMessage::FileTransferCompleteAck {
+                                        transfer_id,
+                                        success: true,
+                                        error: None,
+                                    }).await;
+                                    let _ = shared.event_tx.send(EngineEvent::FileTransferComplete {
+                                        transfer_id,
+                                        from_device: peer_id,
+                                        from_name: peer_name.clone(),
+                                        file_name,
+                                        dest_path: dest,
+                                    }).await;
+                                }
+                                Err(e) => {
+                                    let hex_tid = hex::encode(transfer_id);
+                                    shared.activity.lock().await.record_file_transfer_failed(
+                                        peer_id, peer_name.clone(), None, hex_tid, e.clone()
+                                    );
+                                    let _ = sess.send(&AppMessage::FileTransferCompleteAck {
+                                        transfer_id,
+                                        success: false,
+                                        error: Some(e.clone()),
+                                    }).await;
+                                    let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
+                                        transfer_id,
+                                        from_device: peer_id,
+                                        reason: e,
+                                    }).await;
+                                }
+                            }
+                        }
+                        Ok(AppMessage::FileTransferCompleteAck { transfer_id, success: _, error: _ }) => {
+                            last_seen = Instant::now();
+                            shared.file_transfers.lock().await.remove_outbound(&transfer_id);
+                        }
+                        Ok(AppMessage::FileTransferCancel { transfer_id, reason }) => {
+                            last_seen = Instant::now();
+                            {
+                                let mut mgr = shared.file_transfers.lock().await;
+                                mgr.cancel_inbound(&transfer_id, &reason);
+                                mgr.cancel_outbound(&transfer_id);
+                            }
+                            let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
+                                transfer_id,
+                                from_device: peer_id,
+                                reason,
+                            }).await;
                         }
                         Ok(AppMessage::HistoryMetadata { entry }) => {
                             last_seen = Instant::now();
@@ -1203,6 +1782,14 @@ fn register_session(
                         reason: reason.clone(),
                     })
                     .await;
+
+                // Record in activity feed.
+                let feed = shared.activity.clone();
+                let name = peer_name.clone();
+                let disc_reason = reason.clone();
+                tokio::spawn(async move {
+                    feed.lock().await.record_peer_disconnected(peer_id, name, disc_reason);
+                });
 
                 if shared
                     .peer_manager

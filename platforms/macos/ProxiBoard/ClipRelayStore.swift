@@ -14,6 +14,13 @@ final class ClipRelayStore: ObservableObject {
     @Published var statusLine: String = "Starting…"
     @Published var connectedCount: Int = 0
 
+    // ── Activity feed (timeline-first clipboard + all events) ─────────────────
+    @Published var activityFeed: [IpcActivityEntry] = []
+    @Published var activeTransfers: [FileTransferState] = []
+    @Published var clipboardPolicy = ClipboardPolicy()
+
+    private var lastActivityId: Int64 = 0
+
     private let ipc: ClipRelayIPCClient
     private var pollTimer: Timer?
     private var pendingRename: PeerViewModel? = nil
@@ -129,6 +136,111 @@ final class ClipRelayStore: ObservableObject {
     func addTimelineEntry(_ entry: TimelineEntry) {
         timeline.insert(entry, at: 0)
         if timeline.count > 200 { timeline.removeLast() }
+    }
+
+    // ── Activity Feed ─────────────────────────────────────────────────────────
+
+    @MainActor
+    func refreshActivityFeed() async {
+        do {
+            let entries = try await ipc.activityRecent(limit: 100)
+            activityFeed = entries
+            lastActivityId = entries.first?.id ?? 0
+        } catch {}
+    }
+
+    @MainActor
+    func pollActivityFeedIncremental() async {
+        do {
+            let newEntries = try await ipc.activitySince(sinceId: lastActivityId)
+            if !newEntries.isEmpty {
+                activityFeed.insert(contentsOf: newEntries.reversed(), at: 0)
+                if activityFeed.count > 200 { activityFeed = Array(activityFeed.prefix(200)) }
+                lastActivityId = newEntries.map(\.id).max() ?? lastActivityId
+            }
+        } catch {}
+    }
+
+    // ── Timeline-first clipboard ──────────────────────────────────────────────
+
+    @MainActor
+    func applyClipboard(entry: IpcActivityEntry) async {
+        guard let hash = entry.content_hash else { return }
+        do {
+            try await ipc.applyClipboard(contentHash: hash)
+            // Update local feed immediately for snappy UX.
+            if let idx = activityFeed.firstIndex(where: { $0.id == entry.id }) {
+                activityFeed[idx].applied_locally = true
+            }
+        } catch {}
+    }
+
+    @MainActor
+    func setTimelineFirstMode(enabled: Bool) async {
+        clipboardPolicy.timelineFirstMode = enabled
+        try? await ipc.setTimelineFirstMode(enabled: enabled)
+    }
+
+    @MainActor
+    func setAutoApplyClipboard(enabled: Bool) async {
+        clipboardPolicy.autoApply = enabled
+        try? await ipc.setAutoApplyClipboard(enabled: enabled)
+    }
+
+    // ── File Transfer ─────────────────────────────────────────────────────────
+
+    func sendFile(url: URL, toPeer deviceId: String? = nil) {
+        Task {
+            _ = try? await ipc.sendFile(url: url, targetDeviceId: deviceId)
+        }
+    }
+
+    @MainActor
+    func acceptFileTransfer(_ transfer: FileTransferState) {
+        Task {
+            try? await ipc.acceptFileTransfer(transferId: transfer.id)
+            updateTransferStatus(id: transfer.id, status: .transferring)
+        }
+    }
+
+    @MainActor
+    func rejectFileTransfer(_ transfer: FileTransferState) {
+        Task {
+            try? await ipc.rejectFileTransfer(transferId: transfer.id)
+            activeTransfers.removeAll { $0.id == transfer.id }
+        }
+    }
+
+    @MainActor
+    func cancelFileTransfer(_ transfer: FileTransferState) {
+        Task {
+            try? await ipc.cancelFileTransfer(transferId: transfer.id)
+            activeTransfers.removeAll { $0.id == transfer.id }
+        }
+    }
+
+    @MainActor
+    func upsertTransfer(_ t: FileTransferState) {
+        if let idx = activeTransfers.firstIndex(where: { $0.id == t.id }) {
+            activeTransfers[idx] = t
+        } else {
+            activeTransfers.insert(t, at: 0)
+        }
+    }
+
+    @MainActor
+    private func updateTransferStatus(id: String, status: FileTransferStatus) {
+        if let idx = activeTransfers.firstIndex(where: { $0.id == id }) {
+            activeTransfers[idx] = FileTransferState(
+                id: activeTransfers[idx].id,
+                fromDeviceName: activeTransfers[idx].fromDeviceName,
+                fileName: activeTransfers[idx].fileName,
+                totalBytes: activeTransfers[idx].totalBytes,
+                bytesReceived: activeTransfers[idx].bytesReceived,
+                percent: activeTransfers[idx].percent,
+                status: status
+            )
+        }
     }
 
     // ── View model mapping ────────────────────────────────────────────────────

@@ -1,11 +1,14 @@
-// ClipRelay for Android
-// Kotlin wrapper using JNI to call the Rust core.
+// ClipRelay — Android Foreground Service
 //
-// Notification UX design:
-// - ONE persistent foreground notification (quiet, minimal)
-// - NO per-clipboard-sync notifications (clipboard is silent/ambient)
-// - Notifications ONLY for: file received, trust request, connection loss
-// - Optional "notify on remote copy" setting (OFF by default)
+// Background execution strategy:
+//   - Foreground service (mandatory, stays alive across screen-off + OEM killers)
+//   - WakeLock (PARTIAL) held only during active event drain — released immediately after
+//   - Doze/standby aware: heartbeat poll rate reduced in Battery Optimized mode
+//   - Single IMPORTANCE_MIN persistent notification — silent, no heads-up, no badge
+//   - Alerts channel (IMPORTANCE_DEFAULT) for trust requests + file receives only
+//   - Zero per-clipboard-sync notifications — clipboard is ambient/invisible
+//   - Notification actions: Pause Sync | Disconnect
+//   - Activity feed (in-memory) replaces notification spam
 
 package com.cliprelay
 
@@ -23,134 +26,280 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
-import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 // ── JNI Bridge ────────────────────────────────────────────────────────────────
-// NOTE: JNI function names in the .so are Java_com_proxiboard_ClipRelayJni_*
-// We keep this object in the Kotlin file under the new package but the .so
-// exports use the legacy prefix for binary compatibility.
+// The prebuilt .so exports Java_com_proxiboard_ClipRelayJni_* symbols.
+// We keep this object name to match — only user-visible strings are renamed.
 
 object ClipRelayJni {
-    init {
-        System.loadLibrary("proxiboard_core")
-    }
+    init { System.loadLibrary("proxiboard_core") }
 
-    // Event codes (must match ffi.rs)
-    const val CR_EVENT_NONE              = 0
-    const val CR_EVENT_CLIPBOARD_TEXT    = 1
-    const val CR_EVENT_CLIPBOARD_IMAGE   = 2
-    const val CR_EVENT_CLIPBOARD_FILE    = 3
-    const val CR_EVENT_TOFU_PROMPT       = 4
-    const val CR_EVENT_PEER_CONNECTED    = 5
-    const val CR_EVENT_PEER_DISCONNECTED = 6
-    const val CR_EVENT_WARNING           = 7
-    const val CR_EVENT_CLIPBOARD_SYNCED  = 8
+    // ── Event type constants ──────────────────────────────────────────────────
+    const val CR_EVENT_NONE                  = 0
+    const val CR_EVENT_CLIPBOARD_TEXT        = 1   // auto-applied to local clipboard
+    const val CR_EVENT_CLIPBOARD_IMAGE       = 2   // auto-applied
+    const val CR_EVENT_CLIPBOARD_FILE        = 3   // auto-applied (legacy)
+    const val CR_EVENT_TOFU_PROMPT           = 4
+    const val CR_EVENT_PEER_CONNECTED        = 5
+    const val CR_EVENT_PEER_DISCONNECTED     = 6
+    const val CR_EVENT_WARNING               = 7
+    const val CR_EVENT_CLIPBOARD_SYNCED      = 8
+    // 9, 10 reserved
+    const val CR_EVENT_CLIPBOARD_AVAILABLE   = 11  // timeline-first: in feed, not yet applied
+    const val CR_EVENT_FILE_TRANSFER_INCOMING  = 12
+    const val CR_EVENT_FILE_TRANSFER_PROGRESS  = 13
+    const val CR_EVENT_FILE_TRANSFER_COMPLETE  = 14
+    const val CR_EVENT_FILE_TRANSFER_FAILED    = 15
+    const val CR_EVENT_ACTIVITY_UPDATED        = 16
 
+    // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?): Long
     @JvmStatic external fun stop(handle: Long)
+
+    // ── Clipboard push ────────────────────────────────────────────────────────
     @JvmStatic external fun pushText(handle: Long, text: String): Int
     @JvmStatic external fun pushImage(handle: Long, mimeType: String, data: ByteArray): Int
     @JvmStatic external fun pushFile(handle: Long, name: String, data: ByteArray): Int
+
+    // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
     @JvmStatic external fun eventType(event: Long): Int
+    @JvmStatic external fun freeEvent(event: Long)
+
+    // ── Common event accessors ────────────────────────────────────────────────
     @JvmStatic external fun eventText(event: Long): String?
     @JvmStatic external fun eventBinaryData(event: Long): ByteArray?
     @JvmStatic external fun eventDeviceName(event: Long): String?
     @JvmStatic external fun eventMimeType(event: Long): String?
     @JvmStatic external fun eventFileName(event: Long): String?
     @JvmStatic external fun eventFingerprint(event: Long): String?
-    @JvmStatic external fun freeEvent(event: Long)
+
+    // ── Timeline-first clipboard ──────────────────────────────────────────────
+    /** 1 if the ClipboardReceived event was auto-applied; 0 if timeline-first. */
+    @JvmStatic external fun eventAutoApplied(event: Long): Int
+    /** Activity feed entry ID (-1 if not applicable). */
+    @JvmStatic external fun eventActivityId(event: Long): Long
+    /** Apply a remote clipboard item to the local clipboard by its content hash. */
+    @JvmStatic external fun applyClipboardByHash(engineHandle: Long, hash: String): Int
+
+    // ── File transfer accessors ───────────────────────────────────────────────
+    @JvmStatic external fun eventTransferId(event: Long): String?
+    @JvmStatic external fun eventTransferFileName(event: Long): String?
+    @JvmStatic external fun eventTransferProgressPercent(event: Long): Int
+    @JvmStatic external fun eventTransferTotalBytes(event: Long): Long
+    @JvmStatic external fun eventTransferDestPath(event: Long): String?
+    /** Accept an incoming file transfer (identified by hex transfer ID). */
+    @JvmStatic external fun acceptFileTransfer(engineHandle: Long, transferIdHex: String): Int
+    /** Reject an incoming file transfer. */
+    @JvmStatic external fun rejectFileTransfer(engineHandle: Long, transferIdHex: String): Int
 }
 
-// ── Activity Feed Entry ───────────────────────────────────────────────────────
+// ── Activity feed model ───────────────────────────────────────────────────────
+
+enum class ActivityKind {
+    CLIPBOARD_TEXT, CLIPBOARD_IMAGE, FILE_SENT, FILE_RECEIVED,
+    FILE_TRANSFER_INCOMING, FILE_TRANSFER_PROGRESS, FILE_TRANSFER_COMPLETE,
+    FILE_TRANSFER_FAILED, PEER_CONNECTED, PEER_DISCONNECTED, WARNING;
+}
 
 data class ActivityEntry(
+    val id: Long = System.nanoTime(),
     val timestamp: Long = System.currentTimeMillis(),
     val deviceName: String,
-    val kind: String,   // "text", "image", "file"
-    val preview: String // short text preview or filename
-)
+    val kind: ActivityKind,
+    val preview: String,
+    /** For clipboard items: the full text (may be empty for images). */
+    val contentHash: String = "",
+    /** True if this clipboard item has been applied to local clipboard. */
+    val appliedLocally: Boolean = false,
+    /** For file transfers: the transfer ID hex. */
+    val transferId: String = "",
+    /** For file transfers: total bytes. */
+    val fileTotalBytes: Long = 0L,
+    /** Transfer progress 0-100. */
+    val progressPercent: Int = 0,
+    /** Final destination path (file transfers). */
+    val destPath: String = ""
+) {
+    fun formattedLine(): String = when (kind) {
+        ActivityKind.CLIPBOARD_TEXT  -> "[$deviceName] copied: $preview"
+        ActivityKind.CLIPBOARD_IMAGE -> "[$deviceName] copied image"
+        ActivityKind.FILE_SENT       -> "[$deviceName] sent file: $preview"
+        ActivityKind.FILE_RECEIVED   -> "[$deviceName] file ready: $preview"
+        ActivityKind.FILE_TRANSFER_INCOMING -> "[$deviceName] sending: $preview"
+        ActivityKind.FILE_TRANSFER_PROGRESS -> "[$deviceName] $progressPercent% — $preview"
+        ActivityKind.FILE_TRANSFER_COMPLETE -> "[$deviceName] ✓ $preview"
+        ActivityKind.FILE_TRANSFER_FAILED   -> "[$deviceName] ✗ transfer failed: $preview"
+        ActivityKind.PEER_CONNECTED  -> "[$deviceName] connected"
+        ActivityKind.PEER_DISCONNECTED -> "[$deviceName] disconnected"
+        ActivityKind.WARNING         -> "⚠ $preview"
+    }
+    /** True if the user can tap "Apply" to write this to local clipboard. */
+    val isApplicable: Boolean get() = kind == ActivityKind.CLIPBOARD_TEXT && !appliedLocally
+}
 
-// ── ClipRelay Service ─────────────────────────────────────────────────────────
+// ── Battery mode ──────────────────────────────────────────────────────────────
 
-/**
- * Foreground service that:
- * 1. Starts the Rust engine via JNI.
- * 2. Monitors the Android clipboard for changes.
- * 3. Propagates changes to peers silently (no per-copy notifications).
- * 4. Receives incoming clipboard data and applies it locally.
- * 5. Maintains an in-memory activity feed instead of noisy notifications.
- */
+enum class BackgroundSyncMode {
+    ALWAYS_ACTIVE,    // poll at full rate, keep WakeLock during drain
+    BATTERY_OPTIMIZED // reduced poll rate, no WakeLock
+}
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
 class ClipRelayService : Service() {
 
     companion object {
         private const val TAG = "ClipRelay"
-        private const val PREFS_NAME = "cliprelay"
-        private const val NOTIF_CHANNEL_SERVICE = "cliprelay_service"
-        private const val NOTIF_CHANNEL_ALERTS  = "cliprelay_alerts"
-        private const val NOTIF_ID_SERVICE = 1001  // Persistent foreground notification
-        private const val NOTIF_ID_TOFU    = 1002  // Trust request
-        private const val NOTIF_ID_FILE    = 1003  // File received
-        private const val POLL_INTERVAL_MS = 20L
-        private const val CLIP_INTERVAL_MS = 200L
-        private const val ACTIVITY_FEED_MAX = 50
+        const val PREFS_NAME = "cliprelay"
 
-        const val ACTION_START = "com.cliprelay.START"
-        const val ACTION_STOP  = "com.cliprelay.STOP"
-        const val ACTION_PUSH_TEXT = "com.cliprelay.PUSH_TEXT"
-        const val ACTION_STATUS_CHANGED = "com.cliprelay.STATUS_CHANGED"
+        // Notification channels
+        private const val CHAN_SERVICE = "cr_service"   // IMPORTANCE_MIN — silent persistent
+        private const val CHAN_ALERTS  = "cr_alerts"    // IMPORTANCE_DEFAULT — trust/file/failure
 
-        // In-memory activity feed (static so UI can read it)
-        val activityFeed = ArrayDeque<ActivityEntry>()
+        // Notification IDs
+        private const val NOTIF_ID_SERVICE           = 1001
+        private const val NOTIF_ID_TOFU              = 1002
+        private const val NOTIF_ID_FILE              = 1003
+        private const val NOTIF_ID_FAILURE           = 1004
+        private const val NOTIF_ID_CLIPBOARD_AVAILABLE = 1005
+        private const val NOTIF_ID_FILE_BASE         = 2000  // + (tid.hashCode() and 0xFFF)
+
+        // Intent actions
+        const val ACTION_START              = "com.cliprelay.START"
+        const val ACTION_STOP               = "com.cliprelay.STOP"
+        const val ACTION_PAUSE_SYNC         = "com.cliprelay.PAUSE_SYNC"
+        const val ACTION_RESUME_SYNC        = "com.cliprelay.RESUME_SYNC"
+        const val ACTION_DISCONNECT_ALL     = "com.cliprelay.DISCONNECT_ALL"
+        const val ACTION_PUSH_TEXT          = "com.cliprelay.PUSH_TEXT"
+        const val ACTION_STATUS_CHANGED     = "com.cliprelay.STATUS_CHANGED"
+        const val ACTION_APPLY_CLIPBOARD    = "com.cliprelay.APPLY_CLIPBOARD"
+        const val ACTION_ACCEPT_FILE_TRANSFER = "com.cliprelay.ACCEPT_FILE_TRANSFER"
+        const val ACTION_REJECT_FILE_TRANSFER = "com.cliprelay.REJECT_FILE_TRANSFER"
+        const val ACTION_CANCEL_FILE_TRANSFER = "com.cliprelay.CANCEL_FILE_TRANSFER"
+
+        // Intent extras
+        const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
+        const val EXTRA_TRANSFER_ID         = "transfer_id"
+
+        // Poll intervals
+        private const val POLL_FULL_MS      = 20L    // 50 Hz — always-active mode
+        private const val POLL_REDUCED_MS   = 100L   // 10 Hz — battery-optimized mode
+        private const val CLIP_FULL_MS      = 200L   // clipboard check interval (full)
+        private const val CLIP_REDUCED_MS   = 500L   // clipboard check interval (reduced)
+        private const val ACTIVITY_FEED_MAX = 100
+
+        // Global activity feed — readable by UI without binding to the service
+        @JvmField val activityFeed = ArrayDeque<ActivityEntry>()
+        @JvmField val feedLock     = Any()
+
+        fun addToFeed(entry: ActivityEntry) {
+            synchronized(feedLock) {
+                activityFeed.addFirst(entry)
+                while (activityFeed.size > ACTIVITY_FEED_MAX) activityFeed.removeLast()
+            }
+        }
+
+        fun getFeedSnapshot(): List<ActivityEntry> = synchronized(feedLock) {
+            activityFeed.toList()
+        }
     }
+
+    // ── State ─────────────────────────────────────────────────────────────────
 
     private var engineHandle: Long = 0L
     private val handler = Handler(Looper.getMainLooper())
     private var lastClipboardSignature: String? = null
     private var suppressNext = false
     private val connectedPeerNames = linkedSetOf<String>()
+    private val engineStarted = AtomicBoolean(false)
+
+    // WakeLock — held ONLY during active event drain, released immediately after.
+    // NOT a permanent wakelock; the foreground service itself keeps us alive.
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private val clipboardManager: ClipboardManager by lazy {
         getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
     }
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    // Cached prefs (reloaded on relevant changes)
+    private fun prefs() = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+    private fun isSyncEnabled()           = prefs().getBoolean("sync_enabled", true)
+    private fun isClipboardNotifyEnabled()= prefs().getBoolean("notify_on_remote_copy", false)
+    private fun syncMode(): BackgroundSyncMode =
+        if (prefs().getString("sync_mode", "always") == "battery") BackgroundSyncMode.BATTERY_OPTIMIZED
+        else BackgroundSyncMode.ALWAYS_ACTIVE
+
+    private val pollInterval  get() = if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE) POLL_FULL_MS  else POLL_REDUCED_MS
+    private val clipInterval  get() = if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE) CLIP_FULL_MS  else CLIP_REDUCED_MS
+
+    // ── Service lifecycle ─────────────────────────────────────────────────────
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        acquireWakeLockIfNeeded()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> { stopSelf(); return START_NOT_STICKY }
-            ClipRelayTileService.ACTION_SYNC_DISABLE -> {
-                prefs().edit().putBoolean("sync_enabled", false).apply()
-                updateForegroundNotification()
-                broadcastStatus()
+            ACTION_STOP         -> { shutdownAndStop(); return START_NOT_STICKY }
+            ACTION_PAUSE_SYNC   -> { setSyncEnabled(false); return START_STICKY }
+            ACTION_RESUME_SYNC  -> { setSyncEnabled(true);  return START_STICKY }
+            ACTION_DISCONNECT_ALL -> { disconnectAllPeers(); return START_STICKY }
+            ClipRelayTileService.ACTION_SYNC_DISABLE -> { setSyncEnabled(false); return START_STICKY }
+            ClipRelayTileService.ACTION_SYNC_ENABLE  -> { setSyncEnabled(true);  return START_STICKY }
+
+            // Timeline-first: user tapped "Apply" on a notification or feed item.
+            ACTION_APPLY_CLIPBOARD -> {
+                val text = intent.getStringExtra(EXTRA_CLIPBOARD_TEXT) ?: return START_STICKY
+                if (engineHandle != 0L) {
+                    val cm = getSystemService(ClipboardManager::class.java)
+                    suppressNext = true
+                    cm.setPrimaryClip(ClipData.newPlainText("ClipRelay", text))
+                    notificationManager.cancel(NOTIF_ID_CLIPBOARD_AVAILABLE)
+                }
                 return START_STICKY
             }
-            ClipRelayTileService.ACTION_SYNC_ENABLE -> {
-                prefs().edit().putBoolean("sync_enabled", true).apply()
-                updateForegroundNotification()
-                broadcastStatus()
+
+            // File transfer: user tapped Accept in notification.
+            ACTION_ACCEPT_FILE_TRANSFER -> {
+                val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
+                if (engineHandle != 0L) {
+                    ClipRelayJni.acceptFileTransfer(engineHandle, tid)
+                    notificationManager.cancel(transferNotifId(tid))
+                }
+                return START_STICKY
+            }
+
+            // File transfer: user tapped Reject in notification.
+            ACTION_REJECT_FILE_TRANSFER -> {
+                val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
+                if (engineHandle != 0L) {
+                    ClipRelayJni.rejectFileTransfer(engineHandle, tid)
+                    notificationManager.cancel(transferNotifId(tid))
+                }
+                return START_STICKY
             }
         }
 
+        // Start / re-attach foreground
         return try {
-            val notification = buildForegroundNotification()
-            startForegroundCompat(notification)
+            startForegroundCompat(buildForegroundNotification())
 
-            if (engineHandle == 0L) {
+            if (!engineStarted.getAndSet(true)) {
                 val deviceName = resolvedDeviceName()
-                val dataDir = File(applicationContext.filesDir, "cliprelay").absolutePath
+                val dataDir = File(filesDir, "cliprelay").also { it.mkdirs() }.absolutePath
                 engineHandle = ClipRelayJni.start(deviceName, 0, dataDir)
+
                 if (engineHandle == 0L) {
-                    Log.e(TAG, "Engine failed to start")
+                    Log.e(TAG, "Rust engine failed to start")
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                Log.i(TAG, "ClipRelay engine started — device: $deviceName")
+
+                Log.i(TAG, "Engine started — $deviceName")
                 scheduleEventDrain()
                 scheduleClipboardWatch()
                 persistStatus()
@@ -158,15 +307,15 @@ class ClipRelayService : Service() {
 
             if (intent?.action == ACTION_PUSH_TEXT) {
                 intent.getStringExtra("text")?.takeIf { it.isNotBlank() }?.let { text ->
-                    if (isSyncEnabled()) {
+                    if (isSyncEnabled() && engineHandle != 0L) {
                         ClipRelayJni.pushText(engineHandle, text)
                     }
                 }
             }
 
             START_STICKY
-        } catch (error: Throwable) {
-            Log.e(TAG, "Failed to start ClipRelay foreground service", error)
+        } catch (ex: Throwable) {
+            Log.e(TAG, "onStartCommand failed", ex)
             stopSelf()
             START_NOT_STICKY
         }
@@ -178,133 +327,416 @@ class ClipRelayService : Service() {
             ClipRelayJni.stop(engineHandle)
             engineHandle = 0L
         }
+        engineStarted.set(false)
         connectedPeerNames.clear()
+        releaseWakeLock()
         persistStatus()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun prefs(): SharedPreferences =
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-
-    private fun isSyncEnabled(): Boolean =
-        prefs().getBoolean("sync_enabled", true)
-
-    private fun isClipboardNotifyEnabled(): Boolean =
-        prefs().getBoolean("notify_on_remote_copy", false) // OFF by default
-
-    // ── Device name resolution ─────────────────────────────────────────────────
-
-    private fun resolvedDeviceName(): String {
-        prefs().getString("device_name", null)
-            ?.trim()?.takeIf { it.isNotEmpty() }
-            ?.let { return it }
-
-        Settings.Global.getString(contentResolver, "device_name")
-            ?.trim()?.takeIf { it.isNotEmpty() }
-            ?.let { return it }
-
-        return humanizeDeviceName()
+    // Survive task removal (user swipes app away)
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Re-schedule restart via AlarmManager for maximum reliability on OEM ROMs
+        val pending = PendingIntent.getService(
+            this, 1,
+            Intent(this, ClipRelayService::class.java).apply { action = ACTION_START },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_ONE_SHOT
+        )
+        val am = getSystemService(ALARM_SERVICE) as AlarmManager
+        am.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1_000L, pending)
+        super.onTaskRemoved(rootIntent)
     }
 
-    private fun humanizeDeviceName(): String {
-        val manufacturer = Build.MANUFACTURER.orEmpty().trim()
-        val model = Build.MODEL.orEmpty().trim()
-        return if (model.startsWith(manufacturer, ignoreCase = true)) {
-            model
-        } else {
-            "$manufacturer $model".trim()
+    // ── WakeLock ──────────────────────────────────────────────────────────────
+
+    private fun acquireWakeLockIfNeeded() {
+        if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE && wakeLock == null) {
+            wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
+                .newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "ClipRelay::EventDrainLock"
+                ).apply {
+                    setReferenceCounted(false)
+                }
         }
     }
 
-    // ── Event drain ────────────────────────────────────────────────────────────
+    private fun releaseWakeLock() {
+        runCatching {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        }
+        wakeLock = null
+    }
+
+    // ── Sync enable / disable ─────────────────────────────────────────────────
+
+    private fun setSyncEnabled(enabled: Boolean) {
+        prefs().edit().putBoolean("sync_enabled", enabled).apply()
+        updateForegroundNotification()
+        broadcastStatus()
+    }
+
+    private fun disconnectAllPeers() {
+        // Signal the Rust engine to disconnect via a graceful shutdown + restart.
+        // We stop and restart the engine so sessions are torn down cleanly.
+        if (engineHandle != 0L) {
+            ClipRelayJni.stop(engineHandle)
+            engineHandle = 0L
+            engineStarted.set(false)
+            connectedPeerNames.clear()
+        }
+        updateForegroundNotification()
+        broadcastStatus()
+    }
+
+    private fun shutdownAndStop() {
+        disconnectAllPeers()
+        stopSelf()
+    }
+
+    // ── Event drain (Rust → Kotlin) ───────────────────────────────────────────
 
     private fun scheduleEventDrain() {
+        val interval = pollInterval
         handler.postDelayed(object : Runnable {
             override fun run() {
                 if (engineHandle != 0L) {
                     drainEvents()
-                    handler.postDelayed(this, POLL_INTERVAL_MS)
+                }
+                if (engineHandle != 0L) {
+                    handler.postDelayed(this, pollInterval)
                 }
             }
-        }, POLL_INTERVAL_MS)
+        }, interval)
     }
 
     private fun drainEvents() {
-        while (true) {
-            val ev = ClipRelayJni.pollEvent(engineHandle)
-            if (ev == 0L) break
-            try { handleEvent(ev) }
-            finally { ClipRelayJni.freeEvent(ev) }
+        // Acquire WakeLock only during drain, then release — prevents battery drain
+        // while still ensuring we process events immediately when they arrive.
+        val lock = wakeLock
+        val shouldLock = lock != null && syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE
+        if (shouldLock) runCatching { if (!(lock!!.isHeld)) lock.acquire(2_000L) }
+
+        try {
+            while (engineHandle != 0L) {
+                val ev = ClipRelayJni.pollEvent(engineHandle)
+                if (ev == 0L) break
+                try { handleEvent(ev) } finally { ClipRelayJni.freeEvent(ev) }
+            }
+        } finally {
+            if (shouldLock) runCatching { if (lock!!.isHeld) lock.release() }
         }
     }
 
     private fun handleEvent(ev: Long) {
         when (ClipRelayJni.eventType(ev)) {
 
+            // ── Clipboard text — AUTO-APPLIED (legacy or auto-apply enabled) ─
             ClipRelayJni.CR_EVENT_CLIPBOARD_TEXT -> {
                 val text = ClipRelayJni.eventText(ev) ?: return
                 val from = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                addActivity(ActivityEntry(
+                    deviceName = from,
+                    kind = ActivityKind.CLIPBOARD_TEXT,
+                    preview = text.take(60).replace('\n', ' '),
+                    appliedLocally = true
+                ))
                 applyText(text, from)
             }
 
+            // ── Clipboard text — TIMELINE-FIRST (available, not auto-applied) ─
+            ClipRelayJni.CR_EVENT_CLIPBOARD_AVAILABLE -> {
+                val text = ClipRelayJni.eventText(ev) ?: return
+                val from = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val autoApplied = ClipRelayJni.eventAutoApplied(ev) == 1
+                val activityId  = ClipRelayJni.eventActivityId(ev)
+                val preview = text.take(60).replace('\n', ' ')
+
+                addActivity(ActivityEntry(
+                    id = activityId.takeIf { it >= 0 } ?: System.nanoTime(),
+                    deviceName = from,
+                    kind = ActivityKind.CLIPBOARD_TEXT,
+                    preview = preview,
+                    appliedLocally = autoApplied
+                ))
+
+                if (autoApplied) {
+                    applyText(text, from)
+                } else {
+                    // Show a dismissable notification with an "Apply" action.
+                    showClipboardAvailableNotification(from, preview, text)
+                }
+            }
+
+            // ── Clipboard image — AUTO-APPLIED ────────────────────────────────
             ClipRelayJni.CR_EVENT_CLIPBOARD_IMAGE -> {
                 val bytes = ClipRelayJni.eventBinaryData(ev) ?: return
-                val mime = ClipRelayJni.eventMimeType(ev) ?: "image/png"
-                val from = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
-                applyBinaryClipboard(bytes, suggestedName = imageNameForMime(mime), mimeType = mime, from = from)
+                val mime  = ClipRelayJni.eventMimeType(ev) ?: "image/png"
+                val from  = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                addActivity(ActivityEntry(deviceName = from, kind = ActivityKind.CLIPBOARD_IMAGE,
+                    preview = "image ($mime)", appliedLocally = true))
+                applyBinaryClipboard(bytes, imageNameForMime(mime), mime, from, isFile = false)
             }
 
+            // ── File received (legacy clipboard file) ─────────────────────────
             ClipRelayJni.CR_EVENT_CLIPBOARD_FILE -> {
                 val bytes = ClipRelayJni.eventBinaryData(ev) ?: return
-                val name = ClipRelayJni.eventFileName(ev) ?: "ClipRelay File"
-                val from = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
-                // Files get a notification (important event)
-                applyBinaryClipboard(bytes, suggestedName = name, mimeType = null, from = from, isFile = true)
+                val name  = ClipRelayJni.eventFileName(ev) ?: "ClipRelay_file"
+                val from  = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                addActivity(ActivityEntry(deviceName = from, kind = ActivityKind.FILE_RECEIVED,
+                    preview = name))
+                applyBinaryClipboard(bytes, name, null, from, isFile = true)
             }
 
+            // ── Dedicated file transfer: incoming ─────────────────────────────
+            ClipRelayJni.CR_EVENT_FILE_TRANSFER_INCOMING -> {
+                val tid       = ClipRelayJni.eventTransferId(ev) ?: return
+                val from      = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val fileName  = ClipRelayJni.eventTransferFileName(ev) ?: "file"
+                val totalBytes = ClipRelayJni.eventTransferTotalBytes(ev)
+                addActivity(ActivityEntry(deviceName = from,
+                    kind = ActivityKind.FILE_TRANSFER_INCOMING, preview = fileName,
+                    transferId = tid, fileTotalBytes = totalBytes))
+                showFileTransferIncomingNotification(from, fileName, totalBytes, tid)
+            }
+
+            // ── Dedicated file transfer: progress update ──────────────────────
+            ClipRelayJni.CR_EVENT_FILE_TRANSFER_PROGRESS -> {
+                val tid     = ClipRelayJni.eventTransferId(ev) ?: return
+                val percent = ClipRelayJni.eventTransferProgressPercent(ev)
+                val name    = ClipRelayJni.eventTransferFileName(ev) ?: "file"
+                val from    = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                // Update existing activity entry in-place.
+                updateActivityTransferProgress(tid, percent)
+                updateFileTransferNotificationProgress(tid, name, percent)
+            }
+
+            // ── Dedicated file transfer: complete ─────────────────────────────
+            ClipRelayJni.CR_EVENT_FILE_TRANSFER_COMPLETE -> {
+                val tid      = ClipRelayJni.eventTransferId(ev) ?: return
+                val from     = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val fileName = ClipRelayJni.eventTransferFileName(ev) ?: "file"
+                val destPath = ClipRelayJni.eventTransferDestPath(ev) ?: ""
+                updateActivityTransferComplete(tid, destPath)
+                showFileTransferCompleteNotification(from, fileName, destPath)
+            }
+
+            // ── Dedicated file transfer: failed ───────────────────────────────
+            ClipRelayJni.CR_EVENT_FILE_TRANSFER_FAILED -> {
+                val tid  = ClipRelayJni.eventTransferId(ev) ?: return
+                val from = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                updateActivityTransferFailed(tid)
+                cancelFileTransferNotification(tid)
+            }
+
+            // ── Trust (TOFU) prompt ───────────────────────────────────────────
             ClipRelayJni.CR_EVENT_TOFU_PROMPT -> {
-                val name = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val name = ClipRelayJni.eventDeviceName(ev) ?: "Unknown device"
                 val fp   = ClipRelayJni.eventFingerprint(ev) ?: ""
                 showTofuNotification(name, fp)
             }
 
+            // ── Peer connected ────────────────────────────────────────────────
             ClipRelayJni.CR_EVENT_PEER_CONNECTED -> {
                 val name = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
-                Log.i(TAG, "Connected: $name")
+                Log.i(TAG, "Peer connected: $name")
                 connectedPeerNames.add(name)
+                addActivity(ActivityEntry(deviceName = name,
+                    kind = ActivityKind.PEER_CONNECTED, preview = "connected"))
                 persistStatus()
                 updateForegroundNotification()
-                // No notification — just update the persistent status bar entry
             }
 
+            // ── Peer disconnected ─────────────────────────────────────────────
             ClipRelayJni.CR_EVENT_PEER_DISCONNECTED -> {
                 val name = ClipRelayJni.eventDeviceName(ev)
                 Log.i(TAG, "Peer disconnected: ${name ?: "unknown"}")
-                if (name != null) connectedPeerNames.remove(name) else connectedPeerNames.clear()
+                if (name != null) {
+                    connectedPeerNames.remove(name)
+                    addActivity(ActivityEntry(deviceName = name,
+                        kind = ActivityKind.PEER_DISCONNECTED, preview = "disconnected"))
+                } else {
+                    connectedPeerNames.clear()
+                }
                 persistStatus()
                 updateForegroundNotification()
             }
 
+            // ── Engine warning ────────────────────────────────────────────────
             ClipRelayJni.CR_EVENT_WARNING -> {
                 val msg = ClipRelayJni.eventText(ev) ?: return
                 Log.w(TAG, "Engine warning: $msg")
-                // Persistent connection loss shown as subtitle in foreground notification
+                addActivity(ActivityEntry(deviceName = "System",
+                    kind = ActivityKind.WARNING, preview = msg.take(80)))
+                if (isCriticalFailure(msg)) showFailureNotification(msg)
                 updateForegroundNotification()
             }
         }
     }
 
-    // ── Clipboard watch (Android → Rust) ──────────────────────────────────────
+    // ── Activity feed helpers ─────────────────────────────────────────────────
+
+    private fun addActivity(entry: ActivityEntry) {
+        activityFeed.add(0, entry)
+        while (activityFeed.size > ACTIVITY_FEED_MAX) activityFeed.removeLastOrNull()
+        broadcastActivityUpdated()
+    }
+
+    private fun updateActivityTransferProgress(tid: String, percent: Int) {
+        val idx = activityFeed.indexOfFirst { it.transferId == tid }
+        if (idx >= 0) {
+            activityFeed[idx] = activityFeed[idx].copy(
+                kind = ActivityKind.FILE_TRANSFER_PROGRESS,
+                progressPercent = percent
+            )
+            broadcastActivityUpdated()
+        }
+    }
+
+    private fun updateActivityTransferComplete(tid: String, destPath: String) {
+        val idx = activityFeed.indexOfFirst { it.transferId == tid }
+        if (idx >= 0) {
+            activityFeed[idx] = activityFeed[idx].copy(
+                kind = ActivityKind.FILE_TRANSFER_COMPLETE,
+                progressPercent = 100,
+                destPath = destPath
+            )
+            broadcastActivityUpdated()
+        }
+    }
+
+    private fun updateActivityTransferFailed(tid: String) {
+        val idx = activityFeed.indexOfFirst { it.transferId == tid }
+        if (idx >= 0) {
+            activityFeed[idx] = activityFeed[idx].copy(kind = ActivityKind.FILE_TRANSFER_FAILED)
+            broadcastActivityUpdated()
+        }
+    }
+
+    private fun broadcastActivityUpdated() {
+        sendBroadcast(Intent(ACTION_STATUS_CHANGED))
+    }
+
+    // ── Clipboard available notification (timeline-first) ─────────────────────
+
+    private fun showClipboardAvailableNotification(from: String, preview: String, fullText: String) {
+        val applyIntent = Intent(ACTION_APPLY_CLIPBOARD).apply {
+            `package` = packageName
+            putExtra(EXTRA_CLIPBOARD_TEXT, fullText)
+        }
+        val applyPi = PendingIntent.getBroadcast(this, fullText.hashCode(),
+            applyIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Clipboard from $from")
+            .setContentText(preview)
+            .addAction(0, "Apply", applyPi)
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify(NOTIF_ID_CLIPBOARD_AVAILABLE, notif)
+    }
+
+    // ── File transfer notifications ───────────────────────────────────────────
+
+    private fun showFileTransferIncomingNotification(
+        from: String, fileName: String, totalBytes: Long, tid: String
+    ) {
+        val sizeStr = formatBytes(totalBytes)
+
+        val acceptIntent = Intent(ACTION_ACCEPT_FILE_TRANSFER).apply {
+            `package` = packageName
+            putExtra(EXTRA_TRANSFER_ID, tid)
+        }
+        val rejectIntent = Intent(ACTION_REJECT_FILE_TRANSFER).apply {
+            `package` = packageName
+            putExtra(EXTRA_TRANSFER_ID, tid)
+        }
+        val acceptPi = PendingIntent.getBroadcast(this, tid.hashCode(),
+            acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val rejectPi = PendingIntent.getBroadcast(this, tid.hashCode() + 1,
+            rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("$from wants to send a file")
+            .setContentText("$fileName ($sizeStr)")
+            .addAction(0, "Accept", acceptPi)
+            .addAction(0, "Reject", rejectPi)
+            .setOngoing(true)
+            .build()
+        notificationManager.notify(transferNotifId(tid), notif)
+    }
+
+    private fun updateFileTransferNotificationProgress(tid: String, fileName: String, percent: Int) {
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Receiving $fileName")
+            .setContentText("$percent%")
+            .setProgress(100, percent, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        notificationManager.notify(transferNotifId(tid), notif)
+    }
+
+    private fun showFileTransferCompleteNotification(from: String, fileName: String, destPath: String) {
+        val openIntent = if (destPath.isNotEmpty()) {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this, "$packageName.fileprovider",
+                java.io.File(destPath)
+            )
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, contentResolver.getType(uri))
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        } else null
+
+        val openPi = openIntent?.let {
+            PendingIntent.getActivity(this, destPath.hashCode(), it,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
+
+        val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("File received from $from")
+            .setContentText(fileName)
+            .setAutoCancel(true)
+        if (openPi != null) builder.setContentIntent(openPi)
+        notificationManager.notify(NOTIF_ID_FILE, builder.build())
+    }
+
+    private fun cancelFileTransferNotification(tid: String) {
+        notificationManager.cancel(transferNotifId(tid))
+    }
+
+    private fun transferNotifId(tid: String): Int = NOTIF_ID_FILE_BASE + (tid.hashCode() and 0xFFF)
+
+    private fun formatBytes(bytes: Long): String = when {
+        bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)
+        bytes >= 1_024L     -> "%.0f KB".format(bytes / 1_024.0)
+        else                -> "$bytes B"
+    }
+
+    private fun isCriticalFailure(msg: String): Boolean =
+        msg.contains("heartbeat timeout", ignoreCase = true) ||
+        msg.contains("network lost", ignoreCase = true) ||
+        msg.contains("listener rebind failed", ignoreCase = true)
+
+    // ── Clipboard watch (Kotlin → Rust) ──────────────────────────────────────
 
     private fun scheduleClipboardWatch() {
+        val interval = clipInterval
         handler.postDelayed(object : Runnable {
             override fun run() {
                 checkClipboard()
-                handler.postDelayed(this, CLIP_INTERVAL_MS)
+                if (engineHandle != 0L) {
+                    handler.postDelayed(this, clipInterval)
+                }
             }
-        }, CLIP_INTERVAL_MS)
+        }, interval)
     }
 
     private fun checkClipboard() {
@@ -317,198 +749,242 @@ class ClipRelayService : Service() {
 
         val text = item.text?.toString()?.trim()
         if (!text.isNullOrEmpty()) {
-            val signature = "text:$text"
-            if (signature != lastClipboardSignature) {
-                lastClipboardSignature = signature
+            val sig = "text:${text.hashCode()}"
+            if (sig != lastClipboardSignature) {
+                lastClipboardSignature = sig
                 ClipRelayJni.pushText(engineHandle, text)
             }
             return
         }
 
         val uri = item.uri ?: return
-        val signature = "uri:$uri"
-        if (signature == lastClipboardSignature) return
+        val sig = "uri:$uri"
+        if (sig == lastClipboardSignature) return
 
         when (val payload = readClipboardUri(uri)) {
             null -> Unit
-            is OutgoingClipboardPayload.Image -> {
-                lastClipboardSignature = signature
-                ClipRelayJni.pushImage(engineHandle, payload.mimeType, payload.data)
+            is OutgoingPayload.Image -> {
+                lastClipboardSignature = sig
+                ClipRelayJni.pushImage(engineHandle, payload.mime, payload.data)
             }
-            is OutgoingClipboardPayload.File -> {
-                lastClipboardSignature = signature
+            is OutgoingPayload.File -> {
+                lastClipboardSignature = sig
                 ClipRelayJni.pushFile(engineHandle, payload.name, payload.data)
             }
         }
     }
 
-    // ── Apply incoming clipboard ───────────────────────────────────────────────
+    // ── Apply incoming clipboard ──────────────────────────────────────────────
 
     private fun applyText(text: String, from: String) {
         suppressNext = true
-        lastClipboardSignature = "text:$text"
-        val clip = android.content.ClipData.newPlainText("cliprelay", text)
-        clipboardManager.setPrimaryClip(clip)
+        lastClipboardSignature = "text:${text.hashCode()}"
+        clipboardManager.setPrimaryClip(
+            android.content.ClipData.newPlainText("cliprelay", text)
+        )
 
-        // Silently update activity feed — NO notification
-        addToActivityFeed(ActivityEntry(
-            deviceName = from,
-            kind = "text",
-            preview = text.take(80)
-        ))
+        // Silently add to activity feed — zero notification
+        addToFeed(ActivityEntry(deviceName = from, kind = "text", preview = text.take(100)))
+        broadcastStatus()
 
-        // Optional notification (OFF by default)
+        // Respect user opt-in for clipboard copy notifications (default OFF)
         if (isClipboardNotifyEnabled()) {
-            showQuietClipboardNotification(from, "text")
+            updateForegroundNotification() // update subtitle only — no new notification
         }
     }
 
     private fun applyBinaryClipboard(
         data: ByteArray,
-        suggestedName: String,
-        mimeType: String?,
+        name: String,
+        mime: String?,
         from: String,
-        isFile: Boolean = false
+        isFile: Boolean
     ) {
-        // Save to Downloads/ClipRelay for files
-        val saveDir = if (isFile) getDownloadsDir() else getCacheDir()
-        val file = writeIncomingBinary(suggestedName, data, mimeType, saveDir)
-        val authority = "$packageName.fileprovider"
-        val uri = FileProvider.getUriForFile(this, authority, file)
+        val saveDir = if (isFile) getDownloadsDir() else cacheDir
+        val file = writeBinaryFile(name, data, mime, saveDir)
+
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         suppressNext = true
         lastClipboardSignature = "uri:$uri"
-        clipboardManager.setPrimaryClip(android.content.ClipData.newUri(contentResolver, file.name, uri))
+        clipboardManager.setPrimaryClip(
+            android.content.ClipData.newUri(contentResolver, file.name, uri)
+        )
 
-        val kind = if (mimeType?.startsWith("image/") == true) "image" else "file"
-        addToActivityFeed(ActivityEntry(deviceName = from, kind = kind, preview = file.name))
+        val kind = if (mime?.startsWith("image/") == true) "image" else "file"
+        addToFeed(ActivityEntry(deviceName = from, kind = kind, preview = file.name))
+        broadcastStatus()
 
         if (isFile) {
-            // Files always get a notification — important event
-            showFileReceivedNotification(from, file.name)
-        } else if (isClipboardNotifyEnabled()) {
-            showQuietClipboardNotification(from, kind)
+            // Files always get an explicit notification — user needs to know where it landed
+            showFileReceivedNotification(from, file.name, uri)
         }
+        // Images and clipboard binary: silent — activity feed only
     }
+
+    // ── File I/O ──────────────────────────────────────────────────────────────
 
     private fun getDownloadsDir(): File {
-        val dir = File(
+        val base = try {
             android.os.Environment.getExternalStoragePublicDirectory(
                 android.os.Environment.DIRECTORY_DOWNLOADS
-            ),
-            "ClipRelay"
-        )
+            )
+        } catch (_: Exception) { filesDir }
+        return File(base, "ClipRelay").also { it.mkdirs() }
+    }
+
+    private fun writeBinaryFile(
+        name: String,
+        data: ByteArray,
+        mime: String?,
+        dir: File
+    ): File {
         dir.mkdirs()
-        return dir
-    }
+        val ext = mime?.let {
+            MimeTypeMap.getSingleton().getExtensionFromMimeType(it.substringBefore(';'))
+        }?.takeIf { it.isNotBlank() }
 
-    // ── Activity feed ─────────────────────────────────────────────────────────
-
-    private fun addToActivityFeed(entry: ActivityEntry) {
-        synchronized(activityFeed) {
-            activityFeed.addFirst(entry)
-            while (activityFeed.size > ACTIVITY_FEED_MAX) activityFeed.removeLast()
-        }
-        broadcastStatus()
-    }
-
-    // ── File helpers ──────────────────────────────────────────────────────────
-
-    private fun readClipboardUri(uri: Uri): OutgoingClipboardPayload? {
-        return runCatching {
-            val mime = contentResolver.getType(uri).orEmpty()
-            val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "ClipRelay File"
-            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-            if (mime.startsWith("image/")) {
-                OutgoingClipboardPayload.Image(mimeType = mime.ifEmpty { "image/png" }, data = bytes)
-            } else {
-                OutgoingClipboardPayload.File(name = name, data = bytes)
-            }
-        }.onFailure { Log.w(TAG, "Failed to read clipboard URI $uri", it) }.getOrNull()
-    }
-
-    private fun writeIncomingBinary(suggestedName: String, data: ByteArray, mimeType: String?, baseDir: File): File {
-        if (!baseDir.exists()) baseDir.mkdirs()
-        val ext = mimeType
-            ?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it.substringBefore(';')) }
-            ?.takeIf { it.isNotBlank() }
-        val safeName = sanitizeFileName(suggestedName, ext)
-        var target = File(baseDir, safeName)
-        var counter = 2
+        val safe = sanitize(name, ext)
+        var target = File(dir, safe)
+        var n = 2
         while (target.exists()) {
             val stem = target.nameWithoutExtension
-            val suffix = target.extension.takeIf { it.isNotBlank() }?.let { ".$it" }.orEmpty()
-            target = File(baseDir, "$stem-$counter$suffix")
-            counter++
+            val suf  = target.extension.takeIf { it.isNotBlank() }?.let { ".$it" }.orEmpty()
+            target = File(dir, "$stem-$n$suf")
+            n++
         }
         FileOutputStream(target).use { it.write(data) }
         return target
     }
 
-    private fun sanitizeFileName(raw: String, fallbackExtension: String?): String {
-        val cleaned = raw.trim().replace("/", "-").replace(":", "-")
-        return if (cleaned.isNotEmpty()) cleaned
-        else if (fallbackExtension.isNullOrBlank()) "cliprelay-item"
-        else "cliprelay-item.$fallbackExtension"
+    private fun sanitize(raw: String, fallbackExt: String?): String {
+        val clean = raw.trim().replace(Regex("[/:\\\\*?\"<>|]"), "-")
+        if (clean.isNotEmpty()) return clean
+        return if (fallbackExt.isNullOrBlank()) "cliprelay-file" else "cliprelay-file.$fallbackExt"
     }
 
-    private fun queryDisplayName(uri: Uri): String? {
-        val cursor = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-        cursor?.use {
-            val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (nameIndex >= 0 && it.moveToFirst()) return it.getString(nameIndex)
+    private fun readClipboardUri(uri: Uri): OutgoingPayload? = runCatching {
+        val mime = contentResolver.getType(uri).orEmpty()
+        val name = run {
+            val cursor = contentResolver.query(
+                uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
+            )
+            cursor?.use {
+                val col = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (col >= 0 && it.moveToFirst()) it.getString(col) else null
+            } ?: uri.lastPathSegment ?: "file"
         }
-        return null
+        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        if (mime.startsWith("image/")) OutgoingPayload.Image(mime.ifEmpty { "image/png" }, bytes)
+        else OutgoingPayload.File(name, bytes)
+    }.onFailure { Log.w(TAG, "Failed to read clipboard URI $uri", it) }.getOrNull()
+
+    private fun imageNameForMime(mime: String): String {
+        val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime.substringBefore(';')) ?: "png"
+        return "ClipRelay-image.$ext"
     }
 
-    private fun imageNameForMime(mimeType: String): String {
-        val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType.substringBefore(';')) ?: "png"
-        return "ClipRelay Image.$ext"
+    private sealed interface OutgoingPayload {
+        data class Image(val mime: String, val data: ByteArray) : OutgoingPayload
+        data class File(val name: String, val data: ByteArray) : OutgoingPayload
     }
 
-    // ── Notifications ─────────────────────────────────────────────────────────
+    // ── Device name ───────────────────────────────────────────────────────────
+
+    private fun resolvedDeviceName(): String {
+        prefs().getString("device_name", null)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        Settings.Global.getString(contentResolver, "device_name")?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val mfr   = Build.MANUFACTURER.orEmpty().trim()
+        val model = Build.MODEL.orEmpty().trim()
+        return if (model.startsWith(mfr, ignoreCase = true)) model else "$mfr $model".trim()
+    }
+
+    // ── Notification channels ─────────────────────────────────────────────────
 
     private fun createNotificationChannels() {
         val nm = getSystemService(NotificationManager::class.java)
 
-        // Channel 1: Persistent service notification — silent, minimal
+        // Channel A: persistent foreground indicator — must be as quiet as possible
         nm.createNotificationChannel(NotificationChannel(
-            NOTIF_CHANNEL_SERVICE,
+            CHAN_SERVICE,
             "ClipRelay",
-            NotificationManager.IMPORTANCE_MIN
+            NotificationManager.IMPORTANCE_MIN          // no sound, no vibration, no heads-up
         ).apply {
-            description = "Keeps ClipRelay running in the background"
+            description = "ClipRelay background sync indicator"
             setShowBadge(false)
+            enableLights(false)
+            enableVibration(false)
+            setSound(null, null)
         })
 
-        // Channel 2: Important alerts — trust requests, files received, connection loss
+        // Channel B: trust requests, file receives, critical failures
         nm.createNotificationChannel(NotificationChannel(
-            NOTIF_CHANNEL_ALERTS,
+            CHAN_ALERTS,
             "ClipRelay Alerts",
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Trust requests, received files, and connection alerts"
+            description = "Trust requests, received files, connection failures"
+            setShowBadge(true)
+            enableLights(true)
+            enableVibration(true)
         })
     }
 
+    // ── Foreground notification ───────────────────────────────────────────────
+    //
+    // ONE notification, ALWAYS the same ID.
+    // Silent — no sound, no vibration, no heads-up banner.
+    // Two action buttons: [Pause Sync] / [Resume Sync] and [Disconnect]
+
     private fun buildForegroundNotification(): Notification {
-        val intent = packageManager.getLaunchIntentForPackage(packageName)
-        val text = foregroundStatusText()
-        val builder = NotificationCompat.Builder(this, NOTIF_CHANNEL_SERVICE)
+        val launchPi = PendingIntent.getActivity(
+            this, 0,
+            packageManager.getLaunchIntentForPackage(packageName),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val syncEnabled = isSyncEnabled()
+
+        // Pause/Resume Sync action
+        val syncActionLabel = if (syncEnabled) "Pause Sync" else "Resume Sync"
+        val syncActionIntent = Intent(this, ClipRelayService::class.java).apply {
+            action = if (syncEnabled) ACTION_PAUSE_SYNC else ACTION_RESUME_SYNC
+        }
+        val syncActionPi = PendingIntent.getService(
+            this, 10,
+            syncActionIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // Disconnect action
+        val disconnectPi = PendingIntent.getService(
+            this, 11,
+            Intent(this, ClipRelayService::class.java).apply { action = ACTION_DISCONNECT_ALL },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        return NotificationCompat.Builder(this, CHAN_SERVICE)
             .setContentTitle("ClipRelay")
-            .setContentText(text)
+            .setContentText(foregroundStatusText())
+            .setSubText(if (syncEnabled) null else "Sync paused")
             .setSmallIcon(android.R.drawable.ic_menu_share)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setOnlyAlertOnce(true)
             .setSilent(true)
-
-        if (intent != null) {
-            val pi = PendingIntent.getActivity(
-                this, 0, intent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // hide on lock screen
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setContentIntent(launchPi)
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                syncActionLabel,
+                syncActionPi
             )
-            builder.setContentIntent(pi)
-        }
-        return builder.build()
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Disconnect",
+                disconnectPi
+            )
+            .build()
     }
 
     private fun startForegroundCompat(notification: Notification) {
@@ -525,45 +1001,86 @@ class ClipRelayService : Service() {
     }
 
     private fun foregroundStatusText(): String {
-        if (!isSyncEnabled()) return "Sync paused"
-        return when {
-            connectedPeerNames.isEmpty() -> "Ready — no devices nearby"
-            connectedPeerNames.size == 1 -> "Connected to ${connectedPeerNames.first()}"
-            else -> "${connectedPeerNames.size} devices connected"
+        if (!isSyncEnabled()) return "Sync paused · tap to manage"
+        return when (connectedPeerNames.size) {
+            0    -> "Active · no devices nearby"
+            1    -> "Active · ${connectedPeerNames.first()}"
+            else -> "Active · ${connectedPeerNames.size} devices connected"
         }
     }
 
-    // Trust request — important, uses alerts channel
+    // ── Alert notifications ───────────────────────────────────────────────────
+    //
+    // These use CHAN_ALERTS — they CAN make sound/vibration.
+    // Only fired for: trust request, file received, critical failure.
+    // NEVER fired for: clipboard text/image sync.
+
     private fun showTofuNotification(deviceName: String, fingerprint: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        val notif = NotificationCompat.Builder(this, NOTIF_CHANNEL_ALERTS)
-            .setContentTitle("Trust \"$deviceName\"?")
-            .setContentText("Fingerprint: $fingerprint")
+        val launchPi = PendingIntent.getActivity(
+            this, 20,
+            packageManager.getLaunchIntentForPackage(packageName),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setContentTitle("$deviceName wants to connect")
+            .setContentText("Fingerprint: ${fingerprint.take(23)}…")
+            .setStyle(NotificationCompat.BigTextStyle()
+                .bigText("Open ClipRelay to trust or deny this device.\n\nFingerprint: $fingerprint"))
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
             .setAutoCancel(true)
+            .setContentIntent(launchPi)
             .build()
-        nm.notify(NOTIF_ID_TOFU, notif)
+
+        getSystemService(NotificationManager::class.java).notify(NOTIF_ID_TOFU, notif)
     }
 
-    // File received — always notify, saves to Downloads/ClipRelay
-    private fun showFileReceivedNotification(fromDevice: String, fileName: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        val notif = NotificationCompat.Builder(this, NOTIF_CHANNEL_ALERTS)
-            .setContentTitle("📎 File received from $fromDevice")
+    private fun showFileReceivedNotification(fromDevice: String, fileName: String, uri: Uri?) {
+        val openPi = uri?.let {
+            val openIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(it, contentResolver.getType(it) ?: "*/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            PendingIntent.getActivity(
+                this, 30,
+                Intent.createChooser(openIntent, "Open $fileName"),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        }
+
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setContentTitle("File received from $fromDevice")
             .setContentText(fileName)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
+            .apply { if (openPi != null) setContentIntent(openPi) }
             .build()
-        nm.notify(NOTIF_ID_FILE, notif)
+
+        getSystemService(NotificationManager::class.java).notify(NOTIF_ID_FILE, notif)
     }
 
-    // Optional quiet clipboard notification (OFF by default)
-    private fun showQuietClipboardNotification(fromDevice: String, kind: String) {
-        // Updates the foreground notification text — no separate pop-up
-        // Only shows if the user has explicitly enabled "notify on remote copy"
-        updateForegroundNotification()
+    private fun showFailureNotification(message: String) {
+        val launchPi = PendingIntent.getActivity(
+            this, 40,
+            packageManager.getLaunchIntentForPackage(packageName),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setContentTitle("ClipRelay connection issue")
+            .setContentText(message.take(80))
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setAutoCancel(true)
+            .setContentIntent(launchPi)
+            .build()
+
+        getSystemService(NotificationManager::class.java).notify(NOTIF_ID_FAILURE, notif)
     }
 
     // ── Status persistence ────────────────────────────────────────────────────
@@ -572,6 +1089,7 @@ class ClipRelayService : Service() {
         prefs().edit()
             .putString("local_device_name", resolvedDeviceName())
             .putBoolean("peer_connected", connectedPeerNames.isNotEmpty())
+            .putInt("connected_count", connectedPeerNames.size)
             .putStringSet("connected_names", connectedPeerNames.toSet())
             .apply()
         broadcastStatus()
@@ -579,10 +1097,5 @@ class ClipRelayService : Service() {
 
     private fun broadcastStatus() {
         sendBroadcast(Intent(ACTION_STATUS_CHANGED).setPackage(packageName))
-    }
-
-    private sealed interface OutgoingClipboardPayload {
-        data class Image(val mimeType: String, val data: ByteArray) : OutgoingClipboardPayload
-        data class File(val name: String, val data: ByteArray) : OutgoingClipboardPayload
     }
 }

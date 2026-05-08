@@ -76,3 +76,64 @@ struct TrustPrompt: Identifiable {
     let fingerprintDisplay: String // shown in secondary "Fingerprint: A4:F2:91…" row
     let publicKeyBytes: Data
 }
+
+// ── Activity Feed — IPC model ─────────────────────────────────────────────────
+// Mirrors crate::activity::ActivityEntry as a Codable Swift struct.
+
+struct IpcActivityEntry: Codable, Identifiable {
+    let id: Int64
+    let timestamp_ms: Int64
+    let device_id: String
+    let device_name: String
+    let kind: String
+    let summary: String
+    let content_hash: String?
+    let text_preview: String?
+    let file_name: String?
+    let file_bytes: Int64?
+    let transfer_id: String?
+    var applied_locally: Bool
+    let relay_path: [String]
+
+    var isApplicable: Bool {
+        kind == "remote_clipboard_available" && !applied_locally
+    }
+
+    var relayPathDisplay: String {
+        relay_path.isEmpty ? "" : relay_path.joined(separator: " → ")
+    }
+}
+
+// ── File transfer progress model ──────────────────────────────────────────────
+
+struct FileTransferState: Identifiable {
+    let id: String          // hex transfer ID
+    let fromDeviceName: String
+    let fileName: String
+    let totalBytes: Int64
+    var bytesReceived: Int64 = 0
+    var percent: Int = 0
+    var speedBps: Int64? = nil
+    var etaSecs: Int64? = nil
+    var status: FileTransferStatus = .incoming
+
+    var formattedSize: String {
+        let mb = Double(totalBytes) / 1_048_576.0
+        if mb >= 1.0 { return String(format: "%.1f MB", mb) }
+        let kb = Double(totalBytes) / 1_024.0
+        if kb >= 1.0 { return String(format: "%.0f KB", kb) }
+        return "\(totalBytes) B"
+    }
+}
+
+enum FileTransferStatus {
+    case incoming, transferring, verifying, complete(destPath: String), failed(reason: String), cancelled
+}
+
+// ── Clipboard apply policy preference ────────────────────────────────────────
+
+struct ClipboardPolicy {
+    var timelineFirstMode: Bool = true   // default: timeline-first
+    var autoApply: Bool = false          // default: manual apply
+    var autoApplyDebounceMs: Int = 500
+}

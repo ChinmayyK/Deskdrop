@@ -4,15 +4,46 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 
 /**
- * Auto-starts the ClipRelay service on device boot.
+ * Starts ClipRelay automatically after device boot.
  *
- * Registered in AndroidManifest.xml with RECEIVE_BOOT_COMPLETED permission.
+ * Also handles:
+ *   - MY_PACKAGE_REPLACED — restart after app update
+ *   - LOCKED_BOOT_COMPLETED — for Android 7+ direct-boot compatibility
+ *
+ * Requires RECEIVE_BOOT_COMPLETED permission in AndroidManifest.xml.
+ * Service is only started if the user had sync enabled before the reboot.
  */
 class BootReceiver : BroadcastReceiver() {
+
+    companion object {
+        private const val TAG = "ClipRelayBoot"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_LOCKED_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                val prefs = context.getSharedPreferences(ClipRelayService.PREFS_NAME, Context.MODE_PRIVATE)
+
+                // Respect user setting — don't auto-start if they stopped it intentionally
+                val syncEnabled = prefs.getBoolean("sync_enabled", true)
+                if (!syncEnabled) {
+                    Log.i(TAG, "Boot received but sync_enabled=false — not auto-starting")
+                    return
+                }
+
+                Log.i(TAG, "Boot received (${intent.action}) — starting ClipRelay")
+                startService(context)
+            }
+        }
+    }
+
+    private fun startService(context: Context) {
+        runCatching {
             val serviceIntent = Intent(context, ClipRelayService::class.java).apply {
                 action = ClipRelayService.ACTION_START
             }
@@ -21,6 +52,8 @@ class BootReceiver : BroadcastReceiver() {
             } else {
                 context.startService(serviceIntent)
             }
+        }.onFailure { ex ->
+            Log.e(TAG, "Failed to start ClipRelay service at boot", ex)
         }
     }
 }

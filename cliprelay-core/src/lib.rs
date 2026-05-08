@@ -28,36 +28,40 @@
 //!  └────────────────────────────────────────────────────────────────────┘
 //! ```
 
+pub mod activity;
 pub mod chunked;
+pub mod compress;
 pub mod crypto;
 pub mod dedup;
 pub mod discovery;
 pub mod engine;
 pub mod ffi;
+pub mod file_transfer;
+pub mod filter;
 pub mod history;
+pub mod identity;
 pub mod ipc;
+pub mod mesh;
 pub mod metrics;
 pub mod network;
 pub mod network_manager;
 pub mod pairing;
 pub mod peer_manager;
+pub mod probe;
 pub mod protocol;
+pub mod retry;
 pub mod settings;
+pub mod sim;
+pub mod sync_controller;
+pub mod throttle;
 pub mod trust;
 
 #[cfg(target_os = "android")]
 pub mod jni_android;
 
+#[cfg(windows)]
+pub mod ipc_windows;
+
 pub use engine::{Engine, EngineConfig, EngineEvent};
 pub use protocol::ClipboardContent;
 pub use settings::{Settings, SettingsStore};
-pub mod compress;
-pub mod filter;
-pub mod identity;
-#[cfg(windows)]
-pub mod ipc_windows;
-pub mod probe;
-pub mod retry;
-pub mod sim;
-pub mod sync_controller;
-pub mod throttle;

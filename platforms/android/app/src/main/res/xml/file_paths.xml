@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <cache-path
-        name="incoming_cache"
-        path="incoming/" />
-    <files-path
-        name="internal_files"
-        path="." />
+<paths>
+    <!-- Cache dir — for incoming images (not persisted long-term) -->
+    <cache-path name="cliprelay_cache" path="." />
+    <!-- Files dir — for anything we write to internal storage -->
+    <files-path name="cliprelay_files" path="." />
+    <!-- External Downloads/ClipRelay — for received files -->
+    <external-path name="cliprelay_downloads" path="ClipRelay/" />
+    <!-- External files dir — fallback on devices without external storage -->
+    <external-files-path name="cliprelay_ext_files" path="." />
 </paths>

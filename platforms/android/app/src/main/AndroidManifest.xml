@@ -1,27 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Network access for LAN clipboard sync -->
+    <!-- ── Network ───────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-
-    <!-- mDNS / NSD -->
     <uses-permission android:name="android.permission.NSD_SERVICE" />
 
-    <!-- Clipboard (Android 10+ restricts background clipboard reads) -->
+    <!-- ── Clipboard (Android 10+ restricts background reads) ────────── -->
     <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
 
-    <!-- Foreground service -->
+    <!-- ── Foreground service ────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <!-- Boot receiver so the service auto-starts -->
+    <!-- ── WakeLock — held only during event drain, released immediately -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- ── Boot / restart ────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Notifications -->
+    <!-- ── Notifications (Android 13+) ──────────────────────────────── -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ── Battery optimisation bypass request ───────────────────────── -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- ── External storage for Downloads/ClipRelay ──────────────────── -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
     <application
         android:allowBackup="false"
@@ -29,31 +39,73 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.ClipRelay">
+        android:theme="@style/Theme.ClipRelay"
+        android:requestLegacyExternalStorage="false">
 
+        <!-- ── Main activity ─────────────────────────────────────────── -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <!-- ── Pairing / TOFU dialog ─────────────────────────────────── -->
         <activity
             android:name=".PairingActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize" />
 
+        <!-- ── Settings ──────────────────────────────────────────────── -->
         <activity
             android:name=".SettingsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
+        <!-- ── Share target ──────────────────────────────────────────── -->
+        <activity
+            android:name=".ClipRelayShareTarget"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- ── Foreground service ─────────────────────────────────────── -->
+        <!--
+            foregroundServiceType="dataSync" satisfies the Android 14
+            foreground service requirements without requiring camera/mic.
+            The service uses a PARTIAL_WAKE_LOCK only during event drain.
+        -->
         <service
             android:name=".ClipRelayService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
 
+        <!-- ── Quick Settings tile ───────────────────────────────────── -->
+        <service
+            android:name=".ClipRelayTileService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
+        </service>
+
+        <!-- ── FileProvider — for sharing received files ──────────────── -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -64,16 +116,21 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Auto-start on boot -->
+        <!-- ── Boot receiver ─────────────────────────────────────────── -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            android:directBootAware="true">
             <intent-filter>
+                <!-- Standard boot -->
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- Android 7+ direct-boot (before credential unlock) -->
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <!-- Restart after OTA app update -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 
     </application>
-
 </manifest>

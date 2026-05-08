@@ -82,6 +82,31 @@ pub enum IpcRequest {
     ForgetDevice { device_id: String },
     /// Set auto-connect for a device.
     SetAutoConnect { device_id: String, enabled: bool },
+    /// Get recent activity feed entries.
+    ActivityRecent { limit: usize },
+    /// Get activity feed entries since a given entry ID.
+    ActivitySince { since_id: u64 },
+    /// Get pending remote clipboard items not yet applied locally.
+    PendingRemoteClipboards,
+    /// Explicitly apply a remote clipboard item by its content hash.
+    ApplyClipboard { content_hash: String },
+    /// Send a file to a specific peer or all peers.
+    SendFile {
+        name: String,
+        mime: String,
+        data_base64: String,
+        target_device: Option<String>,
+    },
+    /// Accept an incoming file transfer.
+    AcceptFileTransfer { transfer_id: String },
+    /// Reject an incoming file transfer.
+    RejectFileTransfer { transfer_id: String, reason: String },
+    /// Cancel an active file transfer.
+    CancelFileTransfer { transfer_id: String },
+    /// Update timeline-first clipboard mode.
+    SetTimelineFirstMode { enabled: bool },
+    /// Update auto-apply remote clipboard setting.
+    SetAutoApplyClipboard { enabled: bool },
     /// Get current settings.
     GetSettings,
     /// Apply a partial JSON patch to settings.

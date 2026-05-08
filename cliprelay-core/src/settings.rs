@@ -94,6 +94,33 @@ pub struct Settings {
     /// Coalesce rapid repeat copy events before syncing.
     pub smart_sync_debounce_ms: u64,
 
+    // ── Clipboard UX ─────────────────────────────────────────────────────────
+    /// Timeline-first mode: remote clipboard items land in the activity feed
+    /// and are NOT auto-applied to the local clipboard.
+    /// Users tap/click an item in the feed to apply it.
+    /// Default: true (safer for multi-device environments).
+    pub timeline_first_mode: bool,
+
+    /// Auto-apply remote clipboard even in timeline-first mode.
+    /// Only applies when `timeline_first_mode` is true.
+    /// When false (default), user must explicitly apply from the feed.
+    pub auto_apply_remote_clipboard: bool,
+
+    /// Only auto-apply clipboard from these device IDs (UUID strings).
+    /// Empty = apply from all trusted devices if auto_apply is on.
+    pub auto_apply_allowed_devices: Vec<String>,
+
+    /// Debounce rapid remote clipboard updates (ms) before auto-apply.
+    pub auto_apply_debounce_ms: u64,
+
+    // ── File Transfer ─────────────────────────────────────────────────────────
+    /// Auto-accept incoming file transfers from trusted devices.
+    /// When false, user is prompted for each transfer.
+    pub auto_accept_file_transfers: bool,
+
+    /// Maximum file size in bytes to auto-accept (0 = unlimited).
+    pub auto_accept_max_bytes: u64,
+
     // ── UI ───────────────────────────────────────────────────────────────────
     /// Start ClipRelay automatically on login.
     pub start_on_login: bool,
@@ -122,6 +149,12 @@ impl Default for Settings {
             rate_limit_burst: 3.0,
             smart_sync_duplicate_window_ms: 1_500,
             smart_sync_debounce_ms: 150,
+            timeline_first_mode: true,
+            auto_apply_remote_clipboard: false,
+            auto_apply_allowed_devices: Vec::new(),
+            auto_apply_debounce_ms: 500,
+            auto_accept_file_transfers: true,
+            auto_accept_max_bytes: 50 * 1024 * 1024, // 50 MB
             start_on_login: false,
         }
     }

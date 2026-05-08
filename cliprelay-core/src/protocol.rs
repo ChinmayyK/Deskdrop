@@ -144,6 +144,9 @@ pub enum AppMessage {
         /// Friendly name of the originating device for UI display.
         /// Never a raw UUID.
         origin_device_name: String,
+        /// Relay path for mesh tracing: list of device names that forwarded this.
+        #[serde(default)]
+        relay_path: Vec<String>,
     },
     HistoryMetadata {
         entry: HistoryMetadata,
@@ -151,14 +154,47 @@ pub enum AppMessage {
     ClipboardAck {
         seq: u64,
     },
-    /// Announce a file transfer before sending chunks.
+    /// Announce a file transfer before sending chunks (dedicated pipeline).
     FileTransferAnnounce {
         meta: FileTransferMetadata,
     },
-    /// Receiver accepts or rejects the transfer.
+    /// Receiver accepts, rejects, or resumes a transfer.
     FileTransferAccept {
         transfer_id: [u8; 16],
         accepted: bool,
+        /// Resume from this chunk index (0 = fresh start).
+        #[serde(default)]
+        resume_from_chunk: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reject_reason: Option<String>,
+    },
+    /// One chunk of file data (dedicated file transfer channel).
+    FileChunk {
+        transfer_id: [u8; 16],
+        chunk_index: u32,
+        total_chunks: u32,
+        data: Vec<u8>,
+    },
+    /// Periodic acknowledgement from receiver → sender.
+    FileChunkAck {
+        transfer_id: [u8; 16],
+        last_confirmed_chunk: u32,
+    },
+    /// Sender signals all chunks sent; receiver should verify.
+    FileTransferComplete {
+        transfer_id: [u8; 16],
+    },
+    /// Receiver confirms finalization (success or error).
+    FileTransferCompleteAck {
+        transfer_id: [u8; 16],
+        success: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Either side cancels a transfer in progress.
+    FileTransferCancel {
+        transfer_id: [u8; 16],
+        reason: String,
     },
     Ping {
         timestamp_ms: u64,
