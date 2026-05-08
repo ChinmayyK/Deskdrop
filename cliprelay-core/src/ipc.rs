@@ -171,8 +171,8 @@ pub fn socket_path() -> PathBuf {
 
 #[cfg(unix)]
 pub mod server {
-    use anyhow::Context;
     use super::*;
+    use anyhow::Context;
     use std::sync::Arc;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::{UnixListener, UnixStream};
@@ -248,8 +248,8 @@ pub mod server {
 
 #[cfg(unix)]
 pub mod client {
-    use anyhow::Context;
     use super::*;
+    use anyhow::Context;
     use std::time::Duration;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
