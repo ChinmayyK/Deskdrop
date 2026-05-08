@@ -1,4 +1,4 @@
-# ProxiBoard top-level Makefile
+# ClipRelay top-level Makefile
 #
 # Usage:
 #   make               # build core + CLI for host platform
@@ -33,11 +33,11 @@ RESET  := \033[0m
 # ── Default: build core + CLI ─────────────────────────────────────────────────
 
 build:
-	@echo -e "$(CYAN)Building proxiboard-core + proxiboard-cli...$(RESET)"
+	@echo -e "$(CYAN)Building cliprelay-core + cliprelay-cli...$(RESET)"
 	$(CARGO) build --release
 	@echo -e "$(GREEN)✓ Build complete.$(RESET)"
-	@echo "  Daemon: target/release/proxiboard-daemon"
-	@echo "  CLI:    target/release/proxiboard-cli"
+	@echo "  Daemon: target/release/cliprelay-daemon"
+	@echo "  CLI:    target/release/cliprelay-cli"
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
@@ -108,18 +108,18 @@ macos:
 	$(CARGO) build --release --target aarch64-apple-darwin
 	$(CARGO) build --release --target x86_64-apple-darwin
 	lipo -create \
-		proxiboard-core/target/aarch64-apple-darwin/release/libproxiboard_core.dylib \
-		proxiboard-core/target/x86_64-apple-darwin/release/libproxiboard_core.dylib \
-		-output libproxiboard_core.dylib
-	@echo -e "$(GREEN)✓ Universal dylib: libproxiboard_core.dylib$(RESET)"
+		cliprelay-core/target/aarch64-apple-darwin/release/libcliprelay_core.dylib \
+		cliprelay-core/target/x86_64-apple-darwin/release/libcliprelay_core.dylib \
+		-output libcliprelay_core.dylib
+	@echo -e "$(GREEN)✓ Universal dylib: libcliprelay_core.dylib$(RESET)"
 	@echo "  Next: bash scripts/build-macos.sh"
 
 windows:
 	@echo -e "$(CYAN)Building Windows DLL + C# app...$(RESET)"
 	$(CARGO) build --release
-	cp proxiboard-core/target/release/proxiboard_core.dll \
-	   platforms/windows/ProxiBoard.Windows/
-	dotnet build platforms/windows/ProxiBoard.Windows/ProxiBoard.Windows.csproj \
+	cp cliprelay-core/target/release/cliprelay_core.dll \
+	   platforms/windows/ClipRelay.Windows/
+	dotnet build platforms/windows/ClipRelay.Windows/ClipRelay.Windows.csproj \
 		-c Release
 	@echo -e "$(GREEN)✓ Windows build complete.$(RESET)"
 
@@ -140,17 +140,17 @@ _android-native:
 linux:
 	@echo -e "$(CYAN)Building Linux binaries...$(RESET)"
 	$(CARGO) build --release \
-		--bin proxiboard-daemon \
-		--bin proxiboard-cli
+		--bin cliprelay-daemon \
+		--bin cliprelay-cli
 	@echo -e "$(GREEN)✓ Linux build complete.$(RESET)"
-	@echo "  Daemon: target/release/proxiboard-daemon"
-	@echo "  CLI:    target/release/proxiboard-cli"
+	@echo "  Daemon: target/release/cliprelay-daemon"
+	@echo "  CLI:    target/release/cliprelay-cli"
 	@echo ""
 	@echo "  Install:"
-	@echo "    sudo cp target/release/proxiboard-daemon /usr/local/bin/"
-	@echo "    sudo cp target/release/proxiboard-cli    /usr/local/bin/"
-	@echo "    cp platforms/linux/proxiboard.service ~/.config/systemd/user/"
-	@echo "    systemctl --user enable --now proxiboard"
+	@echo "    sudo cp target/release/cliprelay-daemon /usr/local/bin/"
+	@echo "    sudo cp target/release/cliprelay-cli    /usr/local/bin/"
+	@echo "    cp platforms/linux/cliprelay.service ~/.config/systemd/user/"
+	@echo "    systemctl --user enable --now cliprelay"
 
 all: build macos linux android windows
 	@echo -e "$(GREEN)✓ All platforms built.$(RESET)"
@@ -181,10 +181,10 @@ endif
 # ── Install locally (Linux/macOS) ─────────────────────────────────────────────
 
 install: build
-	install -Dm755 proxiboard-core/target/release/proxiboard-daemon \
-		$(DESTDIR)$(PREFIX)/bin/proxiboard-daemon
-	install -Dm755 proxiboard-core/target/release/proxiboard-cli \
-		$(DESTDIR)$(PREFIX)/bin/proxiboard-cli
+	install -Dm755 cliprelay-core/target/release/cliprelay-daemon \
+		$(DESTDIR)$(PREFIX)/bin/cliprelay-daemon
+	install -Dm755 cliprelay-core/target/release/cliprelay-cli \
+		$(DESTDIR)$(PREFIX)/bin/cliprelay-cli
 	@echo -e "$(GREEN)✓ Installed to $(DESTDIR)$(PREFIX)/bin/$(RESET)"
 
 PREFIX ?= /usr/local
@@ -193,18 +193,18 @@ PREFIX ?= /usr/local
 
 clean:
 	$(CARGO) clean
-	rm -f libproxiboard_core.dylib proxiboard_core.dll
+	rm -f libcliprelay_core.dylib cliprelay_core.dll
 	rm -f bom.json
 	rm -rf platforms/android/app/build
-	rm -rf platforms/windows/ProxiBoard.Windows/bin
-	rm -rf platforms/windows/ProxiBoard.Windows/obj
+	rm -rf platforms/windows/ClipRelay.Windows/bin
+	rm -rf platforms/windows/ClipRelay.Windows/obj
 	@echo -e "$(GREEN)✓ Clean.$(RESET)"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 help:
 	@echo ""
-	@echo -e "$(CYAN)ProxiBoard Build System$(RESET)"
+	@echo -e "$(CYAN)ClipRelay Build System$(RESET)"
 	@echo ""
 	@echo "  make              Build core + CLI for host"
 	@echo "  make test         Run all tests"

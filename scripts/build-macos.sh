@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CORE_DIR="${REPO_ROOT}/cliprelay-core"
 MACOS_DIR="${REPO_ROOT}/platforms/macos"
-SOURCE_DIR_NAME="ProxiBoard"
+SOURCE_DIR_NAME="ClipRelay"
 PRODUCT_NAME="ClipRelay"
 BUILD_TYPE="${1:---release}"
 APP_BUNDLE="${MACOS_DIR}/build/${PRODUCT_NAME}.app"
@@ -55,11 +55,7 @@ install_name_tool \
 log "Compiling Swift sources..."
 SWIFT_FILES=()
 while IFS= read -r file; do
-    case "$(basename "${file}")" in
-        ActivityFeedView.swift|ClipRelayIPCClient.swift|ClipRelayModels.swift|ClipRelayStore.swift)
-            continue
-            ;;
-    esac
+    # Include all files found in the source directory
     SWIFT_FILES+=("${file}")
 done < <(find "${MACOS_DIR}/${SOURCE_DIR_NAME}" -name '*.swift' | sort)
 
@@ -68,7 +64,7 @@ MACOS_TARGET="arm64-apple-macos13.0"
 
 swiftc \
     "${SWIFT_FILES[@]}" \
-    -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/ProxiBoardBridge.h" \
+    -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/ClipRelayBridge.h" \
     -sdk "${SDK_PATH}" \
     -target "${MACOS_TARGET}" \
     -framework AppKit \
@@ -110,7 +106,7 @@ codesign \
     --force \
     --deep \
     --sign "${IDENTITY}" \
-    --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/ProxiBoard.entitlements" \
+    --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/ClipRelay.entitlements" \
     --options runtime \
     "${APP_BUNDLE}"
 

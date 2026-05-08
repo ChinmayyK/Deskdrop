@@ -31,7 +31,7 @@ import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
 // ── JNI Bridge ────────────────────────────────────────────────────────────────
-// The prebuilt .so exports Java_com_proxiboard_ClipRelayJni_* symbols.
+// The prebuilt .so exports Java_com_cliprelay_ClipRelayJni_* symbols.
 // We keep this object name to match — only user-visible strings are renamed.
 
 object ClipRelayJni {

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="platforms/macos/ProxiBoard/Resources/AppIconSource.png" alt="ClipRelay Logo" width="128" />
+  <img src="platforms/macos/ClipRelay/Resources/AppIconSource.png" alt="ClipRelay Logo" width="128" />
   <h1>ClipRelay</h1>
   <p><strong>Local-First · Encrypted · Multi-Device Continuity System</strong></p>
 

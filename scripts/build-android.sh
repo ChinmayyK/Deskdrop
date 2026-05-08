@@ -18,7 +18,7 @@ ANDROID_DIR="${REPO_ROOT}/platforms/android"
 SDK_ROOT_DEFAULT="${HOME}/Library/Android/sdk"
 BREW_SDK_ROOT="/opt/homebrew/share/android-commandlinetools"
 BREW_NDK_ROOT="/opt/homebrew/share/android-ndk"
-ICON_SRC="${REPO_ROOT}/platforms/macos/ProxiBoard/Resources/AppIconSource.png"
+ICON_SRC="${REPO_ROOT}/platforms/macos/ClipRelay/Resources/AppIconSource.png"
 LOCAL_PROPERTIES_PATH="${ANDROID_DIR}/local.properties"
 BRAND_DRAWABLE_DIR="${ANDROID_DIR}/app/src/main/res/drawable-nodpi"
 

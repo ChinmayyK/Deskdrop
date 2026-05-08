@@ -2,7 +2,7 @@
 
 ## Architecture Changes
 
-### 1. Complete product rebrand: ProxiBoard → ClipRelay
+### 1. Complete product rebrand: ClipRelay → ClipRelay
 - All user-facing strings, app names, bundle IDs, package names updated
 - mDNS service type: `_cliprelay._tcp.local.`
 - IPC socket: `cliprelay.sock` / `\\.\pipe\cliprelay`

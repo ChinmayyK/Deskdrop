@@ -52,7 +52,7 @@ android {
     packaging {
         jniLibs {
             // Preserve debug symbols in release so crash reports are actionable
-            keepDebugSymbols += '**/libproxiboard_core.so'
+            keepDebugSymbols += '**/libcliprelay_core.so'
         }
     }
 }

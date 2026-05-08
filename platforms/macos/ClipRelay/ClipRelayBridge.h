@@ -1,4 +1,4 @@
-// ProxiBoardBridge.h
+// ClipRelayBridge.h
 // C header for the Rust cliprelay-core FFI — add to Xcode bridging header.
 
 #pragma once
