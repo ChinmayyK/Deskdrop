@@ -1,119 +1,84 @@
-# ClipRelay
+<div align="center">
+  <img src="platforms/macos/ProxiBoard/Resources/AppIconSource.png" alt="ClipRelay Logo" width="128" />
+  <h1>ClipRelay</h1>
+  <p><strong>LAN-first · Encrypted · Multi-device clipboard & file relay</strong></p>
+  
+  [![Build Status](https://github.com/ChinmayyK/ClipRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/ChinmayyK/ClipRelay/actions/workflows/ci.yml)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+</div>
 
-**LAN-first · Encrypted · Multi-device clipboard & file relay**
+<br />
 
-ClipRelay syncs your clipboard and files across all your devices on your local network — privately, without any cloud.
+ClipRelay syncs your clipboard and files across all your devices on your local network — privately, instantly, and without any cloud servers or accounts required.
 
----
+## ✨ Key Features
 
-## What's new in v0.2
+- 🔒 **End-to-End Encryption:** All data in transit is encrypted using X25519 ECDH and ChaCha20-Poly1305 AEAD.
+- 🌐 **True Mesh Networking:** Three or more devices sync simultaneously. Peer-aware fanout and deduplication prevent echo storms in large meshes.
+- ⚡ **LAN-First Architecture:** Operates entirely over your local network using mDNS discovery. No internet connection needed.
+- 📁 **File Transfer Support:** Stream large files over the mesh with chunking, SHA-256 checksum verification, progress tracking, and failure recovery.
+- 🛡️ **Fine-Grained Device Control:** Manage connected peers with granular state layers (Trust, Remembered, Connected, Sync Enabled, Auto-connect).
+- 🏷️ **Human-Readable Identity:** See clean device names (e.g., "Chinmay's Pixel 8") instead of cryptographic hashes across all UIs.
 
-### Device lifecycle model
-Every device now has five independent state layers:
+## 📱 Supported Platforms
 
-| Layer | Meaning |
-|---|---|
-| **Trust** | Cryptographically approved |
-| **Remembered** | Pairing persists across restarts |
-| **Connected** | Active TCP session |
-| **Sync Enabled** | Clipboard data flows |
-| **Auto-connect** | Reconnects on startup / network restore |
+ClipRelay provides native experiences across all major operating systems:
 
-**Per-device controls:**
-- **Disconnect** — end the session, keep trust
-- **Pause Sync** — keep connection, stop clipboard flow
-- **Resume Sync** — re-enable clipboard flow
-- **Forget Device** — remove pairing, keep trust
-- **Revoke Trust** — invalidate trust, disconnect immediately
-- **Auto-connect toggle** — control reconnect behaviour
+| Platform | Status | Implementation Details |
+|---|:---:|---|
+| **macOS** | ✅ | Native SwiftUI app (`ProxiBoard`) + IPC client |
+| **Android** | ✅ | Kotlin foreground service + JNI bridge, ambient notifications |
+| **Windows** | ✅ | WinForms app + Named Pipe client |
+| **Linux** | ✅ | System service + GTK4 tray app |
 
-### Human-readable device names
-Device names are shown everywhere in the UI. Internal cryptographic IDs (`e72a91b3…`) never appear in normal usage — only in the trust fingerprint dialog.
+## 🏗️ Architecture
 
-**Timeline:**
-```
-[Chinmay's Pixel 8] copied OTP
-[MacBook Pro] copied stack trace
-```
+ClipRelay is built on a high-performance Rust core that powers all platform-specific clients.
 
-**Notifications (Android):**
-```
-📎 File received from Chinmay's Pixel 8
-```
-
-### True multi-device mesh
-Three or more devices sync simultaneously. Clipboard fanout is peer-aware and deduplication is per-peer so no echo storms occur in large meshes.
-
-### File transfer improvements
-- Chunked streaming (no full-file memory load)
-- SHA-256 checksum verification before saving
-- Progress tracking (bytes transferred / percent)
-- Files saved to `Downloads/ClipRelay/`
-- Failure recovery (disconnect mid-transfer, timeout)
-
-### Android notification redesign
-- **ONE** quiet persistent foreground notification — "ClipRelay · 3 devices connected"
-- **No** per-clipboard-sync notifications (clipboard is silent/ambient)
-- Notifications only for: file received, trust request, connection alerts
-- Optional "notify on remote copy" setting (OFF by default)
-- In-app activity feed instead of notification spam
-
----
-
-## Supported platforms
-
-| Platform | Status |
-|---|---|
-| macOS | ✅ |
-| Android | ✅ |
-| Linux | ✅ |
-| Windows | ✅ |
-
----
-
-## Architecture
-
-```
-cliprelay-core/   Rust engine — networking, crypto, sync, IPC
+```text
+cliprelay-core/   Rust engine (networking, crypto, sync, IPC)
 cliprelay-cli/    Command-line interface to the daemon
 platforms/
-  android/        Kotlin foreground service + JNI bridge
-  macos/          SwiftUI app + IPC client
-  linux/          System service + tray
-  windows/        WinForms app + named pipe client
+  android/        Android app with JNI integration
+  macos/          macOS SwiftUI application
+  linux/          Linux system service and tray integration
+  windows/        Windows desktop application
 ```
 
-### IPC protocol (daemon ↔ UI)
-JSON over Unix socket (`~/.run/cliprelay.sock`) or Windows named pipe (`\\.\pipe\cliprelay`).
+### IPC Protocol (Daemon ↔ UI)
+Communication between the Rust engine and platform UIs happens via JSON over Unix domain sockets (`~/.run/cliprelay.sock`) or Windows Named Pipes (`\\.\pipe\cliprelay`). This ensures high performance and clean separation of concerns.
 
-New commands in v0.2:
-- `pause_sync_peer` / `resume_sync_peer`
-- `forget_device`
-- `set_auto_connect`
+## 🔒 Security Model
 
-### Security
-- X25519 ECDH + HKDF key derivation per session
-- ChaCha20-Poly1305 AEAD encryption for all messages
-- Trust-on-first-use (TOFU) with fingerprint verification
-- Trust, revoke, reject are all persistent
+Security is built-in from the ground up:
+- **Key Exchange:** X25519 ECDH + HKDF key derivation per session.
+- **Encryption:** ChaCha20-Poly1305 AEAD encryption for all messages and file chunks.
+- **Trust Model:** Trust-on-first-use (TOFU) with fingerprint verification. Trust relationships, revocations, and rejections are fully persistent.
 
----
+## 🛠️ Building from Source
 
-## Building
+### Prerequisites
+- [Rust toolchain](https://rustup.rs/) (Cargo)
+- Platform-specific build tools (Xcode for macOS, Android Studio / SDK for Android, .NET for Windows)
+
+### Build Commands
 
 ```bash
-# Core (all platforms)
+# 1. Build the Rust core engine (all platforms)
 cargo build --release -p cliprelay-core
 
-# Android
-./scripts/build-android.sh
+# 2. Build the Command Line Interface
+cargo build --release -p cliprelay-cli
 
-# macOS
+# 3. Build platform apps (macOS / Android)
 ./scripts/build-macos.sh
+./scripts/build-android.sh
 ```
 
----
+## 🤝 Contributing
 
-## License
+Contributions are welcome! Please check out our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started, our code of conduct, and development workflows.
 
-MIT
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
