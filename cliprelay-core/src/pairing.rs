@@ -148,6 +148,9 @@ impl PairingManager {
     pub async fn request_pairing(&self, pairing: PendingPairing) -> Result<bool> {
         let (decision_tx, decision_rx) = oneshot::channel();
 
+        // Capture device_id before moving `pairing` into the map.
+        let device_id = pairing.device_id;
+
         let pr = PairingRequest {
             device_id: pairing.device_id,
             device_name: pairing.device_name.clone(),
@@ -167,8 +170,8 @@ impl PairingManager {
             Ok(Ok(approved)) => Ok(approved),
             Ok(Err(_)) => Ok(false), // sender dropped
             Err(_) => {
-                // Timed out — clean up and deny.
-                self.pending.lock().await.remove(&Uuid::nil()); // placeholder
+                // Timed out — clean up using the captured device_id, not Uuid::nil().
+                self.pending.lock().await.remove(&device_id);
                 Ok(false)
             }
         }
@@ -195,6 +198,36 @@ impl PairingManager {
                 time_remaining_secs: p.time_remaining().as_secs(),
             })
             .collect()
+    }
+
+    /// Remove any pairing requests that have exceeded `PAIRING_TIMEOUT`.
+    ///
+    /// Call periodically (e.g. every 5 s) to prevent stale entries from
+    /// accumulating if the UI layer forgets to call `resolve()`.
+    ///
+    /// v3 fix: expired entries now explicitly send `false` on the oneshot
+    /// channel before dropping it, so any task awaiting `request_pairing()`
+    /// receives `Ok(false)` (denied) instead of `Ok(Err(_))` (channel broken).
+    pub async fn expire_stale(&self) -> usize {
+        let mut pending = self.pending.lock().await;
+        let before = pending.len();
+        let expired_ids: Vec<Uuid> = pending
+            .iter()
+            .filter(|(_, (p, _))| p.is_expired())
+            .map(|(id, _)| *id)
+            .collect();
+        for id in &expired_ids {
+            if let Some((_, tx)) = pending.remove(id) {
+                // Explicitly deny — the waiter sees Ok(false) not a channel error.
+                let _ = tx.send(false);
+            }
+        }
+        before - pending.len()
+    }
+
+    /// Total pending pairing count (including expired, not yet cleaned up).
+    pub async fn pending_count(&self) -> usize {
+        self.pending.lock().await.len()
     }
 }
 
@@ -239,4 +272,56 @@ mod tests {
             assert!(p.value() < 1_000_000);
         }
     }
-}
+
+    #[test]
+    fn pin_distribution_rough_uniformity() {
+        // Sample 1000 random secrets and check that pins span multiple thousands.
+        // This catches degenerate distributions (e.g. all pins < 1000).
+        use std::collections::HashSet;
+        let thousands: HashSet<u32> = (0u32..1000)
+            .map(|i| {
+                let mut secret = [0u8; 32];
+                secret[0] = (i & 0xFF) as u8;
+                secret[1] = ((i >> 8) & 0xFF) as u8;
+                derive_pin(&secret).value() / 1000
+            })
+            .collect();
+        // Should hit at least 5 different thousand-buckets.
+        assert!(thousands.len() >= 5, "poor PIN distribution: {:?}", thousands);
+    }
+
+    #[test]
+    fn pending_pairing_is_not_immediately_expired() {
+        let id = Uuid::new_v4();
+        let pairing = PendingPairing::new(id, "TestDevice".into(), &[0xAB; 32], [0u8; 32]);
+        assert!(!pairing.is_expired());
+        assert!(pairing.time_remaining() > Duration::from_secs(25));
+    }
+
+    #[tokio::test]
+    async fn pairing_manager_deny_and_remove() {
+        let (ui_tx, mut ui_rx) = tokio::sync::mpsc::channel(4);
+        let mgr = PairingManager::new(ui_tx);
+        let id = Uuid::new_v4();
+        let pairing = PendingPairing::new(id, "Phone".into(), &[0xCC; 32], [0u8; 32]);
+
+        let mgr_ref = std::sync::Arc::new(mgr);
+        let mgr2 = mgr_ref.clone();
+
+        // Spawn the blocking pairing request.
+        let handle = tokio::spawn(async move {
+            mgr2.request_pairing(pairing).await
+        });
+
+        // Receive the UI notification.
+        let req = ui_rx.recv().await.unwrap();
+        assert_eq!(req.device_id, id);
+
+        // Deny it.
+        mgr_ref.resolve(id, false).await;
+        let approved = handle.await.unwrap().unwrap();
+        assert!(!approved);
+
+        // Map should be empty after resolution.
+        assert_eq!(mgr_ref.pending_count().await, 0);
+    }

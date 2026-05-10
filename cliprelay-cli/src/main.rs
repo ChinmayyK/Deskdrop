@@ -56,6 +56,8 @@ async fn run() -> Result<()> {
         ["history", "repush", id] => cmd_history_repush(id, None).await,
         ["history", "repush", id, target] => cmd_history_repush(id, Some(target)).await,
         ["history", "delete", id] => cmd_history_delete(id).await,
+        ["history", "export"] | ["history", "export", "csv"] => cmd_history_export_csv().await,
+        ["metrics"] => cmd_metrics().await,
         ["settings"] | ["settings", "get"] => cmd_settings_get(None),
         ["settings", "get", key] => cmd_settings_get(Some(key)),
         ["settings", "set", key, value] => cmd_settings_set(key, value),
@@ -68,7 +70,7 @@ async fn run() -> Result<()> {
             Ok(())
         }
         other => bail!(
-            "Unknown command: {}\nRun `cliprelay-cli help`",
+            "Unknown command: '{}'\n\nRun `cliprelay-cli help` to see all available commands.",
             other.join(" ")
         ),
     }
@@ -546,6 +548,37 @@ async fn cmd_history_delete(id_str: &str) -> Result<()> {
     Ok(())
 }
 
+async fn cmd_history_export_csv() -> Result<()> {
+    // Try live daemon first.
+    if let Some(IpcResponse::Ok { data: Some(data) }) =
+        try_ipc(&IpcRequest::HistoryExportCsv).await
+    {
+        if let Some(csv) = data.as_str() {
+            print!("{}", csv);
+            return Ok(());
+        }
+    }
+    // Fallback: read from disk.
+    let history = History::load(default_history_path())?;
+    print!("{}", history.export_csv());
+    Ok(())
+}
+
+async fn cmd_metrics() -> Result<()> {
+    match ipc(&IpcRequest::GetMetrics).await? {
+        IpcResponse::Ok { data: Some(data) } => {
+            if let Ok(pretty) = serde_json::to_string_pretty(&data) {
+                println!("{}", pretty);
+            } else {
+                println!("{}", data);
+            }
+        }
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => bail!("daemon did not respond with metrics"),
+    }
+    Ok(())
+}
+
 fn cmd_settings_get(key: Option<&str>) -> Result<()> {
     let store = SettingsStore::load(default_settings_path())?;
     let value = serde_json::to_value(store.get())?;
@@ -694,6 +727,7 @@ DAEMON CONTROL
   sync on|off                     Enable or disable clipboard syncing globally
   stop                            Gracefully stop the daemon
   version                         Print version and exit
+  metrics                         Print live runtime metrics (JSON)
 
 PEERS
   peers                           List currently connected peers with stats
@@ -716,6 +750,7 @@ HISTORY
   history unpin <id>              Remove a pin
   history repush <id> [device]    Re-send a stored text entry (optional: to one device)
   history delete <id>             Delete a single history entry
+  history export [csv]            Export full history as CSV (stdout)
   history clear                   Clear all history (irreversible)
 
 SETTINGS

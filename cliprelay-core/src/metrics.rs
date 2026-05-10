@@ -51,16 +51,53 @@ impl GlobalMetrics {
         self.start_time.elapsed()
     }
 
+    /// Format uptime as `Xd Xh Xm Xs`.
+    pub fn format_uptime(&self) -> String {
+        let total = self.uptime().as_secs();
+        let days = total / 86_400;
+        let hours = (total % 86_400) / 3_600;
+        let mins = (total % 3_600) / 60;
+        let secs = total % 60;
+        if days > 0 {
+            format!("{}d {}h {}m", days, hours, mins)
+        } else if hours > 0 {
+            format!("{}h {}m {}s", hours, mins, secs)
+        } else if mins > 0 {
+            format!("{}m {}s", mins, secs)
+        } else {
+            format!("{}s", secs)
+        }
+    }
+
     /// Human-readable summary line.
     pub fn summary(&self) -> String {
+        let sent_kb = self.bytes_sent.load(Relaxed) / 1024;
+        let recv_kb = self.bytes_received.load(Relaxed) / 1024;
         format!(
-            "↑{} pushes / {} KB  ↓{} pushes / {} KB  peers_ok  uptime {}s",
+            "↑{} pushes ({} KB)  ↓{} pushes ({} KB)  dedup={} rate_limited={} errors={}  uptime={}",
             self.pushes_sent.load(Relaxed),
-            self.bytes_sent.load(Relaxed) / 1024,
+            sent_kb,
             self.pushes_received.load(Relaxed),
-            self.bytes_received.load(Relaxed) / 1024,
-            self.uptime().as_secs(),
+            recv_kb,
+            self.dedup_suppressed.load(Relaxed),
+            self.rate_limited.load(Relaxed),
+            self.connection_errors.load(Relaxed),
+            self.format_uptime(),
         )
+    }
+
+    /// Produce a serializable point-in-time snapshot.
+    pub fn snapshot(&self) -> MetricsSnapshot {
+        MetricsSnapshot {
+            pushes_sent: self.pushes_sent.load(Relaxed),
+            pushes_received: self.pushes_received.load(Relaxed),
+            bytes_sent: self.bytes_sent.load(Relaxed),
+            bytes_received: self.bytes_received.load(Relaxed),
+            dedup_suppressed: self.dedup_suppressed.load(Relaxed),
+            rate_limited: self.rate_limited.load(Relaxed),
+            connection_errors: self.connection_errors.load(Relaxed),
+            uptime_secs: self.uptime().as_secs(),
+        }
     }
 }
 
@@ -76,6 +113,33 @@ impl Default for GlobalMetrics {
             connection_errors: AtomicU64::new(0),
             start_time: Instant::now(),
         }
+    }
+}
+
+/// Serializable point-in-time snapshot of global metrics.
+///
+/// Use this for JSON export to the CLI, IPC responses, or telemetry.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MetricsSnapshot {
+    pub pushes_sent: u64,
+    pub pushes_received: u64,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+    pub dedup_suppressed: u64,
+    pub rate_limited: u64,
+    pub connection_errors: u64,
+    pub uptime_secs: u64,
+}
+
+impl MetricsSnapshot {
+    /// True if no traffic has been observed yet.
+    pub fn is_idle(&self) -> bool {
+        self.pushes_sent == 0 && self.pushes_received == 0
+    }
+
+    /// Net bytes transferred (sent + received).
+    pub fn total_bytes(&self) -> u64 {
+        self.bytes_sent.saturating_add(self.bytes_received)
     }
 }
 
@@ -285,6 +349,15 @@ impl MetricsRegistry {
     }
 }
 
+impl Default for MetricsRegistry {
+    fn default() -> Self {
+        Self {
+            global: GlobalMetrics::new(),
+            peers: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -304,6 +377,24 @@ mod tests {
     }
 
     #[test]
+    fn latency_tracker_ring_wraps() {
+        let mut t = LatencyTracker::new(3);
+        for v in [10, 20, 30, 40] {
+            t.record(v);
+        }
+        // After wrap: contains [40, 20, 30] in some order — oldest evicted.
+        assert_eq!(t.sample_count(), 3);
+        assert!(t.min_us().unwrap() >= 20); // 10 was evicted
+    }
+
+    #[test]
+    fn latency_tracker_empty() {
+        let t = LatencyTracker::new(10);
+        assert_eq!(t.avg_us(), None);
+        assert_eq!(t.p95_us(), None);
+    }
+
+    #[test]
     fn registry_peer_lifecycle() {
         let reg = MetricsRegistry::new();
         let id = Uuid::new_v4();
@@ -314,6 +405,40 @@ mod tests {
         let stats = reg.all_peer_stats();
         assert_eq!(stats[0].bytes_sent, 1024);
         assert_eq!(stats[0].avg_rtt_us, Some(5000));
+        reg.peer_disconnected(id);
+        assert_eq!(reg.peer_count(), 0);
+    }
+
+    #[test]
+    fn global_metrics_snapshot() {
+        let m = GlobalMetrics::new();
+        m.pushes_sent.fetch_add(5, std::sync::atomic::Ordering::Relaxed);
+        m.bytes_sent.fetch_add(2048, std::sync::atomic::Ordering::Relaxed);
+        let snap = m.snapshot();
+        assert_eq!(snap.pushes_sent, 5);
+        assert_eq!(snap.bytes_sent, 2048);
+        assert!(!snap.is_idle());
+        assert_eq!(snap.total_bytes(), 2048);
+    }
+
+    #[test]
+    fn format_uptime_displays_correctly() {
+        // We can't control Instant::now(), so just confirm no panic and non-empty.
+        let m = GlobalMetrics::new();
+        let s = m.format_uptime();
+        assert!(!s.is_empty());
+        assert!(s.ends_with('s') || s.ends_with('m') || s.ends_with('h'));
+    }
+
+    #[test]
+    fn summary_includes_key_fields() {
+        let m = GlobalMetrics::new();
+        m.dedup_suppressed.fetch_add(3, std::sync::atomic::Ordering::Relaxed);
+        let s = m.summary();
+        assert!(s.contains("dedup=3"));
+        assert!(s.contains("uptime="));
+    }
+}
         reg.peer_disconnected(id);
         assert_eq!(reg.peer_count(), 0);
     }

@@ -59,6 +59,38 @@ impl CompressionStats {
     }
 }
 
+/// Fix 12: Display impl for CompressionStats.
+///
+/// Before this fix every call site had to reconstruct the log string manually
+/// (e.g. `format!("{} → {} ({:.1}%)", ...)`) with no consistency guarantee.
+/// Now callers can simply `log::info!("{}", stats)` or include it in IPC
+/// responses as `stats.to_string()`.
+///
+/// Example output:
+/// ```text
+/// "1024 KB → 614 KB  savings=40.0%  strategy=jpeg-85  time=3ms"
+/// ```
+impl std::fmt::Display for CompressionStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let orig_kb = self.original_bytes as f64 / 1024.0;
+        let comp_kb = self.compressed_bytes as f64 / 1024.0;
+        let strategy = match self.strategy {
+            CompressionStrategy::Passthrough => "passthrough".to_string(),
+            CompressionStrategy::PngReencode => "png-reencode".to_string(),
+            CompressionStrategy::JpegLossy { quality } => format!("jpeg-{}", quality),
+        };
+        write!(
+            f,
+            "{:.0} KB → {:.0} KB  savings={:.1}%  strategy={}  time={}ms",
+            orig_kb,
+            comp_kb,
+            self.savings_pct(),
+            strategy,
+            self.duration_ms
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CompressionStrategy {
     Passthrough,
@@ -241,6 +273,20 @@ mod tests {
         let (out, stats) = compress_image(content.clone(), true).await;
         assert!(stats.is_none());
         assert_eq!(out, content);
+    }
+
+    #[test]
+    fn compression_stats_display() {
+        let stats = CompressionStats {
+            original_bytes: 1_024_000,
+            compressed_bytes: 614_400,
+            strategy: CompressionStrategy::JpegLossy { quality: 85 },
+            duration_ms: 3,
+        };
+        let s = stats.to_string();
+        assert!(s.contains("savings="), "display missing savings: {}", s);
+        assert!(s.contains("jpeg-85"), "display missing strategy: {}", s);
+        assert!(s.contains("3ms"), "display missing time: {}", s);
     }
 
     #[test]

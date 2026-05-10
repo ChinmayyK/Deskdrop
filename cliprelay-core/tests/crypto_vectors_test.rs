@@ -130,28 +130,20 @@ fn session_key_derivation_vector() {
     let mut okm = [0u8; 32];
     hk.expand(b"cliprelay-v1-session", &mut okm).unwrap();
 
-    // This is our reference vector — generated once and locked in.
-    // If this test fails, the session key derivation has changed and
-    // ALL existing trust stores / in-flight sessions will break.
-    let _expected = hex_32(
-        "3f5a7b2c9d4e8f16a2b3c4d5e6f70819\
-         2a3b4c5d6e7f8091a2b3c4d5e6f70819",
+    // Fix 11/20: This is the real, pre-computed reference vector.
+    // It was computed from HKDF-SHA256(IKM=0xAB*32, salt=none, info="cliprelay-v1-session").
+    // If this test fails, the session key derivation has changed and ALL existing
+    // trust stores / in-flight sessions will break — investigate before merging.
+    let expected = hex_32(
+        "e3302f731b9029d93a794e9c42892a2e\
+         c6dada0bb44467e851c4f033a765dd58",
     );
 
-    // NOTE: expected vector must be pre-computed from the actual impl.
-    // We verify the structure (32 bytes, non-zero) rather than exact value
-    // since it depends on the actual HKDF computation.
-    assert_eq!(okm.len(), 32);
-    assert_ne!(okm, [0u8; 32], "session key must not be all zeros");
-    // Stable regression check: first byte must be consistent.
-    let first_byte = okm[0];
-    let recomputed = {
-        let hk2 = Hkdf::<Sha256>::new(None, &shared_secret);
-        let mut okm2 = [0u8; 32];
-        hk2.expand(b"cliprelay-v1-session", &mut okm2).unwrap();
-        okm2[0]
-    };
-    assert_eq!(first_byte, recomputed, "session key is non-deterministic");
+    assert_eq!(
+        okm, expected,
+        "session key derivation vector mismatch — \
+         key derivation logic has changed; this will break existing sessions"
+    );
 }
 
 // ── ClipRelay PIN derivation vectors ─────────────────────────────────────────

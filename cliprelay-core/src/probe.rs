@@ -187,6 +187,43 @@ impl QualityProbe {
     pub fn quality(&self) -> Option<LinkQuality> {
         self.last_result.as_ref().map(|r| r.quality)
     }
+
+    /// Fix 13: Detect link quality degradation between probe cycles.
+    ///
+    /// Returns `Some((old, new))` if quality dropped since the last recorded
+    /// result, `None` if there is no previous result or quality stayed the same
+    /// / improved.  Callers should emit a warning and consider shrinking the
+    /// active chunk size proactively.
+    ///
+    /// # Example
+    /// ```ignore
+    /// if let Some((old, new)) = probe.degraded_from(&new_result) {
+    ///     tracing::warn!("Link quality degraded: {:?} → {:?}", old, new);
+    ///     engine.reduce_chunk_size(new.chunk_size());
+    /// }
+    /// probe.record(new_result);
+    /// ```
+    pub fn degraded_from(&self, new_result: &ProbeResult) -> Option<(LinkQuality, LinkQuality)> {
+        let old = self.last_result.as_ref()?.quality;
+        let new = new_result.quality;
+        // Degradation means the numeric severity went up (worse quality).
+        if quality_severity(new) > quality_severity(old) {
+            Some((old, new))
+        } else {
+            None
+        }
+    }
+}
+
+/// Maps `LinkQuality` to a severity integer so we can compare them.
+/// Higher value = worse link.
+fn quality_severity(q: LinkQuality) -> u8 {
+    match q {
+        LinkQuality::Excellent => 0,
+        LinkQuality::Good => 1,
+        LinkQuality::Fair => 2,
+        LinkQuality::Poor => 3,
+    }
 }
 
 // ── Probe message helpers ─────────────────────────────────────────────────────
@@ -259,5 +296,69 @@ mod tests {
         // Samples with low variance → low jitter.
         let low = ProbeResult::from_samples(vec![5_000u64, 5_100, 4_900, 5_050, 4_950]);
         assert!(high.jitter_us > low.jitter_us);
+    }
+
+    // ── Fix 13: degraded_from ─────────────────────────────────────────────────
+
+    #[test]
+    fn degraded_from_detects_quality_drop() {
+        let mut probe = QualityProbe::new("TestPeer");
+        // Record an Excellent result first.
+        let excellent = ProbeResult::from_samples(vec![1_000u64; PROBE_COUNT]);
+        probe.record(excellent);
+        assert_eq!(probe.quality(), Some(LinkQuality::Excellent));
+
+        // Now simulate a Poor result arriving.
+        let poor = ProbeResult::from_samples(vec![200_000u64; PROBE_COUNT]);
+        let degraded = probe.degraded_from(&poor);
+        assert!(
+            degraded.is_some(),
+            "should detect Excellent → Poor degradation"
+        );
+        let (old, new) = degraded.unwrap();
+        assert_eq!(old, LinkQuality::Excellent);
+        assert_eq!(new, LinkQuality::Poor);
+    }
+
+    #[test]
+    fn degraded_from_no_alert_on_improvement() {
+        let mut probe = QualityProbe::new("TestPeer");
+        // Start with Poor.
+        let poor = ProbeResult::from_samples(vec![200_000u64; PROBE_COUNT]);
+        probe.record(poor);
+
+        // Improved to Excellent — not a degradation.
+        let excellent = ProbeResult::from_samples(vec![1_000u64; PROBE_COUNT]);
+        assert!(
+            probe.degraded_from(&excellent).is_none(),
+            "improvement should not be reported as degradation"
+        );
+    }
+
+    #[test]
+    fn degraded_from_no_alert_on_same_quality() {
+        let mut probe = QualityProbe::new("TestPeer");
+        let good1 = ProbeResult::from_samples(vec![10_000u64; PROBE_COUNT]);
+        probe.record(good1);
+
+        let good2 = ProbeResult::from_samples(vec![15_000u64; PROBE_COUNT]);
+        // Both are Good — no degradation.
+        assert!(probe.degraded_from(&good2).is_none());
+    }
+
+    #[test]
+    fn degraded_from_returns_none_without_prior_result() {
+        let probe = QualityProbe::new("TestPeer");
+        // No prior result — cannot determine degradation.
+        let poor = ProbeResult::from_samples(vec![200_000u64; PROBE_COUNT]);
+        assert!(probe.degraded_from(&poor).is_none());
+    }
+
+    #[test]
+    fn quality_severity_ordering() {
+        use super::quality_severity;
+        assert!(quality_severity(LinkQuality::Poor) > quality_severity(LinkQuality::Fair));
+        assert!(quality_severity(LinkQuality::Fair) > quality_severity(LinkQuality::Good));
+        assert!(quality_severity(LinkQuality::Good) > quality_severity(LinkQuality::Excellent));
     }
 }

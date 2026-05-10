@@ -145,6 +145,29 @@ impl Reassembler {
                 checksum,
                 kind,
             } => {
+                // Fix 8: Reject absurd transfer announcements before allocating
+                // any state.  A malicious peer can announce total_bytes=u64::MAX
+                // and total_chunks=u32::MAX to tie up in-flight slots indefinitely.
+                // We cap at MAX_FILE_BYTES (512 MB) and MAX_CHUNKS_ALLOWED (8 192).
+                const MAX_ANNOUNCED_BYTES: u64 = crate::protocol::MAX_FILE_BYTES as u64;
+                const MAX_CHUNKS_ALLOWED: u32 = 8_192; // 8 192 × 64 KB = 512 MB
+                anyhow::ensure!(
+                    total_bytes <= MAX_ANNOUNCED_BYTES,
+                    "transfer announces {} bytes which exceeds the {} byte cap",
+                    total_bytes,
+                    MAX_ANNOUNCED_BYTES
+                );
+                anyhow::ensure!(
+                    total_chunks <= MAX_CHUNKS_ALLOWED,
+                    "transfer announces {} chunks which exceeds the {} chunk cap",
+                    total_chunks,
+                    MAX_CHUNKS_ALLOWED
+                );
+                anyhow::ensure!(
+                    !checksum.is_empty(),
+                    "transfer Start has empty checksum"
+                );
+
                 self.in_flight.insert(
                     transfer_id,
                     Transfer {
@@ -179,6 +202,13 @@ impl Reassembler {
                     "chunk {} too large ({})",
                     index,
                     data.len()
+                );
+                // Reject duplicate chunk indices — an attacker sending a
+                // second chunk with the same index could replace valid data.
+                anyhow::ensure!(
+                    !transfer.chunks.contains_key(&index),
+                    "duplicate chunk index {} for transfer — rejected",
+                    index
                 );
 
                 transfer.chunks.insert(index, data);
@@ -249,8 +279,33 @@ impl Reassembler {
         self.in_flight.remove(transfer_id);
     }
 
+    /// Cancel all in-flight transfers (e.g. on peer disconnect).
+    ///
+    /// Returns the number of transfers cancelled.
+    pub fn cancel_all(&mut self) -> usize {
+        let count = self.in_flight.len();
+        self.in_flight.clear();
+        count
+    }
+
     pub fn in_flight_count(&self) -> usize {
         self.in_flight.len()
+    }
+
+    /// IDs of all currently in-flight transfers.
+    pub fn in_flight_ids(&self) -> Vec<TransferId> {
+        self.in_flight.keys().copied().collect()
+    }
+
+    /// Progress (0.0–1.0) of a specific transfer, if known.
+    pub fn progress(&self, transfer_id: &TransferId) -> Option<f32> {
+        self.in_flight.get(transfer_id).map(|t| {
+            if t.total_chunks == 0 {
+                0.0
+            } else {
+                t.chunks.len() as f32 / t.total_chunks as f32
+            }
+        })
     }
 }
 
@@ -310,4 +365,100 @@ mod tests {
         }
         assert!(corrupted, "should detect corruption via SHA-256");
     }
-}
+
+    #[test]
+    fn duplicate_chunk_index_is_rejected() {
+        let content = make_content(CHUNK_THRESHOLD * 2);
+        let mut msgs = maybe_chunk(&content).unwrap();
+
+        // Duplicate chunk index 0.
+        let dup = msgs
+            .iter()
+            .find(|m| matches!(m, ChunkMessage::Chunk { index: 0, .. }))
+            .cloned()
+            .unwrap();
+
+        let mut r = Reassembler::default();
+        let mut hit_dup_error = false;
+        // Feed the Start message first.
+        r.feed(msgs.remove(0)).unwrap();
+        // Feed the first real chunk.
+        r.feed(msgs[0].clone()).unwrap();
+        // Feed the duplicate — should error.
+        match r.feed(dup) {
+            Err(e) => {
+                hit_dup_error = true;
+                assert!(
+                    e.to_string().contains("duplicate chunk"),
+                    "unexpected error: {}",
+                    e
+                );
+            }
+            Ok(_) => {}
+        }
+        assert!(hit_dup_error, "duplicate chunk should have been rejected");
+    }
+
+    #[test]
+    fn cancel_all_clears_in_flight() {
+        let content = make_content(CHUNK_THRESHOLD * 2);
+        let msgs = maybe_chunk(&content).unwrap();
+
+        let mut r = Reassembler::default();
+        // Feed just the Start.
+        r.feed(msgs[0].clone()).unwrap();
+        assert_eq!(r.in_flight_count(), 1);
+        assert_eq!(r.in_flight_ids().len(), 1);
+
+        let cancelled = r.cancel_all();
+        assert_eq!(cancelled, 1);
+        assert_eq!(r.in_flight_count(), 0);
+    }
+
+    #[test]
+    fn start_with_absurd_size_is_rejected() {
+        let mut r = Reassembler::default();
+        let result = r.feed(ChunkMessage::Start {
+            transfer_id: [0xAB; 16],
+            total_chunks: 1,
+            total_bytes: u64::MAX,
+            checksum: "deadbeef".into(),
+            kind: ChunkKind::Text,
+        });
+        assert!(result.is_err(), "absurd total_bytes must be rejected");
+    }
+
+    #[test]
+    fn start_with_absurd_chunk_count_is_rejected() {
+        let mut r = Reassembler::default();
+        let result = r.feed(ChunkMessage::Start {
+            transfer_id: [0xCD; 16],
+            total_chunks: u32::MAX,
+            total_bytes: 1024,
+            checksum: "deadbeef".into(),
+            kind: ChunkKind::Text,
+        });
+        assert!(result.is_err(), "absurd total_chunks must be rejected");
+    }
+
+    #[test]
+    fn progress_tracking() {
+        let content = make_content(CHUNK_THRESHOLD * 2);
+        let msgs = maybe_chunk(&content).unwrap();
+
+        let mut r = Reassembler::default();
+        // Start the transfer.
+        r.feed(msgs[0].clone()).unwrap();
+
+        let ids = r.in_flight_ids();
+        assert_eq!(ids.len(), 1);
+
+        // Before any chunks: progress = 0.
+        let p = r.progress(&ids[0]).unwrap();
+        assert_eq!(p, 0.0);
+
+        // Feed one data chunk.
+        r.feed(msgs[1].clone()).unwrap();
+        let p = r.progress(&ids[0]).unwrap();
+        assert!(p > 0.0 && p <= 1.0);
+    }

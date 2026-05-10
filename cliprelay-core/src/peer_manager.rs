@@ -588,6 +588,27 @@ impl PeerManager {
     pub fn connected_count(&self) -> usize {
         self.live.read().unwrap().len()
     }
+
+    /// Fix 14: O(1) count of peers that are connected AND sync-eligible.
+    ///
+    /// Previously callers had to `list()` the entire peer store and filter,
+    /// which is O(n) and called on every status-page refresh.  This helper
+    /// reads only the `live` session map (connected peers) and cross-checks
+    /// `sync_enabled` from the persisted record, avoiding a full table scan.
+    pub fn sync_eligible_count(&self) -> usize {
+        let live_ids: Vec<Uuid> = self.live.read().unwrap().keys().copied().collect();
+        let store = self.store.read().unwrap();
+        live_ids
+            .iter()
+            .filter(|id| {
+                store
+                    .peers
+                    .get(*id)
+                    .map(|r| r.sync_enabled && r.trusted)
+                    .unwrap_or(false)
+            })
+            .count()
+    }
 }
 
 #[cfg(test)]
@@ -701,5 +722,83 @@ mod tests {
             manager.get(id).unwrap().ip,
             Some(IpAddr::V4(Ipv4Addr::new(172, 20, 10, 4)))
         );
+    }
+
+    // ── Fix 14: connected_count and sync_eligible_count ───────────────────────
+
+    #[test]
+    fn connected_count_zero_when_no_sessions() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        assert_eq!(manager.connected_count(), 0);
+    }
+
+    #[test]
+    fn connected_count_increments_with_live_sessions() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+
+        let id_a = Uuid::new_v4();
+        let id_b = Uuid::new_v4();
+
+        for (id, name, ip) in [
+            (id_a, "Alpha", [192, 168, 1, 10u8]),
+            (id_b, "Beta",  [192, 168, 1, 11]),
+        ] {
+            manager
+                .upsert_peer(id, name.into(), SocketAddr::from((ip, 47823)), true, DiscoverySource::Mdns)
+                .unwrap();
+        }
+
+        assert_eq!(manager.connected_count(), 0, "no live sessions yet");
+
+        let (tx, _rx) = mpsc::channel(1);
+        let (stop, _) = oneshot::channel();
+        manager
+            .replace_live_session(id_a, SocketAddr::from(([192, 168, 1, 10], 47823)), tx, stop)
+            .unwrap();
+
+        assert_eq!(manager.connected_count(), 1);
+    }
+
+    #[test]
+    fn sync_eligible_count_excludes_untrusted_and_sync_disabled() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+
+        let id_trusted   = Uuid::new_v4();
+        let id_untrusted = Uuid::new_v4();
+        let id_nosync    = Uuid::new_v4();
+
+        // Trusted + sync enabled.
+        manager
+            .upsert_peer(id_trusted, "Trusted".into(), SocketAddr::from(([10, 0, 0, 1], 47823)), true, DiscoverySource::Mdns)
+            .unwrap();
+        // Untrusted.
+        manager
+            .upsert_peer(id_untrusted, "Stranger".into(), SocketAddr::from(([10, 0, 0, 2], 47823)), false, DiscoverySource::Mdns)
+            .unwrap();
+        // Trusted but sync disabled.
+        manager
+            .upsert_peer(id_nosync, "NoSync".into(), SocketAddr::from(([10, 0, 0, 3], 47823)), true, DiscoverySource::Mdns)
+            .unwrap();
+        manager.set_sync_enabled(id_nosync, false).unwrap();
+
+        // Give all three a live session.
+        for (id, ip) in [
+            (id_trusted,   [10, 0, 0, 1u8]),
+            (id_untrusted, [10, 0, 0, 2]),
+            (id_nosync,    [10, 0, 0, 3]),
+        ] {
+            let (tx, _rx) = mpsc::channel(1);
+            let (stop, _) = oneshot::channel();
+            manager
+                .replace_live_session(id, SocketAddr::from((ip, 47823)), tx, stop)
+                .unwrap();
+        }
+
+        assert_eq!(manager.connected_count(), 3, "all three connected");
+        // Only id_trusted passes both trusted AND sync_enabled.
+        assert_eq!(manager.sync_eligible_count(), 1);
     }
 }

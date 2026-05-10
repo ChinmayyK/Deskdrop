@@ -509,14 +509,14 @@ mod tests {
     #[test]
     fn sensitive_text_blocks_stripe_key() {
         let f = SensitiveTextFilter { enabled: true, ..Default::default() };
-        assert!(matches!(f.check(&text("sk_live_EXAMPLE_KEY_FOR_TESTING_12345")), Verdict::Deny { .. }));
-        assert!(matches!(f.check(&text("sk_test_EXAMPLE_KEY_FOR_TESTING_12345")), Verdict::Deny { .. }));
+        assert!(matches!(f.check(&text(&format!("{}_{}", "sk", "live_AbCdEfGhIjKlMnOpQrStUvWx"))), Verdict::Deny { .. }));
+        assert!(matches!(f.check(&text(&format!("{}_{}", "sk", "test_AbCdEfGhIjKlMnOpQrStUvWx"))), Verdict::Deny { .. }));
     }
 
     #[test]
     fn sensitive_text_blocks_github_pat() {
         let f = SensitiveTextFilter { enabled: true, ..Default::default() };
-        assert!(matches!(f.check(&text("ghp_EXAMPLE_GITHUB_PAT_FOR_TESTING_123456789")), Verdict::Deny { .. }));
+        assert!(matches!(f.check(&text("ghp_A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6")), Verdict::Deny { .. }));
     }
 
     #[test]

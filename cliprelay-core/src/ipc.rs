@@ -63,6 +63,8 @@ pub enum IpcRequest {
     HistoryDelete { id: u64 },
     /// Clear all history.
     HistoryClear,
+    /// Export full history as CSV text.
+    HistoryExportCsv,
     /// Read recent feedback events.
     Feedback { last: usize },
     /// Fetch one incoming clipboard payload by daemon-assigned ID.
@@ -117,6 +119,8 @@ pub enum IpcRequest {
     Shutdown,
     /// Ping — check if daemon is alive.
     Ping,
+    /// Get a serializable snapshot of global runtime metrics.
+    GetMetrics,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

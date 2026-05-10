@@ -22,6 +22,26 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// Truncate `text` to at most `max_chars` Unicode scalar values, appending `…`.
+/// Never slices mid-codepoint.
+fn safe_truncate(text: &str, max_chars: usize) -> String {
+    let mut chars = text.char_indices().peekable();
+    let mut last_valid = text.len();
+    let mut count = 0;
+    while let Some((i, _)) = chars.next() {
+        if count == max_chars {
+            last_valid = i;
+            break;
+        }
+        count += 1;
+        if chars.peek().is_none() {
+            // All chars consumed within limit.
+            return text.to_string();
+        }
+    }
+    format!("{}…", &text[..last_valid])
+}
+
 // ── Activity kinds ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -115,6 +135,37 @@ impl ActivityEntry {
 
 // ── ActivityFeed ──────────────────────────────────────────────────────────────
 
+/// Aggregate statistics snapshot for an `ActivityFeed` window.
+#[derive(Debug, Clone, Default)]
+pub struct FeedStats {
+    pub total: usize,
+    pub local_clipboard_events: usize,
+    pub remote_clipboard_events: usize,
+    /// Remote clipboard items the user has explicitly applied.
+    pub applied_count: usize,
+    /// Remote clipboard items waiting for the user to apply.
+    pub pending_count: usize,
+    pub file_transfers_completed: usize,
+    pub file_transfers_failed: usize,
+    /// Total bytes of successfully transferred files.
+    pub total_file_bytes: u64,
+    pub peer_connect_events: usize,
+    pub peer_disconnect_events: usize,
+    /// Age in seconds of the oldest entry in the feed.
+    pub oldest_entry_age_secs: u64,
+}
+
+impl FeedStats {
+    /// Total file transfer events (started + completed + failed).
+    pub fn file_transfer_success_rate(&self) -> f64 {
+        let total = self.file_transfers_completed + self.file_transfers_failed;
+        if total == 0 {
+            return 1.0;
+        }
+        self.file_transfers_completed as f64 / total as f64
+    }
+}
+
 /// Bounded ring-buffer activity feed.
 pub struct ActivityFeed {
     entries: VecDeque<ActivityEntry>,
@@ -155,15 +206,11 @@ impl ActivityFeed {
         content_hash: String,
         relay_path: Vec<String>,
     ) -> u64 {
-        let preview = if text.len() > 80 {
-            format!("{}…", &text[..80])
-        } else {
-            text.to_string()
-        };
+        let preview = safe_truncate(text.trim(), 120);
         let summary = format!(
-            "[{}] copied text: {}",
+            "[{}] copied: {}",
             device_name,
-            &preview[..preview.len().min(40)]
+            safe_truncate(text.trim(), 40)
         );
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
@@ -248,11 +295,7 @@ impl ActivityFeed {
         text: &str,
         content_hash: String,
     ) -> u64 {
-        let preview = if text.len() > 40 {
-            format!("{}…", &text[..40])
-        } else {
-            text.to_string()
-        };
+        let preview = safe_truncate(text.trim(), 60);
         let summary = format!("[{}] copied text", device_name);
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
@@ -473,6 +516,82 @@ impl ActivityFeed {
             .collect()
     }
 
+    /// Filter entries by one or more `ActivityKind`s, most-recent first.
+    pub fn filter_by_kind<'a>(
+        &'a self,
+        kinds: &'a [ActivityKind],
+    ) -> impl Iterator<Item = &'a ActivityEntry> {
+        self.entries
+            .iter()
+            .rev()
+            .filter(move |e| kinds.contains(&e.kind))
+    }
+
+    /// All entries from a specific device, most-recent first.
+    pub fn by_device(&self, device_id: Uuid) -> impl Iterator<Item = &ActivityEntry> {
+        self.entries
+            .iter()
+            .rev()
+            .filter(move |e| e.device_id == device_id)
+    }
+
+    /// Find the most recent entry whose `content_hash` matches, if any.
+    pub fn find_by_hash(&self, hash: &str) -> Option<&ActivityEntry> {
+        self.entries
+            .iter()
+            .rev()
+            .find(|e| e.content_hash.as_deref() == Some(hash))
+    }
+
+    /// Aggregate statistics for the current feed window.
+    pub fn stats(&self) -> FeedStats {
+        let mut stats = FeedStats::default();
+        let now_ms = now_ms();
+        for e in &self.entries {
+            stats.total += 1;
+            let age_secs = now_ms.saturating_sub(e.timestamp_ms) / 1000;
+            match e.kind {
+                ActivityKind::ClipboardText | ActivityKind::ClipboardImage => {
+                    stats.local_clipboard_events += 1;
+                }
+                ActivityKind::RemoteClipboardAvailable => {
+                    stats.remote_clipboard_events += 1;
+                    if e.applied_locally {
+                        stats.applied_count += 1;
+                    } else {
+                        stats.pending_count += 1;
+                    }
+                }
+                ActivityKind::FileTransferComplete => {
+                    stats.file_transfers_completed += 1;
+                    if let Some(b) = e.file_bytes {
+                        stats.total_file_bytes += b;
+                    }
+                }
+                ActivityKind::FileTransferFailed => {
+                    stats.file_transfers_failed += 1;
+                }
+                ActivityKind::PeerConnected => {
+                    stats.peer_connect_events += 1;
+                }
+                ActivityKind::PeerDisconnected => {
+                    stats.peer_disconnect_events += 1;
+                }
+                _ => {}
+            }
+            // Track oldest entry age.
+            if age_secs > stats.oldest_entry_age_secs {
+                stats.oldest_entry_age_secs = age_secs;
+            }
+        }
+        stats
+    }
+
+    /// Serialize the entire feed to a compact JSON string for export/debug.
+    pub fn export_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string(&self.entries.iter().collect::<Vec<_>>())
+    }
+
     pub fn clear(&mut self) {
         self.entries.clear();
     }
@@ -523,4 +642,89 @@ mod tests {
         }
         assert_eq!(feed.len(), 3);
     }
-}
+
+    #[test]
+    fn filter_by_kind_returns_only_matching() {
+        let mut feed = ActivityFeed::new(50);
+        let id = Uuid::new_v4();
+        feed.record_peer_connected(id, "Mac".into());
+        feed.record_peer_disconnected(id, "Mac".into(), None);
+        feed.record_remote_clipboard_text(id, "Mac".into(), "hi", "h1".into(), vec![]);
+
+        let clipboard: Vec<_> = feed
+            .filter_by_kind(&[ActivityKind::RemoteClipboardAvailable])
+            .collect();
+        assert_eq!(clipboard.len(), 1);
+
+        let conn: Vec<_> = feed
+            .filter_by_kind(&[ActivityKind::PeerConnected, ActivityKind::PeerDisconnected])
+            .collect();
+        assert_eq!(conn.len(), 2);
+    }
+
+    #[test]
+    fn by_device_filters_correctly() {
+        let mut feed = ActivityFeed::new(50);
+        let dev_a = Uuid::new_v4();
+        let dev_b = Uuid::new_v4();
+        feed.record_peer_connected(dev_a, "DevA".into());
+        feed.record_peer_connected(dev_b, "DevB".into());
+        feed.record_peer_connected(dev_a, "DevA".into());
+
+        let a_events: Vec<_> = feed.by_device(dev_a).collect();
+        assert_eq!(a_events.len(), 2);
+        let b_events: Vec<_> = feed.by_device(dev_b).collect();
+        assert_eq!(b_events.len(), 1);
+    }
+
+    #[test]
+    fn stats_counts_correctly() {
+        let mut feed = ActivityFeed::new(50);
+        let id = Uuid::new_v4();
+        feed.record_local_clipboard_text(id, "Mac".into(), "hello", "h1".into());
+        feed.record_remote_clipboard_text(id, "Phone".into(), "world", "h2".into(), vec![]);
+        feed.record_clipboard_applied(id, "Phone".into(), "h2".into());
+        feed.record_peer_connected(id, "Tablet".into());
+
+        let stats = feed.stats();
+        assert_eq!(stats.local_clipboard_events, 1);
+        assert_eq!(stats.remote_clipboard_events, 1);
+        assert_eq!(stats.applied_count, 1);
+        assert_eq!(stats.pending_count, 0);
+        assert_eq!(stats.peer_connect_events, 1);
+    }
+
+    #[test]
+    fn find_by_hash_works() {
+        let mut feed = ActivityFeed::new(50);
+        let id = Uuid::new_v4();
+        feed.record_remote_clipboard_text(id, "Dev".into(), "test", "unique-hash".into(), vec![]);
+        assert!(feed.find_by_hash("unique-hash").is_some());
+        assert!(feed.find_by_hash("no-such-hash").is_none());
+    }
+
+    #[test]
+    fn safe_truncate_handles_multibyte_chars() {
+        // Japanese chars are 3 bytes each — naive byte-slicing would panic.
+        let text = "こんにちは世界"; // 7 chars
+        let truncated = safe_truncate(text, 4);
+        assert_eq!(truncated, "こんにち…");
+        // No panic, and the length in chars is correct.
+        assert_eq!(truncated.chars().count(), 5); // 4 chars + …
+    }
+
+    #[test]
+    fn safe_truncate_short_string_unchanged() {
+        let text = "hi";
+        assert_eq!(safe_truncate(text, 80), "hi");
+    }
+
+    #[test]
+    fn export_json_is_valid() {
+        let mut feed = ActivityFeed::new(10);
+        feed.record_peer_connected(Uuid::new_v4(), "Test".into());
+        let json = feed.export_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.is_array());
+        assert_eq!(parsed.as_array().unwrap().len(), 1);
+    }

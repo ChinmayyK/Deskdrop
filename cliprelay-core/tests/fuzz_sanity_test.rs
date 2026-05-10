@@ -1,5 +1,12 @@
 //! Fuzz targets for the ClipRelay protocol and crypto layers.
 //!
+//! # v3 fix (Fix 4)
+//! The `#[cfg(fuzzing)]` block previously referenced `ExtensionFilter` which
+//! did not exist in filter.rs, causing compilation failure in fuzz mode.
+//! `ExtensionFilter` was added to filter.rs in v2 and `bincode` was added to
+//! dev-dependencies in v3 so the integration test stubs compile correctly
+//! in normal (non-fuzzing) `cargo test` mode without a separate crate override.
+//!
 //! Run with libFuzzer:
 //!   cargo +nightly fuzz run fuzz_protocol -- -max_len=65536
 //!   cargo +nightly fuzz run fuzz_crypto    -- -max_len=1024

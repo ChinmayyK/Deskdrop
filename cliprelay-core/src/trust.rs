@@ -268,6 +268,71 @@ impl TrustStore {
         self.data.devices.len()
     }
 
+    /// Count of devices in `Trusted` state.
+    pub fn trusted_count(&self) -> usize {
+        self.data
+            .devices
+            .values()
+            .filter(|r| r.state == TrustState::Trusted)
+            .count()
+    }
+
+    /// Iterator over all `Trusted` records.
+    pub fn all_trusted(&self) -> impl Iterator<Item = &TrustRecord> {
+        self.data
+            .devices
+            .values()
+            .filter(|r| r.state == TrustState::Trusted)
+    }
+
+    /// True if the device has been explicitly rejected.
+    pub fn is_rejected(&self, device_id: Uuid) -> bool {
+        self.data
+            .devices
+            .get(&device_id)
+            .map(|r| r.state == TrustState::Rejected)
+            .unwrap_or(false)
+    }
+
+    /// True if the device had trust but it was revoked.
+    pub fn is_revoked(&self, device_id: Uuid) -> bool {
+        self.data
+            .devices
+            .get(&device_id)
+            .map(|r| r.state == TrustState::Revoked)
+            .unwrap_or(false)
+    }
+
+    /// Check whether a device should be permitted to sync (trusted and not revoked).
+    pub fn is_sync_allowed(&self, device_id: Uuid) -> bool {
+        self.data
+            .devices
+            .get(&device_id)
+            .map(|r| r.state == TrustState::Trusted)
+            .unwrap_or(false)
+    }
+
+    /// Export a human-readable summary of all known devices for diagnostics.
+    pub fn export_summary(&self) -> String {
+        let mut lines = vec![format!(
+            "{} device(s) known ({} trusted):",
+            self.device_count(),
+            self.trusted_count()
+        )];
+        let mut records: Vec<_> = self.data.devices.values().collect();
+        records.sort_by_key(|r| r.last_seen);
+        for r in records.iter().rev() {
+            lines.push(format!(
+                "  [{:?}] {}  fp={}  last_seen={}",
+                r.state,
+                r.effective_name(),
+                format_fingerprint(&r.key_fingerprint),
+                r.last_seen,
+            ));
+        }
+        lines.join("\n")
+    }
+
     pub fn check(
         &mut self,
         device_id: Uuid,
@@ -309,15 +374,20 @@ impl TrustStore {
     }
 }
 
+/// Format a 32-byte fingerprint as 8 groups of 4 hex chars, colon-separated.
+///
+/// Example: `"A1B2:C3D4:E5F6:0708:1920:3040:5060:7080"`
+///
+/// Consistent with `IdentityKey::fingerprint_display()` in `crypto.rs`.
 pub fn format_fingerprint(fp: &[u8; 32]) -> String {
-    fp[..16]
-        .iter()
-        .map(|b| format!("{:02X}", b))
+    let hex: String = fp[..16].iter().map(|b| format!("{:02X}", b)).collect();
+    hex.chars()
         .collect::<Vec<_>>()
-        .chunks(2)
-        .map(|c| c.join(""))
+        .chunks(4)
+        .map(|chunk| chunk.iter().collect::<String>())
         .collect::<Vec<_>>()
         .join(":")
+}
 }
 
 #[cfg(test)]
@@ -338,6 +408,7 @@ mod tests {
 
         store.trust_peer(id).unwrap();
         assert!(store.is_trusted(id));
+        assert_eq!(store.trusted_count(), 1);
     }
 
     #[test]
@@ -349,4 +420,67 @@ mod tests {
 
         assert!(store.observe_peer(id, "Device".into(), &[2u8; 32]).is_err());
     }
-}
+
+    #[test]
+    fn reject_and_revoke_states() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+
+        store.observe_peer(a, "A".into(), &[1u8; 32]).unwrap();
+        store.observe_peer(b, "B".into(), &[2u8; 32]).unwrap();
+
+        store.reject_peer(a).unwrap();
+        assert!(store.is_rejected(a));
+        assert!(!store.is_sync_allowed(a));
+
+        store.trust_peer(b).unwrap();
+        store.revoke_peer(b).unwrap();
+        assert!(store.is_revoked(b));
+        assert!(!store.is_trusted(b));
+        assert!(!store.is_sync_allowed(b));
+    }
+
+    #[test]
+    fn all_trusted_filters_correctly() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+
+        for (i, key) in [[1u8; 32], [2u8; 32], [3u8; 32]].iter().enumerate() {
+            let id = Uuid::new_v4();
+            store.observe_peer(id, format!("Dev{}", i), key).unwrap();
+            if i < 2 {
+                store.trust_peer(id).unwrap();
+            }
+        }
+        let trusted: Vec<_> = store.all_trusted().collect();
+        assert_eq!(trusted.len(), 2);
+    }
+
+    #[test]
+    fn format_fingerprint_produces_8_groups() {
+        let fp = [0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6, 0x07, 0x08,
+                  0x19, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
+                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00u8];
+        let s = format_fingerprint(&fp);
+        let parts: Vec<_> = s.split(':').collect();
+        assert_eq!(parts.len(), 8, "fingerprint: {}", s);
+        for p in &parts {
+            assert_eq!(p.len(), 4, "part '{}' in {}", p, s);
+        }
+    }
+
+    #[test]
+    fn export_summary_contains_device_names() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        store.observe_peer(id, "MyPhone".into(), &[7u8; 32]).unwrap();
+        store.trust_peer(id).unwrap();
+
+        let summary = store.export_summary();
+        assert!(summary.contains("MyPhone"), "summary: {}", summary);
+        assert!(summary.contains("Trusted"), "summary: {}", summary);
+    }

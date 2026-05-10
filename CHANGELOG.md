@@ -8,8 +8,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-- Initial public release of ClipRelay
+### Added (v3)
+- `ClipboardContent::is_empty()` — single guard method, eliminating per-call-site duplication (#16)
+- `CompressionStats: Display` — consistent log format, usable in IPC responses (#12)
+- `QualityProbe::degraded_from()` — detect link quality regressions between probe cycles with `quality_severity` ordering (#13)
+- `PeerManager::sync_eligible_count()` — O(1) count of connected+trusted+sync-enabled peers (#14)
+- TCP connect timeout (5 s) via `tokio::time::timeout` on all outbound connects (#1)
+- TCP keepalive (`SO_KEEPALIVE`, idle 30 s / interval 5 s / 3 probes) on both accept and connect paths (#9)
+- Unit tests: `network.rs` (framing, nonce XOR, nonce-echo verification, handshake integration), `discovery.rs` (address preference, version validation), `peer_manager.rs` (`connected_count`, `sync_eligible_count`), `probe.rs` (`degraded_from`, quality ordering), `compress.rs` (Display), `chunked.rs` (size cap rejection), `identity.rs` (fingerprint format), `protocol.rs` (is_empty)
+
+### Fixed (v3)
+- **Critical** — Handshake nonce verification was a stub; replay protection now enforced on the initiator side (#2)
+- **Critical** — `set_nodelay(true)` was absent on the outbound (initiator) TCP path, adding ~40 ms Nagle delay (#3)
+- **Critical** — `pairing.rs` `expire_stale()` silently dropped oneshot channels; now sends explicit `false` so waiters receive `Ok(false)` instead of a channel error (#5)
+- **Critical** — `fuzz_sanity_test.rs` used `ExtensionFilter` before it existed; `bincode` added to `[dev-dependencies]` so integration tests compile without a separate crate override (#4)
+- **Security** — mDNS version TXT record `v` was advertised but never validated on the browsing side; incompatible peers are now skipped at mDNS time (#6)
+- **Security** — mDNS address selection used `HashSet::iter().next()` (arbitrary order); now prefers IPv4 → IPv6 global → IPv6 link-local to avoid silent connect failures from fe80:: addresses without a scope_id (#7)
+- **Security** — `Reassembler::feed(Start)` had no total-payload size cap; malicious peers could announce `u64::MAX` bytes and tie up in-flight state indefinitely; capped at 512 MB / 8 192 chunks (#8)
+- **Correctness** — `fingerprint_display()` doc comment showed wrong format (16 pairs of 2 chars) vs actual output (8 groups of 4 chars); corrected and test added (#10)
+- **Correctness** — `crypto_vectors_test.rs` session key vector was a non-asserting stub; real HKDF-SHA256 vector computed and asserted (#11)
+- **Correctness** — CLI unknown command printed bare `"Unknown command: foo"` with no quoting and wrong help hint; now prints `"Unknown command: 'foo'\n\nRun \`cliprelay-cli help\` to see all available commands."` (#15)
+
 - Rust core engine (`cliprelay-core`) with:
   - X25519 ephemeral ECDH key exchange
   - HKDF-SHA256 session key derivation

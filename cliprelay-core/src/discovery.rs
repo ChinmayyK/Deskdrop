@@ -7,14 +7,28 @@
 //!   4. When a peer disappears, `PeerEvent::Lost` fires.
 //!
 //! The caller then initiates a TCP handshake to Found peers.
+//!
+//! # v3 fixes in this module
+//!
+//! **Fix 6 — Protocol version validation**: The TXT record `v` field is now
+//! compared against `PROTOCOL_VERSION` before emitting a `PeerEvent::Found`.
+//! An incompatible peer is skipped at mDNS time (clean log warning) rather
+//! than causing a TCP-layer handshake failure after an unnecessary connect.
+//!
+//! **Fix 7 — IPv4 preference**: When a peer advertises multiple addresses the
+//! old code used `HashSet::iter().next()`, whose order is non-deterministic.
+//! IPv6 link-local addresses (fe80::/10) require a `%scope_id` suffix that
+//! the socket layer doesn't supply automatically, causing silent connect
+//! failures. The new `prefer_ipv4()` helper chooses IPv4 first, then IPv6
+//! global unicast, and only falls back to link-local as a last resort.
 
 #[cfg(not(target_os = "android"))]
 mod platform {
-    use crate::protocol::MDNS_SERVICE_TYPE;
+    use crate::protocol::{MDNS_SERVICE_TYPE, PROTOCOL_VERSION};
     use anyhow::{Context, Result};
     use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
     use std::collections::HashMap;
-    use std::net::IpAddr;
+    use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, Mutex};
     use tokio::sync::mpsc;
     use tracing::{debug, info, warn};
@@ -50,26 +64,28 @@ mod platform {
         }
 
         /// Advertise our service on the LAN.
+        ///
+        /// Fix 6: `v` TXT record now uses `PROTOCOL_VERSION` (currently 3) so
+        /// peers can skip us cleanly if they're running an incompatible version.
         pub fn advertise(
             &self,
             device_name: &str,
             port: u16,
             bind_ip: Option<IpAddr>,
         ) -> Result<()> {
-            // TXT record carries our device_id so peers know who we are before TCP.
             let mut properties = HashMap::new();
             properties.insert("id".to_string(), self.my_device_id.to_string());
             properties.insert("name".to_string(), device_name.to_string());
-            properties.insert("v".to_string(), "1".to_string()); // protocol version
+            // Fix 6: was hard-coded to "1"; now dynamically reflects PROTOCOL_VERSION.
+            properties.insert("v".to_string(), PROTOCOL_VERSION.to_string());
 
-            // Instance name must be unique — use device_id prefix.
             let instance_name = format!("cliprelay-{}", &self.my_device_id.to_string()[..8]);
 
             let service = ServiceInfo::new(
                 MDNS_SERVICE_TYPE,
                 &instance_name,
                 &format!("{}.local.", gethostname()),
-                bind_ip.unwrap_or(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
+                bind_ip.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
                 port,
                 Some(properties),
             )
@@ -97,6 +113,32 @@ mod platform {
                     match receiver.recv_async().await {
                         Ok(event) => match event {
                             ServiceEvent::ServiceResolved(info) => {
+                                // Fix 6: Validate protocol version before connecting.
+                                // Incompatible peers are skipped at mDNS time instead of
+                                // failing expensively at the TCP handshake layer.
+                                let peer_version: Option<u16> = info
+                                    .get_property_val_str("v")
+                                    .and_then(|s| s.parse().ok());
+
+                                match peer_version {
+                                    Some(v) if v == PROTOCOL_VERSION => {} // OK, proceed
+                                    Some(v) => {
+                                        warn!(
+                                            "mDNS: skipping peer with incompatible protocol \
+                                             v{} (we speak v{})",
+                                            v, PROTOCOL_VERSION
+                                        );
+                                        continue;
+                                    }
+                                    None => {
+                                        warn!(
+                                            "mDNS: resolved service missing 'v' TXT record, \
+                                             skipping (not a ClipRelay v3+ peer)"
+                                        );
+                                        continue;
+                                    }
+                                }
+
                                 // Parse device_id from TXT record.
                                 let peer_id = info
                                     .get_property_val_str("id")
@@ -119,14 +161,20 @@ mod platform {
                                     .unwrap_or("Unknown Device")
                                     .to_string();
 
-                                // Pick the first resolved address.
-                                let Some(&addr) = info.get_addresses().iter().next() else {
-                                    warn!("mDNS: service {} has no addresses", peer_id);
+                                // Fix 7: Prefer IPv4 over IPv6 link-local.
+                                // Old code: `info.get_addresses().iter().next()` — arbitrary
+                                // HashSet order, often picks fe80:: which needs a scope_id.
+                                let addr = prefer_ipv4(info.get_addresses());
+                                let Some(addr) = addr else {
+                                    warn!("mDNS: service {} has no usable addresses", peer_id);
                                     continue;
                                 };
 
                                 let port = info.get_port();
-                                info!("mDNS: found peer '{}' at {}:{}", device_name, addr, port);
+                                info!(
+                                    "mDNS: found peer '{}' at {}:{}",
+                                    device_name, addr, port
+                                );
                                 resolved
                                     .lock()
                                     .unwrap()
@@ -178,11 +226,109 @@ mod platform {
         }
     }
 
+    /// Fix 7: Select the best address from a peer's advertised set.
+    ///
+    /// Preference order:
+    ///   1. IPv4 — no scope_id needed, works universally on LAN.
+    ///   2. IPv6 global unicast (not fe80::/10) — usable without scope_id.
+    ///   3. IPv6 link-local — last resort; may fail without scope_id.
+    fn prefer_ipv4<'a>(addrs: impl IntoIterator<Item = &'a IpAddr>) -> Option<IpAddr> {
+        let addrs: Vec<IpAddr> = addrs.into_iter().copied().collect();
+        if addrs.is_empty() {
+            return None;
+        }
+        // 1. Any IPv4.
+        if let Some(&v4) = addrs.iter().find(|a| a.is_ipv4()) {
+            return Some(v4);
+        }
+        // 2. IPv6 global unicast.
+        if let Some(&v6) = addrs.iter().find(|a| {
+            if let IpAddr::V6(v6) = a {
+                !v6.is_loopback() && !is_ipv6_link_local(*v6)
+            } else {
+                false
+            }
+        }) {
+            return Some(v6);
+        }
+        // 3. Fallback.
+        Some(addrs[0])
+    }
+
+    /// Returns true if the address is in the IPv6 link-local range (fe80::/10).
+    fn is_ipv6_link_local(addr: std::net::Ipv6Addr) -> bool {
+        let o = addr.octets();
+        o[0] == 0xFE && (o[1] & 0xC0) == 0x80
+    }
+
     fn gethostname() -> String {
         hostname::get()
             .ok()
             .and_then(|h| h.into_string().ok())
             .unwrap_or_else(|| "cliprelay-host".to_string())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn prefer_ipv4_over_v6_link_local() {
+            let v4: IpAddr = "192.168.1.1".parse().unwrap();
+            let ll: IpAddr = "fe80::1".parse().unwrap();
+            assert_eq!(prefer_ipv4(&[ll, v4]), Some(v4));
+        }
+
+        #[test]
+        fn prefer_ipv4_falls_back_to_global_v6() {
+            let ll: IpAddr = "fe80::1".parse().unwrap();
+            let global: IpAddr = "2001:db8::1".parse().unwrap();
+            assert_eq!(prefer_ipv4(&[ll, global]), Some(global));
+        }
+
+        #[test]
+        fn prefer_ipv4_link_local_last_resort() {
+            let ll: IpAddr = "fe80::1".parse().unwrap();
+            assert_eq!(prefer_ipv4(&[ll]), Some(ll));
+        }
+
+        #[test]
+        fn prefer_ipv4_empty_is_none() {
+            let empty: &[IpAddr] = &[];
+            assert_eq!(prefer_ipv4(empty), None);
+        }
+
+        #[test]
+        fn is_ipv6_link_local_detection() {
+            let ll: std::net::Ipv6Addr = "fe80::1".parse().unwrap();
+            let global: std::net::Ipv6Addr = "2001:db8::1".parse().unwrap();
+            assert!(is_ipv6_link_local(ll));
+            assert!(!is_ipv6_link_local(global));
+        }
+
+        #[test]
+        fn version_validation_logic() {
+            // Simulate parsing the v TXT record.
+            let our_version = PROTOCOL_VERSION;
+            let old_version: u16 = our_version.saturating_sub(1);
+            let new_version: u16 = our_version + 1;
+
+            // Correct version should pass.
+            assert_eq!(
+                Some(our_version).filter(|&v| v == PROTOCOL_VERSION),
+                Some(our_version)
+            );
+            // Old version should be filtered out.
+            assert_eq!(
+                Some(old_version).filter(|&v| v == PROTOCOL_VERSION),
+                None
+            );
+            // Future version should also be filtered out.
+            assert_eq!(
+                Some(new_version).filter(|&v| v == PROTOCOL_VERSION),
+                None
+            );
+        }
     }
 }
 

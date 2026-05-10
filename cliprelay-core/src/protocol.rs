@@ -34,6 +34,22 @@ impl ClipboardContent {
         }
     }
 
+    /// Fix 16: Returns true if the content carries no actual data.
+    ///
+    /// Previously every call site re-implemented this guard:
+    /// ```ignore
+    /// if matches!(&content, ClipboardContent::Text(s) if s.is_empty()) { ... }
+    /// ```
+    /// Now the engine can do a single `if content.is_empty() { return; }` check
+    /// before broadcasting, preventing empty clipboard events from propagating.
+    pub fn is_empty(&self) -> bool {
+        match self {
+            ClipboardContent::Text(s) => s.is_empty(),
+            ClipboardContent::Image { data, .. } => data.is_empty(),
+            ClipboardContent::File { data, .. } => data.is_empty(),
+        }
+    }
+
     pub fn kind_str(&self) -> &'static str {
         match self {
             ClipboardContent::Text(_) => "text",
@@ -283,3 +299,71 @@ pub const MDNS_SERVICE_TYPE: &str = "_cliprelay._tcp.local.";
 pub const PROTOCOL_VERSION: u16 = 3;
 pub const DEFAULT_PORT: u16 = 47823;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Fix 16: ClipboardContent::is_empty ───────────────────────────────────
+
+    #[test]
+    fn empty_text_is_empty() {
+        assert!(ClipboardContent::Text(String::new()).is_empty());
+    }
+
+    #[test]
+    fn nonempty_text_is_not_empty() {
+        assert!(!ClipboardContent::Text("hello".into()).is_empty());
+    }
+
+    #[test]
+    fn empty_image_is_empty() {
+        let c = ClipboardContent::Image {
+            mime: "image/png".into(),
+            data: vec![],
+        };
+        assert!(c.is_empty());
+    }
+
+    #[test]
+    fn nonempty_image_is_not_empty() {
+        let c = ClipboardContent::Image {
+            mime: "image/png".into(),
+            data: vec![0xFF; 8],
+        };
+        assert!(!c.is_empty());
+    }
+
+    #[test]
+    fn empty_file_is_empty() {
+        let c = ClipboardContent::File {
+            name: "doc.pdf".into(),
+            data: vec![],
+        };
+        assert!(c.is_empty());
+    }
+
+    #[test]
+    fn nonempty_file_is_not_empty() {
+        let c = ClipboardContent::File {
+            name: "doc.pdf".into(),
+            data: vec![1, 2, 3],
+        };
+        assert!(!c.is_empty());
+    }
+
+    #[test]
+    fn is_empty_consistent_with_byte_len() {
+        let items: Vec<ClipboardContent> = vec![
+            ClipboardContent::Text(String::new()),
+            ClipboardContent::Text("x".into()),
+            ClipboardContent::Image { mime: "image/png".into(), data: vec![] },
+            ClipboardContent::Image { mime: "image/png".into(), data: vec![0] },
+        ];
+        for item in &items {
+            assert_eq!(item.is_empty(), item.byte_len() == 0);
+        }
+    }
+}

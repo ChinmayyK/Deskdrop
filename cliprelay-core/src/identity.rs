@@ -72,8 +72,17 @@ impl IdentityKey {
         h.finalize().into()
     }
 
-    /// Display fingerprint: colon-separated hex pairs (first 16 bytes).
-    /// Example: `"3A:F2:0B:9C:44:E1:7D:28:AA:BB:CC:DD:EE:FF:00:11"`
+    /// Display fingerprint: colon-separated 4-hex-char groups (first 16 bytes, 8 groups).
+    ///
+    /// # Format
+    /// Each group is two bytes rendered as 4 uppercase hex digits. Groups are
+    /// separated by colons. Example for the first 16 bytes of a SHA-256 digest:
+    ///
+    /// ```text
+    /// "3AF2:0B9C:44E1:7D28:AABB:CCDD:EEFF:0011"
+    /// ```
+    ///
+    /// (8 groups × 4 chars = 32 hex chars + 7 colons = 39 chars total)
     pub fn fingerprint_display(&self) -> String {
         let fp = self.fingerprint();
         fp[..16]
@@ -212,6 +221,22 @@ impl IdentityStore {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn fingerprint_display_format_is_correct() {
+        // Use a deterministic key so we can verify the exact output format.
+        let k = IdentityKey::from_secret_bytes([42u8; 32]);
+        let display = k.fingerprint_display();
+        // Format: 8 groups of 4 hex chars, separated by colons.
+        // Total length: 8*4 + 7 = 39 characters.
+        assert_eq!(display.len(), 39, "fingerprint display has wrong length: {}", display);
+        let parts: Vec<&str> = display.split(':').collect();
+        assert_eq!(parts.len(), 8, "expected 8 colon-separated groups: {}", display);
+        for part in &parts {
+            assert_eq!(part.len(), 4, "each group must be 4 chars, got '{}' in '{}'", part, display);
+            assert!(part.chars().all(|c| c.is_ascii_hexdigit()), "non-hex char in '{}'", display);
+        }
+    }
 
     #[test]
     fn generate_and_fingerprint() {
