@@ -126,3 +126,4 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - [Security Policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 - [GitHub](https://github.com/deskdrop/deskdrop)
+
