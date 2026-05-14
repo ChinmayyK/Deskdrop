@@ -1,171 +1,35 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-<<<<<<< HEAD
-=======
 // MARK: - Root
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 struct DashboardRootView: View {
     @ObservedObject var store: ClipRelayStore
-    @State private var renameTarget: ManagedDevice?
-    @State private var renameDraft = ""
-<<<<<<< HEAD
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            HStack(spacing: 0) {
-                sidebar
-                Divider()
-                content
-            }
-            .background(
-                LinearGradient(
-                    colors: [PBTheme.backgroundTop, PBTheme.backgroundBottom],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-
-            ToastStackView(toasts: store.toasts)
-                .padding(18)
-        }
-        .sheet(item: $renameTarget) { device in
-            RenameDeviceSheet(
-                device: device,
-                draft: renameDraft,
-                onCancel: { renameTarget = nil },
-                onSave: { updatedName in
-                    store.rename(device, to: updatedName)
-                    renameTarget = nil
-                }
-=======
+    @State private var renameTarget:   ManagedDevice?
+    @State private var renameDraft     = ""
+    @State private var density: CRDensityMode = .comfortable
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             Sidebar(store: store)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
+                .navigationSplitViewColumnWidth(min: 210, ideal: 226, max: 250)
         } detail: {
-            DetailContent(store: store, beginRename: beginRename(device:))
+            DetailContent(store: store, density: $density, beginRename: beginRename)
         }
-        .background(PBTheme.backgroundGradient)
         .overlay(alignment: .topTrailing) {
-            CRToastStack(toasts: store.toasts).padding(20)
+            CRToastStack(toasts: store.toasts).padding(18)
         }
         .sheet(item: $renameTarget) { device in
             RenameDeviceSheet(
                 device: device, draft: renameDraft,
                 onCancel: { renameTarget = nil },
-                onSave: { name in store.rename(device, to: name); renameTarget = nil }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+                onSave:   { store.rename(device, to: $0); renameTarget = nil }
             )
         }
     }
 
-<<<<<<< HEAD
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("ClipRelay")
-                    .font(.system(size: 30, weight: .bold, design: .serif))
-                    .foregroundStyle(.white)
-                Text(store.connectionBanner)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let status = store.status {
-                    Text("\(status.peerCount) device\(status.peerCount == 1 ? "" : "s") nearby")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.56))
-                        .lineLimit(1)
-                }
-            }
-
-            VStack(spacing: 10) {
-                ForEach(DashboardSection.allCases) { section in
-                    Button {
-                        store.selectedSection = section
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: icon(for: section))
-                                .frame(width: 18)
-                            Text(section.title)
-                            Spacer()
-                        }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(
-                                    store.selectedSection == section
-                                        ? Color.white.opacity(0.12)
-                                        : Color.clear
-                                )
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Spacer()
-
-            VStack(alignment: .leading, spacing: 10) {
-                PBBadge(store.settings?.syncEnabled == false ? "SYNC PAUSED" : "LOCAL-FIRST", tint: PBTheme.accentGreen, dark: true)
-                Text("Clipboard history stays on your devices and moves over your local network.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.66))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(22)
-        .frame(width: 220)
-        .background(
-            LinearGradient(
-                colors: [PBTheme.sidebarTop, PBTheme.sidebarBottom],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch store.selectedSection {
-        case .timeline:
-            TimelineSectionView(store: store)
-        case .devices:
-            DevicesSectionView(
-                store: store,
-                devices: store.devices,
-                rename: beginRename(device:)
-            )
-        case .trust:
-            TrustSectionView(
-                store: store,
-                rename: beginRename(device:)
-            )
-        case .settings:
-            PreferencesView(store: store)
-        }
-    }
-
-    private func beginRename(device: ManagedDevice) {
-        renameDraft = device.name
-        renameTarget = device
-    }
-
-    private func icon(for section: DashboardSection) -> String {
-        switch section {
-        case .timeline: return "clock.arrow.circlepath"
-        case .devices: return "desktopcomputer"
-        case .trust: return "checkmark.shield"
-        case .settings: return "slider.horizontal.3"
-=======
-    private func beginRename(device: ManagedDevice) {
+    private func beginRename(_ device: ManagedDevice) {
         renameDraft = device.name; renameTarget = device
     }
 }
@@ -174,116 +38,123 @@ struct DashboardRootView: View {
 
 private struct Sidebar: View {
     @ObservedObject var store: ClipRelayStore
-
     private var untrustedCount: Int { store.devices.filter { $0.trustState == .untrusted }.count }
-    private var deviceCount: Int    { store.devices.count }
 
     var body: some View {
         ZStack {
-            PBTheme.sidebarGradient.ignoresSafeArea()
+            CRSidebarMaterial().ignoresSafeArea()
+            CRTheme.sidebarOverlay.ignoresSafeArea()
+
+            // Subtle top shimmer
+            VStack {
+                LinearGradient(colors: [Color(white: 1, opacity: 0.028), .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 80)
+                Spacer()
+            }
+
             VStack(alignment: .leading, spacing: 0) {
-                // ── Brand header ──────────────────────────────────────────────
                 SidebarHeader(store: store)
+                CRDividerDark().padding(.horizontal, 16).padding(.vertical, 12)
 
-                // ── Divider ───────────────────────────────────────────────────
-                Rectangle()
-                    .fill(Color.white.opacity(0.10))
-                    .frame(height: 1)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                Text("NAVIGATION")
+                    .font(.system(size: 9.5, weight: .bold)).tracking(1.2)
+                    .foregroundStyle(Color(white: 1, opacity: 0.20))
+                    .padding(.horizontal, 18).padding(.bottom, 4)
 
-                // ── Navigation ────────────────────────────────────────────────
-                VStack(spacing: 4) {
-                    SidebarNavButton(
-                        icon: "clock.arrow.circlepath", label: "Timeline",
-                        badge: 0,
-                        isSelected: store.selectedSection == .timeline,
-                        action: { store.selectedSection = .timeline }
-                    )
-                    SidebarNavButton(
-                        icon: "desktopcomputer", label: "Devices",
-                        badge: deviceCount,
-                        isSelected: store.selectedSection == .devices,
-                        action: { store.selectedSection = .devices }
-                    )
-                    SidebarNavButton(
-                        icon: "checkmark.shield.fill", label: "Trust",
-                        badge: untrustedCount,
-                        isSelected: store.selectedSection == .trust,
-                        action: { store.selectedSection = .trust }
-                    )
-                    SidebarNavButton(
-                        icon: "slider.horizontal.3", label: "Settings",
-                        badge: 0,
-                        isSelected: store.selectedSection == .settings,
-                        action: { store.selectedSection = .settings }
-                    )
+                VStack(spacing: 1) {
+                    SidebarNavButton(icon: "clock.arrow.circlepath", label: "Timeline",
+                                     badge: 0, shortcut: "⌘1",
+                                     isSelected: store.selectedSection == .timeline,
+                                     action: { store.selectedSection = .timeline })
+                    SidebarNavButton(icon: "rectangle.connected.to.line.below", label: "Devices",
+                                     badge: store.devices.count, shortcut: "⌘2",
+                                     isSelected: store.selectedSection == .devices,
+                                     action: { store.selectedSection = .devices })
+                    SidebarNavButton(icon: "shield.checkered", label: "Trust",
+                                     badge: untrustedCount, shortcut: "⌘3",
+                                     isSelected: store.selectedSection == .trust,
+                                     action: { store.selectedSection = .trust })
+                    SidebarNavButton(icon: "slider.horizontal.3", label: "Settings",
+                                     badge: 0, shortcut: "⌘4",
+                                     isSelected: store.selectedSection == .settings,
+                                     action: { store.selectedSection = .settings })
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 8)
 
                 Spacer()
-
-                // ── Sync badge + legal copy ───────────────────────────────────
-                VStack(alignment: .leading, spacing: 10) {
-                    PBBadge(
-                        store.settings?.syncEnabled == false ? "SYNC PAUSED" : "LOCAL-FIRST",
-                        tint: store.settings?.syncEnabled == false ? PBTheme.accentOrange : PBTheme.accentGreen,
-                        dark: true
-                    )
-                    Text("Clipboard history stays on your\ndevices over your local network.")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(0.50))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .lineSpacing(2)
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                SidebarFooter(store: store)
             }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+        }
+        // Keyboard shortcuts ⌘1-4
+        .background {
+            Group {
+                Button("") { store.selectedSection = .timeline }.keyboardShortcut("1", modifiers: .command)
+                Button("") { store.selectedSection = .devices  }.keyboardShortcut("2", modifiers: .command)
+                Button("") { store.selectedSection = .trust    }.keyboardShortcut("3", modifiers: .command)
+                Button("") { store.selectedSection = .settings }.keyboardShortcut("4", modifiers: .command)
+            }
+            .frame(width: 0, height: 0).opacity(0)
         }
     }
 }
 
-<<<<<<< HEAD
-=======
+// MARK: - Sidebar Header
+
 private struct SidebarHeader: View {
     @ObservedObject var store: ClipRelayStore
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                // App icon placeholder
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(LinearGradient(colors: [PBTheme.accentBlue, PBTheme.accentIndigo],
-                                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 34, height: 34)
-                    Image(systemName: "clipboard.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                VStack(alignment: .leading, spacing: 1) {
+                CRAppIconMark(size: 34)
+                VStack(alignment: .leading, spacing: 2) {
                     Text("ClipRelay")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
-                    HStack(spacing: 5) {
-                        StatusDot(isOnline: store.isRunning, size: 6)
-                        Text(store.isRunning ? "Running" : "Offline")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.60))
+                    HStack(spacing: 4) {
+                        StatusDot(isOnline: store.isRunning, size: 5.5)
+                        Text(store.isRunning ? "Active" : "Offline")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(Color(white: 1, opacity: 0.40))
                     }
                 }
+                Spacer()
             }
-
-            Text(store.connectionBanner)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.55))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+            if !store.connectionBanner.isEmpty {
+                HStack(spacing: 5) {
+                    Image(systemName: "wifi").font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color(white: 1, opacity: 0.24))
+                    Text(store.connectionBanner).font(.system(size: 11))
+                        .foregroundStyle(Color(white: 1, opacity: 0.32))
+                        .lineLimit(1).truncationMode(.tail)
+                }
+            }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 22)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 16).padding(.top, 20).padding(.bottom, 4)
+    }
+}
+
+// MARK: - Sidebar Footer
+
+private struct SidebarFooter: View {
+    @ObservedObject var store: ClipRelayStore
+    private var syncColor: Color { store.settings?.syncEnabled == false ? CRTheme.accentOrange : CRTheme.accentGreen }
+    private var syncLabel: String { store.settings?.syncEnabled == false ? "PAUSED" : "SYNCING" }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            CRDividerDark()
+            HStack(spacing: 7) {
+                SidebarStatPill(icon: "desktopcomputer",  value: "\(store.devices.count)", label: "peers")
+                SidebarStatPill(icon: "doc.on.clipboard", value: "\(store.timeline.count)", label: "items")
+            }
+            HStack(spacing: 6) {
+                Circle().fill(syncColor).frame(width: 5.5, height: 5.5)
+                Text(syncLabel).font(.system(size: 10, weight: .bold)).tracking(0.6).foregroundStyle(syncColor)
+                Spacer()
+                Text("Local-first").font(.system(size: 10)).foregroundStyle(Color(white: 1, opacity: 0.24))
+            }
+        }
+        .padding(.horizontal, 16).padding(.bottom, 20)
     }
 }
 
@@ -291,93 +162,200 @@ private struct SidebarHeader: View {
 
 private struct DetailContent: View {
     @ObservedObject var store: ClipRelayStore
+    @Binding var density: CRDensityMode
     let beginRename: (ManagedDevice) -> Void
 
     var body: some View {
-        Group {
-            switch store.selectedSection {
-            case .timeline:
-                TimelineSectionView(store: store)
-            case .devices:
-                DevicesSectionView(store: store, rename: beginRename)
-            case .trust:
-                TrustSectionView(store: store, rename: beginRename)
-            case .settings:
-                PreferencesView(store: store)
+        VStack(spacing: 0) {
+            // Sticky section toolbar
+            CRSectionToolbar(
+                title:    store.selectedSection.title,
+                subtitle: store.selectedSection.subtitle
+            ) {
+                toolbarActions
             }
+
+            // Content — keyed so SwiftUI rebuilds on section change (enables transition)
+            Group {
+                switch store.selectedSection {
+                case .timeline: TimelineSectionView(store: store, density: density)
+                case .devices:  DevicesSectionView(store: store, rename: beginRename)
+                case .trust:    TrustSectionView(store: store, rename: beginRename)
+                case .settings: PreferencesView(store: store)
+                }
+            }
+            .id(store.selectedSection)
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .move(edge: .trailing)),
+                removal:   .opacity.combined(with: .move(edge: .leading))
+            ))
+            .animation(.crSpring, value: store.selectedSection)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PBTheme.backgroundGradient)
+        .background(CRTheme.canvasGradient)
+    }
+
+    @ViewBuilder private var toolbarActions: some View {
+        switch store.selectedSection {
+        case .timeline:
+            // Density toggle
+            HStack(spacing: 4) {
+                Button {
+                    withAnimation(.crFast) { density = .comfortable }
+                } label: {
+                    Image(systemName: density == .comfortable ? "rectangle.grid.1x2.fill" : "rectangle.grid.1x2")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(density == .comfortable ? CRTheme.brandElectric : CRTheme.inkSoft)
+
+                Button {
+                    withAnimation(.crFast) { density = .compact }
+                } label: {
+                    Image(systemName: density == .compact ? "list.bullet.fill" : "list.bullet")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(density == .compact ? CRTheme.brandElectric : CRTheme.inkSoft)
+            }
+
+        case .devices:
+            Button { store.scanForDevices() } label: {
+                Label("Scan", systemImage: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 12.5, weight: .medium))
+            }
+            .buttonStyle(CRSecondaryButtonStyle())
+
+        case .trust:
+            if store.devices.filter({ $0.trustState == .untrusted }).count > 1 {
+                Button("Reject All") { store.rejectAll() }
+                    .buttonStyle(CRDestructiveButtonStyle())
+            }
+
+        case .settings:
+            EmptyView()
+        }
     }
 }
 
 // MARK: - Timeline Section
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 private struct TimelineSectionView: View {
     @ObservedObject var store: ClipRelayStore
+    let density: CRDensityMode
+    @State private var search     = ""
+    @State private var filterKind = "all"
+    private let filters = [("all","All"),("text","Text"),("image","Image"),("file","File")]
+
+    private var pinnedItems: [TimelineItem] {
+        guard search.isEmpty else { return [] }
+        return store.timeline.filter { $0.pinned }
+    }
+
+    private var filteredItems: [TimelineItem] {
+        var base = store.timeline.filter { !$0.pinned }
+        if filterKind != "all" { base = base.filter { $0.typeLabel.lowercased().contains(filterKind) } }
+        if !search.isEmpty {
+            base = base.filter {
+                $0.title.localizedCaseInsensitiveContains(search)         ||
+                $0.sourceDevice.localizedCaseInsensitiveContains(search)  ||
+                ($0.fullText?.localizedCaseInsensitiveContains(search) ?? false)
+            }
+        }
+        return base
+    }
 
     var body: some View {
-<<<<<<< HEAD
-        PBPanel {
-            VStack(alignment: .leading, spacing: 18) {
-                DashboardHeaderView(
-                    eyebrow: "Timeline",
-                    title: "Recent clipboard activity",
-                    subtitle: "Copy items locally, resend them to another device, or keep important entries pinned."
-                )
+        VStack(spacing: 0) {
+            // Search + filter bar (below sticky toolbar, scrolls with content on small windows)
+            VStack(alignment: .leading, spacing: 9) {
+                CRSearchField(placeholder: "Search timeline…", text: $search)
+                filterRow
+            }
+            .padding(.horizontal, 20).padding(.vertical, 12)
+            .background(CRTheme.surfaceElevated.opacity(0.7))
 
-                if store.timeline.isEmpty {
-                    EmptySectionView(
-                        systemImage: "doc.text.magnifyingglass",
-                        title: "Nothing here yet",
-                        subtitle: "Copied text, images, and files will show up once the daemon starts receiving activity."
-                    )
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(store.timeline.prefix(80)) { item in
-                                TimelineCardView(item: item, store: store)
+            CRDivider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Pinned group
+                        if !pinnedItems.isEmpty {
+                            groupLabel("PINNED", icon: "pin.fill", tint: CRTheme.accentGold)
+                                .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 6)
+                            VStack(spacing: density.cardSpacing) {
+                                ForEach(pinnedItems) { TimelineCard(item: $0, store: store, density: density) }
                             }
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 14)
+
+                            groupLabel("RECENT", icon: "clock", tint: CRTheme.inkSubtle)
+                                .padding(.horizontal, 20).padding(.bottom, 6)
                         }
-                        .padding(.vertical, 2)
+
+                        // Main list
+                        if filteredItems.isEmpty && store.timeline.isEmpty {
+                            CREmptyState(
+                                systemImage: "doc.text.magnifyingglass",
+                                title: "Nothing here yet",
+                                message: "Copied text, images, and files will appear once the daemon is running."
+                            )
+                        } else if filteredItems.isEmpty {
+                            CREmptyState(
+                                systemImage: "magnifyingglass",
+                                title: "No results",
+                                message: search.isEmpty ? "Try a different filter." : "No items match "\(search)".",
+                                accent: CRTheme.accentIndigo,
+                                actionLabel: "Clear search",
+                                onAction: { search = "" }
+                            )
+                        } else {
+                            VStack(spacing: density.cardSpacing) {
+                                ForEach(filteredItems) { TimelineCard(item: $0, store: store, density: density) }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, pinnedItems.isEmpty ? 16 : 0)
+                        }
                     }
+                    .padding(.bottom, 24)
                 }
             }
         }
-        .padding(22)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
 
-private struct DevicesSectionView: View {
-    @ObservedObject var store: ClipRelayStore
-    let devices: [ManagedDevice]
-=======
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                CRSectionHeader(
-                    eyebrow: store.selectedSection.eyebrow,
-                    title: "Timeline",
-                    subtitle: "All clipboard activity across your devices."
-                )
-                .padding(.top, 4)
-
-                if store.timeline.isEmpty {
-                    CREmptyState(
-                        systemImage: "doc.text.magnifyingglass",
-                        title: "Nothing here yet",
-                        message: "Copied text, images, and files will appear once the daemon receives activity."
-                    )
-                } else {
-                    LazyVStack(spacing: 10) {
-                        ForEach(store.timeline) { item in
-                            TimelineCard(item: item, store: store)
-                        }
+    private var filterRow: some View {
+        HStack(spacing: 5) {
+            ForEach(filters, id: \.0) { key, label in
+                Button(label) { withAnimation(.crFast) { filterKind = key } }
+                    .font(.system(size: 12, weight: filterKind == key ? .semibold : .regular))
+                    .foregroundStyle(filterKind == key ? CRTheme.brandElectric : CRTheme.inkSoft)
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background {
+                        Capsule()
+                            .fill(filterKind == key ? CRTheme.brandElectric.opacity(0.09) : CRTheme.surface)
+                            .overlay {
+                                Capsule().strokeBorder(
+                                    filterKind == key ? CRTheme.brandElectric.opacity(0.20) : CRTheme.stroke.opacity(0.55),
+                                    lineWidth: 0.5)
+                            }
                     }
-                }
+                    .buttonStyle(.plain).animation(.crFast, value: filterKind)
             }
-            .padding(24)
+            Spacer()
+            if !search.isEmpty || filterKind != "all" {
+                Text("\(filteredItems.count) result\(filteredItems.count == 1 ? "" : "s")")
+                    .font(.system(size: 11)).foregroundStyle(CRTheme.inkSubtle)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.crFast, value: search.isEmpty && filterKind == "all")
+    }
+
+    @ViewBuilder private func groupLabel(_ text: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: 9, weight: .semibold)).foregroundStyle(tint)
+            Text(text).font(.system(size: 10, weight: .bold)).tracking(1.0).foregroundStyle(tint)
         }
     }
 }
@@ -386,266 +364,92 @@ private struct DevicesSectionView: View {
 
 private struct DevicesSectionView: View {
     @ObservedObject var store: ClipRelayStore
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     let rename: (ManagedDevice) -> Void
     @State private var showingFileImporter = false
-    @State private var pendingFileTarget: ManagedDevice?
+    @State private var pendingFileTarget:  ManagedDevice?
 
     var body: some View {
-<<<<<<< HEAD
-        PBPanel {
-            VStack(alignment: .leading, spacing: 18) {
-                DashboardHeaderView(
-                    eyebrow: "Devices",
-                    title: "Manage nearby devices",
-                    subtitle: "Connect manually, rename trusted devices, and control active sessions."
-                )
-
-                ManualConnectCard(store: store)
-                FileShareCard(store: store) { target in
-                    pendingFileTarget = target
-                    showingFileImporter = true
-                }
-
-                if devices.isEmpty {
-                    EmptySectionView(
-                        systemImage: "wifi.slash",
-                        title: "No devices discovered",
-                        subtitle: "When another ClipRelay device appears on your network, it will show up here."
-                    )
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(devices) { device in
-                                DeviceManagementCard(device: device, store: store, rename: rename)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-            }
-        }
-        .padding(22)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .fileImporter(
-            isPresented: $showingFileImporter,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: false
-        ) { result in
-=======
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                CRSectionHeader(
-                    eyebrow: store.selectedSection.eyebrow,
-                    title: "Devices",
-                    subtitle: "Discover, connect, and manage nearby peers."
-                )
-                .padding(.top, 4)
-
-                // Manual connect card
-                ManualConnectCard(store: store)
-
-                // File share card
-                FileShareCard(store: store) { target in
-                    pendingFileTarget = target; showingFileImporter = true
+            VStack(alignment: .leading, spacing: 14) {
+                // Quick-action row — full width stacked vertically so content isn't cramped
+                VStack(spacing: 8) {
+                    ManualConnectCard(store: store)
+                    FileShareCard(store: store) { pendingFileTarget = $0; showingFileImporter = true }
                 }
+                .padding(.top, 18)
 
                 if store.devices.isEmpty {
                     CREmptyState(
-                        systemImage: "wifi.slash",
-                        title: "No devices discovered",
-                        message: "When another ClipRelay device appears on your network, it will show up here."
+                        systemImage: "wifi.slash", title: "No devices discovered",
+                        message: "When another ClipRelay device appears on your network it will show up here.",
+                        accent: CRTheme.inkSoft,
+                        actionLabel: "Scan again",
+                        onAction: { store.scanForDevices() }
                     )
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(store.devices) { device in
-                            DeviceCard(device: device, store: store, rename: rename)
-                        }
+                    VStack(spacing: 7) {
+                        ForEach(store.devices) { DeviceCard(device: $0, store: store, rename: rename) }
                     }
                 }
             }
-            .padding(24)
+            .padding(.horizontal, 20).padding(.bottom, 24)
         }
-        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
-            guard case let .success(urls) = result, let url = urls.first else { return }
-            store.sendFile(url: url, to: pendingFileTarget)
-            pendingFileTarget = nil
+        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item]) { result in
+            if case let .success(urls) = result, let url = urls.first {
+                store.sendFile(url: url, to: pendingFileTarget); pendingFileTarget = nil
+            }
         }
     }
 }
 
-<<<<<<< HEAD
-=======
 // MARK: - Trust Section
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 private struct TrustSectionView: View {
     @ObservedObject var store: ClipRelayStore
     let rename: (ManagedDevice) -> Void
-
-    private var attentionDevices: [ManagedDevice] {
-        store.devices.filter { $0.trustState != .trusted }
-    }
+    private var attention: [ManagedDevice] { store.devices.filter { $0.trustState != .trusted } }
 
     var body: some View {
-<<<<<<< HEAD
-        PBPanel {
-            VStack(alignment: .leading, spacing: 18) {
-                DashboardHeaderView(
-                    eyebrow: "Trust",
-                    title: "Review device trust",
-                    subtitle: "Approve devices you control, reject unknown ones, and revisit trusted peers."
-                )
-
-                if store.devices.isEmpty {
-                    EmptySectionView(
-                        systemImage: "checkmark.shield",
-                        title: "No trust prompts right now",
-                        subtitle: "New devices will appear here when they request access."
-                    )
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            if !attentionDevices.isEmpty {
-                                ForEach(attentionDevices) { device in
-                                    DeviceManagementCard(device: device, store: store, rename: rename, emphasizeTrust: true)
-                                }
-                            }
-                            if attentionDevices.isEmpty {
-                                EmptySectionView(
-                                    systemImage: "checkmark.shield",
-                                    title: "All visible devices are trusted",
-                                    subtitle: "You can still rename, revoke, or disconnect any device from the Devices tab."
-                                )
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-            }
-        }
-        .padding(22)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct TimelineCardView: View {
-    let item: TimelineItem
-    @ObservedObject var store: ClipRelayStore
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: item.iconName)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(PBTheme.accentBlue)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(PBTheme.accentBlue.opacity(0.10))
-                    )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(PBTheme.ink)
-                        .lineLimit(2)
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 6) {
-                            Text(item.typeLabel)
-                            Text("•")
-                            Text(item.sourceDevice)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Text("•")
-                            Text(item.timestamp.relativeTimeString())
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(item.typeLabel) from \(item.sourceDevice)")
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Text(item.timestamp.relativeTimeString())
-                        }
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(PBTheme.inkSoft)
-                }
-
-                Spacer()
-                if item.pinned {
-                    PBBadge("PINNED", tint: PBTheme.accentGold)
-                }
-            }
-
-            ViewThatFits(in: .horizontal) {
-                timelineActions
-                VStack(alignment: .leading, spacing: 8) {
-                    timelineActions
-                }
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(PBTheme.surfaceStrong)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(PBTheme.stroke, lineWidth: 1)
-                )
-        )
-    }
-
-    @ViewBuilder
-    private var timelineActions: some View {
-        HStack(spacing: 8) {
-            if item.fullText != nil {
-                Button("Copy to this Mac") { store.copyTimelineItem(item) }
-                    .buttonStyle(PBPrimaryButtonStyle())
-            }
-
-            Menu("Send") {
-                Button("Send to all devices") { store.sendTimelineItem(item, to: nil) }
-                ForEach(store.connectedDevices) { device in
-                    Button(device.name) { store.sendTimelineItem(item, to: device) }
-                }
-            }
-            .menuStyle(.borderlessButton)
-
-            Button(item.pinned ? "Unpin" : "Pin") {
-                store.pinTimelineItem(item, pinned: !item.pinned)
-            }
-            .buttonStyle(PBSecondaryButtonStyle())
-
-            Button("Delete") {
-                store.deleteTimelineItem(item)
-            }
-            .buttonStyle(PBSecondaryButtonStyle())
-=======
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                CRSectionHeader(
-                    eyebrow: store.selectedSection.eyebrow,
-                    title: "Trust",
-                    subtitle: "Approve or reject devices requesting access."
-                )
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 8) {
+                // Attention banner
+                if !attention.isEmpty {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle().fill(CRTheme.accentOrange.opacity(0.10)).frame(width: 28, height: 28)
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(CRTheme.accentOrange)
+                        }
+                        Text("\(attention.count) device\(attention.count == 1 ? "" : "s") awaiting your decision")
+                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(CRTheme.accentOrange.opacity(0.06))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(CRTheme.accentOrange.opacity(0.18), lineWidth: 0.5)
+                            }
+                    }
+                    .padding(.top, 18)
+                }
 
-                if store.devices.isEmpty || attentionDevices.isEmpty {
+                if attention.isEmpty {
                     CREmptyState(
-                        systemImage: "checkmark.shield.fill",
-                        title: "All clear",
+                        systemImage: "checkmark.shield.fill", title: "All clear",
                         message: "No trust prompts right now. New devices appear here when they request access.",
-                        accent: PBTheme.accentGreen
+                        accent: CRTheme.accentGreen
                     )
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(attentionDevices) { device in
-                            DeviceCard(device: device, store: store, rename: rename, emphasizeTrust: true)
-                        }
+                    VStack(spacing: 7) {
+                        ForEach(attention) { DeviceCard(device: $0, store: store, rename: rename, emphasizeTrust: true) }
                     }
                 }
             }
-            .padding(24)
+            .padding(.horizontal, 20).padding(.bottom, 24)
         }
     }
 }
@@ -653,134 +457,142 @@ private struct TimelineCardView: View {
 // MARK: - Timeline Card
 
 struct TimelineCard: View {
-    let item: TimelineItem
+    let item:    TimelineItem
     @ObservedObject var store: ClipRelayStore
+    var density: CRDensityMode = .comfortable
     @State private var isHovered = false
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // ── Header row ────────────────────────────────────────────────────
-            HStack(alignment: .top, spacing: 12) {
-                // Icon
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(accentForKind.opacity(0.12))
-                        .frame(width: 36, height: 36)
-                    Image(systemName: item.iconName)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(accentForKind)
-                        .symbolRenderingMode(.hierarchical)
-                }
-
-                // Text
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.title)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(PBTheme.ink)
-                        .lineLimit(2)
-
-                    HStack(spacing: 6) {
-                        PBBadge(item.typeLabel, tint: accentForKind)
-                        Text("·").foregroundStyle(PBTheme.inkSubtle)
-                        Text(item.sourceDevice)
-                            .lineLimit(1).truncationMode(.middle)
-                        Text("·").foregroundStyle(PBTheme.inkSubtle)
-                        Text(item.timestamp.relativeTimeString())
-                    }
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(PBTheme.inkSoft)
-                }
-
-                Spacer(minLength: 0)
-
-                if item.pinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(PBTheme.accentGold)
-                        .rotationEffect(.degrees(45))
-                }
-            }
-
-            // ── Action row ────────────────────────────────────────────────────
-            HStack(spacing: 8) {
-                if item.fullText != nil {
-                    Button("Copy") { store.copyTimelineItem(item) }
-                        .buttonStyle(PBPrimaryButtonStyle())
-                }
-
-                Menu {
-                    Button("Send to all devices") { store.sendTimelineItem(item, to: nil) }
-                    Divider()
-                    ForEach(store.connectedDevices) { device in
-                        Button(device.name) { store.sendTimelineItem(item, to: device) }
-                    }
-                } label: {
-                    Label("Send", systemImage: "paperplane.fill")
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .buttonStyle(PBSecondaryButtonStyle())
-                .menuIndicator(.hidden)
-
-                Button(item.pinned ? "Unpin" : "Pin") {
-                    store.pinTimelineItem(item, pinned: !item.pinned)
-                }
-                .buttonStyle(PBSecondaryButtonStyle())
-
-                Spacer()
-
-                Button { store.deleteTimelineItem(item) } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .buttonStyle(PBDestructiveButtonStyle())
-            }
+    private var accent: Color {
+        switch item.iconName {
+        case "doc.on.clipboard": return CRTheme.accentBlue
+        case "photo":            return CRTheme.accentPurple
+        case "doc.fill":         return CRTheme.accentIndigo
+        case "wifi":             return CRTheme.accentGreen
+        case "wifi.slash":       return CRTheme.inkSoft
+        default:                 return CRTheme.accentBlue
         }
-        .padding(16)
-        .pbCard(cornerRadius: 14, highlighted: isHovered)
-        .onHover { isHovered = $0 }
-        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
     }
 
-    private var accentForKind: Color {
-        switch item.iconName {
-        case "doc.on.clipboard": return PBTheme.accentBlue
-        case "photo":            return PBTheme.accentPurple
-        case "doc.fill":         return PBTheme.accentIndigo
-        case "wifi":             return PBTheme.accentGreen
-        case "wifi.slash":       return PBTheme.inkSoft
-        default:                 return PBTheme.accentBlue
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+    private var charCount: String? {
+        guard let t = item.fullText, !t.isEmpty else { return nil }
+        return t.count > 999 ? "\(t.count / 1000)k chars" : "\(t.count) chars"
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Left accent stripe
+            RoundedRectangle(cornerRadius: 1.5).fill(accent)
+                .frame(width: 2.5)
+                .padding(.vertical, density.rowPadding)
+                .padding(.leading, 11)
+
+            VStack(alignment: .leading, spacing: density == .compact ? 5 : 8) {
+                // Header
+                HStack(alignment: .center, spacing: 9) {
+                    if density == .comfortable {
+                        CRIconChip(systemName: item.iconName, tint: accent, size: 28)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(item.title)
+                                .font(.system(size: density == .compact ? 12.5 : 13, weight: .semibold))
+                                .foregroundStyle(CRTheme.ink).lineLimit(1)
+                            if item.pinned {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 9)).foregroundStyle(CRTheme.accentGold.opacity(0.85))
+                                    .rotationEffect(.degrees(45))
+                            }
+                        }
+                        HStack(spacing: 4) {
+                            CRTag(text: item.typeLabel, tint: accent)
+                            if let cc = charCount {
+                                Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 9))
+                                Text(cc).foregroundStyle(CRTheme.inkSubtle)
+                            }
+                            Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 9))
+                            Image(systemName: "desktopcomputer").font(.system(size: 9))
+                                .foregroundStyle(CRTheme.inkSubtle)
+                            Text(item.sourceDevice).lineLimit(1).truncationMode(.middle)
+                            Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 9))
+                            Text(item.timestamp.relativeTimeString())
+                        }
+                        .font(.system(size: 10.5)).foregroundStyle(CRTheme.inkSoft)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                // Text preview
+                if let preview = item.fullText, !preview.isEmpty, density == .comfortable {
+                    Text(preview)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .lineLimit(isHovered ? 4 : 1)
+                        .padding(.horizontal, 9).padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(CRTheme.surface)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .strokeBorder(CRTheme.stroke.opacity(0.40), lineWidth: 0.5)
+                                }
+                        }
+                        .animation(.crSpring, value: isHovered)
+                }
+
+                // Action bar
+                if isHovered {
+                    HStack(spacing: 6) {
+                        if item.fullText != nil {
+                            Button("Copy") { store.copyTimelineItem(item) }
+                                .buttonStyle(CRPrimaryButtonStyle())
+                        }
+                        Menu {
+                            Button("Send to all devices") { store.sendTimelineItem(item, to: nil) }
+                            if !store.connectedDevices.isEmpty { Divider() }
+                            ForEach(store.connectedDevices) { d in
+                                Button(d.name) { store.sendTimelineItem(item, to: d) }
+                            }
+                        } label: {
+                            Label("Send", systemImage: "paperplane.fill")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .buttonStyle(CRSecondaryButtonStyle()).menuIndicator(.hidden)
+
+                        Button(item.pinned ? "Unpin" : "Pin") {
+                            store.pinTimelineItem(item, pinned: !item.pinned)
+                        }
+                        .buttonStyle(CRSecondaryButtonStyle())
+
+                        Spacer()
+
+                        Button { store.deleteTimelineItem(item) } label: {
+                            Image(systemName: "trash").font(.system(size: 11.5, weight: .medium))
+                        }
+                        .buttonStyle(CRDestructiveButtonStyle())
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
+            .padding(.horizontal, 11).padding(.vertical, density.rowPadding)
         }
+        .background {
+            RoundedRectangle(cornerRadius: density.cardRadius, style: .continuous)
+                .fill(CRTheme.surfaceStrong)
+                .overlay {
+                    RoundedRectangle(cornerRadius: density.cardRadius, style: .continuous)
+                        .strokeBorder(isHovered ? accent.opacity(0.28) : CRTheme.stroke.opacity(0.38), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(isHovered ? 0.08 : 0.04),
+                        radius: isHovered ? 12 : 4, x: 0, y: isHovered ? 3 : 1)
+        }
+        .onHover { isHovered = $0 }
+        .animation(.crSpring, value: isHovered)
     }
 }
 
-<<<<<<< HEAD
-private struct DeviceManagementCard: View {
-    let device: ManagedDevice
-    @ObservedObject var store: ClipRelayStore
-    let rename: (ManagedDevice) -> Void
-    var emphasizeTrust = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill((emphasizeTrust ? PBTheme.accentOrange : PBTheme.accentBlue).opacity(0.12))
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        Image(systemName: "desktopcomputer")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(emphasizeTrust ? PBTheme.accentOrange : PBTheme.accentBlue)
-                    )
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Text(device.name)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(PBTheme.ink)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-=======
 // MARK: - Device Card
 
 private struct DeviceCard: View {
@@ -790,491 +602,177 @@ private struct DeviceCard: View {
     var emphasizeTrust: Bool = false
     @State private var isHovered = false
 
-    private var accent: Color { emphasizeTrust ? PBTheme.accentOrange : device.connectionState.color }
+    private var accent: Color { emphasizeTrust ? CRTheme.accentOrange : device.connectionState.color }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // ── Header ────────────────────────────────────────────────────────
-            HStack(alignment: .top, spacing: 12) {
-                DeviceAvatar(name: device.name, platform: nil, size: 42, color: accent)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 11) {
+                DeviceAvatar(name: device.name, platform: nil, size: 38, color: accent)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
                         Text(device.name)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(PBTheme.ink)
+                            .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
                             .lineLimit(1)
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
-                        DevicePill(text: device.connectionState.label, tint: device.connectionState.color)
-                        DevicePill(text: device.trustState.rawValue.capitalized, tint: device.trustState.color)
-                    }
-
-<<<<<<< HEAD
-                    if device.rawName != device.name {
-                        Text(device.rawName)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(PBTheme.inkSoft)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) {
-                            if let endpoint = device.endpoint {
-                                Label(endpoint, systemImage: "network")
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            if let lastSeen = device.lastSeen {
-                                Label("Seen \(lastSeen.relativeTimeString())", systemImage: "clock")
-                                    .lineLimit(1)
-                            }
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let endpoint = device.endpoint {
-                                Label(endpoint, systemImage: "network")
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            if let lastSeen = device.lastSeen {
-                                Label("Seen \(lastSeen.relativeTimeString())", systemImage: "clock")
-                                    .lineLimit(1)
-                            }
+                        HStack(spacing: 3) {
+                            StatusDot(isOnline: device.isConnected, size: 6)
+                            Text(device.connectionState.label)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(device.connectionState.color)
                         }
                     }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(PBTheme.inkSoft)
-
-                    if let fingerprint = device.fingerprint {
-                        Text("Fingerprint: \(fingerprint)")
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(PBTheme.inkSoft)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    if let error = device.lastError, !error.isEmpty {
-                        Text(error)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(PBTheme.accentPurple)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-
-            ViewThatFits(in: .horizontal) {
-                deviceActions
-                VStack(alignment: .leading, spacing: 8) {
-                    deviceActions
-                }
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(PBTheme.surfaceStrong)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(PBTheme.stroke, lineWidth: 1)
-                )
-        )
-    }
-
-    @ViewBuilder
-    private var deviceActions: some View {
-        HStack(spacing: 8) {
-            if device.isConnected {
-                Button("Disconnect") { store.disconnect(device) }
-                    .buttonStyle(PBPrimaryButtonStyle(tint: PBTheme.accentOrange))
-            }
-            if device.trustState != .trusted {
-                Button("Trust") { store.trust(device) }
-                    .buttonStyle(PBPrimaryButtonStyle(tint: PBTheme.accentGreen))
-                Button("Reject") { store.reject(device) }
-                    .buttonStyle(PBSecondaryButtonStyle())
-            } else {
-                Button("Rename") { rename(device) }
-                    .buttonStyle(PBSecondaryButtonStyle())
-                Button("Revoke Trust") { store.revoke(device) }
-                    .buttonStyle(PBSecondaryButtonStyle())
-            }
-        }
-    }
-}
-
-=======
-                    HStack(spacing: 10) {
+                    HStack(spacing: 6) {
+                        CRTag(text: device.trustState.rawValue.capitalized, tint: device.trustState.color)
                         if let ep = device.endpoint {
+                            Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 10))
                             Label(ep, systemImage: "network")
                                 .lineLimit(1).truncationMode(.middle)
+                                .font(.system(size: 10.5)).foregroundStyle(CRTheme.inkSoft)
                         }
                         if let seen = device.lastSeen {
-                            Label("Seen \(seen.relativeTimeString())", systemImage: "clock")
+                            Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 10))
+                            Text("Seen \(seen.relativeTimeString())")
+                                .font(.system(size: 10.5)).foregroundStyle(CRTheme.inkSoft)
                         }
                     }
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(PBTheme.inkSoft)
-
-                    if let fp = device.fingerprint {
-                        Text("Fingerprint: \(fp)")
-                            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                            .foregroundStyle(PBTheme.inkSubtle)
-                            .lineLimit(1).truncationMode(.middle)
-                    }
-                    if let err = device.lastError, !err.isEmpty {
-                        Label(err, systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(PBTheme.accentOrange)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-
-            // ── Actions ───────────────────────────────────────────────────────
-            HStack(spacing: 8) {
-                if device.isConnected {
-                    Button("Disconnect") { store.disconnect(device) }
-                        .buttonStyle(PBPrimaryButtonStyle(tint: PBTheme.accentOrange))
-                }
-                if device.trustState != .trusted {
-                    Button("Trust") { store.trust(device) }
-                        .buttonStyle(PBPrimaryButtonStyle(tint: PBTheme.accentGreen))
-                    Button("Reject") { store.reject(device) }
-                        .buttonStyle(PBDestructiveButtonStyle())
-                } else {
-                    Button("Rename") { rename(device) }
-                        .buttonStyle(PBSecondaryButtonStyle())
-                    Button("Revoke Trust") { store.revoke(device) }
-                        .buttonStyle(PBDestructiveButtonStyle())
                 }
                 Spacer()
             }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+
+            // Fingerprint (hover)
+            if let fp = device.fingerprint, isHovered {
+                CRDivider().padding(.horizontal, 14)
+                HStack(spacing: 5) {
+                    Image(systemName: "key.fill").font(.system(size: 9)).foregroundStyle(CRTheme.inkSubtle)
+                    Text(fp).font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(CRTheme.inkSubtle).lineLimit(1).truncationMode(.middle)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 6)
+                .transition(.opacity)
+            }
+
+            // Error
+            if let err = device.lastError, !err.isEmpty {
+                CRDivider().padding(.horizontal, 14)
+                Label(err, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11)).foregroundStyle(CRTheme.accentOrange)
+                    .padding(.horizontal, 14).padding(.vertical, 6)
+            }
+
+            // Actions
+            CRDivider()
+            HStack(spacing: 7) {
+                if device.isConnected {
+                    Button("Disconnect") { store.disconnect(device) }
+                        .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentOrange))
+                }
+                if device.trustState != .trusted {
+                    Button("Trust")  { store.trust(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
+                    Button("Reject") { store.reject(device) }.buttonStyle(CRDestructiveButtonStyle())
+                } else {
+                    Button("Rename")       { rename(device) }.buttonStyle(CRSecondaryButtonStyle())
+                    Button("Revoke Trust") { store.revoke(device) }.buttonStyle(CRDestructiveButtonStyle())
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 9)
         }
-        .padding(16)
-        .pbCard(cornerRadius: 14, highlighted: isHovered)
+        .background {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(CRTheme.surfaceStrong)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(isHovered ? accent.opacity(0.30) : CRTheme.stroke.opacity(0.38), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(isHovered ? 0.07 : 0.04),
+                        radius: isHovered ? 12 : 4, x: 0, y: isHovered ? 3 : 1)
+        }
         .onHover { isHovered = $0 }
-        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
+        .animation(.crSpring, value: isHovered)
     }
 }
 
 // MARK: - Manual Connect Card
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 private struct ManualConnectCard: View {
     @ObservedObject var store: ClipRelayStore
-
+    @State private var hovered = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-<<<<<<< HEAD
-            Text("Manual connect")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(PBTheme.ink)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    TextField("192.168.1.20:47823", text: $store.manualConnectAddress)
-                        .pbInput()
-                    Button("Connect") {
-                        store.connectManual()
-                    }
-                    .buttonStyle(PBPrimaryButtonStyle())
-                }
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField("192.168.1.20:47823", text: $store.manualConnectAddress)
-                        .pbInput()
-                    Button("Connect") {
-                        store.connectManual()
-                    }
-                    .buttonStyle(PBPrimaryButtonStyle())
-                }
+        HStack(spacing: 12) {
+            CRIconChip(systemName: "network", tint: CRTheme.accentBlue, size: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Manual Connect").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                Text("Connect to a specific IP address and port").font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft)
             }
+            Spacer()
+            TextField("192.168.1.20:47823", text: $store.manualConnectAddress)
+                .crInput().frame(width: 160)
+            Button("Connect") { store.connectManual() }.buttonStyle(CRPrimaryButtonStyle())
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(PBTheme.surfaceStrong)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(PBTheme.stroke, lineWidth: 1)
-                )
-        )
-    }
-}
-
-=======
-            HStack(spacing: 8) {
-                Image(systemName: "network")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PBTheme.accentBlue)
-                Text("Manual connect")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(PBTheme.ink)
-            }
-            HStack(spacing: 10) {
-                TextField("192.168.1.20:47823", text: $store.manualConnectAddress)
-                    .pbInput()
-                Button("Connect") { store.connectManual() }
-                    .buttonStyle(PBPrimaryButtonStyle())
-            }
-        }
-        .padding(16)
-        .pbCard()
+        .padding(14).frame(maxWidth: .infinity)
+        .crCard(cornerRadius: 11, highlighted: hovered)
+        .onHover { hovered = $0 }.animation(.crFast, value: hovered)
     }
 }
 
 // MARK: - File Share Card
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 private struct FileShareCard: View {
     @ObservedObject var store: ClipRelayStore
     let chooseTarget: (ManagedDevice?) -> Void
-
+    @State private var hovered = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-<<<<<<< HEAD
-            Text("Send a file")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(PBTheme.ink)
-
-            Text("Pick any document, image, or archive and push it directly to nearby ClipRelay devices.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(PBTheme.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    Button("Send to all devices") {
-                        chooseTarget(nil)
-                    }
-                    .buttonStyle(PBPrimaryButtonStyle())
-
-                    if !store.connectedDevices.isEmpty {
-                        Menu("Send to device") {
-                            ForEach(store.connectedDevices) { device in
-                                Button(device.name) { chooseTarget(device) }
-                            }
-                        }
-                        .menuStyle(.borderlessButton)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Button("Send to all devices") {
-                        chooseTarget(nil)
-                    }
-                    .buttonStyle(PBPrimaryButtonStyle())
-
-                    if !store.connectedDevices.isEmpty {
-                        Menu("Send to device") {
-                            ForEach(store.connectedDevices) { device in
-                                Button(device.name) { chooseTarget(device) }
-                            }
-                        }
-                        .menuStyle(.borderlessButton)
-                    }
-=======
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.up.doc.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PBTheme.accentIndigo)
-                Text("Send a file")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(PBTheme.ink)
+        HStack(spacing: 12) {
+            CRIconChip(systemName: "arrow.up.doc.fill", tint: CRTheme.accentIndigo, size: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Send a File").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                Text("Push a document, image, or archive to peers").font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft)
             }
-            Text("Push any document, image, or archive to nearby ClipRelay devices.")
-                .font(.system(size: 12.5))
-                .foregroundStyle(PBTheme.inkSoft)
-
-            HStack(spacing: 10) {
-                Button("Send to all") { chooseTarget(nil) }
-                    .buttonStyle(PBPrimaryButtonStyle(tint: PBTheme.accentIndigo))
-
-                if !store.connectedDevices.isEmpty {
-                    Menu("Send to device") {
-                        ForEach(store.connectedDevices) { d in
-                            Button(d.name) { chooseTarget(d) }
-                        }
-                    }
-                    .buttonStyle(PBSecondaryButtonStyle())
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+            Spacer()
+            Button("Send to all") { chooseTarget(nil) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentIndigo))
+            if !store.connectedDevices.isEmpty {
+                Menu("Choose…") {
+                    ForEach(store.connectedDevices) { d in Button(d.name) { chooseTarget(d) } }
                 }
+                .buttonStyle(CRSecondaryButtonStyle())
             }
         }
-        .padding(16)
-<<<<<<< HEAD
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(PBTheme.surfaceStrong)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(PBTheme.stroke, lineWidth: 1)
-                )
-        )
+        .padding(14).frame(maxWidth: .infinity)
+        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.accentIndigo)
+        .onHover { hovered = $0 }.animation(.crFast, value: hovered)
     }
 }
 
-private struct DashboardHeaderView: View {
-    let eyebrow: String
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(eyebrow.uppercased())
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.5)
-                .foregroundStyle(PBTheme.accentBlue)
-            Text(title)
-                .font(.system(size: 28, weight: .bold, design: .serif))
-                .foregroundStyle(PBTheme.ink)
-            Text(subtitle)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(PBTheme.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-private struct EmptySectionView: View {
-    let systemImage: String
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 30, weight: .medium))
-                .foregroundStyle(PBTheme.accentBlue)
-            Text(title)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(PBTheme.ink)
-            Text(subtitle)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(PBTheme.inkSoft)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 360)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 40)
-    }
-}
-
-private struct DevicePill: View {
-=======
-        .pbCard()
-    }
-}
-
-// MARK: - Device Pill
-
-struct DevicePill: View {
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
-    let text: String
-    let tint: Color
-
-    var body: some View {
-        Text(text)
-<<<<<<< HEAD
-            .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(tint.opacity(0.12))
-            )
-    }
-}
-
-private struct ToastStackView: View {
-    let toasts: [ToastItem]
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: 10) {
-            ForEach(toasts.suffix(3)) { toast in
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(toast.tint)
-                        .frame(width: 10, height: 10)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(toast.title)
-                            .font(.system(size: 13, weight: .semibold))
-                        Text(toast.body)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.96))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(PBTheme.stroke, lineWidth: 1)
-                        )
-                )
-            }
-        }
-    }
-}
-=======
-            .font(.system(size: 10.5, weight: .bold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
-    }
-}
-
-// MARK: - Rename Sheet
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+// MARK: - Rename Sheet (auto-focuses text field)
 
 private struct RenameDeviceSheet: View {
     let device: ManagedDevice
     @State var draft: String
     let onCancel: () -> Void
-    let onSave: (String) -> Void
+    let onSave:   (String) -> Void
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
-<<<<<<< HEAD
         VStack(alignment: .leading, spacing: 16) {
-            Text("Rename Device")
-                .font(.system(size: 20, weight: .bold))
-            Text("Choose a friendly name for \(device.name).")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-=======
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Rename Device")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(PBTheme.ink)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Rename Device").font(.system(size: 18, weight: .bold)).foregroundStyle(CRTheme.ink)
                 Text("Give \(device.rawName) a friendly name.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(PBTheme.inkSoft)
+                    .font(.system(size: 12.5)).foregroundStyle(CRTheme.inkSoft)
             }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
             TextField("Device name", text: $draft)
-                .pbInput()
+                .crInput()
+                .focused($fieldFocused)
+                .onSubmit { if !draft.isEmpty { onSave(draft) } }
             HStack {
                 Spacer()
-<<<<<<< HEAD
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(PBSecondaryButtonStyle())
-                Button("Save") { onSave(draft) }
-                    .buttonStyle(PBPrimaryButtonStyle())
+                Button("Cancel", action: onCancel).buttonStyle(CRSecondaryButtonStyle())
+                Button("Save") { onSave(draft) }.buttonStyle(CRPrimaryButtonStyle())
+                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(22)
-        .frame(width: 360)
-=======
-                Button("Cancel", action: onCancel).buttonStyle(PBSecondaryButtonStyle())
-                Button("Save")  { onSave(draft) }.buttonStyle(PBPrimaryButtonStyle())
-            }
-        }
-        .padding(24)
-        .frame(width: 360)
-        .background(PBTheme.surfaceStrong.ignoresSafeArea())
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+        .padding(24).frame(width: 330)
+        .background(CRTheme.surfaceStrong.ignoresSafeArea())
+        .onAppear { fieldFocused = true }
     }
 }

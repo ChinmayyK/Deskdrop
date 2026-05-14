@@ -65,8 +65,6 @@ impl FilterChain {
             allow_files: settings.sync_files,
         });
 
-<<<<<<< HEAD
-=======
         // Skip trivially short text copies if configured.
         if settings.min_text_length > 0 {
             chain.push(MinLengthFilter {
@@ -79,7 +77,6 @@ impl FilterChain {
             chain.push(UrlOnlyFilter);
         }
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         chain.push(IgnorePatternFilter::from_settings(settings));
         chain.push(ExtensionFilter::default());
         chain.push(SensitiveTextFilter::from_settings(settings));
@@ -109,8 +106,6 @@ impl Default for FilterChain {
     }
 }
 
-<<<<<<< HEAD
-=======
 // ── MinLengthFilter ───────────────────────────────────────────────────────────
 
 /// Reject text that is shorter than `min_chars` Unicode scalar values.
@@ -261,7 +256,6 @@ impl Filter for GlobPatternFilter {
     }
 }
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 pub struct IgnorePatternFilter {
     patterns: Vec<String>,
 }
@@ -734,8 +728,6 @@ mod tests {
         });
         assert_eq!(chain.run(&text("safe text")), Verdict::Allow);
     }
-<<<<<<< HEAD
-=======
 
     // ── MinLengthFilter tests ─────────────────────────────────────────────────
 
@@ -839,5 +831,4 @@ mod tests {
         let f = GlobPatternFilter::new(vec!["*".into()]);
         assert!(matches!(f.check(&text("any text")), Verdict::Deny { .. }));
     }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 }

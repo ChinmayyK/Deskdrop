@@ -1,9 +1,5 @@
 //! Clipboard history — a bounded, persisted ring buffer of recent clipboard
-<<<<<<< HEAD
-//! entries with pinning and metadata-only support for targeted sync.
-=======
 //! entries with pinning, tagging, date-range filtering, stats, and JSON export.
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 
 use crate::dedup::hash_content;
 use crate::protocol::{ClipboardContent, HistoryMetadata};
@@ -14,11 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const MIN_ENTRIES: usize = 20;
-<<<<<<< HEAD
-pub const MAX_ENTRIES: usize = 100;
-=======
 pub const MAX_ENTRIES: usize = 500;
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 pub const DEFAULT_ENTRIES: usize = 50;
 pub const DEFAULT_MAX_TEXT_BYTES: usize = 64 * 1024;
 pub const MAX_TEXT_PREVIEW: usize = 4096;
@@ -34,8 +26,6 @@ fn clamp_entries(limit: usize) -> usize {
     limit.clamp(MIN_ENTRIES, MAX_ENTRIES)
 }
 
-<<<<<<< HEAD
-=======
 /// Aggregated statistics over the full history buffer.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HistoryStats {
@@ -79,7 +69,6 @@ pub struct HistoryFilter {
     pub pinned_only: bool,
 }
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryEntry {
     pub id: u64,
@@ -89,12 +78,9 @@ pub struct HistoryEntry {
     pub hash: String,
     #[serde(default)]
     pub pinned: bool,
-<<<<<<< HEAD
-=======
     /// User-defined labels for this entry.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,10 +146,7 @@ impl HistoryEntry {
             payload,
             hash,
             pinned: false,
-<<<<<<< HEAD
-=======
             tags: Vec::new(),
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         }
     }
 
@@ -180,10 +163,7 @@ impl HistoryEntry {
             },
             hash: meta.hash.clone(),
             pinned: meta.pinned,
-<<<<<<< HEAD
-=======
             tags: Vec::new(),
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         }
     }
 
@@ -352,8 +332,6 @@ impl History {
         Ok(None)
     }
 
-<<<<<<< HEAD
-=======
     /// Add a tag to a history entry. Tags are stored lowercase and deduplicated.
     /// Returns `true` if the tag was added (false if it already existed or entry not found).
     pub fn add_tag(&mut self, id: u64, tag: &str) -> Result<bool> {
@@ -487,7 +465,6 @@ impl History {
         serde_json::to_string_pretty(&entries).context("serialising history to JSON")
     }
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     pub fn remove(&mut self, id: u64) -> Result<bool> {
         let len_before = self.entries.len();
         self.entries.retain(|entry| entry.id != id);
@@ -803,8 +780,6 @@ mod tests {
         // Commas inside text should be quoted in the preview column.
         assert!(lines[1].contains("text"));
     }
-<<<<<<< HEAD
-=======
 
     // ── New functionality tests ───────────────────────────────────────────────
 
@@ -996,4 +971,3 @@ mod tests {
         assert_eq!(history.entries().len(), 0); // empty, just checks no panic
     }
 }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)

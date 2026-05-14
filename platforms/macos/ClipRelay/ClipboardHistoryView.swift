@@ -1,330 +1,286 @@
-<<<<<<< HEAD
-=======
-// ClipboardHistoryView.swift
-// Spotlight-inspired quick access panel — floats above all windows.
+// ClipboardHistoryView.swift — ClipRelay macOS v4
+// Spotlight-style quick-access panel. Keyboard-first, day-grouped, live preview expand.
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 import SwiftUI
+
+// MARK: - Root Panel
 
 struct QuickAccessHistoryView: View {
     @ObservedObject var store: ClipRelayStore
-    @State private var search = ""
-<<<<<<< HEAD
-
-    private var results: [TimelineItem] {
-        if search.isEmpty { return store.timeline }
-        return store.timeline.filter {
-            $0.title.localizedCaseInsensitiveContains(search) ||
-            $0.sourceDevice.localizedCaseInsensitiveContains(search)
-        }
-    }
-
-    var body: some View {
-        PBPanel {
-            VStack(spacing: 16) {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Quick Access")
-                            .font(.system(size: 25, weight: .bold, design: .serif))
-                            .foregroundStyle(PBTheme.ink)
-                        Text("Search, copy, or resend your recent clipboard items.")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(PBTheme.inkSoft)
-                    }
-
-                    Spacer()
-
-                    HStack(spacing: 10) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(PBTheme.inkSoft)
-                        TextField("Search clipboard history", text: $search)
-                            .textFieldStyle(.plain)
-                    }
-                    .pbInput()
-                    .frame(width: 220)
-                }
-
-                ScrollView {
-                    LazyVStack(spacing: 10) {
-                        if let context = store.quickSendContext, !context.text.isEmpty {
-                            QuickSendStripView(store: store, text: context.text)
-                        }
-
-                        if results.isEmpty {
-                            VStack(spacing: 10) {
-                                Image(systemName: "doc.text.magnifyingglass")
-                                    .font(.system(size: 30))
-                                    .foregroundStyle(PBTheme.accentBlue)
-                                Text(search.isEmpty ? "No items yet" : "Nothing matched")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(PBTheme.ink)
-                                Text(search.isEmpty ? "Recent clipboard history will appear here." : "Try a shorter or different search phrase.")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(PBTheme.inkSoft)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 28)
-                        } else {
-                            ForEach(results.prefix(25)) { item in
-                                QuickHistoryRow(item: item, store: store)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
-            .padding(18)
-        }
-        .frame(width: 460, height: 540)
-    }
-}
-
-private struct QuickSendStripView: View {
-    @ObservedObject var store: ClipRelayStore
-    let text: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                PBBadge("JUST COPIED", tint: PBTheme.accentBlue)
-                Spacer()
-                Text("\(store.connectedDevices.count) target\(store.connectedDevices.count == 1 ? "" : "s")")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(PBTheme.inkSoft)
-            }
-
-            Text(text)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(PBTheme.ink)
-                .lineLimit(3)
-=======
+    @State private var search        = ""
+    @State private var selectedIndex = 0
+    @State private var expandedID:   Int64? = nil          // TimelineItem.id is Int64
     @FocusState private var searchFocused: Bool
-    @State private var selectedIndex: Int = 0
+
+    // ── Results ───────────────────────────────────────────────────────────────
 
     private var results: [TimelineItem] {
-        let all = store.timeline
-        if search.isEmpty { return Array(all.prefix(25)) }
-        return all.filter {
-            $0.title.localizedCaseInsensitiveContains(search) ||
+        let base = store.timeline
+        if search.isEmpty { return Array(base.prefix(40)) }
+        return base.filter {
+            $0.title.localizedCaseInsensitiveContains(search)        ||
             $0.sourceDevice.localizedCaseInsensitiveContains(search) ||
-            $0.typeLabel.localizedCaseInsensitiveContains(search)
-        }.prefix(25).map { $0 }
+            $0.typeLabel.localizedCaseInsensitiveContains(search)    ||
+            ($0.fullText?.localizedCaseInsensitiveContains(search) ?? false)
+        }.prefix(40).map { $0 }
     }
+
+    // Group by calendar day (pinned items float to top when no search)
+    private var dayGroups: [(label: String, items: [TimelineItem])] {
+        guard search.isEmpty else {
+            return results.isEmpty ? [] : [("RESULTS", results)]
+        }
+        let pinned = results.filter { $0.pinned }
+        let rest   = results.filter { !$0.pinned }
+
+        var groups: [(String, [TimelineItem])] = []
+        if !pinned.isEmpty { groups.append(("PINNED", pinned)) }
+
+        let cal = Calendar.current
+        let byDay = Dictionary(grouping: rest) { cal.startOfDay(for: $0.timestamp) }
+        let sorted = byDay.keys.sorted(by: >)
+        for day in sorted {
+            let label: String
+            if cal.isDateInToday(day)     { label = "TODAY" }
+            else if cal.isDateInYesterday(day) { label = "YESTERDAY" }
+            else {
+                let f = DateFormatter(); f.dateFormat = "EEEE, MMM d"; label = f.string(from: day).uppercased()
+            }
+            groups.append((label, byDay[day]!))
+        }
+        return groups
+    }
+
+    private var flatResults: [TimelineItem] { dayGroups.flatMap { $0.items } }
 
     var body: some View {
         ZStack {
-            // Glass background
-            VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
-                .ignoresSafeArea()
+            // Background: HUD vibrancy + obsidian tint
+            CRHUDMaterial().ignoresSafeArea()
+            LinearGradient(
+                stops: [
+                    .init(color: Color(hex: 0x0C1025, opacity: 0.58), location: 0),
+                    .init(color: Color(hex: 0x060810, opacity: 0.70), location: 1)
+                ],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            ).ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // ── Search bar ────────────────────────────────────────────────
-                SearchBar(text: $search, focused: $searchFocused)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
+                // Search bar
+                QASearchBar(text: $search, focused: $searchFocused)
+                    .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 11)
 
-                Divider().opacity(0.4)
+                panelSeparator
 
-                // ── Just-copied strip ─────────────────────────────────────────
+                // Just-copied strip (only when not searching)
                 if let ctx = store.quickSendContext, !ctx.text.isEmpty, search.isEmpty {
                     QuickSendStrip(store: store, context: ctx)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .padding(.bottom, 4)
+                        .padding(.horizontal, 14).padding(.top, 11).padding(.bottom, 2)
                 }
 
-                // ── Results ───────────────────────────────────────────────────
-                if results.isEmpty {
-                    QuickEmptyState(hasSearch: !search.isEmpty)
+                // Content
+                if flatResults.isEmpty {
+                    QAEmptyState(hasSearch: !search.isEmpty)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 6) {
-                            ForEach(Array(results.enumerated()), id: \.element.id) { idx, item in
-                                QuickRow(
-                                    item: item,
-                                    store: store,
-                                    isSelected: idx == selectedIndex
-                                )
-                                .onTapGesture { store.copyTimelineItem(item) }
+                    ScrollViewReader { proxy in
+                        ScrollView(.vertical, showsIndicators: false) {
+                            LazyVStack(spacing: 0) {
+                                ForEach(Array(dayGroups.enumerated()), id: \.offset) { _, group in
+                                    QAGroupLabel(text: group.label,
+                                                 icon: group.label == "PINNED" ? "pin.fill" : "clock",
+                                                 tint: group.label == "PINNED"
+                                                     ? CRTheme.accentGold
+                                                     : Color(white: 1, opacity: 0.26))
+                                    ForEach(Array(group.items.enumerated()), id: \.element.id) { _, item in
+                                        let globalIdx = flatResults.firstIndex(where: { $0.id == item.id }) ?? 0
+                                        QuickRow(
+                                            item:        item,
+                                            store:       store,
+                                            isSelected:  globalIdx == selectedIndex,
+                                            isExpanded:  expandedID == item.id,
+                                            onTap:       { store.copyTimelineItem(item) },
+                                            onExpand:    {
+                                                withAnimation(.crSpring) {
+                                                    expandedID = expandedID == item.id ? nil : item.id
+                                                }
+                                            }
+                                        )
+                                        .id(item.id)
+                                    }
+                                }
                             }
+                            .padding(.horizontal, 8).padding(.bottom, 8)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .onChange(of: selectedIndex) { idx in
+                            guard idx < flatResults.count else { return }
+                            withAnimation { proxy.scrollTo(flatResults[idx].id, anchor: .center) }
+                        }
                     }
                 }
+
+                panelSeparator
+                QAFooter()
             }
         }
-        .frame(width: 480, height: 560)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(width: 500, height: 570)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color(white: 1, opacity: 0.08), lineWidth: 0.5)
         }
-        .shadow(color: .black.opacity(0.30), radius: 40, x: 0, y: 12)
+        .shadow(color: .black.opacity(0.55), radius: 70, x: 0, y: 28)
         .environment(\.colorScheme, .dark)
         .onAppear { searchFocused = true }
+        .onChange(of: search) { _ in selectedIndex = 0; expandedID = nil }
+        // Keyboard navigation via NSEvent monitor would live in AppDelegate;
+        // these buttons handle it when the window is focused.
+        .background(
+            Group {
+                Button("") { navigate(-1) }.keyboardShortcut(.upArrow,   modifiers: [])
+                Button("") { navigate(+1) }.keyboardShortcut(.downArrow, modifiers: [])
+                Button("") { runSelected() }.keyboardShortcut(.return,   modifiers: [])
+            }
+            .frame(width: 0, height: 0).opacity(0)
+        )
+    }
+
+    // MARK: Helpers
+
+    private var panelSeparator: some View {
+        Rectangle().fill(Color(white: 1, opacity: 0.07)).frame(height: 0.5)
+    }
+
+    private func navigate(_ delta: Int) {
+        let max = flatResults.count - 1
+        guard max >= 0 else { return }
+        selectedIndex = min(max, max(0, selectedIndex + delta))
+    }
+
+    private func runSelected() {
+        guard selectedIndex < flatResults.count else { return }
+        store.copyTimelineItem(flatResults[selectedIndex])
     }
 }
 
 // MARK: - Search Bar
 
-private struct SearchBar: View {
+private struct QASearchBar: View {
     @Binding var text: String
     var focused: FocusState<Bool>.Binding
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.white.opacity(0.50))
-                .frame(width: 20)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color(white: 1, opacity: 0.28))
+                .frame(width: 18)
 
             TextField("Search clipboard history…", text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 15.5))
                 .foregroundStyle(.white)
                 .focused(focused)
 
             if !text.isEmpty {
-                Button { text = "" } label: {
+                Button { withAnimation(.crFast) { text = "" } } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.white.opacity(0.40))
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color(white: 1, opacity: 0.28))
                 }
                 .buttonStyle(.plain)
-                .transition(.scale.combined(with: .opacity))
+                .transition(.scale(scale: 0.75).combined(with: .opacity))
+            } else {
+                HStack(spacing: 2) { KbdChip("⌘"); KbdChip("⇧"); KbdChip("V") }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 13).padding(.vertical, 10)
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.09))
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color(white: 1, opacity: 0.08))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(Color(white: 1, opacity: 0.10), lineWidth: 0.5)
                 }
         }
-        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: text.isEmpty)
+        .animation(.crFast, value: text.isEmpty)
     }
 }
 
-// MARK: - Just-Copied Strip
+// MARK: - Group Label
+
+private struct QAGroupLabel: View {
+    let text: String; let icon: String; let tint: Color
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 9, weight: .bold)).foregroundStyle(tint)
+            Text(text).font(.system(size: 9.5, weight: .bold)).tracking(1.1).foregroundStyle(tint)
+            Spacer()
+        }
+        .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 3)
+    }
+}
+
+// MARK: - Quick Send Strip
 
 private struct QuickSendStrip: View {
     @ObservedObject var store: ClipRelayStore
     let context: QuickSendContext
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(PBTheme.accentBlue)
-                    .frame(width: 7, height: 7)
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 6) {
+                // Pulsing dot
+                ZStack {
+                    Circle().fill(CRTheme.brandElectric.opacity(0.20)).frame(width: 14, height: 14)
+                    Circle().fill(CRTheme.brandElectric).frame(width: 5.5, height: 5.5)
+                }
+                .crGlow(CRTheme.brandElectric, radius: 4)
+
                 Text("JUST COPIED")
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(0.8)
-                    .foregroundStyle(PBTheme.accentBlue.opacity(0.85))
+                    .font(.system(size: 9.5, weight: .bold)).tracking(1.0)
+                    .foregroundStyle(CRTheme.brandElectric)
                 Spacer()
                 Text(context.timestamp.relativeTimeString())
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.35))
+                    .font(.system(size: 10.5)).foregroundStyle(Color(white: 1, opacity: 0.24))
             }
 
             Text(context.text)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.90))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color(white: 1, opacity: 0.80))
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 8) {
-                Button("Send to all") { store.sendCurrentClipboard(to: nil) }
-                    .buttonStyle(PBPrimaryButtonStyle())
-<<<<<<< HEAD
-=======
-
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
-                ForEach(store.connectedDevices.prefix(3)) { device in
-                    Button(device.name) { store.sendCurrentClipboard(to: device) }
-                        .buttonStyle(PBSecondaryButtonStyle())
-                }
-            }
-        }
-<<<<<<< HEAD
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [PBTheme.accentBlue.opacity(0.12), Color.white],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(PBTheme.accentBlue.opacity(0.18), lineWidth: 1)
-                )
-        )
-    }
-}
-
-private struct QuickHistoryRow: View {
-    let item: TimelineItem
-    @ObservedObject var store: ClipRelayStore
-
-    var body: some View {
-        Button {
-            store.copyTimelineItem(item)
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(PBTheme.accentBlue.opacity(0.12))
-                    .frame(width: 34, height: 34)
-                    .overlay(
-                        Image(systemName: item.iconName)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(PBTheme.accentBlue)
-                    )
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(PBTheme.ink)
-                        .lineLimit(2)
+            if !store.connectedDevices.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        Text(item.sourceDevice)
-                        Text("•")
-                        Text(item.timestamp.relativeTimeString())
+                        ForEach(store.connectedDevices) { device in
+                            Button {
+                                store.sendQuickContext(to: device)
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "desktopcomputer").font(.system(size: 9.5))
+                                    Text(device.name).font(.system(size: 11, weight: .medium))
+                                }
+                                .foregroundStyle(.white.opacity(0.82))
+                                .padding(.horizontal, 9).padding(.vertical, 5)
+                                .background {
+                                    Capsule()
+                                        .fill(Color(white: 1, opacity: 0.09))
+                                        .overlay { Capsule().strokeBorder(Color(white: 1, opacity: 0.11), lineWidth: 0.5) }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(PBTheme.inkSoft)
                 }
-
-                Spacer()
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(PBTheme.surfaceStrong)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(PBTheme.stroke, lineWidth: 1)
-                    )
-            )
         }
-        .buttonStyle(.plain)
-=======
-        .padding(14)
+        .padding(12)
         .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(PBTheme.accentBlue.opacity(0.14))
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(CRTheme.brandElectric.opacity(0.08))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(PBTheme.accentBlue.opacity(0.28), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(CRTheme.brandElectric.opacity(0.17), lineWidth: 0.5)
                 }
         }
     }
@@ -333,188 +289,159 @@ private struct QuickHistoryRow: View {
 // MARK: - Quick Row
 
 private struct QuickRow: View {
-    let item: TimelineItem
+    let item:       TimelineItem
     @ObservedObject var store: ClipRelayStore
     var isSelected: Bool
-    @State private var isHovered = false
+    var isExpanded: Bool
+    let onTap:      () -> Void
+    let onExpand:   () -> Void
+
+    @State private var hovered = false
+
+    private var accent: Color {
+        switch item.iconName {
+        case "photo":    return CRTheme.accentPurple
+        case "doc.fill": return CRTheme.accentIndigo
+        case "wifi":     return CRTheme.accentGreen
+        default:         return CRTheme.brandElectric
+        }
+    }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            // Icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-                    .frame(width: 32, height: 32)
-                Image(systemName: item.iconName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.70))
-                    .symbolRenderingMode(.hierarchical)
-            }
-
-            // Text
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.title)
-                    .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                HStack(spacing: 5) {
-                    Text(item.typeLabel)
-                    Text("·").opacity(0.4)
-                    Text(item.sourceDevice)
-                        .lineLimit(1).truncationMode(.middle)
-                    Text("·").opacity(0.4)
-                    Text(item.timestamp.relativeTimeString())
+        VStack(alignment: .leading, spacing: 0) {
+            // Main row
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(accent.opacity(isSelected ? 0.22 : 0.10))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: item.iconName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(accent).symbolRenderingMode(.hierarchical)
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.40))
-            }
 
-            Spacer(minLength: 0)
-
-            // Hover actions
-            if isHovered {
-                HStack(spacing: 6) {
-                    Button { store.copyTimelineItem(item) } label: {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.system(size: 12, weight: .semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(isSelected ? 1.0 : 0.82))
+                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(item.typeLabel).foregroundStyle(accent.opacity(0.70))
+                        Text("·").foregroundStyle(Color(white: 1, opacity: 0.18)).font(.system(size: 9))
+                        Text(item.sourceDevice).lineLimit(1).truncationMode(.middle)
+                        Text("·").foregroundStyle(Color(white: 1, opacity: 0.18)).font(.system(size: 9))
+                        Text(item.timestamp.relativeTimeString())
                     }
-                    .buttonStyle(QuickActionButton())
+                    .font(.system(size: 10.5)).foregroundStyle(Color(white: 1, opacity: 0.36))
+                }
 
-                    if !store.connectedDevices.isEmpty {
-                        Menu {
-                            Button("Send to all") { store.sendTimelineItem(item, to: nil) }
-                            Divider()
-                            ForEach(store.connectedDevices) { d in
-                                Button(d.name) { store.sendTimelineItem(item, to: d) }
+                Spacer(minLength: 0)
+
+                // Right actions — visible on select/hover
+                if isSelected || hovered {
+                    HStack(spacing: 5) {
+                        // Expand preview (text items only)
+                        if item.fullText != nil {
+                            Button {
+                                onExpand()
+                            } label: {
+                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(Color(white: 1, opacity: 0.40))
                             }
-                        } label: {
-                            Image(systemName: "paperplane.fill")
-                                .font(.system(size: 12, weight: .semibold))
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(QuickActionButton())
-                        .menuIndicator(.hidden)
+                        KbdChip("↵")
                     }
-
-                    Button { store.pinTimelineItem(item, pinned: !item.pinned) } label: {
-                        Image(systemName: item.pinned ? "pin.slash" : "pin.fill")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .buttonStyle(QuickActionButton())
+                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
                 }
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else if item.pinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(PBTheme.accentGold)
-                    .rotationEffect(.degrees(45))
+
+                if item.pinned && !(isSelected || hovered) {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(CRTheme.accentGold.opacity(0.70))
+                        .rotationEffect(.degrees(45))
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+
+            // Expanded preview
+            if isExpanded, let preview = item.fullText, !preview.isEmpty {
+                Text(preview)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(Color(white: 1, opacity: 0.65))
+                    .padding(.horizontal, 10).padding(.bottom, 9)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
         .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isHovered || isSelected
-                      ? Color.white.opacity(0.08)
-                      : Color.clear)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected
+                      ? Color(white: 1, opacity: 0.095)
+                      : (hovered ? Color(white: 1, opacity: 0.042) : .clear))
         }
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .animation(.spring(response: 0.20, dampingFraction: 0.8), value: isHovered)
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
-        .contextMenu {
-            Button("Copy to this Mac") { store.copyTimelineItem(item) }
-            Menu("Send to device") {
-                Button("Send to all devices") { store.sendTimelineItem(item, to: nil) }
-<<<<<<< HEAD
-                ForEach(store.connectedDevices) { device in
-                    Button(device.name) { store.sendTimelineItem(item, to: device) }
-                }
-            }
-            Button(item.pinned ? "Unpin" : "Pin") {
-                store.pinTimelineItem(item, pinned: !item.pinned)
-            }
-            Button("Delete", role: .destructive) {
-                store.deleteTimelineItem(item)
-            }
-        }
-    }
-}
-=======
-                Divider()
-                ForEach(store.connectedDevices) { d in
-                    Button(d.name) { store.sendTimelineItem(item, to: d) }
-                }
-            }
-            Divider()
-            Button(item.pinned ? "Unpin" : "Pin") {
-                store.pinTimelineItem(item, pinned: !item.pinned)
-            }
-            Button("Delete", role: .destructive) { store.deleteTimelineItem(item) }
-        }
-    }
-}
-
-// MARK: - Quick Action Button Style
-
-private struct QuickActionButton: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(.white.opacity(configuration.isPressed ? 0.5 : 0.70))
-            .frame(width: 28, height: 28)
-            .background {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color.white.opacity(configuration.isPressed ? 0.18 : 0.10))
-            }
-            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
-            .animation(.spring(response: 0.18, dampingFraction: 0.8), value: configuration.isPressed)
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onTapGesture { onTap() }
+        .onHover { hovered = $0 }
+        .animation(.crFast, value: isSelected)
+        .animation(.crFast, value: hovered)
     }
 }
 
 // MARK: - Empty State
 
-private struct QuickEmptyState: View {
-    let hasSearch: Bool
-
+private struct QAEmptyState: View {
+    var hasSearch: Bool
     var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: hasSearch ? "magnifyingglass" : "clock.arrow.circlepath")
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(.white.opacity(0.25))
-            Text(hasSearch ? "Nothing matched" : "No history yet")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.50))
-            Text(hasSearch
-                 ? "Try a shorter search phrase."
-                 : "Copied items will appear here once the daemon is running.")
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.30))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
+        VStack(spacing: 11) {
+            Image(systemName: hasSearch ? "magnifyingglass" : "doc.on.clipboard")
+                .font(.system(size: 26, weight: .ultraLight))
+                .foregroundStyle(Color(white: 1, opacity: 0.16))
+                .symbolRenderingMode(.hierarchical)
+            Text(hasSearch ? "No results" : "Clipboard is empty")
+                .font(.system(size: 13.5, weight: .medium))
+                .foregroundStyle(Color(white: 1, opacity: 0.32))
+            if !hasSearch {
+                Text("Copy something to get started")
+                    .font(.system(size: 12)).foregroundStyle(Color(white: 1, opacity: 0.18))
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 48)
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.vertical, 44)
     }
 }
 
-// MARK: - NSVisualEffectView wrapper
+// MARK: - Footer
 
-private struct VisualEffectBackground: NSViewRepresentable {
-    let material: NSVisualEffectView.Material
-    let blendingMode: NSVisualEffectView.BlendingMode
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let v = NSVisualEffectView()
-        v.material     = material
-        v.blendingMode = blendingMode
-        v.state        = .active
-        return v
-    }
-
-    func updateNSView(_ v: NSVisualEffectView, context: Context) {
-        v.material     = material
-        v.blendingMode = blendingMode
+private struct QAFooter: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            QAHint(keys: ["↑", "↓"], label: "navigate")
+            QAHint(keys: ["↵"],       label: "copy")
+            QAHint(keys: ["⌘", "↵"],  label: "send to all")
+            QAHint(keys: ["Space"],    label: "preview")
+            Spacer()
+            QAHint(keys: ["Esc"], label: "close")
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background {
+            Rectangle()
+                .fill(Color(white: 1, opacity: 0.022))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color(white: 1, opacity: 0.07)).frame(height: 0.5)
+                }
+        }
     }
 }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+
+private struct QAHint: View {
+    let keys: [String]; let label: String
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(keys, id: \.self) { KbdChip($0) }
+            Text(label).font(.system(size: 10.5)).foregroundStyle(Color(white: 1, opacity: 0.20))
+        }
+    }
+}

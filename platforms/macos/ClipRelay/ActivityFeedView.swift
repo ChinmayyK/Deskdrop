@@ -1,147 +1,104 @@
-// ActivityFeedView.swift
-<<<<<<< HEAD
-// ClipRelay — macOS Timeline-First Clipboard & Activity Feed
-//
-// Shows all cross-device events in reverse-chronological order.
-// Remote clipboard items display an "Apply" button instead of auto-overwriting.
-// File transfers show progress bars and Accept/Reject actions.
+// ActivityFeedView.swift — ClipRelay macOS v4
+// Live activity feed: day-grouped rows, inline transfer progress, clipboard policy.
 
 import SwiftUI
 
-struct ActivityFeedView: View {
-    @EnvironmentObject var store: ClipRelayStore
-    @State private var searchText = ""
-
-    private var filteredEntries: [IpcActivityEntry] {
-        if searchText.isEmpty { return store.activityFeed }
-        return store.activityFeed.filter {
-            $0.summary.localizedCaseInsensitiveContains(searchText) ||
-            $0.device_name.localizedCaseInsensitiveContains(searchText) ||
-            ($0.text_preview?.localizedCaseInsensitiveContains(searchText) ?? false)
-        }
-=======
-// ClipRelay — macOS Activity Feed & Clipboard Policy panel
-
-import SwiftUI
-
-// MARK: - Activity Feed
+// MARK: - Activity Feed Root
 
 struct ActivityFeedView: View {
     @EnvironmentObject var store: ClipRelayStore
-    @State private var searchText = ""
+    @State private var searchText  = ""
     @State private var filterKind: KindFilter = .all
+    @State private var expandedID: UUID?       = nil
+
+    // ── Computed feed ─────────────────────────────────────────────────────────
 
     private var filteredEntries: [IpcActivityEntry] {
         var entries = store.activityFeed
-        if filterKind != .all {
-            entries = entries.filter { filterKind.matches($0.kind) }
-        }
+        if filterKind != .all { entries = entries.filter { filterKind.matches($0.kind) } }
         if !searchText.isEmpty {
             entries = entries.filter {
-                $0.summary.localizedCaseInsensitiveContains(searchText) ||
-                $0.device_name.localizedCaseInsensitiveContains(searchText) ||
-                ($0.text_preview?.localizedCaseInsensitiveContains(searchText) ?? false)
+                $0.summary.localizedCaseInsensitiveContains(searchText)
+                || $0.device_name.localizedCaseInsensitiveContains(searchText)
+                || ($0.text_preview?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
         return entries
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+    }
+
+    // Group entries by calendar day
+    private var dayGroups: [(label: String, entries: [IpcActivityEntry])] {
+        let cal = Calendar.current
+        let byDay = Dictionary(grouping: filteredEntries) { entry -> Date in
+            cal.startOfDay(for: Date(timeIntervalSince1970: Double(entry.timestamp_ms) / 1000))
+        }
+        return byDay.keys.sorted(by: >).map { day in
+            let label: String
+            if cal.isDateInToday(day)          { label = "Today" }
+            else if cal.isDateInYesterday(day) { label = "Yesterday" }
+            else {
+                let f = DateFormatter()
+                let thisYear = cal.component(.year, from: Date())
+                let entryYear = cal.component(.year, from: day)
+                f.dateFormat = thisYear == entryYear ? "EEEE, MMMM d" : "MMMM d, yyyy"
+                label = f.string(from: day)
+            }
+            return (label, byDay[day]!)
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-<<<<<<< HEAD
-            // ── Search bar ────────────────────────────────────────────────────
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                    .font(.caption)
-                TextField("Filter activity…", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.callout)
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
+            FeedToolbar(searchText: $searchText, filterKind: $filterKind,
+                        resultCount: filteredEntries.count)
+            CRDivider()
+
+            // Active file transfers
+            if !store.activeTransfers.isEmpty && searchText.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(store.activeTransfers) { transfer in
+                        FileTransferBanner(transfer: transfer)
+                        CRDivider().padding(.leading, 54)
                     }
-                    .buttonStyle(.plain)
                 }
+                .background(CRTheme.accentIndigo.opacity(0.030))
+                CRDivider()
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color(NSColor.controlBackgroundColor))
 
-            Divider()
-
-            // ── Pending clipboard items banner ────────────────────────────────
-=======
-            // ── Toolbar ───────────────────────────────────────────────────────
-            FeedToolbar(searchText: $searchText, filterKind: $filterKind)
-
-            Divider()
-
-            // ── Pending clipboard banner ──────────────────────────────────────
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+            // Pending clipboard banner
             let pending = store.activityFeed.filter { $0.isApplicable }
             if !pending.isEmpty && searchText.isEmpty {
                 PendingClipboardBanner(items: pending)
-                Divider()
+                CRDivider()
             }
 
-<<<<<<< HEAD
-            // ── Active file transfers ─────────────────────────────────────────
-=======
-            // ── Active transfers ──────────────────────────────────────────────
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
-            if !store.activeTransfers.isEmpty && searchText.isEmpty {
-                ForEach(store.activeTransfers) { transfer in
-                    FileTransferRowView(transfer: transfer)
-                    Divider()
-                }
-            }
-
-<<<<<<< HEAD
-            // ── Feed entries ──────────────────────────────────────────────────
+            // Feed content
             if filteredEntries.isEmpty {
-                emptyState
-=======
-            // ── Feed ──────────────────────────────────────────────────────────
-            if filteredEntries.isEmpty {
-                EmptyFeedState(hasSearch: !searchText.isEmpty || filterKind != .all)
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+                FeedEmptyState(hasFilter: !searchText.isEmpty || filterKind != .all)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(filteredEntries) { entry in
-                            ActivityEntryRowView(entry: entry)
-<<<<<<< HEAD
-                            Divider().padding(.leading, 40)
-=======
-                            Divider().padding(.leading, 56)
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(dayGroups.enumerated()), id: \.offset) { _, group in
+                            // Day header
+                            FeedDayHeader(label: group.label)
+                            ForEach(group.entries) { entry in
+                                ActivityEntryRow(
+                                    entry: entry,
+                                    isExpanded: expandedID == entry.uuid,
+                                    onToggleExpand: {
+                                        withAnimation(.crSpring) {
+                                            expandedID = expandedID == entry.uuid ? nil : entry.uuid
+                                        }
+                                    }
+                                )
+                                CRDivider().padding(.leading, 54).opacity(0.50)
+                            }
                         }
                     }
                 }
             }
         }
-<<<<<<< HEAD
-        .frame(minWidth: 340, minHeight: 400)
-        .task { await store.refreshActivityFeed() }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.largeTitle)
-                .foregroundColor(.secondary)
-            Text("No activity yet")
-                .font(.subheadline)
-            Text("Clipboard copies and file transfers across devices will appear here.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-=======
-        .frame(minWidth: 360, minHeight: 440)
+        .frame(minWidth: 380, minHeight: 480)
         .task { await store.refreshActivityFeed() }
     }
 }
@@ -151,54 +108,40 @@ struct ActivityFeedView: View {
 private struct FeedToolbar: View {
     @Binding var searchText: String
     @Binding var filterKind: KindFilter
+    let resultCount: Int
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Search
-            HStack(spacing: 7) {
-                Image(systemName: "magnifyingglass")
-                    .font(.caption)
-                    .foregroundStyle(PBTheme.inkSoft)
-                TextField("Filter activity…", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.callout)
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(PBTheme.inkSoft)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(PBTheme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(PBTheme.stroke, lineWidth: 0.5)
-            }
+        HStack(spacing: 10) {
+            CRSearchField(placeholder: "Filter activity…", text: $searchText)
 
-            // Kind filter pills
-            HStack(spacing: 4) {
+            HStack(spacing: 2) {
                 ForEach(KindFilter.allCases) { kind in
-                    Button(kind.label) { filterKind = kind }
-                        .font(.system(size: 11.5, weight: filterKind == kind ? .semibold : .regular))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
+                    Button(kind.label) { withAnimation(.crFast) { filterKind = kind } }
+                        .font(.system(size: 12, weight: filterKind == kind ? .semibold : .regular))
+                        .padding(.horizontal, 9).padding(.vertical, 4.5)
                         .background {
                             if filterKind == kind {
-                                Capsule().fill(PBTheme.accentBlue.opacity(0.12))
+                                Capsule()
+                                    .fill(CRTheme.brandElectric.opacity(0.09))
+                                    .overlay { Capsule().strokeBorder(CRTheme.brandElectric.opacity(0.20), lineWidth: 0.5) }
                             }
                         }
-                        .foregroundStyle(filterKind == kind ? PBTheme.accentBlue : PBTheme.inkSoft)
-                        .buttonStyle(.plain)
+                        .foregroundStyle(filterKind == kind ? CRTheme.brandElectric : CRTheme.inkSoft)
+                        .buttonStyle(.plain).animation(.crFast, value: filterKind)
                 }
             }
+
+            Spacer()
+
+            if !searchText.isEmpty || filterKind != .all {
+                Text("\(resultCount)")
+                    .font(.system(size: 11, design: .rounded)).foregroundStyle(CRTheme.inkSubtle)
+                    .transition(.opacity)
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(PBTheme.surfaceElevated)
+        .padding(.horizontal, 13).padding(.vertical, 9)
+        .background(CRTheme.surfaceElevated)
+        .animation(.crFast, value: searchText.isEmpty && filterKind == .all)
     }
 }
 
@@ -207,647 +150,383 @@ private enum KindFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .all:       return "All"
-        case .clipboard: return "Clipboard"
-        case .files:     return "Files"
-        case .peers:     return "Peers"
+        case .all: return "All"; case .clipboard: return "Clipboard"
+        case .files: return "Files"; case .peers: return "Peers"
         }
     }
     func matches(_ kind: String) -> Bool {
         switch self {
-        case .all: return true
+        case .all:       return true
         case .clipboard: return kind.contains("clipboard")
-        case .files:     return kind.contains("file") || kind.contains("transfer")
-        case .peers:     return kind.contains("peer") || kind.contains("sync")
+        case .files:     return kind.contains("file")
+        case .peers:     return kind.contains("peer")
         }
+    }
+}
+
+// MARK: - Day Header
+
+private struct FeedDayHeader: View {
+    let label: String
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold)).foregroundStyle(CRTheme.inkSubtle)
+            Rectangle().fill(CRTheme.stroke.opacity(0.35)).frame(height: 0.5)
+        }
+        .padding(.horizontal, 13).padding(.vertical, 7)
     }
 }
 
 // MARK: - Empty State
 
-private struct EmptyFeedState: View {
-    let hasSearch: Bool
+private struct FeedEmptyState: View {
+    var hasFilter: Bool
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: hasSearch ? "magnifyingglass" : "clock.arrow.circlepath")
-                .font(.largeTitle)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(PBTheme.accentBlue)
-            Text(hasSearch ? "Nothing matched" : "No activity yet")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(PBTheme.ink)
-            Text(hasSearch
-                 ? "Try adjusting your filter or search term."
-                 : "Clipboard copies and file transfers across devices will appear here.")
-                .font(.caption)
-                .foregroundStyle(PBTheme.inkSoft)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 260)
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+        VStack(spacing: 14) {
+            ZStack {
+                Circle().fill(CRTheme.inkSubtle.opacity(0.06)).frame(width: 64, height: 64)
+                Image(systemName: hasFilter ? "line.3.horizontal.decrease.circle" : "tray")
+                    .font(.system(size: 24, weight: .light)).foregroundStyle(CRTheme.inkSubtle)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            VStack(spacing: 4) {
+                Text(hasFilter ? "No matching activity" : "No activity yet")
+                    .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                Text(hasFilter
+                     ? "Try clearing the search or changing the filter"
+                     : "Clipboard events and file transfers appear here in real time")
+                    .font(.system(size: 12)).foregroundStyle(CRTheme.inkSoft)
+                    .multilineTextAlignment(.center).lineSpacing(1.5).frame(maxWidth: 260)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.vertical, 48)
     }
 }
 
-<<<<<<< HEAD
-// ── Pending clipboard items banner ─────────────────────────────────────────────
-=======
 // MARK: - Pending Clipboard Banner
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 
 private struct PendingClipboardBanner: View {
     let items: [IpcActivityEntry]
     @EnvironmentObject var store: ClipRelayStore
 
     var body: some View {
-<<<<<<< HEAD
-        VStack(alignment: .leading, spacing: 4) {
-            Label("\(items.count) clipboard item\(items.count == 1 ? "" : "s") waiting",
-                  systemImage: "doc.on.clipboard")
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.accentColor)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(items) { item in
-                        PendingClipboardChip(entry: item)
-                    }
-                }
+        HStack(spacing: 11) {
+            ZStack {
+                Circle().fill(CRTheme.brandElectric.opacity(0.10)).frame(width: 30, height: 30)
+                Image(systemName: "doc.on.clipboard.fill")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.brandElectric)
             }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color.accentColor.opacity(0.06))
-    }
-}
-
-private struct PendingClipboardChip: View {
-    let entry: IpcActivityEntry
-    @EnvironmentObject var store: ClipRelayStore
-    @State private var applying = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(entry.device_name)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                Text(entry.text_preview ?? "Clipboard item")
-                    .font(.caption)
-                    .lineLimit(1)
-            }
-            Button {
-                applying = true
-                Task {
-                    await store.applyClipboard(entry: entry)
-                    applying = false
-                }
-            } label: {
-                if applying {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Text("Apply")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.mini)
-            .disabled(applying)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(6)
-        .overlay(RoundedRectangle(cornerRadius: 6)
-            .stroke(Color.accentColor.opacity(0.3), lineWidth: 1))
-    }
-}
-
-// ── File transfer progress row ─────────────────────────────────────────────────
-=======
-        HStack(spacing: 12) {
-            Image(systemName: "doc.on.clipboard.fill")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(PBTheme.accentBlue)
-
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(items.count) pending clipboard item\(items.count == 1 ? "" : "s")")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PBTheme.ink)
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
                 if let first = items.first {
                     Text("Latest from \(first.device_name)")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(PBTheme.inkSoft)
+                        .font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft)
                 }
             }
             Spacer()
-            Button("Apply latest") {
+            Button("Apply Latest") {
                 if let first = items.first { Task { await store.applyClipboard(entry: first) } }
             }
-            .buttonStyle(PBPrimaryButtonStyle())
+            .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(PBTheme.accentBlue.opacity(0.06))
+        .padding(.horizontal, 13).padding(.vertical, 10)
+        .background(CRTheme.brandElectric.opacity(0.04))
     }
 }
 
 // MARK: - Activity Entry Row
 
-struct ActivityEntryRowView: View {
-    let entry: IpcActivityEntry
+struct ActivityEntryRow: View {
+    let entry:          IpcActivityEntry
+    var isExpanded:     Bool
+    let onToggleExpand: () -> Void
+
     @EnvironmentObject var store: ClipRelayStore
-    @State private var expanded = false
-    @State private var applying = false
+    @State private var applying  = false
     @State private var isHovered = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // ── Device avatar ─────────────────────────────────────────────────
+        HStack(alignment: .top, spacing: 11) {
+            // Kind icon
             ZStack {
-                Circle()
-                    .fill(kindColor.opacity(0.12))
-                    .frame(width: 32, height: 32)
+                Circle().fill(kindColor.opacity(0.10)).frame(width: 30, height: 30)
                 Image(systemName: kindIcon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(kindColor)
-                    .symbolRenderingMode(.hierarchical)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(kindColor).symbolRenderingMode(.hierarchical)
             }
+            .padding(.top, 1)
 
-            // ── Content ───────────────────────────────────────────────────────
+            // Content
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+                // Header line
+                HStack(spacing: 0) {
                     Text(entry.device_name)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(PBTheme.ink)
-                    Text("·").foregroundStyle(PBTheme.inkSubtle)
+                        .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                    Text("  ·  ").foregroundStyle(CRTheme.inkFaint).font(.system(size: 10))
                     Text(formattedTime(entry.timestamp_ms))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(PBTheme.inkSoft)
+                        .font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft)
+                    Spacer(minLength: 0)
                 }
 
+                // Summary
                 Text(entry.summary)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(PBTheme.ink)
-                    .lineLimit(expanded ? nil : 2)
+                    .font(.system(size: 12.5)).foregroundStyle(CRTheme.ink)
+                    .lineLimit(isExpanded ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
 
+                // Relay path
                 if !entry.relay_path.isEmpty {
-                    Label(entry.relay_path.joined(separator: " → "), systemImage: "arrow.triangle.branch")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(PBTheme.inkSubtle)
-                }
-
-                if let preview = entry.text_preview, !preview.isEmpty, expanded {
-                    Text(preview)
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(PBTheme.ink)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(PBTheme.surface)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .strokeBorder(PBTheme.stroke, lineWidth: 0.5)
-                                }
-                        }
-                        .onTapGesture { expanded = false }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: expanded)
-
-            Spacer()
-
-            // ── Apply / status ─────────────────────────────────────────────────
-            if entry.isApplicable {
-                Button {
-                    applying = true
-                    Task { await store.applyClipboard(entry: entry); applying = false }
-                } label: {
-                    if applying {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        Label("Apply", systemImage: "doc.on.clipboard.fill")
-                            .font(.system(size: 11.5, weight: .semibold))
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 9)).foregroundStyle(CRTheme.inkSubtle)
+                        Text(entry.relay_path.joined(separator: " → "))
+                            .font(.system(size: 10.5)).foregroundStyle(CRTheme.inkSubtle)
                     }
                 }
-                .buttonStyle(PBPrimaryButtonStyle())
-                .controlSize(.small)
-                .disabled(applying)
-            } else if entry.applied_locally {
-                Label("Applied", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(PBTheme.accentGreen)
+
+                // Expanded text preview
+                if isExpanded, let preview = entry.text_preview, !preview.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Text(preview)
+                            .font(.system(size: 10.5, design: .monospaced)).foregroundStyle(CRTheme.ink)
+                            .padding(.horizontal, 9).padding(.vertical, 7)
+                    }
+                    .background {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(CRTheme.surface)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(CRTheme.stroke.opacity(0.40), lineWidth: 0.5)
+                            }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // Kind tag + expand hint
+                HStack(spacing: 6) {
+                    CRTag(text: kindLabel, tint: kindColor)
+                    if entry.text_preview != nil {
+                        Button(isExpanded ? "Collapse" : "Expand") { onToggleExpand() }
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .buttonStyle(.plain)
+                    }
+                }
+            }
+            .animation(.crSpring, value: isExpanded)
+
+            Spacer(minLength: 0)
+
+            // Apply / applied badge
+            VStack(alignment: .trailing, spacing: 4) {
+                if entry.isApplicable {
+                    Button {
+                        applying = true
+                        Task { await store.applyClipboard(entry: entry); applying = false }
+                    } label: {
+                        if applying {
+                            ProgressView().controlSize(.mini).padding(.horizontal, 6)
+                        } else {
+                            Label("Apply", systemImage: "doc.on.clipboard.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                    }
+                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                    .disabled(applying)
+                } else if entry.applied_locally {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10.5)).foregroundStyle(CRTheme.accentGreen)
+                        Text("Applied")
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(CRTheme.accentGreen)
+                    }
+                }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(isHovered ? PBTheme.surface.opacity(0.5) : .clear)
+        .padding(.horizontal, 13).padding(.vertical, 11)
+        .background(isHovered ? CRTheme.rowHover : .clear)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture { if entry.text_preview != nil { expanded.toggle() } }
+        .animation(.crFast, value: isHovered)
     }
+
+    // MARK: Kind mapping (string → SF Symbol, colour, label)
 
     private var kindIcon: String {
         switch entry.kind {
         case "remote_clipboard_available", "clipboard_text": return "doc.on.clipboard"
-        case "clipboard_image":          return "photo"
-        case "file_transfer_started":    return "arrow.down.circle"
-        case "file_transfer_complete":   return "checkmark.circle.fill"
-        case "file_transfer_failed":     return "xmark.circle"
-        case "peer_connected":           return "wifi"
-        case "peer_disconnected":        return "wifi.slash"
-        case "sync_paused":              return "pause.circle"
-        case "sync_resumed":             return "play.circle"
-        case "clipboard_applied":        return "checkmark.circle"
-        default:                         return "info.circle"
+        case "clipboard_image":        return "photo"
+        case "file_transfer_started":  return "arrow.down.circle"
+        case "file_transfer_complete": return "checkmark.circle.fill"
+        case "file_transfer_failed":   return "xmark.circle"
+        case "peer_connected":         return "wifi"
+        case "peer_disconnected":      return "wifi.slash"
+        case "sync_paused":            return "pause.circle"
+        case "sync_resumed":           return "play.circle"
+        case "clipboard_applied":      return "checkmark.circle"
+        default:                       return "info.circle"
+        }
+    }
+
+    private var kindLabel: String {
+        switch entry.kind {
+        case "remote_clipboard_available":
+            return entry.applied_locally ? "Applied" : "Pending"
+        case "clipboard_text":        return "Text"
+        case "clipboard_image":       return "Image"
+        case "file_transfer_started": return "Transfer"
+        case "file_transfer_complete":return "Complete"
+        case "file_transfer_failed":  return "Failed"
+        case "peer_connected":        return "Connected"
+        case "peer_disconnected":     return "Disconnected"
+        case "sync_paused":           return "Paused"
+        case "sync_resumed":          return "Resumed"
+        default:                      return "Event"
         }
     }
 
     private var kindColor: Color {
         switch entry.kind {
-        case "remote_clipboard_available":  return entry.applied_locally ? PBTheme.accentGreen : PBTheme.accentBlue
-        case "file_transfer_complete":      return PBTheme.accentGreen
-        case "file_transfer_failed":        return PBTheme.accentRed
-        case "peer_connected":              return PBTheme.accentGreen
-        case "peer_disconnected":           return PBTheme.inkSoft
-        case "sync_paused":                 return PBTheme.accentOrange
-        default:                            return PBTheme.inkSoft
+        case "remote_clipboard_available":
+            return entry.applied_locally ? CRTheme.accentGreen : CRTheme.brandElectric
+        case "file_transfer_complete": return CRTheme.accentGreen
+        case "file_transfer_failed":   return CRTheme.accentRed
+        case "peer_connected":         return CRTheme.accentGreen
+        case "peer_disconnected":      return CRTheme.inkSoft
+        case "sync_paused":            return CRTheme.accentOrange
+        case "sync_resumed":           return CRTheme.accentGreen
+        default:                       return CRTheme.inkSoft
         }
     }
 
     private func formattedTime(_ ms: Int64) -> String {
-        Date(timeIntervalSince1970: Double(ms) / 1000.0).relativeTimeString()
+        Date(timeIntervalSince1970: Double(ms) / 1000).relativeTimeString()
     }
 }
 
-// MARK: - File Transfer Row
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+// MARK: - IpcActivityEntry identity helper
 
-struct FileTransferRowView: View {
+private extension IpcActivityEntry {
+    // Stable UUID derived from the int64 id for use as SwiftUI identity
+    var uuid: UUID { UUID(uuidString: String(format: "%08X-0000-0000-0000-%012X", id >> 32, id & 0xFFFFFFFFFFFF)) ?? UUID() }
+}
+
+// MARK: - File Transfer Banner
+
+struct FileTransferBanner: View {
     let transfer: FileTransferState
     @EnvironmentObject var store: ClipRelayStore
 
     var body: some View {
-<<<<<<< HEAD
-        HStack(spacing: 10) {
-            // Icon
-            Image(systemName: transferIcon)
-                .foregroundColor(transferColor)
-                .font(.title3)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(transfer.fileName)
-                        .font(.callout)
-                        .lineLimit(1)
-                    Spacer()
-                    Text(transfer.formattedSize)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("From \(transfer.fromDeviceName)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    statusText
-                }
-                if case .transferring = transfer.status {
-                    ProgressView(value: Double(transfer.percent), total: 100)
-                        .progressViewStyle(.linear)
-                        .tint(.accentColor)
-=======
-        HStack(spacing: 12) {
+        HStack(spacing: 11) {
             ZStack {
-                Circle()
-                    .fill(PBTheme.accentIndigo.opacity(0.12))
-                    .frame(width: 32, height: 32)
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(PBTheme.accentIndigo)
+                Circle().fill(CRTheme.accentIndigo.opacity(0.10)).frame(width: 30, height: 30)
+                Image(systemName: transferIcon)
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.accentIndigo)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack {
                     Text(transfer.fileName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(PBTheme.ink)
-                        .lineLimit(1)
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink).lineLimit(1)
                     Spacer()
                     Text(transfer.formattedSize)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(PBTheme.inkSoft)
+                        .font(.system(size: 10.5, design: .monospaced)).foregroundStyle(CRTheme.inkSoft)
                 }
 
-                HStack(spacing: 8) {
-                    Text("From \(transfer.fromDeviceName)")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(PBTheme.inkSoft)
-
-                    if case .transferring = transfer.status {
-                        ProgressView(value: Double(transfer.percent), total: 100)
-                            .progressViewStyle(.linear)
-                            .frame(maxWidth: 120)
-                        Text("\(transfer.percent)%")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(PBTheme.inkSoft)
+                if case .transferring = transfer.status {
+                    VStack(alignment: .leading, spacing: 3) {
+                        CRProgressBar(value: Double(transfer.percent) / 100.0, tint: CRTheme.accentIndigo)
+                        HStack {
+                            Text("From \(transfer.fromDeviceName)")
+                            Spacer()
+                            Text("\(transfer.percent)%")
+                        }
+                        .font(.system(size: 10.5)).foregroundStyle(CRTheme.inkSoft)
                     }
-                }
-
-                if case .failed(let reason) = transfer.status {
-                    Label(reason, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(PBTheme.accentOrange)
-                } else if case .complete(let path) = transfer.status {
-                    Label("Saved to \(path)", systemImage: "checkmark.circle.fill")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(PBTheme.accentGreen)
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+                } else {
+                    Text(statusText).font(.system(size: 11.5)).foregroundStyle(statusColor)
                 }
             }
 
-            // Actions
-<<<<<<< HEAD
-            actionButtons
+            // Action buttons
+            actionGroup
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        .padding(.horizontal, 13).padding(.vertical, 10)
     }
 
-    @ViewBuilder
-    private var actionButtons: some View {
+    @ViewBuilder private var actionGroup: some View {
         switch transfer.status {
         case .incoming:
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 Button("Accept") { store.acceptFileTransfer(transfer) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
                 Button("Reject") { store.rejectFileTransfer(transfer) }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .buttonStyle(CRDestructiveButtonStyle())
             }
         case .transferring:
             Button("Cancel") { store.cancelFileTransfer(transfer) }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-        case .complete(let path):
-            Button {
-                NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
-            } label: {
-                Label("Show in Finder", systemImage: "folder")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+                .buttonStyle(CRSecondaryButtonStyle())
         default:
             EmptyView()
         }
     }
 
-    private var statusText: some View {
-        Group {
-            switch transfer.status {
-            case .incoming:      Text("Incoming").foregroundColor(.orange)
-            case .transferring:  Text("\(transfer.percent)%").foregroundColor(.accentColor)
-            case .verifying:     Text("Verifying…").foregroundColor(.secondary)
-            case .complete:      Text("Complete").foregroundColor(.green)
-            case .failed(let r): Text("Failed: \(r)").foregroundColor(.red)
-            case .cancelled:     Text("Cancelled").foregroundColor(.secondary)
-            }
-        }
-        .font(.caption2)
-        .fontWeight(.medium)
-    }
-
     private var transferIcon: String {
         switch transfer.status {
-        case .incoming:      return "arrow.down.circle"
-        case .transferring:  return "arrow.down.circle.fill"
-        case .complete:      return "checkmark.circle.fill"
-        case .failed:        return "xmark.circle.fill"
-        case .cancelled:     return "minus.circle"
-        default:             return "doc.circle"
+        case .incoming:     return "arrow.down.circle"
+        case .transferring: return "arrow.down.circle.fill"
+        case .complete:     return "checkmark.circle.fill"
+        case .failed:       return "xmark.circle.fill"
         }
     }
 
-    private var transferColor: Color {
+    private var statusText: String {
         switch transfer.status {
-        case .incoming:      return .orange
-        case .transferring:  return .accentColor
-        case .complete:      return .green
-        case .failed:        return .red
-        default:             return .secondary
-        }
-    }
-}
-
-// ── Single activity entry row ──────────────────────────────────────────────────
-
-private struct ActivityEntryRowView: View {
-    let entry: IpcActivityEntry
-    @EnvironmentObject var store: ClipRelayStore
-    @State private var applying = false
-    @State private var expanded = false
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            // Kind icon
-            Image(systemName: kindIcon)
-                .foregroundColor(kindColor)
-                .font(.callout)
-                .frame(width: 20, alignment: .center)
-                .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 2) {
-                // Summary line
-                Text(entry.summary)
-                    .font(.callout)
-                    .lineLimit(expanded ? nil : 2)
-
-                // Relay path (mesh traceability)
-                if !entry.relay_path.isEmpty {
-                    Text(entry.relay_path.joined(separator: " → "))
-                        .font(.caption2)
-                        .foregroundColor(.secondary.opacity(0.7))
-                }
-
-                // Text preview for clipboard items
-                if let preview = entry.text_preview, !preview.isEmpty, expanded {
-                    Text(preview)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(6)
-                        .background(Color(NSColor.textBackgroundColor))
-                        .cornerRadius(4)
-                        .onTapGesture { expanded = false }
-                }
-
-                // Timestamp
-                Text(formattedTime(entry.timestamp_ms))
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(0.6))
-            }
-
-            Spacer()
-
-            // Apply button for unapplied remote clipboard items
-            if entry.isApplicable {
-                Button {
-                    applying = true
-                    Task {
-                        await store.applyClipboard(entry: entry)
-                        applying = false
-                    }
-                } label: {
-                    if applying {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        Label("Apply", systemImage: "doc.on.clipboard")
-                            .font(.caption)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.mini)
-                .disabled(applying)
-            } else if entry.applied_locally {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.caption)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if entry.text_preview != nil { expanded.toggle() }
+        case .complete(let path): return "Saved to \(path)"
+        case .failed(let reason): return reason
+        default: return ""
         }
     }
 
-    private var kindIcon: String {
-        switch entry.kind {
-        case "remote_clipboard_available", "clipboard_text":   return "doc.on.clipboard"
-        case "clipboard_image":                                return "photo"
-        case "file_transfer_started":                          return "arrow.down.circle"
-        case "file_transfer_complete":                         return "checkmark.circle.fill"
-        case "file_transfer_failed":                           return "xmark.circle"
-        case "peer_connected":                                 return "wifi"
-        case "peer_disconnected":                              return "wifi.slash"
-        case "sync_paused":                                    return "pause.circle"
-        case "sync_resumed":                                   return "play.circle"
-        case "clipboard_applied":                              return "checkmark.circle"
-        default:                                               return "info.circle"
+    private var statusColor: Color {
+        switch transfer.status {
+        case .complete: return CRTheme.accentGreen
+        case .failed:   return CRTheme.accentOrange
+        default:        return CRTheme.inkSoft
         }
-    }
-
-    private var kindColor: Color {
-        switch entry.kind {
-        case "remote_clipboard_available":  return entry.applied_locally ? .green : .accentColor
-        case "file_transfer_complete":      return .green
-        case "file_transfer_failed":        return .red
-        case "peer_connected":              return .green
-        case "peer_disconnected":           return .secondary
-        case "sync_paused":                 return .orange
-        default:                            return .secondary
-        }
-    }
-
-    private func formattedTime(_ ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: Double(ms) / 1000.0)
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
-}
-
-// ── Settings pane for clipboard UX preferences ────────────────────────────────
-=======
-            if case .incoming = transfer.status {
-                HStack(spacing: 8) {
-                    Button("Accept") { store.acceptFileTransfer(transfer) }
-                        .buttonStyle(PBPrimaryButtonStyle(tint: PBTheme.accentGreen))
-                    Button("Reject") { store.rejectFileTransfer(transfer) }
-                        .buttonStyle(PBDestructiveButtonStyle())
-                }
-            } else if case .transferring = transfer.status {
-                Button("Cancel") { store.cancelFileTransfer(transfer) }
-                    .buttonStyle(PBSecondaryButtonStyle())
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
     }
 }
 
 // MARK: - Clipboard Policy View
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 
 struct ClipboardPolicyView: View {
     @EnvironmentObject var store: ClipRelayStore
-    @State private var timelineFirst = true
-<<<<<<< HEAD
-    @State private var autoApply = false
-    @State private var saving = false
-=======
-    @State private var autoApply    = false
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+    @State private var timelineFirst = false
+    @State private var autoApply     = false
 
     var body: some View {
         Form {
             Section {
                 Toggle("Timeline-first mode", isOn: $timelineFirst)
-<<<<<<< HEAD
-                    .onChange(of: timelineFirst) { newValue in
-                        Task { await store.setTimelineFirstMode(enabled: newValue) }
-                    }
-                Text("Remote clipboard items appear in the feed instead of automatically overwriting your clipboard. You tap Apply to use them.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } header: {
-                Text("Clipboard Behavior")
-            }
-=======
-                    .onChange(of: timelineFirst) { Task { await store.setTimelineFirstMode(enabled: $0) } }
-                Text("Remote clipboard items appear in the feed instead of automatically overwriting your clipboard. Tap Apply to use them.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: { Text("Clipboard Behavior") }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+                    .onChange(of: timelineFirst) { v in Task { await store.setTimelineFirstMode(enabled: v) } }
+                Text("Remote clipboard items land in the activity feed instead of immediately overwriting your clipboard. Tap Apply on any item to paste it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: { Text("Clipboard Behaviour") }
 
             if timelineFirst {
                 Section {
                     Toggle("Auto-apply from trusted devices", isOn: $autoApply)
-<<<<<<< HEAD
-                        .onChange(of: autoApply) { newValue in
-                            Task { await store.setAutoApplyClipboard(enabled: newValue) }
-                        }
-                    Text("When enabled, clipboard items from trusted devices are still applied automatically. Timeline-first for all others.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } header: {
-                    Text("Auto-Apply (optional)")
-                }
-=======
-                        .onChange(of: autoApply) { Task { await store.setAutoApplyClipboard(enabled: $0) } }
-                    Text("When enabled, clipboard items from trusted devices are still applied automatically.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } header: { Text("Auto-Apply (optional)") }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
+                        .onChange(of: autoApply) { v in Task { await store.setAutoApplyClipboard(enabled: v) } }
+                    Text("Items from trusted peers still apply automatically, as if timeline-first mode were off for those devices.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } header: { Text("Auto-Apply") }
             }
         }
-        .formStyle(.grouped)
-        .padding()
-        .onAppear {
-            timelineFirst = store.clipboardPolicy.timelineFirstMode
-<<<<<<< HEAD
-            autoApply = store.clipboardPolicy.autoApply
-=======
-            autoApply     = store.clipboardPolicy.autoApply
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
-        }
+        .formStyle(.grouped).padding()
+        .onAppear { timelineFirst = store.clipboardPolicy.timelineFirstMode
+                    autoApply     = store.clipboardPolicy.autoApply }
     }
 }

@@ -4,13 +4,6 @@
 
 import Foundation
 import Combine
-<<<<<<< HEAD
-
-@MainActor
-final class ClipRelayStore: ObservableObject {
-    @Published var peers: [PeerViewModel] = []
-    @Published var timeline: [TimelineEntry] = []
-=======
 import AppKit
 
 @MainActor
@@ -18,28 +11,16 @@ final class ClipRelayStore: ObservableObject {
 
     // ── Core state ────────────────────────────────────────────────────────────
     @Published var peers: [PeerViewModel] = []
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     @Published var activeTrustPrompt: TrustPrompt? = nil
     @Published var isRunning: Bool = false
     @Published var statusLine: String = "Starting…"
     @Published var connectedCount: Int = 0
 
-<<<<<<< HEAD
-    // ── Activity feed (timeline-first clipboard + all events) ─────────────────
-=======
     // ── Activity feed ─────────────────────────────────────────────────────────
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     @Published var activityFeed: [IpcActivityEntry] = []
     @Published var activeTransfers: [FileTransferState] = []
     @Published var clipboardPolicy = ClipboardPolicy()
 
-<<<<<<< HEAD
-    private var lastActivityId: Int64 = 0
-
-    private let ipc: ClipRelayIPCClient
-    private var pollTimer: Timer?
-    private var pendingRename: PeerViewModel? = nil
-=======
     // ── Dashboard UI state ────────────────────────────────────────────────────
     @Published var selectedSection: DashboardSection = .timeline
     @Published var toasts: [ToastItem] = []
@@ -55,19 +36,12 @@ final class ClipRelayStore: ObservableObject {
     private var pollTimer: Timer?
     private var pendingRename: PeerViewModel? = nil
     private var toastWorkItems: [UUID: DispatchWorkItem] = [:]
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 
     init(ipc: ClipRelayIPCClient = .shared) {
         self.ipc = ipc
         startPolling()
     }
 
-<<<<<<< HEAD
-    // ── Polling ───────────────────────────────────────────────────────────────
-
-    private func startPolling() {
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-=======
     // MARK: - Computed / Bridging
 
     var connectionBanner: String { statusLine }
@@ -86,70 +60,12 @@ final class ClipRelayStore: ObservableObject {
 
     private func startPolling() {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
             Task { await self?.refresh() }
         }
     }
 
     func refresh() async {
         do {
-<<<<<<< HEAD
-            let status = try await ipc.status()
-            isRunning = true
-            connectedCount = status.peers.filter { $0.status == "connected" }.count
-            statusLine = connectedCount == 0
-                ? "Ready — no devices nearby"
-                : "\(connectedCount) device\(connectedCount == 1 ? "" : "s") connected"
-            peers = status.peers.map { makePeerViewModel($0) }
-        } catch {
-            isRunning = false
-            statusLine = "Daemon not running"
-        }
-    }
-
-    // ── Device lifecycle controls ─────────────────────────────────────────────
-
-    func disconnect(_ peer: PeerViewModel) {
-        Task {
-            try? await ipc.disconnectPeer(deviceId: peer.id)
-            await refresh()
-        }
-    }
-
-    func pauseSync(_ peer: PeerViewModel) {
-        Task {
-            try? await ipc.pauseSync(deviceId: peer.id)
-            await refresh()
-        }
-    }
-
-    func resumeSync(_ peer: PeerViewModel) {
-        Task {
-            try? await ipc.resumeSync(deviceId: peer.id)
-            await refresh()
-        }
-    }
-
-    func forgetDevice(_ peer: PeerViewModel) {
-        Task {
-            try? await ipc.forgetDevice(deviceId: peer.id)
-            await refresh()
-        }
-    }
-
-    func revokeTrust(_ peer: PeerViewModel) {
-        Task {
-            try? await ipc.revokeDevice(deviceId: peer.id)
-            await refresh()
-        }
-    }
-
-    func toggleAutoConnect(_ peer: PeerViewModel) {
-        Task {
-            try? await ipc.setAutoConnect(deviceId: peer.id, enabled: !peer.autoConnect)
-            await refresh()
-        }
-=======
             let s = try await ipc.status()
             isRunning      = true
             connectedCount = s.peers.filter { $0.status == "connected" }.count
@@ -199,53 +115,10 @@ final class ClipRelayStore: ObservableObject {
     func disconnect(_ peer: PeerViewModel)       { Task { try? await ipc.disconnectPeer(deviceId: peer.id); await refresh() } }
     func toggleAutoConnect(_ peer: PeerViewModel) {
         Task { try? await ipc.setAutoConnect(deviceId: peer.id, enabled: !peer.autoConnect); await refresh() }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     }
 
     func beginRename(_ peer: PeerViewModel) {
         pendingRename = peer
-<<<<<<< HEAD
-        // Trigger a rename sheet — handled by the view
-        NotificationCenter.default.post(name: .beginRename, object: peer)
-    }
-
-    func applyRename(deviceId: String, newName: String) {
-        Task {
-            try? await ipc.renameDevice(deviceId: deviceId, displayName: newName)
-            await refresh()
-        }
-    }
-
-    // ── Trust prompts ─────────────────────────────────────────────────────────
-
-    func approveTrust(_ prompt: TrustPrompt) {
-        Task {
-            try? await ipc.approveTrust(
-                deviceId: prompt.deviceId,
-                deviceName: prompt.deviceName,
-                pubkeyBytes: prompt.publicKeyBytes
-            )
-            activeTrustPrompt = nil
-            await refresh()
-        }
-    }
-
-    func rejectTrust(_ prompt: TrustPrompt) {
-        Task {
-            try? await ipc.rejectTrust(deviceId: prompt.deviceId)
-            activeTrustPrompt = nil
-        }
-    }
-
-    // ── Timeline ──────────────────────────────────────────────────────────────
-
-    func addTimelineEntry(_ entry: TimelineEntry) {
-        timeline.insert(entry, at: 0)
-        if timeline.count > 200 { timeline.removeLast() }
-    }
-
-    // ── Activity Feed ─────────────────────────────────────────────────────────
-=======
         NotificationCenter.default.post(name: .beginRename, object: peer)
     }
     func applyRename(deviceId: String, newName: String) {
@@ -345,18 +218,12 @@ final class ClipRelayStore: ObservableObject {
     }
 
     // MARK: - Activity Feed
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 
     @MainActor
     func refreshActivityFeed() async {
         do {
-<<<<<<< HEAD
-            let entries = try await ipc.activityRecent(limit: 100)
-            activityFeed = entries
-=======
             let entries    = try await ipc.activityRecent(limit: 100)
             activityFeed   = entries
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
             lastActivityId = entries.first?.id ?? 0
         } catch {}
     }
@@ -373,21 +240,13 @@ final class ClipRelayStore: ObservableObject {
         } catch {}
     }
 
-<<<<<<< HEAD
-    // ── Timeline-first clipboard ──────────────────────────────────────────────
-=======
     // MARK: - Clipboard policy
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 
     @MainActor
     func applyClipboard(entry: IpcActivityEntry) async {
         guard let hash = entry.content_hash else { return }
         do {
             try await ipc.applyClipboard(contentHash: hash)
-<<<<<<< HEAD
-            // Update local feed immediately for snappy UX.
-=======
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
             if let idx = activityFeed.firstIndex(where: { $0.id == entry.id }) {
                 activityFeed[idx].applied_locally = true
             }
@@ -406,38 +265,6 @@ final class ClipRelayStore: ObservableObject {
         try? await ipc.setAutoApplyClipboard(enabled: enabled)
     }
 
-<<<<<<< HEAD
-    // ── File Transfer ─────────────────────────────────────────────────────────
-
-    func sendFile(url: URL, toPeer deviceId: String? = nil) {
-        Task {
-            _ = try? await ipc.sendFile(url: url, targetDeviceId: deviceId)
-        }
-    }
-
-    @MainActor
-    func acceptFileTransfer(_ transfer: FileTransferState) {
-        Task {
-            try? await ipc.acceptFileTransfer(transferId: transfer.id)
-            updateTransferStatus(id: transfer.id, status: .transferring)
-        }
-    }
-
-    @MainActor
-    func rejectFileTransfer(_ transfer: FileTransferState) {
-        Task {
-            try? await ipc.rejectFileTransfer(transferId: transfer.id)
-            activeTransfers.removeAll { $0.id == transfer.id }
-        }
-    }
-
-    @MainActor
-    func cancelFileTransfer(_ transfer: FileTransferState) {
-        Task {
-            try? await ipc.cancelFileTransfer(transferId: transfer.id)
-            activeTransfers.removeAll { $0.id == transfer.id }
-        }
-=======
     // MARK: - Settings
 
     func saveSettings(_ snapshot: ClipRelaySettingsSnapshot) {
@@ -471,56 +298,16 @@ final class ClipRelayStore: ObservableObject {
     }
     @MainActor func cancelFileTransfer(_ t: FileTransferState) {
         Task { try? await ipc.cancelFileTransfer(transferId: t.id); activeTransfers.removeAll { $0.id == t.id } }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     }
 
     @MainActor
     func upsertTransfer(_ t: FileTransferState) {
-<<<<<<< HEAD
-        if let idx = activeTransfers.firstIndex(where: { $0.id == t.id }) {
-            activeTransfers[idx] = t
-        } else {
-            activeTransfers.insert(t, at: 0)
-        }
-=======
         if let idx = activeTransfers.firstIndex(where: { $0.id == t.id }) { activeTransfers[idx] = t }
         else { activeTransfers.insert(t, at: 0) }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     }
 
     @MainActor
     private func updateTransferStatus(id: String, status: FileTransferStatus) {
-<<<<<<< HEAD
-        if let idx = activeTransfers.firstIndex(where: { $0.id == id }) {
-            activeTransfers[idx] = FileTransferState(
-                id: activeTransfers[idx].id,
-                fromDeviceName: activeTransfers[idx].fromDeviceName,
-                fileName: activeTransfers[idx].fileName,
-                totalBytes: activeTransfers[idx].totalBytes,
-                bytesReceived: activeTransfers[idx].bytesReceived,
-                percent: activeTransfers[idx].percent,
-                status: status
-            )
-        }
-    }
-
-    // ── View model mapping ────────────────────────────────────────────────────
-
-    private func makePeerViewModel(_ raw: IpcPeerRecord) -> PeerViewModel {
-        PeerViewModel(
-            id: raw.id,
-            // displayName uses the trust store's display_name override if set,
-            // otherwise the peer's friendly_name. Never the raw UUID.
-            displayName: raw.display_name?.isEmpty == false ? raw.display_name! : raw.friendly_name,
-            platform: raw.platform,
-            trusted: raw.trusted,
-            remembered: raw.remembered ?? true,
-            connected: raw.status == "connected",
-            syncEnabled: raw.sync_enabled ?? true,
-            autoConnect: raw.auto_connect ?? true,
-            lastSeen: raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
-            lastSync: raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) }
-=======
         guard let idx = activeTransfers.firstIndex(where: { $0.id == id }) else { return }
         var t = activeTransfers[idx]
         t = FileTransferState(id: t.id, fromDeviceName: t.fromDeviceName, fileName: t.fileName,
@@ -556,7 +343,6 @@ final class ClipRelayStore: ObservableObject {
             autoConnect: raw.auto_connect ?? true,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         )
     }
 }

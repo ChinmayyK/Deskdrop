@@ -7,20 +7,11 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = ClipRelayStore()
     private var statusItem: NSStatusItem!
-<<<<<<< HEAD
-    private let statusMenuItem = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
-    private let lastSyncMenuItem = NSMenuItem(title: "Last sync: —", action: nil, keyEquivalent: "")
-    private var dashboardController: NSWindowController?
-    private var quickAccessController: NSWindowController?
-    private var commandPaletteController: NSWindowController?
-    private var preferencesController: NSWindowController?
-=======
     private let statusMenuItem  = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
     private let lastSyncMenuItem = NSMenuItem(title: "Last sync: —", action: nil, keyEquivalent: "")
     private var dashboardController:      NSWindowController?
     private var quickAccessController:    NSWindowController?
     private var commandPaletteController: NSWindowController?
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -38,21 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.stop()
     }
 
-<<<<<<< HEAD
-    private func ensureSingleRunningInstance() -> Bool {
-        guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
-            return true
-        }
-
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-        guard running.count > 1 else {
-            return true
-        }
-
-        let currentProcessIdentifier = ProcessInfo.processInfo.processIdentifier
-        let existingInstance = running.first { $0.processIdentifier != currentProcessIdentifier }
-        existingInstance?.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-=======
     // MARK: - Single instance guard
 
     private func ensureSingleRunningInstance() -> Bool {
@@ -61,18 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard running.count > 1 else { return true }
         let pid = ProcessInfo.processInfo.processIdentifier
         running.first { $0.processIdentifier != pid }?.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         NSApp.terminate(nil)
         return false
     }
 
-<<<<<<< HEAD
-    private func setupMenuBar() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.toolTip = "ClipRelay"
-        if let image = statusBarImage() {
-            statusItem.button?.image = image
-=======
     // MARK: - Menu bar
 
     private func setupMenuBar() {
@@ -81,33 +49,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let img = statusBarImage() {
             statusItem.button?.image = img
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
             statusItem.button?.imageScaling = .scaleProportionallyUpOrDown
             statusItem.button?.imagePosition = .imageOnly
             statusItem.button?.title = ""
         } else {
-<<<<<<< HEAD
-            statusItem.button?.title = "PB"
-=======
             statusItem.button?.title = "CR"
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
             statusItem.button?.font = .systemFont(ofSize: 12, weight: .semibold)
         }
 
         let menu = NSMenu()
-<<<<<<< HEAD
-        statusMenuItem.isEnabled = false
-        lastSyncMenuItem.isEnabled = false
-        menu.addItem(statusMenuItem)
-        menu.addItem(lastSyncMenuItem)
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Open Dashboard", action: #selector(openDashboard), keyEquivalent: "0"))
-        menu.addItem(NSMenuItem(title: "Quick Access", action: #selector(openQuickAccess), keyEquivalent: "v"))
-        menu.addItem(NSMenuItem(title: "Command Palette", action: #selector(openCommandPalette), keyEquivalent: "k"))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ","))
-        menu.addItem(NSMenuItem.separator())
-=======
         statusMenuItem.isEnabled  = false
         lastSyncMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
@@ -123,27 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quickItem)
         menu.addItem(cmdItem)
         menu.addItem(.separator())
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         menu.addItem(NSMenuItem(title: "Quit ClipRelay", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem.menu = menu
     }
 
     private func statusBarImage() -> NSImage? {
-<<<<<<< HEAD
-        guard let url = Bundle.main.url(forResource: "StatusBarIcon", withExtension: "png"),
-              let image = NSImage(contentsOf: url) else {
-            return nil
-        }
-        image.size = NSSize(width: 18, height: 18)
-        image.isTemplate = false
-        return image
-    }
-
-    private func setupWindows() {
-        dashboardController = Self.makeWindow(
-            title: "ClipRelay",
-            size: NSSize(width: 980, height: 680),
-=======
         guard let url   = Bundle.main.url(forResource: "StatusBarIcon", withExtension: "png"),
               let image = NSImage(contentsOf: url) else { return nil }
         image.size       = NSSize(width: 18, height: 18)
@@ -157,32 +91,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dashboardController = Self.makeWindow(
             title: "ClipRelay",
             size:  NSSize(width: 1020, height: 700),
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
             rootView: DashboardRootView(store: store)
         )
         quickAccessController = Self.makePanel(
             title: "Quick Access",
-<<<<<<< HEAD
-            size: NSSize(width: 460, height: 540),
-=======
             size:  NSSize(width: 480, height: 560),
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
             rootView: QuickAccessHistoryView(store: store)
         )
         commandPaletteController = Self.makePanel(
             title: "Command Palette",
-<<<<<<< HEAD
-            size: NSSize(width: 540, height: 320),
-            rootView: CommandPaletteView(store: store)
-        )
-        preferencesController = Self.makeWindow(
-            title: "Preferences",
-            size: NSSize(width: 560, height: 700),
-            rootView: PreferencesView(store: store)
-        )
-    }
-
-=======
             size:  NSSize(width: 520, height: 400),
             rootView: CommandPaletteView(store: store)
         )
@@ -190,24 +107,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Store bindings
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     private func bindStore() {
         store.$connectionBanner
             .receive(on: RunLoop.main)
             .sink { [weak self] banner in
-<<<<<<< HEAD
-                self?.statusItem.button?.toolTip = banner
-                self?.statusMenuItem.title = banner
-            }
-            .store(in: &cancellables)
-
-        store.$status
-            .receive(on: RunLoop.main)
-            .sink { [weak self] status in
-                let peerCount = status?.peerCount ?? 0
-                self?.statusItem.button?.title = self?.statusItem.button?.image == nil ? (peerCount > 0 ? "PB \(peerCount)" : "PB") : ""
-                self?.statusItem.button?.toolTip = peerCount > 0 ? "ClipRelay • \(peerCount) connected" : "ClipRelay"
-=======
                 self?.statusMenuItem.title = banner
                 self?.statusItem.button?.toolTip = "ClipRelay • \(banner)"
             }
@@ -216,7 +119,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.$dashboardStatus
             .receive(on: RunLoop.main)
             .sink { [weak self] status in
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
                 if let lastSync = status?.lastSyncAt {
                     self?.lastSyncMenuItem.title = "Last sync: \(lastSync.relativeTimeString())"
                 } else {
@@ -241,29 +143,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
     }
 
-<<<<<<< HEAD
-    private func registerHotKeys() {
-        GlobalHotKeyManager.shared.register(
-            id: 1,
-            keyCode: UInt32(kVK_ANSI_V),
-            modifiers: UInt32(cmdKey | shiftKey)
-        ) { [weak self] in
-            self?.openQuickAccess()
-        }
-
-        GlobalHotKeyManager.shared.register(
-            id: 2,
-            keyCode: UInt32(kVK_ANSI_K),
-            modifiers: UInt32(cmdKey)
-        ) { [weak self] in
-            self?.openCommandPalette()
-        }
-    }
-
-    private func presentTrustPrompt(for detail: DeviceDetailSnapshot) {
-        let alert = NSAlert()
-        alert.messageText = "Trust \(detail.effectiveName)?"
-=======
     // MARK: - Hot keys
 
     private func registerHotKeys() {
@@ -283,7 +162,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func presentTrustPrompt(for detail: DeviceDetailSnapshot) {
         let alert = NSAlert()
         alert.messageText    = "Trust \(detail.effectiveName)?"
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         alert.informativeText = """
         Device name: \(detail.deviceName)
         Fingerprint:
@@ -294,31 +172,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Trust")
         alert.addButton(withTitle: "Reject")
         alert.alertStyle = .warning
-<<<<<<< HEAD
-
-        NSApp.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
-        let device = ManagedDevice(
-            id: detail.deviceId,
-            name: detail.effectiveName,
-            rawName: detail.deviceName,
-            endpoint: nil,
-            connectionState: .connecting,
-            trustState: .untrusted,
-            fingerprint: detail.fingerprint,
-            lastSeen: detail.lastSeen,
-            lastSync: nil,
-            lastError: nil
-        )
-
-        if response == .alertFirstButtonReturn {
-            store.trust(device)
-        } else {
-            store.reject(device)
-        }
-    }
-
-=======
         NSApp.activate(ignoringOtherApps: true)
         let response = alert.runModal()
         let device   = ManagedDevice(peer: PeerViewModel(
@@ -332,7 +185,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Actions
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     private func showPanel(_ controller: NSWindowController?) {
         guard let window = controller?.window else { return }
         NSApp.activate(ignoringOtherApps: true)
@@ -340,42 +192,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-<<<<<<< HEAD
-    @objc private func openDashboard() {
-        showPanel(dashboardController)
-    }
-
-    @objc private func openQuickAccess() {
-        showPanel(quickAccessController)
-    }
-
-    @objc private func openCommandPalette() {
-        showPanel(commandPaletteController)
-    }
-
-    @objc private func openPreferences() {
-        showPanel(preferencesController)
-    }
-
-    @objc private func quitApp() {
-        NSApp.terminate(nil)
-    }
-
-    private static func makeWindow<Content: View>(
-        title: String,
-        size: NSSize,
-        rootView: Content
-    ) -> NSWindowController {
-        let fittedFrame = fittedFrame(for: size)
-        let window = NSWindow(
-            contentRect: fittedFrame,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = title
-        window.minSize = NSSize(width: min(size.width, 720), height: min(size.height, 520))
-=======
     @objc private func openDashboard()      { showPanel(dashboardController) }
     @objc private func openQuickAccess()    { showPanel(quickAccessController) }
     @objc private func openCommandPalette() { showPanel(commandPaletteController) }
@@ -397,28 +213,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility            = .hidden
         window.isMovableByWindowBackground = true
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         window.contentViewController = NSHostingController(rootView: rootView)
         return NSWindowController(window: window)
     }
 
     private static func makePanel<Content: View>(
-<<<<<<< HEAD
-        title: String,
-        size: NSSize,
-        rootView: Content
-    ) -> NSWindowController {
-        let fittedFrame = fittedFrame(for: size)
-        let panel = NSPanel(
-            contentRect: fittedFrame,
-            styleMask: [.titled, .closable, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.title = title
-        panel.isFloatingPanel = true
-        panel.level = .floating
-=======
         title: String, size: NSSize, rootView: Content
     ) -> NSWindowController {
         let frame = fittedFrame(for: size)
@@ -432,31 +231,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.level              = .floating
         panel.isOpaque           = false
         panel.backgroundColor    = .clear
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         panel.collectionBehavior = [.moveToActiveSpace]
         panel.contentViewController = NSHostingController(rootView: rootView)
         return NSWindowController(window: panel)
     }
 
     private static func fit(window: NSWindow) {
-<<<<<<< HEAD
-        let requestedSize = window.frame.size
-        window.setFrame(fittedFrame(for: requestedSize), display: false)
-    }
-
-    private static func fittedFrame(for requestedSize: NSSize) -> NSRect {
-        let screen = NSScreen.main ?? NSScreen.screens.first
-        let visibleFrame = screen?.visibleFrame ?? NSRect(origin: .zero, size: requestedSize)
-        let horizontalMargin: CGFloat = 48
-        let verticalMargin: CGFloat = 48
-        let width = min(requestedSize.width, max(visibleFrame.width - horizontalMargin, 560))
-        let height = min(requestedSize.height, max(visibleFrame.height - verticalMargin, 420))
-        let origin = NSPoint(
-            x: visibleFrame.midX - (width / 2),
-            y: visibleFrame.midY - (height / 2)
-        )
-        return NSRect(origin: origin, size: NSSize(width: width, height: height))
-=======
         window.setFrame(fittedFrame(for: window.frame.size), display: false)
     }
 
@@ -471,6 +251,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             y: visible.midY - h / 2,
             width: w, height: h
         )
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     }
 }

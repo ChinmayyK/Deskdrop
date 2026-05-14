@@ -121,8 +121,6 @@ pub enum IpcRequest {
     Ping,
     /// Get a serializable snapshot of global runtime metrics.
     GetMetrics,
-<<<<<<< HEAD
-=======
 
     // ── History tag management ────────────────────────────────────────────────
     /// Add a tag to a history entry.
@@ -177,7 +175,6 @@ pub enum IpcRequest {
     GetPeerSettings { device_id: String },
     /// Patch per-peer settings for a specific device (partial JSON).
     PatchPeerSettings { device_id: String, patch: String },
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

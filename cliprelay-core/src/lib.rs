@@ -63,11 +63,6 @@ pub mod jni_android;
 pub mod ipc_windows;
 
 pub use engine::{Engine, EngineConfig, EngineEvent};
-<<<<<<< HEAD
-pub use protocol::ClipboardContent;
-pub use settings::{Settings, SettingsStore};
-=======
 pub use history::{HistoryFilter, HistoryStats};
 pub use protocol::ClipboardContent;
 pub use settings::{ClipboardTemplate, PeerSettings, Settings, SettingsStore};
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)

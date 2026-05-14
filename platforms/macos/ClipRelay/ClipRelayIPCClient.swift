@@ -221,8 +221,6 @@ enum ClipRelayIPCError: Error {
     case connectionFailed
     case noData
 }
-<<<<<<< HEAD
-=======
 
 // MARK: - Dashboard extensions (stubs — wire to daemon when ready)
 
@@ -251,4 +249,3 @@ extension ClipRelayIPCClient {
         _ = try await send(cmd: cmd)
     }
 }
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)

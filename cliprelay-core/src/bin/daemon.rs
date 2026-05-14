@@ -1,19 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use cliprelay_core::{
     engine::{Engine, EngineConfig, EngineEvent, SyncDispatchReport, SyncTarget},
-<<<<<<< HEAD
-    history::{History, HistoryEntry},
-    ipc::{IpcRequest, IpcResponse},
-    peer_manager::PeerConnectionState,
-    protocol::ClipboardContent,
-    settings::{default_history_path, default_settings_path, SettingsStore},
-=======
     history::{History, HistoryEntry, HistoryFilter},
     ipc::{IpcRequest, IpcResponse},
     peer_manager::PeerConnectionState,
     protocol::ClipboardContent,
     settings::{ClipboardTemplate, PeerSettings, default_history_path, default_settings_path, SettingsStore},
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
     trust::format_fingerprint,
 };
 use serde::Serialize;
@@ -581,8 +573,6 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state.engine.apply_settings(updated).await;
             Ok(IpcResponse::ok_empty())
         }
-<<<<<<< HEAD
-=======
 
         // ── History tag management ────────────────────────────────────────────
         IpcRequest::HistoryTag { id, tag } => {
@@ -719,7 +709,6 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok_empty())
         }
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         IpcRequest::Shutdown => {
             state.shutdown.notify_waiters();
             Ok(IpcResponse::ok_empty())

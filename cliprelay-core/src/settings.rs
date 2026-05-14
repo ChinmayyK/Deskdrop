@@ -120,8 +120,6 @@ pub struct Settings {
     // ── UI ───────────────────────────────────────────────────────────────────
     /// Start ClipRelay automatically on login.
     pub start_on_login: bool,
-<<<<<<< HEAD
-=======
 
     // ── Advanced filtering ────────────────────────────────────────────────────
     /// Minimum number of non-whitespace characters for a text clip to be synced.
@@ -176,7 +174,6 @@ pub struct PeerSettings {
     /// If Some, override the global `max_payload_bytes` for this device.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_payload_bytes: Option<u64>,
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 }
 
 impl Default for Settings {
@@ -209,13 +206,10 @@ impl Default for Settings {
             auto_accept_file_transfers: true,
             auto_accept_max_bytes: 50 * 1024 * 1024, // 50 MB
             start_on_login: false,
-<<<<<<< HEAD
-=======
             min_text_length: 0,
             sync_urls_only: false,
             clipboard_templates: Vec::new(),
             per_peer: std::collections::HashMap::new(),
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         }
     }
 }

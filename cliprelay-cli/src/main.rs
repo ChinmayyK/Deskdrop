@@ -44,8 +44,6 @@ async fn run() -> Result<()> {
         ["devices", "reject", id] => cmd_devices_reject(id).await,
         ["devices", "revoke", id] => cmd_devices_revoke(id),
         ["devices", "rename", id, name] => cmd_devices_rename(id, name).await,
-<<<<<<< HEAD
-=======
         // Peer settings
         ["devices", "peer-settings", id] => cmd_peer_settings_get(id).await,
         ["devices", "peer-settings", id, "pause"] => cmd_peer_settings_patch(id, r#"{"sync_paused":true}"#).await,
@@ -54,7 +52,6 @@ async fn run() -> Result<()> {
         ["devices", "peer-settings", id, "auto-apply", "off"] => cmd_peer_settings_patch(id, r#"{"auto_apply":false}"#).await,
 
         // History — basic
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         ["history"] => cmd_history(20, None).await,
         ["history", "--last", n] => cmd_history(n.parse().context("bad N")?, None).await,
         ["history", "--search", q] => cmd_history(100, Some(*q)).await,
@@ -67,9 +64,6 @@ async fn run() -> Result<()> {
         ["history", "repush", id] => cmd_history_repush(id, None).await,
         ["history", "repush", id, target] => cmd_history_repush(id, Some(target)).await,
         ["history", "delete", id] => cmd_history_delete(id).await,
-<<<<<<< HEAD
-        ["history", "export"] | ["history", "export", "csv"] => cmd_history_export_csv().await,
-=======
         // History — export
         ["history", "export"] | ["history", "export", "csv"] => cmd_history_export_csv().await,
         ["history", "export", "json"] => cmd_history_export_json().await,
@@ -98,7 +92,6 @@ async fn run() -> Result<()> {
         ["template", "add", name, "--desc", desc, text] => cmd_template_set(name, text, desc).await,
         ["template", "remove", name] => cmd_template_remove(name).await,
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
         ["metrics"] => cmd_metrics().await,
         ["settings"] | ["settings", "get"] => cmd_settings_get(None),
         ["settings", "get", key] => cmd_settings_get(Some(key)),
@@ -606,8 +599,6 @@ async fn cmd_history_export_csv() -> Result<()> {
     Ok(())
 }
 
-<<<<<<< HEAD
-=======
 async fn cmd_history_export_json() -> Result<()> {
     match ipc(&IpcRequest::HistoryExportJson).await? {
         IpcResponse::Ok { data: Some(data) } => {
@@ -862,7 +853,6 @@ fn trunc_summary(entry: &serde_json::Value) -> String {
     }
 }
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 async fn cmd_metrics() -> Result<()> {
     match ipc(&IpcRequest::GetMetrics).await? {
         IpcResponse::Ok { data: Some(data) } => {
@@ -1040,28 +1030,16 @@ DEVICES
   devices reject <uuid>           Reject a device (deny this session, don't remember)
   devices revoke <uuid>           Revoke trust for a previously-trusted device
   devices rename <uuid> <name>    Assign a human-readable display name
-<<<<<<< HEAD
-=======
   devices peer-settings <uuid>    Show per-device sync settings
   devices peer-settings <uuid> pause          Pause sync from this device
   devices peer-settings <uuid> resume         Resume sync from this device
   devices peer-settings <uuid> auto-apply on  Auto-apply clipboard from this device
   devices peer-settings <uuid> auto-apply off Disable auto-apply from this device
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 
 HISTORY
   history [--last N]              Show recent clipboard history (default: 20)
   history --search <query>        Full-text search through history
   history --last N --search <q>   Combine limit and search
-<<<<<<< HEAD
-  history pin <id>                Pin an entry so it survives the ring-buffer limit
-  history unpin <id>              Remove a pin
-  history repush <id> [device]    Re-send a stored text entry (optional: to one device)
-  history delete <id>             Delete a single history entry
-  history export [csv]            Export full history as CSV (stdout)
-  history clear                   Clear all history (irreversible)
-
-=======
   history --type <text|image|file>  Filter by content type
   history --device <name>         Filter by source device name (substring)
   history --tag <tag>             Filter by tag
@@ -1085,7 +1063,6 @@ TEMPLATES
   template push <name> --to <dev> Push a template to one device
   template remove <name>          Delete a template
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
 SETTINGS
   settings get [<key>]            Print all settings (JSON) or one key's value
   settings set <key> <value>      Update a setting; value is JSON-typed
@@ -1096,15 +1073,10 @@ COMMON SETTINGS KEYS
   sync_enabled                    bool — master sync on/off switch
   sync_text / sync_images         bool — sync specific content types
   sync_files                      bool — sync file transfers
-<<<<<<< HEAD
-  max_payload_bytes               Maximum synced payload (bytes)
-  history_limit                   Max entries retained (20–100)
-=======
   sync_urls_only                  bool — only sync content that is a URL
   min_text_length                 int  — skip text with fewer non-whitespace chars
   max_payload_bytes               Maximum synced payload (bytes)
   history_limit                   Max entries retained (20–500)
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
   max_history_text_bytes          Max stored text per history entry
   block_sensitive_text            bool — heuristic password/secret suppression
   smart_sync_duplicate_window_ms  Suppress identical copies within this window (ms)
@@ -1118,13 +1090,6 @@ COMMON SETTINGS KEYS
 EXAMPLES
   cliprelay-cli /history
   cliprelay-cli history --search "github"
-<<<<<<< HEAD
-  cliprelay-cli send macbook "meeting at 3pm"
-  cliprelay-cli history repush 42 windows-pc
-  cliprelay-cli history delete 17
-  cliprelay-cli devices show 550e8400-e29b-41d4-a716-446655440000
-  cliprelay-cli settings set block_sensitive_text true
-=======
   cliprelay-cli history --type text --last 10
   cliprelay-cli history --device iphone
   cliprelay-cli history stats
@@ -1137,13 +1102,9 @@ EXAMPLES
   cliprelay-cli devices peer-settings <uuid> pause
   cliprelay-cli settings set sync_urls_only true
   cliprelay-cli settings set min_text_length 3
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
   cliprelay-cli events --last 10
 "#,
         env!("CARGO_PKG_VERSION")
     );
 }
-<<<<<<< HEAD
-=======
 
->>>>>>> 546e515 (feat: implement architectural improvements and synchronize core assets)
