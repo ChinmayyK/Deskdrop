@@ -1,44 +1,75 @@
 # ClipRelay systemd user service
 #
-# Install: cp cliprelay.service ~/.config/systemd/user/
-#          systemctl --user daemon-reload
-#          systemctl --user enable --now cliprelay
+# Install: install -Dm644 cliprelay.service ~/.config/systemd/user/cliprelay.service
+#           systemctl --user daemon-reload
+#           systemctl --user enable --now cliprelay
 #
 # Logs:    journalctl --user -u cliprelay -f
+# Status:  systemctl --user status cliprelay (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 
 [Unit]
 Description=ClipRelay — Proximity-Based Shared Clipboard
 Documentation=https://github.com/cliprelay/cliprelay
+# Network must be available before we start (mDNS discovery won't work otherwise).
 After=network-online.target
 Wants=network-online.target
+# Restart after graphical session is available so clipboard access works.
+After=graphical-session.target (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/cliprelay-gtk
 Restart=on-failure
 RestartSec=5s
+# Give the process up to 10 s to start responding before systemd considers it failed.
+TimeoutStartSec=10s (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=cliprelay
 
-# Resource limits
+# ── Resource limits ────────────────────────────────────────────────────────────
 MemoryMax=128M
-CPUQuota=10%
+MemoryHigh=96M
+CPUQuota=15%
+# Cap file descriptors — we open one socket per peer connection.
+LimitNOFILE=1024
 
-# Security hardening
+# ── State persistence ──────────────────────────────────────────────────────────
+# Engine persists trust store, identity key, and peer store here.
+# Resolves to ~/.local/share/cliprelay (user service).
+StateDirectory=cliprelay
+# Runtime dir for the IPC socket.
+RuntimeDirectory=cliprelay
+
+# ── Security hardening ─────────────────────────────────────────────────────────
 NoNewPrivileges=true
-ProtectHome=read-only
+# Home dir must be readable for clipboard watcher (arboard reads XDG_RUNTIME_DIR).
+ProtectHome=true
 ProtectSystem=strict
 PrivateTmp=true
 PrivateDevices=true
-# Network access required for LAN discovery
+# mDNS uses multicast; restrict to required address families.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
-# Allow binding to our port
-AmbientCapabilities=
-CapabilityBoundingSet=
-
+# Prevent kernel module loading.
+RestrictModules=true
+# No SUID/SGID files.
+RestrictSUIDSGID=true
+# Lock down system calls.
+SystemCallFilter=@system-service @network-io @file-system
+SystemCallErrorNumber=EPERM
+# Prevent access to other users' data.
+PrivateUsers=true
+# Prevent writing to /proc or /sys.
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+# Clipboard access requires the user's session bus.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
 Environment=CLIPRELAY_LOG=info
 Environment=RUST_BACKTRACE=0
+# State and runtime paths for the engine.
+Environment=CLIPRELAY_STATE_DIR=%S/cliprelay
+Environment=CLIPRELAY_RUNTIME_DIR=%t/cliprelay (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 
 [Install]
 WantedBy=default.target

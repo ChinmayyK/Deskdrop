@@ -75,7 +75,10 @@ mod platform {
         ) -> Result<()> {
             let mut properties = HashMap::new();
             properties.insert("id".to_string(), self.my_device_id.to_string());
-            properties.insert("name".to_string(), device_name.to_string());
+            // TRU-06: Device names are intentionally NOT included in mDNS TXT records.
+            // Only the opaque UUID is broadcast here.  The friendly device name is
+            // exchanged after a successful encrypted handshake via HelloFrame/HelloAck,
+            // so passive mDNS observers cannot enumerate device names on the LAN. (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
             // Fix 6: was hard-coded to "1"; now dynamically reflects PROTOCOL_VERSION.
             properties.insert("v".to_string(), PROTOCOL_VERSION.to_string());
 
@@ -156,10 +159,13 @@ mod platform {
                                     continue;
                                 }
 
-                                let device_name = info
-                                    .get_property_val_str("name")
-                                    .unwrap_or("Unknown Device")
-                                    .to_string();
+                                // TRU-06: device names are no longer broadcast in TXT records.
+                                // Use the first 8 chars of the UUID as a placeholder; the real
+                                // name is learned from the encrypted HelloFrame after handshake.
+                                let device_name = format!(
+                                    "device-{}",
+                                    &peer_id.to_string()[..8]
+                                ); (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 
                                 // Fix 7: Prefer IPv4 over IPv6 link-local.
                                 // Old code: `info.get_addresses().iter().next()` — arbitrary
@@ -172,8 +178,8 @@ mod platform {
 
                                 let port = info.get_port();
                                 info!(
-                                    "mDNS: found peer '{}' at {}:{}",
-                                    device_name, addr, port
+                                    "mDNS: found peer {} at {}:{} (name resolved after handshake)",
+                                    peer_id, addr, port (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
                                 );
                                 resolved
                                     .lock()

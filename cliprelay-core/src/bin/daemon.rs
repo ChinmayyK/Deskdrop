@@ -110,11 +110,75 @@ async fn run() -> Result<()> {
         .context("starting IPC server")?;
     }
 
+    #[cfg(windows)]
+    {
+        use cliprelay_core::ipc_windows::spawn_windows_ipc;
+        let handler_state = state.clone();
+        spawn_windows_ipc(Arc::new(move |req| {
+            let handler_state = handler_state.clone();
+            async move { handle_request(handler_state, req).await }
+        }))
+        .await
+        .context("starting Windows named-pipe IPC server")?;
+        tracing::info!("Windows IPC server started on \\\\.\\pipe\\cliprelay");
+    }
+ (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
     tracing::info!(
         "ClipRelay daemon started. IPC socket: {:?}",
         cliprelay_core::ipc::socket_path()
     );
 
+    // ── SET-06: Hot-reload settings without daemon restart ────────────────────
+    //
+    // Poll the settings file's modification time every second.  When it
+    // changes (e.g. the Mac preferences UI or an external editor wrote it),
+    // reload the store and apply the new settings to the running engine and
+    // history buffer without any restart.
+    {
+        let reload_state = state.clone();
+        let settings_path = default_settings_path();
+        tokio::spawn(async move {
+            let mut last_mtime: Option<std::time::SystemTime> = std::fs::metadata(&settings_path)
+                .and_then(|m| m.modified())
+                .ok();
+
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                interval.tick().await;
+
+                let current_mtime = std::fs::metadata(&settings_path)
+                    .and_then(|m| m.modified())
+                    .ok();
+
+                if current_mtime != last_mtime && current_mtime.is_some() {
+                    last_mtime = current_mtime;
+                    tracing::info!("Settings file changed — hot-reloading");
+
+                    match SettingsStore::load(&settings_path) {
+                        Ok(new_store) => {
+                            let new_settings = new_store.get().clone();
+                            {
+                                let mut store = reload_state.settings.lock().await;
+                                *store = new_store;
+                            }
+                            {
+                                let mut history = reload_state.history.lock().await;
+                                let _ = history.set_max_entries(new_settings.effective_history_limit());
+                            }
+                            reload_state.engine.apply_settings(new_settings).await;
+                            tracing::info!("Settings hot-reload complete");
+                        }
+                        Err(e) => {
+                            tracing::warn!("Settings hot-reload failed (file may be mid-write): {e:#}");
+                        }
+                    }
+                }
+            }
+        });
+    }
+ (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
     tokio::select! {
         _ = state.shutdown.notified() => {
             tracing::info!("Shutdown requested by IPC client");
@@ -811,6 +875,41 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok_empty())
         }
 
+        // ── Runtime metrics (PER-07, PER-08) ─────────────────────────────────
+        IpcRequest::GetMetrics => {
+            let uptime_secs = state.started_at.elapsed().as_secs();
+            let engine_peer_count = state.engine.connected_peer_count();
+            let settings = state.settings.lock().await.get().clone();
+            let history_count = state.history.lock().await.stats().total;
+
+            let d = uptime_secs / 86400;
+            let h = (uptime_secs % 86400) / 3600;
+            let m = (uptime_secs % 3600) / 60;
+            let s = uptime_secs % 60;
+            let uptime_fmt = if d > 0 {
+                format!("{}d {}h {}m {}s", d, h, m, s)
+            } else if h > 0 {
+                format!("{}h {}m {}s", h, m, s)
+            } else {
+                format!("{}m {}s", m, s)
+            };
+
+            Ok(IpcResponse::ok(json!({
+                "uptime_secs": uptime_secs,
+                "uptime": uptime_fmt,
+                "connected_peers": engine_peer_count,
+                "history_entries": history_count,
+                "sync_enabled": settings.sync_enabled,
+                "port": settings.port,
+            })))
+        }
+
+        // ── History CSV export (HIS-06) ───────────────────────────────────────
+        IpcRequest::HistoryExportCsv => {
+            let csv = state.history.lock().await.export_csv();
+            Ok(IpcResponse::ok(csv))
+        }
+ (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
         IpcRequest::Shutdown => {
             state.shutdown.notify_waiters();
             Ok(IpcResponse::ok_empty())

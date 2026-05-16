@@ -89,12 +89,32 @@ namespace ClipRelay.Windows
             key.SetValue("SyncText",          _chkText.Checked          ? 1 : 0, RegistryValueKind.DWord);
             key.SetValue("SyncImages",        _chkImages.Checked        ? 1 : 0, RegistryValueKind.DWord);
             key.SetValue("SyncFiles",         _chkFiles.Checked         ? 1 : 0, RegistryValueKind.DWord);
-            key.SetValue("ShowNotifications", _chkNotifications.Checked ? 1 : 0, RegistryValueKat.DWord);
+            key.SetValue("ShowNotifications", _chkNotifications.Checked ? 1 : 0, RegistryValueKind.DWord);
             key.SetValue("RequireTofu",       _chkTofu.Checked          ? 1 : 0, RegistryValueKind.DWord);
+            key.SetValue("StartOnLogin",      _chkStartOnLogin.Checked  ? 1 : 0, RegistryValueKind.DWord);
             key.SetValue("DeviceName",        _txtDeviceName.Text,                RegistryValueKind.String);
             key.SetValue("Port",              (int)_nudPort.Value,                RegistryValueKind.DWord);
 
+            // Register / unregister Windows login item.
             ApplyLoginItem(_chkStartOnLogin.Checked);
+
+            // Push to running daemon via named pipe so changes take effect immediately
+            // without restarting the tray app.
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                DaemonClient.Send(new
+                {
+                    cmd            = "save_settings",
+                    sync_enabled   = _chkEnabled.Checked,
+                    sync_text      = _chkText.Checked,
+                    sync_images    = _chkImages.Checked,
+                    sync_files     = _chkFiles.Checked,
+                    device_name    = string.IsNullOrWhiteSpace(_txtDeviceName.Text)
+                                         ? null : _txtDeviceName.Text,
+                    require_tofu_confirmation   = _chkTofu.Checked,
+                    show_receive_notification   = _chkNotifications.Checked,
+                });
+            }); (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
         }
 
         private void UpdateEnabledState()

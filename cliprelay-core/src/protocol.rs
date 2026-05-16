@@ -58,6 +58,12 @@ impl ClipboardContent {
         }
     }
 
+    /// Convenience wrapper: `truncated_preview(80)`.
+    /// Used by Linux notifications and Windows balloon tips.
+    pub fn preview_string(&self) -> String {
+        self.truncated_preview(80)
+    }
+ (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
     /// A short human-readable preview suitable for notifications and timeline entries.
     ///
     /// Text is truncated to `max_chars` with an ellipsis; images and files show

@@ -13,9 +13,11 @@ cliprelay-core = { path = "../../cliprelay-core" }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-arboard = "3"
+arboard = { version = "3", features = ["image-data"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+anyhow = "1"
 dirs = "5"
 
-# GTK4 tray (optional — comment out for headless daemon mode)
+# GTK4 tray (optional — uncomment for full system-tray experience) (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 # gtk4 = "0.7"
 # libappindicator = { package = "libappindicator", version = "0.8", features = ["gtk"] }

@@ -22,6 +22,13 @@ use std::path::PathBuf;
 
 // ── Request / Response types ──────────────────────────────────────────────────
 
+/// Parse a UUID string, giving a clear error if it's malformed.
+/// Used by IPC handlers and `spawn_with_engine`.
+pub fn parse_uuid(value: &str) -> anyhow::Result<uuid::Uuid> {
+    uuid::Uuid::parse_str(value)
+        .with_context(|| format!("invalid UUID: {value}"))
+}
+ (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum IpcRequest {
@@ -250,6 +257,13 @@ impl IpcResponse {
             message: msg.into(),
         }
     }
+
+    /// Alias for [`IpcResponse::error`].  Used by the embedded
+    /// `spawn_with_engine` handler for brevity.
+    #[inline]
+    pub fn err(msg: impl Into<String>) -> Self {
+        Self::error(msg)
+    } (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 }
 
 // ── Socket path ───────────────────────────────────────────────────────────────
@@ -388,6 +402,92 @@ pub mod client {
             serde_json::from_str(&line).context("IPC response parse")
         }
     }
+
+    /// Convenience: spawn the IPC server wired directly to an `Arc<Engine>`.
+    ///
+    /// This is used by the Linux binary (which embeds the engine) so it doesn't
+    /// need to duplicate the full daemon dispatch table.  The handler maps every
+    /// `IpcRequest` variant to the corresponding `engine.*` call.
+    pub async fn spawn_with_engine(engine: std::sync::Arc<crate::engine::Engine>) -> Result<()> {
+        let handler = std::sync::Arc::new(move |req: IpcRequest| {
+            let eng = engine.clone();
+            async move {
+                use crate::engine::Engine;
+                match req {
+                    IpcRequest::Status => {
+                        let snap = eng.status_snapshot().await;
+                        let fp   = eng.local_fingerprint();
+                        let pending = eng.pending_remote_clipboards().await.len();
+                        IpcResponse::ok(serde_json::json!({
+                            "peers": snap.peers,
+                            "peer_count": snap.peers.iter().filter(|p| p.status == crate::peer_manager::PeerConnectionState::Connected).count(),
+                            "last_sync_at": snap.last_sync_at,
+                            "pending_clipboard_count": pending,
+                            "local_fingerprint": fp,
+                        }))
+                    }
+                    IpcRequest::RescanPeers => {
+                        eng.rescan_peers().await;
+                        IpcResponse::ok_empty()
+                    }
+                    IpcRequest::Peers => {
+                        IpcResponse::ok(eng.status_snapshot().await.peers)
+                    }
+                    IpcRequest::TrustedDevices => {
+                        IpcResponse::ok(eng.trusted_devices().await)
+                    }
+                    IpcRequest::ActivityRecent { limit } => {
+                        IpcResponse::ok(eng.activity_recent(limit).await)
+                    }
+                    IpcRequest::ActivitySince { since_id } => {
+                        IpcResponse::ok(eng.activity_since(since_id).await)
+                    }
+                    IpcRequest::PendingRemoteClipboards => {
+                        IpcResponse::ok(eng.pending_remote_clipboards().await)
+                    }
+                    IpcRequest::ApplyClipboard { content_hash } => {
+                        match eng.apply_clipboard_by_hash(content_hash).await {
+                            Ok(_)  => IpcResponse::ok_empty(),
+                            Err(e) => IpcResponse::err(e.to_string()),
+                        }
+                    }
+                    IpcRequest::ConnectPeer { ip, port } => {
+                        match eng.connect_to_peer(ip, port).await {
+                            Ok(())  => IpcResponse::ok_empty(),
+                            Err(e)  => IpcResponse::err(e.to_string()),
+                        }
+                    }
+                    IpcRequest::TrustPeer { device_id } => {
+                        match crate::ipc::parse_uuid(&device_id)
+                            .and_then(|id| Ok(id))
+                            .ok()
+                            .map(|id| eng.trust_peer(id))
+                        {
+                            Some(fut) => match fut.await {
+                                Ok(_)  => IpcResponse::ok_empty(),
+                                Err(e) => IpcResponse::err(e.to_string()),
+                            },
+                            None => IpcResponse::err("invalid device id".into()),
+                        }
+                    }
+                    IpcRequest::RejectPeer { device_id } => {
+                        match crate::ipc::parse_uuid(&device_id)
+                            .ok()
+                            .map(|id| eng.reject_peer(id))
+                        {
+                            Some(fut) => match fut.await {
+                                Ok(_)  => IpcResponse::ok_empty(),
+                                Err(e) => IpcResponse::err(e.to_string()),
+                            },
+                            None => IpcResponse::err("invalid device id".into()),
+                        }
+                    }
+                    _ => IpcResponse::err("not supported in embedded mode".into()),
+                }
+            }
+        });
+        spawn(handler).await
+    } (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 }
 
 // ── Windows named pipe stubs ──────────────────────────────────────────────────

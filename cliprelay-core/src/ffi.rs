@@ -510,3 +510,55 @@ pub unsafe extern "C" fn cliprelay_free_event(event: *mut PbEvent) {
         drop(Box::from_raw(event));
     }
 }
+
+// ── Windows P/Invoke helpers ──────────────────────────────────────────────────
+
+/// Respond to a TOFU prompt.  `trust` = 1 to accept, 0 to reject.
+/// Returns 0 on success.
+///
+/// # Safety
+/// `handle` and `device_name_ptr` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn cliprelay_trust_peer(
+    handle: *mut ClipRelayHandle,
+    device_name_ptr: *const std::ffi::c_char,
+    trust: std::ffi::c_int,
+) -> std::ffi::c_int {
+    if handle.is_null() || device_name_ptr.is_null() {
+        return -1;
+    }
+    let name = match std::ffi::CStr::from_ptr(device_name_ptr).to_str() {
+        Ok(s) => s.to_string(),
+        Err(_) => return -1,
+    };
+    let h = &*handle;
+    if trust != 0 {
+        // Resolve the device ID from the TOFU store by name, then trust it.
+        runtime().block_on(async {
+            let trusted = h.engine.trusted_devices().await;
+            if let Some(peer) = trusted.iter().find(|p| p.device_name == name) {
+                let _ = h.engine.trust_peer(peer.device_id).await;
+            }
+        });
+    } else {
+        runtime().block_on(async {
+            let trusted = h.engine.trusted_devices().await;
+            if let Some(peer) = trusted.iter().find(|p| p.device_name == name) {
+                let _ = h.engine.reject_peer(peer.device_id).await;
+            }
+        });
+    }
+    0
+}
+
+/// Alias for `cliprelay_apply_clipboard` for Windows P/Invoke compatibility.
+///
+/// # Safety
+/// `handle` and `hash_ptr` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn cliprelay_apply_by_hash(
+    handle: *mut ClipRelayHandle,
+    hash_ptr: *const std::ffi::c_char,
+) -> std::ffi::c_int {
+    cliprelay_apply_clipboard(handle, hash_ptr)
+} (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)

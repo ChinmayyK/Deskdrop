@@ -74,9 +74,72 @@ namespace ClipRelay.Windows
 
         // ── Convenience commands ──────────────────────────────────────────────
 
-        public static JsonDocument? Ping()   => Send(new { cmd = "ping" });
-        public static JsonDocument? Status() => Send(new { cmd = "status" });
-        public static JsonDocument? Peers()  => Send(new { cmd = "peers" });
+        public static JsonDocument? Ping()       => Send(new { cmd = "ping" });
+        public static JsonDocument? Status()     => Send(new { cmd = "status" });
+        public static JsonDocument? Peers()      => Send(new { cmd = "peers" });
+        public static JsonDocument? RescanPeers() => Send(new { cmd = "rescan_peers" });
+
+        public static JsonDocument? ConnectManual(string host, int? port = null)
+        {
+            object cmd = port.HasValue
+                ? new { cmd = "connect_manual", host, port = port.Value }
+                : (object)new { cmd = "connect_manual", host };
+            return Send(cmd);
+        }
+
+        public static JsonDocument? PushClipboard(string? targetDeviceId = null)
+        {
+            object cmd = targetDeviceId != null
+                ? new { cmd = "push_clipboard", target_device_id = targetDeviceId }
+                : (object)new { cmd = "push_clipboard" };
+            return Send(cmd);
+        }
+
+        public static JsonDocument? SaveSettings(object patch) =>
+            Send(new { cmd = "save_settings" }); // caller passes full anon object
+
+        // ── Private transport ─────────────────────────────────────────────────
+
+        private static NamedPipeClientStream? OpenPipe(int timeoutMs)
+        {
+            var pipe = new NamedPipeClientStream(".", PipeName,
+                PipeDirection.InOut, PipeOptions.None);
+            try
+            {
+                pipe.Connect(timeoutMs);
+                return pipe;
+            }
+            catch
+            {
+                pipe.Dispose();
+                return null;
+            }
+        }
+
+        private static string? ReadLineWithTimeout(Stream stream, int timeoutMs)
+        {
+            var sb   = new StringBuilder();
+            var buf  = new byte[1];
+            var dl   = DateTime.Now.AddMilliseconds(timeoutMs);
+            while (DateTime.Now < dl)
+            {
+                if (stream.Read(buf, 0, 1) == 0) break;
+                if (buf[0] == '\n') break;
+                sb.Append((char)buf[0]);
+            }
+            return sb.Length > 0 ? sb.ToString() : null;
+        }
+
+        public void Dispose() { }
+    }
+
+    /// <summary>
+    /// Polls the daemon on a background timer, surfacing connectivity and
+    /// peer-count changes as events.  Uses adaptive interval: fast (1 s) when
+    /// peers are connected for near-real-time UI; slow (5 s) when idle.
+    /// </summary>
+    internal sealed class DaemonPoller : IDisposable
+    { (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 
         public static JsonDocument? PushText(string text) =>
             Send(new { cmd = "push_text", text });
@@ -159,19 +222,28 @@ namespace ClipRelay.Windows
     /// </summary>
     internal sealed class DaemonPoller : IDisposable
     {
-        private readonly Timer _timer;
+        // Fast poll when peers are connected; slow poll when idle.
+        private const int FastMs = 1000;
+        private const int SlowMs = 5000;
+
+        private System.Threading.Timer? _timer;
         private bool _wasDaemonRunning;
+        private int  _lastPeerCount        = -1;
+        private bool _lastSyncState        = true;
+        private int  _lastPendingClipboard = -1; (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 
         public event Action<bool>? DaemonAvailabilityChanged;
         public event Action<int>?  PeerCountChanged;
         public event Action<bool>? SyncStateChanged;
+        /// Fired when the number of unapplied incoming clipboard items changes.
+        public event Action<int>?  PendingClipboardCountChanged;
 
-        private int  _lastPeerCount  = -1;
-        private bool _lastSyncState  = true;
+        public DaemonPoller() => SchedulePoll(SlowMs);
 
-        public DaemonPoller(int intervalMs = 3000)
+        private void SchedulePoll(int delayMs)
         {
-            _timer = new Timer(_ => Poll(), null, 0, intervalMs);
+            _timer?.Dispose();
+            _timer = new System.Threading.Timer(_ => Poll(), null, delayMs, Timeout.Infinite); (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
         }
 
         private void Poll()
@@ -183,10 +255,10 @@ namespace ClipRelay.Windows
                 DaemonAvailabilityChanged?.Invoke(running);
             }
 
-            if (!running) return;
+            if (!running) { SchedulePoll(SlowMs); return; }
 
             var resp = DaemonClient.Status();
-            if (resp == null) return;
+            if (resp == null) { SchedulePoll(SlowMs); return; } (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
 
             try
             {
@@ -195,26 +267,25 @@ namespace ClipRelay.Windows
                 {
                     int peerCount = data.TryGetProperty("peer_count", out var pc)
                         ? pc.GetInt32() : 0;
-
                     bool syncEnabled = !data.TryGetProperty("sync_enabled", out var se)
                         || se.GetBoolean();
+                    int pending = data.TryGetProperty("pending_clipboard_count", out var pcc)
+                        ? pcc.GetInt32() : 0;
 
                     if (peerCount != _lastPeerCount)
-                    {
-                        _lastPeerCount = peerCount;
-                        PeerCountChanged?.Invoke(peerCount);
-                    }
-
+                    { _lastPeerCount = peerCount; PeerCountChanged?.Invoke(peerCount); }
                     if (syncEnabled != _lastSyncState)
-                    {
-                        _lastSyncState = syncEnabled;
-                        SyncStateChanged?.Invoke(syncEnabled);
-                    }
+                    { _lastSyncState = syncEnabled; SyncStateChanged?.Invoke(syncEnabled); }
+                    if (pending != _lastPendingClipboard)
+                    { _lastPendingClipboard = pending; PendingClipboardCountChanged?.Invoke(pending); }
                 }
             }
-            catch { /* JSON shape mismatch — ignore */ }
+            catch { }
+
+            // Adaptive interval: fast when peers are present, slow otherwise.
+            SchedulePoll(_lastPeerCount > 0 ? FastMs : SlowMs);
         }
 
-        public void Dispose() => _timer.Dispose();
+        public void Dispose() { _timer?.Dispose(); } (feat: enhance core daemon, FFI, and IPC; major updates to Windows and Linux platform implementations)
     }
 }
