@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 pub const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024; // 4 MB
 pub const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024; // 32 MB
-pub const MAX_FILE_BYTES: usize = 512 * 1024 * 1024; // 512 MB (chunked)
+pub const MAX_FILE_BYTES: usize = 2 * 1024 * 1024 * 1024; // 2 GB (chunked / file-backed)
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ClipboardContent {

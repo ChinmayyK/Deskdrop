@@ -22,6 +22,7 @@ struct PeerViewModel: Identifiable, Equatable {
     let trusted: Bool
     let remembered: Bool
     let connected: Bool
+    let connectionStatus: String
     let syncEnabled: Bool
     let autoConnect: Bool
 
@@ -31,9 +32,12 @@ struct PeerViewModel: Identifiable, Equatable {
 
     /// Short status description shown under the device name.
     var statusLine: String {
-        if !connected { return "Disconnected" }
+        if connectionStatus == "connecting" { return "Reconnecting" }
+        if connected && !syncEnabled { return "Connected · Sync paused" }
+        if connected { return "Connected · Syncing" }
+        if trusted && remembered && autoConnect { return "Ready to reconnect" }
         if !syncEnabled { return "Connected · Sync paused" }
-        return "Connected · Syncing"
+        return "Offline"
     }
 }
 

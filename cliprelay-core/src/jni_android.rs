@@ -569,6 +569,66 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferProgressPerc
     }
 }
 
+// ── eventTransferBytesReceived ───────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferBytesReceived(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jlong {
+    if event == 0 {
+        return -1;
+    }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    if let crate::engine::EngineEvent::FileTransferProgress {
+        bytes_received, ..
+    } = ev
+    {
+        *bytes_received as jlong
+    } else {
+        -1
+    }
+}
+
+// ── eventTransferSpeedBps ────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferSpeedBps(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jlong {
+    if event == 0 {
+        return -1;
+    }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    if let crate::engine::EngineEvent::FileTransferProgress { speed_bps, .. } = ev {
+        speed_bps.unwrap_or(0) as jlong
+    } else {
+        -1
+    }
+}
+
+// ── eventTransferEtaSecs ─────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferEtaSecs(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jlong {
+    if event == 0 {
+        return -1;
+    }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    if let crate::engine::EngineEvent::FileTransferProgress { eta_secs, .. } = ev {
+        eta_secs.map(|value| value as jlong).unwrap_or(-1)
+    } else {
+        -1
+    }
+}
+
 // ── eventTransferTotalBytes ──────────────────────────────────────────────────
 
 #[no_mangle]
@@ -779,6 +839,82 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_connectToPeer(
     }
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_disconnectPeer(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    device_id_jstr: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let device_id: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.disconnect_peer(device_id)) {
+        Ok(true) => 1,
+        Ok(false) => 0,
+        Err(_) => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_sendFilePath(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    path: JString,
+    display_name: JString,
+    mime_type: JString,
+    target_device_id: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+
+    let path: String = match env.get_string(&path) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let display_name: String = match env.get_string(&display_name) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let mime_type: String = match env.get_string(&mime_type) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let target_device = if target_device_id.is_null() {
+        None
+    } else {
+        let raw: String = match env.get_string(&target_device_id) {
+            Ok(s) => s.into(),
+            Err(_) => return -1,
+        };
+        match uuid::Uuid::parse_str(&raw) {
+            Ok(value) => Some(value),
+            Err(_) => return -1,
+        }
+    };
+
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.send_file_path(
+        PathBuf::from(path),
+        display_name,
+        mime_type,
+        target_device,
+    )) {
+        Ok(_) => 1,
+        Err(_) => -1,
+    }
+}
+
 // ── freeEvent ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -839,6 +975,24 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_getDeviceId(
     let h = unsafe { &*(handle as *const AndroidHandle) };
     let uuid_str = rt().block_on(h.engine.device_id()).to_string();
     match env.new_string(&uuid_str) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_peersJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    let peers = rt().block_on(h.engine.status_snapshot()).peers;
+    let json = serde_json::to_string(&peers).unwrap_or_else(|_| "[]".to_string());
+    match env.new_string(json) {
         Ok(s) => s.into_raw(),
         Err(_) => std::ptr::null_mut(),
     }

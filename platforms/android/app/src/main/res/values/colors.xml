@@ -1,58 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- ── Page backgrounds ───────────────────────────────────────── -->
-    <color name="cr_bg">#FAFAF8</color>
-    <color name="cr_bg_card">#FFFFFF</color>
-    <color name="cr_bg_inset">#F3F2EF</color>
-    <color name="cr_bg_input">#EDECE9</color>
+    <color name="cr_bg">#F4F1EB</color>
+    <color name="cr_bg_card">#FCFAF6</color>
+    <color name="cr_bg_inset">#ECE6DB</color>
+    <color name="cr_bg_input">#E6DFD2</color>
 
     <!-- ── Borders and dividers ───────────────────────────────────── -->
-    <color name="cr_border">#E4E3DF</color>
-    <color name="cr_border_strong">#C9C8C3</color>
-    <color name="cr_divider">#EFEFEC</color>
+    <color name="cr_border">#D8D0C4</color>
+    <color name="cr_border_strong">#BCAE9D</color>
+    <color name="cr_divider">#E8E1D5</color>
 
-    <!-- ── Accent — indigo/violet ─────────────────────────────────── -->
-    <color name="cr_accent">#5B47E0</color>
-    <color name="cr_accent_dim">#7B6AE8</color>
-    <color name="cr_accent_bg">#EEE9FF</color>
-    <color name="cr_accent_bg_strong">#DDD4FF</color>
+    <!-- ── Accent — deep teal ─────────────────────────────────────── -->
+    <color name="cr_accent">#1D6B72</color>
+    <color name="cr_accent_dim">#3A858C</color>
+    <color name="cr_accent_bg">#DDECEC</color>
+    <color name="cr_accent_bg_strong">#CAE1E1</color>
     <color name="cr_on_accent">#FFFFFF</color>
 
     <!-- ── Text ───────────────────────────────────────────────────── -->
-    <color name="cr_text_1">#111110</color>
-    <color name="cr_text_2">#4B4A47</color>
-    <color name="cr_text_3">#908E89</color>
-    <color name="cr_text_4">#C4C2BC</color>
+    <color name="cr_text_1">#181613</color>
+    <color name="cr_text_2">#4E4941</color>
+    <color name="cr_text_3">#7F786D</color>
+    <color name="cr_text_4">#B8AFA2</color>
 
     <!-- ── Semantic colours ────────────────────────────────────────── -->
-    <color name="cr_green">#15803D</color>
-    <color name="cr_green_bg">#DCFCE7</color>
-    <color name="cr_amber">#B45309</color>
-    <color name="cr_amber_bg">#FEF3C7</color>
-    <color name="cr_red">#B91C1C</color>
-    <color name="cr_red_bg">#FEE2E2</color>
-    <color name="cr_blue">#1D4ED8</color>
-    <color name="cr_blue_bg">#DBEAFE</color>
-    <color name="cr_purple">#7C3AED</color>
-    <color name="cr_purple_bg">#EDE9FE</color>
+    <color name="cr_green">#1C7C54</color>
+    <color name="cr_green_bg">#DDF4E8</color>
+    <color name="cr_amber">#A2621E</color>
+    <color name="cr_amber_bg">#F6E8CB</color>
+    <color name="cr_red">#AF3F37</color>
+    <color name="cr_red_bg">#F7DFDB</color>
+    <color name="cr_blue">#295D8F</color>
+    <color name="cr_blue_bg">#DDE9F6</color>
+    <color name="cr_purple">#6B5C7A</color>
+    <color name="cr_purple_bg">#E9E1EE</color>
 
     <!-- ── Activity kind colours ──────────────────────────────────── -->
-    <color name="cr_k_text_fg">#5B47E0</color>
-    <color name="cr_k_text_bg">#EEE9FF</color>
-    <color name="cr_k_img_fg">#7C3AED</color>
-    <color name="cr_k_img_bg">#EDE9FE</color>
-    <color name="cr_k_file_fg">#1D4ED8</color>
-    <color name="cr_k_file_bg">#DBEAFE</color>
-    <color name="cr_k_peer_fg">#15803D</color>
-    <color name="cr_k_peer_bg">#DCFCE7</color>
-    <color name="cr_k_warn_fg">#B45309</color>
-    <color name="cr_k_warn_bg">#FEF3C7</color>
+    <color name="cr_k_text_fg">#1D6B72</color>
+    <color name="cr_k_text_bg">#DDECEC</color>
+    <color name="cr_k_img_fg">#6B5C7A</color>
+    <color name="cr_k_img_bg">#E9E1EE</color>
+    <color name="cr_k_file_fg">#295D8F</color>
+    <color name="cr_k_file_bg">#DDE9F6</color>
+    <color name="cr_k_peer_fg">#1C7C54</color>
+    <color name="cr_k_peer_bg">#DDF4E8</color>
+    <color name="cr_k_warn_fg">#A2621E</color>
+    <color name="cr_k_warn_bg">#F6E8CB</color>
 
     <!-- ── Navigation ─────────────────────────────────────────────── -->
-    <color name="cr_nav_bg">#FFFFFF</color>
-    <color name="cr_nav_on">#5B47E0</color>
-    <color name="cr_nav_off">#B0AEA8</color>
+    <color name="cr_nav_bg">#FCFAF6</color>
+    <color name="cr_nav_on">#1D6B72</color>
+    <color name="cr_nav_off">#A1988C</color>
 
     <!-- ── Ripple ──────────────────────────────────────────────────── -->
-    <color name="cr_ripple">#12111110</color>
+    <color name="cr_ripple">#16120F12</color>
 </resources>

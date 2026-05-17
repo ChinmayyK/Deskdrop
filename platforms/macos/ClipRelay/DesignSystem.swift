@@ -28,60 +28,60 @@ extension Color {
 enum CRTheme {
 
     // ── Brand ─────────────────────────────────────────────────────────────────
-    static let brandElectric = Color(hex: 0x4F8EF7)
-    static let brandViolet   = Color(hex: 0x9B6BF5)
-    static let brandCyan     = Color(hex: 0x34C8E8)
+    static let brandElectric = Color(hex: 0x1E6B74)
+    static let brandViolet   = Color(hex: 0x5E7E79)
+    static let brandCyan     = Color(hex: 0x8FA89E)
 
     // ── Sidebar — fully adaptive ───────────────────────────────────────────────
     static var sidebarBase: Color {
-        Color(light: Color(hex: 0xF2F4F8), dark: Color(hex: 0x080B14))
+        Color(light: Color(hex: 0xECE6DD), dark: Color(hex: 0x11161B))
     }
     static var sidebarMid: Color {
-        Color(light: Color(hex: 0xE8EBF2), dark: Color(hex: 0x0C1121))
+        Color(light: Color(hex: 0xE1DACE), dark: Color(hex: 0x171E25))
     }
     static var sidebarTop: Color {
-        Color(light: Color(hex: 0xEDF0F8), dark: Color(hex: 0x11162C))
+        Color(light: Color(hex: 0xF4F0E8), dark: Color(hex: 0x1D2730))
     }
 
     /// Primary foreground for text/icons drawn on the sidebar surface
     static var sidebarInk: Color {
-        Color(light: Color(hex: 0x1C1E26), dark: .white)
+        Color(light: Color(hex: 0x1B1A17), dark: Color(white: 1, opacity: 0.96))
     }
     /// Secondary / de-emphasised sidebar text
     static var sidebarInkSoft: Color {
-        Color(light: Color(hex: 0x6B7280), dark: Color(white: 1, opacity: 0.46))
+        Color(light: Color(hex: 0x6C655C), dark: Color(white: 1, opacity: 0.52))
     }
     /// Very muted sidebar text (timestamps, hints)
     static var sidebarInkSubtle: Color {
-        Color(light: Color(hex: 0x9CA3AF), dark: Color(white: 1, opacity: 0.28))
+        Color(light: Color(hex: 0x978D80), dark: Color(white: 1, opacity: 0.30))
     }
     /// Subtle separator for use inside the sidebar
     static var sidebarDivider: Color {
-        Color(light: Color(hex: 0xD1D5E0).opacity(0.9), dark: Color(white: 1, opacity: 0.07))
+        Color(light: Color(hex: 0xCEC4B7).opacity(0.9), dark: Color(white: 1, opacity: 0.08))
     }
     /// Selected nav-button pill fill
     static var sidebarSelectedFill: Color {
-        Color(light: Color(hex: 0xFFFFFF).opacity(0.80), dark: Color(white: 1, opacity: 0.11))
+        Color(light: Color(hex: 0xFFFFFF).opacity(0.72), dark: Color(white: 1, opacity: 0.12))
     }
     /// Hovered nav-button pill fill
     static var sidebarHoverFill: Color {
-        Color(light: Color(hex: 0x000000).opacity(0.04), dark: Color(white: 1, opacity: 0.045))
+        Color(light: Color(hex: 0x000000).opacity(0.035), dark: Color(white: 1, opacity: 0.05))
     }
     /// Selected nav-button border
     static var sidebarSelectedStroke: Color {
-        Color(light: Color(hex: 0xD1D5E0).opacity(0.7), dark: Color(white: 1, opacity: 0.07))
+        Color(light: Color(hex: 0xCBC0B3).opacity(0.75), dark: Color(white: 1, opacity: 0.08))
     }
     /// Stat-pill fill inside footer
     static var sidebarPillFill: Color {
-        Color(light: Color(hex: 0x000000).opacity(0.05), dark: Color(white: 1, opacity: 0.05))
+        Color(light: Color(hex: 0x000000).opacity(0.04), dark: Color(white: 1, opacity: 0.05))
     }
     static var sidebarPillStroke: Color {
-        Color(light: Color(hex: 0x000000).opacity(0.07), dark: Color(white: 1, opacity: 0.07))
+        Color(light: Color(hex: 0x000000).opacity(0.06), dark: Color(white: 1, opacity: 0.08))
     }
 
     // ── Canvas ────────────────────────────────────────────────────────────────
-    static var canvasTop:    Color { Color(light: Color(hex: 0xEFF1F8), dark: Color(hex: 0x13161F)) }
-    static var canvasBottom: Color { Color(light: Color(hex: 0xE5E8F5), dark: Color(hex: 0x0D1017)) }
+    static var canvasTop:    Color { Color(light: Color(hex: 0xF4F0E8), dark: Color(hex: 0x12171C)) }
+    static var canvasBottom: Color { Color(light: Color(hex: 0xE9E2D6), dark: Color(hex: 0x0E1318)) }
 
     // ── Semantic surfaces ─────────────────────────────────────────────────────
     static var surface:         Color { Color(nsColor: .controlBackgroundColor) }
@@ -93,17 +93,17 @@ enum CRTheme {
     static var rowSelected: Color { Color(light: .black.opacity(0.072), dark: .white.opacity(0.082)) }
 
     // ── System accent palette ─────────────────────────────────────────────────
-    static let accentBlue   = Color(hex: 0x007AFF)
-    static let accentGreen  = Color(hex: 0x34C759)
-    static let accentYellow = Color(hex: 0xFFCC00)
-    static let accentOrange = Color(hex: 0xFF9500)
-    static let accentRed    = Color(hex: 0xFF3B30)
-    static let accentPurple = Color(hex: 0xAF52DE)
-    static let accentIndigo = Color(hex: 0x5856D6)
-    static let accentTeal   = Color(hex: 0x32ADE6)
-    static let accentMint   = Color(hex: 0x00C7BE)
-    static let accentPink   = Color(hex: 0xFF2D55)
-    static let accentGold   = Color(hex: 0xFFCC00)
+    static let accentBlue   = Color(hex: 0x2C6288)
+    static let accentGreen  = Color(hex: 0x2D7B58)
+    static let accentYellow = Color(hex: 0xD3AB49)
+    static let accentOrange = Color(hex: 0xB77833)
+    static let accentRed    = Color(hex: 0xB65348)
+    static let accentPurple = Color(hex: 0x7B667B)
+    static let accentIndigo = Color(hex: 0x5B6D89)
+    static let accentTeal   = Color(hex: 0x2F7C7A)
+    static let accentMint   = Color(hex: 0x3B8C72)
+    static let accentPink   = Color(hex: 0xB96874)
+    static let accentGold   = Color(hex: 0xC39A3F)
 
     // ── Text ──────────────────────────────────────────────────────────────────
     static var ink:       Color { Color(nsColor: .labelColor) }
@@ -117,7 +117,7 @@ enum CRTheme {
 
     // ── Gradients ─────────────────────────────────────────────────────────────
     static var brandGradient: LinearGradient {
-        LinearGradient(colors: [brandElectric, brandViolet],
+        LinearGradient(colors: [brandElectric, brandCyan],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
     static var canvasGradient: LinearGradient {

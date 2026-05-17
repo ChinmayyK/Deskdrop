@@ -37,7 +37,7 @@ final class ClipboardWatcher {
 
     var onTextChange:  ((String) -> Void)?
     var onImageChange: ((Data, String) -> Void)?  // (data, mimeType)
-    var onFileChange:  ((URL) -> Void)?
+    var onFileChange:  (([URL]) -> Void)?
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -122,8 +122,8 @@ final class ClipboardWatcher {
             .urlReadingFileURLsOnly: true
         ]
         if let urls = pb.readObjects(forClasses: classes, options: options) as? [URL],
-           let first = urls.first {
-            let captured = first
+           !urls.isEmpty {
+            let captured = urls
             DispatchQueue.main.async { [weak self] in
                 self?.onFileChange?(captured)
             }

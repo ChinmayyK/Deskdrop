@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-#[cfg(not(target_os = "android"))]
 use if_addrs::{get_if_addrs, IfAddr};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
@@ -35,7 +34,6 @@ pub struct NetworkChangeEvent {
     pub kinds: Vec<NetworkChangeKind>,
 }
 
-#[cfg(not(target_os = "android"))]
 pub fn list_interfaces() -> Result<Vec<NetworkInterfaceInfo>> {
     let primary_ip = detect_primary_outbound_ip().ok();
     let mut interfaces = Vec::new();
@@ -54,33 +52,13 @@ pub fn list_interfaces() -> Result<Vec<NetworkInterfaceInfo>> {
         });
     }
 
-    Ok(interfaces)
-}
-
-#[cfg(target_os = "android")]
-pub fn list_interfaces() -> Result<Vec<NetworkInterfaceInfo>> {
-    let primary_ip = detect_primary_outbound_ip().ok();
-    let mut interfaces = Vec::new();
-
-    if let Some(ip) = primary_ip {
-        interfaces.push(NetworkInterfaceInfo {
-            name: "primary".to_string(),
-            ip,
-            is_primary: true,
-        });
-    }
+    interfaces.sort_by_cached_key(|iface| interface_rank(iface, primary_ip));
 
     Ok(interfaces)
 }
 
 pub fn get_active_interface() -> Result<NetworkInterfaceInfo> {
-    let interfaces = list_interfaces()?;
-
-    if let Some(primary) = interfaces.iter().find(|iface| iface.is_primary) {
-        return Ok(primary.clone());
-    }
-
-    interfaces
+    list_interfaces()?
         .into_iter()
         .next()
         .context("no active LAN interface found")
@@ -231,6 +209,47 @@ fn is_candidate_v6(ip: std::net::Ipv6Addr) -> bool {
         && !ip.is_unspecified()
         && !ip.is_multicast()
         && (ip.is_unique_local() || ip.is_unicast_link_local())
+}
+
+fn interface_rank(
+    iface: &NetworkInterfaceInfo,
+    primary_ip: Option<IpAddr>,
+) -> (u8, u8, u8, String) {
+    let name = iface.name.to_lowercase();
+    let primary_rank = if Some(iface.ip) == primary_ip { 0 } else { 1 };
+    let transport_rank = if looks_like_wifi_or_ethernet(&name) {
+        0
+    } else if looks_like_usb_tether(&name) {
+        1
+    } else {
+        2
+    };
+    let ip_rank = match iface.ip {
+        IpAddr::V4(v4) if v4.is_private() => 0,
+        IpAddr::V6(v6) if v6.is_unique_local() => 1,
+        IpAddr::V4(v4) if v4.is_link_local() => 2,
+        IpAddr::V6(v6) if v6.is_unicast_link_local() => 3,
+        _ => 4,
+    };
+
+    (primary_rank, transport_rank, ip_rank, name)
+}
+
+fn looks_like_wifi_or_ethernet(name: &str) -> bool {
+    name.starts_with("en")
+        || name.starts_with("eth")
+        || name.starts_with("wl")
+        || name.contains("wifi")
+        || name.contains("wlan")
+        || name.contains("ap")
+        || name.contains("bridge")
+}
+
+fn looks_like_usb_tether(name: &str) -> bool {
+    name.starts_with("usb")
+        || name.contains("rndis")
+        || name.contains("tether")
+        || name.contains("bridge")
 }
 
 #[cfg(target_os = "linux")]

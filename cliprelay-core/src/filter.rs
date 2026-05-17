@@ -317,6 +317,9 @@ impl Filter for SizeFilter {
     }
 
     fn check(&self, content: &ClipboardContent) -> Verdict {
+        if self.max_bytes == 0 {
+            return Verdict::Allow;
+        }
         let len = content.byte_len();
         if len > self.max_bytes {
             Verdict::deny(format!(

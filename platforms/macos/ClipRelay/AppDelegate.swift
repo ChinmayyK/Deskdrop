@@ -37,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .clipRelayOpenHistoryPanel,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(ensureDaemonResponsiveFromStore),
+            name: .clipRelayEnsureDaemon,
+            object: nil
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -47,7 +53,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Daemon lifecycle
 
     private func startDaemonIfNeeded() {
-        guard !isDaemonSocketPresent() else { return }
+        if isDaemonSocketPresent() {
+            ensureDaemonResponsive(forceRestartOnFailure: true)
+            return
+        }
+        launchDaemonProcess()
+    }
+
+    private func launchDaemonProcess() {
+        cleanupDaemonSocketIfNeeded()
 
         let candidates = [
             Bundle.main.resourceURL?.appendingPathComponent("cliprelay-daemon"),
@@ -78,6 +92,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func ensureDaemonResponsiveFromStore() {
+        ensureDaemonResponsive(forceRestartOnFailure: true)
+    }
+
+    private func ensureDaemonResponsive(forceRestartOnFailure: Bool) {
+        Task { [weak self] in
+            do {
+                try await ClipRelayIPCClient.shared.ping()
+            } catch {
+                guard forceRestartOnFailure else { return }
+                self?.daemonProcess?.terminate()
+                self?.daemonProcess = nil
+                self?.cleanupDaemonSocketIfNeeded()
+                self?.launchDaemonProcess()
+            }
+        }
+    }
+
     private func isDaemonSocketPresent() -> Bool {
         let path: String
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
@@ -86,6 +118,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             path = "/tmp/cliprelay-\(getuid()).sock"
         }
         return FileManager.default.fileExists(atPath: path)
+    }
+
+    private func cleanupDaemonSocketIfNeeded() {
+        let path: String
+        if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
+            path = "\(runtime)/cliprelay.sock"
+        } else {
+            path = "/tmp/cliprelay-\(getuid()).sock"
+        }
+        if FileManager.default.fileExists(atPath: path) {
+            try? FileManager.default.removeItem(atPath: path)
+        }
     }
 
     // MARK: - Single instance guard
@@ -193,14 +237,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] count in
                 self?.updateMenuBarBadge(pendingCount: count)
-            }
-            .store(in: &cancellables)
-
-        store.$quickSendContext
-            .dropFirst()
-            .sink { [weak self] context in
-                guard context != nil else { return }
-                self?.showPanel(self?.quickAccessController)
             }
             .store(in: &cancellables)
 
@@ -342,6 +378,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let device = ManagedDevice(peer: PeerViewModel(
             id: detail.deviceId, displayName: detail.deviceName,
             platform: nil, trusted: false, remembered: false, connected: false,
+            connectionStatus: "disconnected",
             syncEnabled: true, autoConnect: false, lastSeen: detail.lastSeen, lastSync: nil
         ))
 

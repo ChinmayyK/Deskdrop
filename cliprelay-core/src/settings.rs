@@ -186,7 +186,7 @@ impl Default for Settings {
             sync_images: true,
             sync_files: true,
             sync_mode: SyncMode::Auto,
-            max_payload_bytes: 64 * 1024 * 1024, // 64 MB
+            max_payload_bytes: 0, // 0 = unlimited
             history_limit: 50,
             max_history_text_bytes: 64 * 1024,
             show_receive_notification: true,
@@ -204,7 +204,7 @@ impl Default for Settings {
             auto_apply_allowed_devices: Vec::new(),
             auto_apply_debounce_ms: 500,
             auto_accept_file_transfers: true,
-            auto_accept_max_bytes: 50 * 1024 * 1024, // 50 MB
+            auto_accept_max_bytes: 0, // 0 = unlimited
             start_on_login: false,
             min_text_length: 0,
             sync_urls_only: false,

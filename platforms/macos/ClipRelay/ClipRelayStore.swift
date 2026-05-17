@@ -13,6 +13,7 @@ import ServiceManagement
 extension Notification.Name {
     /// Posted by ClipRelayStore.openHistoryPanel() — observed by AppDelegate.
     static let clipRelayOpenHistoryPanel = Notification.Name("com.cliprelay.openHistoryPanel")
+    static let clipRelayEnsureDaemon = Notification.Name("com.cliprelay.ensureDaemon")
 }
 
 @MainActor
@@ -51,6 +52,7 @@ final class ClipRelayStore: ObservableObject {
     private var pollTimer: Timer?
     private var pendingRename: PeerViewModel? = nil
     private var toastWorkItems: [UUID: DispatchWorkItem] = [:]
+    private var ipcFailureCount: Int = 0
 
     init(ipc: ClipRelayIPCClient = .shared) {
         self.ipc = ipc
@@ -97,8 +99,8 @@ final class ClipRelayStore: ObservableObject {
         watcher.onImageChange = { [weak self] data, mimeType in
             self?.handleLocalClipboardImage(data, mimeType: mimeType)
         }
-        watcher.onFileChange = { [weak self] url in
-            self?.handleLocalClipboardFile(url)
+        watcher.onFileChange = { [weak self] urls in
+            self?.handleLocalClipboardFiles(urls)
         }
         watcher.start()
     }
@@ -128,9 +130,29 @@ final class ClipRelayStore: ObservableObject {
         }
     }
 
-    private func handleLocalClipboardFile(_ url: URL) {
+    private func handleLocalClipboardFiles(_ urls: [URL]) {
         guard connectedCount > 0 else { return }
-        sendFile(url: url)
+        let readable = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !readable.isEmpty else { return }
+        if readable.count == 1, let first = readable.first {
+            sendFile(url: first)
+            return
+        }
+
+        guard let archiveURL = buildClipboardArchive(from: readable) else {
+            showToast(
+                title: "Archive failed",
+                body: "Could not bundle copied files for transfer",
+                tint: CRTheme.accentOrange
+            )
+            return
+        }
+        sendFile(url: archiveURL)
+        showToast(
+            title: "Bundled \(readable.count) files",
+            body: "Sending a zip archive to connected devices",
+            tint: CRTheme.accentBlue
+        )
     }
 
     /// Apply received clipboard text locally without triggering the watcher callback.
@@ -150,7 +172,7 @@ final class ClipRelayStore: ObservableObject {
         pollTimer?.invalidate()
         let interval: TimeInterval = connectedCount > 0 ? 0.25 : 3.0
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
-            Task { [weak self] in
+            Task { @MainActor [weak self] in
                 await self?.refresh()
                 self?.schedulePollTick()   // reschedule with updated interval
             }
@@ -160,11 +182,22 @@ final class ClipRelayStore: ObservableObject {
     func refresh() async {
         do {
             let s = try await ipc.status()
+            ipcFailureCount = 0
             isRunning      = true
             connectedCount = s.peers.filter { $0.status == "connected" }.count
-            statusLine     = connectedCount == 0
-                ? "Ready — no devices nearby"
-                : "\(connectedCount) device\(connectedCount == 1 ? "" : "s") connected"
+            let reconnectingCount = s.peers.filter { $0.status == "connecting" }.count
+            let reconnectableCount = s.peers.filter {
+                $0.status != "connected" &&
+                $0.status != "connecting" &&
+                $0.trusted &&
+                ($0.remembered ?? true) &&
+                ($0.auto_connect ?? true)
+            }.count
+            statusLine = whenStatusLine(
+                connectedCount: connectedCount,
+                reconnectingCount: reconnectingCount,
+                reconnectableCount: reconnectableCount
+            )
             peers = s.peers.map { makePeerViewModel($0) }
             pendingClipboardCount = s.pending_clipboard_count ?? 0
             if let fp = s.local_fingerprint { localFingerprint = fp }
@@ -182,9 +215,15 @@ final class ClipRelayStore: ObservableObject {
                 await primeActivityFeed()
             }
         } catch {
+            ipcFailureCount += 1
             isRunning       = false
-            statusLine      = "Daemon not running"
+            statusLine      = ipcFailureCount >= 3
+                ? "Daemon not running"
+                : "Reconnecting to daemon…"
             dashboardStatus = nil
+            if case ClipRelayIPCError.connectionFailed = error {
+                NotificationCenter.default.post(name: .clipRelayEnsureDaemon, object: nil)
+            }
         }
     }
 
@@ -273,7 +312,7 @@ final class ClipRelayStore: ObservableObject {
     /// and re-starts discovery, picking up any peers that came online recently.
     func scanForDevices() {
         Task {
-            try? await ipc.send(cmd: ["cmd": "rescan_peers"])
+            _ = try? await ipc.send(cmd: ["cmd": "rescan_peers"])
             // Give discovery 1.5 s to find peers, then refresh the peer list.
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             await refresh()
@@ -382,6 +421,83 @@ final class ClipRelayStore: ObservableObject {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(context.text, forType: .string)
         sendCurrentClipboard(to: device)
+    }
+
+    private func buildClipboardArchive(from urls: [URL]) -> URL? {
+        guard !urls.isEmpty else { return nil }
+
+        let stamp = ISO8601DateFormatter()
+            .string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cliprelay-clipboard-archives", isDirectory: true)
+        let stagingDir = tempRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let archiveURL = tempRoot.appendingPathComponent("ClipRelay Bundle \(stamp).zip")
+
+        do {
+            try FileManager.default.createDirectory(
+                at: stagingDir,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+
+            var stagedNames = Set<String>()
+            for source in urls {
+                let stagedName = uniqueClipboardItemName(for: source.lastPathComponent, existing: &stagedNames)
+                let stagedURL = stagingDir.appendingPathComponent(stagedName)
+                try FileManager.default.createSymbolicLink(at: stagedURL, withDestinationURL: source)
+            }
+
+            if FileManager.default.fileExists(atPath: archiveURL.path) {
+                try FileManager.default.removeItem(at: archiveURL)
+            }
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+            process.currentDirectoryURL = stagingDir
+            process.arguments = ["-r", "-q", archiveURL.path] + stagedNames.sorted()
+
+            try process.run()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0,
+                  FileManager.default.fileExists(atPath: archiveURL.path) else {
+                throw NSError(
+                    domain: "ClipRelayArchive",
+                    code: Int(process.terminationStatus),
+                    userInfo: nil
+                )
+            }
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(1800)) {
+                try? FileManager.default.removeItem(at: archiveURL)
+                try? FileManager.default.removeItem(at: stagingDir)
+            }
+            return archiveURL
+        } catch {
+            try? FileManager.default.removeItem(at: stagingDir)
+            try? FileManager.default.removeItem(at: archiveURL)
+            NSLog("ClipRelay: failed to archive clipboard files: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func uniqueClipboardItemName(for baseName: String, existing: inout Set<String>) -> String {
+        guard !existing.contains(baseName) else {
+            let stem = URL(fileURLWithPath: baseName).deletingPathExtension().lastPathComponent
+            let ext = URL(fileURLWithPath: baseName).pathExtension
+            var index = 2
+            while true {
+                let candidate = ext.isEmpty ? "\(stem) \(index)" : "\(stem) \(index).\(ext)"
+                if !existing.contains(candidate) {
+                    existing.insert(candidate)
+                    return candidate
+                }
+                index += 1
+            }
+        }
+        existing.insert(baseName)
+        return baseName
     }
 
     // MARK: - Activity Feed
@@ -568,11 +684,25 @@ final class ClipRelayStore: ObservableObject {
             trusted:     raw.trusted,
             remembered:  raw.remembered ?? true,
             connected:   raw.status == "connected",
+            connectionStatus: raw.status,
             syncEnabled: raw.sync_enabled ?? true,
             autoConnect: raw.auto_connect ?? true,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) }
         )
+    }
+
+    private func whenStatusLine(connectedCount: Int, reconnectingCount: Int, reconnectableCount: Int) -> String {
+        if connectedCount > 0 {
+            return "\(connectedCount) device\(connectedCount == 1 ? "" : "s") connected"
+        }
+        if reconnectingCount > 0 {
+            return "Reconnecting to nearby devices…"
+        }
+        if reconnectableCount > 0 {
+            return "Trusted devices ready to reconnect"
+        }
+        return "Ready — no devices nearby"
     }
 }
 

@@ -54,6 +54,10 @@ final class ClipRelayIPCClient {
         return data
     }
 
+    func ping() async throws {
+        _ = try await send(cmd: ["cmd": "ping"])
+    }
+
     func disconnectPeer(deviceId: String) async throws {
         _ = try await send(cmd: ["cmd": "disconnect_peer", "device_id": deviceId])
     }
@@ -137,12 +141,11 @@ final class ClipRelayIPCClient {
 
     /// Send a file to a specific peer, or all peers when targetDevice is nil.
     func sendFile(url: URL, targetDeviceId: String? = nil) async throws -> String {
-        let data = try Data(contentsOf: url)
         var cmd: [String: Any] = [
-            "cmd":        "send_file",
-            "name":       url.lastPathComponent,
-            "mime":       mimeType(for: url),
-            "data_base64": data.base64EncodedString()
+            "cmd":  "send_file_path",
+            "path": url.path,
+            "name": url.lastPathComponent,
+            "mime": mimeType(for: url),
         ]
         if let t = targetDeviceId { cmd["target_device"] = t }
         let raw = try await send(cmd: cmd)
@@ -240,7 +243,7 @@ final class ClipRelayIPCClient {
     }
 }
 
-enum ClipRelayIPCError: Error {
+enum ClipRelayIPCError: Error, Equatable {
     case socketFailed
     case connectionFailed
     case noData

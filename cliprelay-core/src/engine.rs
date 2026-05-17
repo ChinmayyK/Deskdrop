@@ -10,7 +10,9 @@ use crate::peer_manager::{
     DiscoverySource, PeerConnectionState, PeerManager, PeerRecord, SessionShutdown,
 };
 use crate::probe::{self, ProbeResult, QualityProbe};
-use crate::protocol::{AppMessage, ClipboardContent, HistoryMetadata, DEFAULT_PORT};
+use crate::protocol::{
+    AppMessage, ClipboardContent, FileTransferMetadata, HistoryMetadata, DEFAULT_PORT,
+};
 use crate::retry::Backoff;
 use crate::settings::{default_peer_store_path, default_trust_store_path, Settings};
 use crate::trust::{format_fingerprint, TrustRecord, TrustState, TrustStore};
@@ -1034,54 +1036,33 @@ impl Engine {
         let transfer_id = transfer.transfer_id;
         let meta = transfer.meta.clone();
         let size_bytes = meta.size_bytes;
-        let _ = transfer; // release immutable borrow before mutable use
-
-        // Announce to target peer(s).
-        let announce = AppMessage::FileTransferAnnounce { meta };
-        let peers = self.shared.peer_manager.active_senders();
-        let mut announced_to = 0usize;
-        for (peer_id, tx) in peers {
-            let should_send = match target_device {
-                Some(t) => t == peer_id,
-                None => true,
-            };
-            if should_send {
-                let msg = announce.clone();
-                let send_result = match tx.try_send(msg.clone()) {
-                    Ok(()) => Ok(()),
-                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => tx.send(msg).await,
-                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
-                        Err(tokio::sync::mpsc::error::SendError(msg))
-                    }
-                };
-                if send_result.is_ok() {
-                    announced_to += 1;
-                } else {
-                    warn!(
-                        "file transfer announce queue unavailable for peer {}",
-                        peer_id
-                    );
-                }
-            }
-        }
+        let _ = transfer;
         drop(mgr);
 
-        if announced_to == 0 {
-            return Err(anyhow!("target peer queue unavailable"));
-        }
+        self.announce_outbound_file_transfer(meta, file_name, size_bytes, target_device)
+            .await?;
+        Ok(transfer_id)
+    }
 
-        // Record in activity feed.
-        {
-            let mut feed = self.shared.activity.lock().await;
-            feed.record_file_transfer_started(
-                self.shared.config.device_id,
-                self.shared.config.device_name.clone(),
-                file_name,
-                size_bytes,
-                hex::encode(transfer_id),
-                true,
-            );
-        }
+    /// Send a file from disk without reading the full payload into memory first.
+    pub async fn send_file_path(
+        &self,
+        path: PathBuf,
+        file_name: String,
+        mime_type: String,
+        target_device: Option<Uuid>,
+    ) -> Result<[u8; 16]> {
+        let mut mgr = self.shared.file_transfers.lock().await;
+        let transfer =
+            mgr.start_outbound_path(path, file_name.clone(), mime_type, target_device)?;
+        let transfer_id = transfer.transfer_id;
+        let meta = transfer.meta.clone();
+        let size_bytes = meta.size_bytes;
+        let _ = transfer;
+        drop(mgr);
+
+        self.announce_outbound_file_transfer(meta, file_name, size_bytes, target_device)
+            .await?;
         Ok(transfer_id)
     }
 
@@ -1114,6 +1095,62 @@ impl Engine {
                 }
             }
         }
+        Ok(())
+    }
+
+    async fn announce_outbound_file_transfer(
+        &self,
+        meta: FileTransferMetadata,
+        file_name: String,
+        size_bytes: u64,
+        target_device: Option<Uuid>,
+    ) -> Result<()> {
+        let transfer_id = meta.transfer_id;
+        let announce = AppMessage::FileTransferAnnounce { meta };
+        let peers = self.shared.peer_manager.active_senders();
+        let mut announced_to = 0usize;
+        for (peer_id, tx) in peers {
+            let should_send = match target_device {
+                Some(t) => t == peer_id,
+                None => true,
+            };
+            if !should_send {
+                continue;
+            }
+
+            let msg = announce.clone();
+            let send_result = match tx.try_send(msg.clone()) {
+                Ok(()) => Ok(()),
+                Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => tx.send(msg).await,
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                    Err(tokio::sync::mpsc::error::SendError(msg))
+                }
+            };
+
+            if send_result.is_ok() {
+                announced_to += 1;
+            } else {
+                warn!("file transfer announce queue unavailable for peer {}", peer_id);
+            }
+        }
+
+        if announced_to == 0 {
+            self.shared
+                .file_transfers
+                .lock()
+                .await
+                .cancel_outbound(&transfer_id);
+            return Err(anyhow!("target peer queue unavailable"));
+        }
+
+        self.shared.activity.lock().await.record_file_transfer_started(
+            self.shared.config.device_id,
+            self.shared.config.device_name.clone(),
+            file_name,
+            size_bytes,
+            hex::encode(transfer_id),
+            true,
+        );
         Ok(())
     }
 
@@ -2037,6 +2074,29 @@ fn register_session(
         });
     }
 
+    // If this peer is reconnecting, re-announce any unfinished outbound
+    // transfers so the receiver can respond with resume_from_chunk.
+    {
+        let pending_shared = shared.clone();
+        let pending_outbox = outbox_tx.clone();
+        tokio::spawn(async move {
+            let pending = pending_shared
+                .file_transfers
+                .lock()
+                .await
+                .pending_outbound_announcements_for(peer_id);
+            for meta in pending {
+                if pending_outbox
+                    .send(AppMessage::FileTransferAnnounce { meta })
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+    }
+
     // MED-02: wrap the session task in a JoinHandle watcher so that panics
     // are logged rather than silently swallowed by the Tokio runtime.
     let panic_peer_name = peer_name.clone();
@@ -2251,23 +2311,35 @@ fn register_session(
                                     reason: reject_reason.unwrap_or_else(|| "rejected".into()),
                                 }).await;
                             } else {
-                                // Collect chunks while holding the lock, then drop lock before sending.
-                                let (chunks_to_send, all_sent) = {
+                                {
                                     let mut mgr = shared.file_transfers.lock().await;
                                     if let Some(transfer) = mgr.get_outbound_mut(&transfer_id) {
                                         transfer.resume_from(resume_from_chunk);
-                                        let mut chunks = Vec::new();
-                                        while let Some(chunk_msg) = transfer.next_chunk_message() {
-                                            chunks.push(chunk_msg);
-                                        }
-                                        let done = transfer.is_all_sent();
-                                        (chunks, done)
-                                    } else {
-                                        (Vec::new(), false)
                                     }
-                                }; // lock released here
+                                }
 
-                                for chunk_msg in chunks_to_send {
+                                let mut stream_failed = false;
+                                loop {
+                                    let next_chunk = {
+                                        let mut mgr = shared.file_transfers.lock().await;
+                                        match mgr.get_outbound_mut(&transfer_id) {
+                                            Some(transfer) => transfer.next_chunk_message(),
+                                            None => Ok(None),
+                                        }
+                                    };
+
+                                    let Some(chunk_msg) = (match next_chunk {
+                                        Ok(value) => value,
+                                        Err(err) => {
+                                            warn!(error = %err, "failed to read outbound file chunk");
+                                            shared.file_transfers.lock().await.cancel_outbound(&transfer_id);
+                                            stream_failed = true;
+                                            break;
+                                        }
+                                    }) else {
+                                        break;
+                                    };
+
                                     let wire_msg = match chunk_msg {
                                         FileTransferMessage::Chunk {
                                             transfer_id,
@@ -2284,11 +2356,21 @@ fn register_session(
                                     };
                                     if let Err(e) = sess.send(&wire_msg).await {
                                         warn!("file chunk send error: {}", e);
+                                        stream_failed = true;
                                         break;
                                     }
                                 }
-                                if all_sent {
-                                    let _ = sess.send(&AppMessage::FileTransferComplete { transfer_id }).await;
+
+                                if !stream_failed {
+                                    let all_sent = {
+                                        let mut mgr = shared.file_transfers.lock().await;
+                                        mgr.get_outbound_mut(&transfer_id)
+                                            .map(|transfer| transfer.is_all_sent())
+                                            .unwrap_or(false)
+                                    };
+                                    if all_sent {
+                                        let _ = sess.send(&AppMessage::FileTransferComplete { transfer_id }).await;
+                                    }
                                 }
                             }
                         }

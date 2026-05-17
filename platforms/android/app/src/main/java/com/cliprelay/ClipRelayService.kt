@@ -33,6 +33,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
@@ -103,6 +104,9 @@ object ClipRelayJni {
     @JvmStatic external fun eventTransferId(event: Long): String?
     @JvmStatic external fun eventTransferFileName(event: Long): String?
     @JvmStatic external fun eventTransferProgressPercent(event: Long): Int
+    @JvmStatic external fun eventTransferBytesReceived(event: Long): Long
+    @JvmStatic external fun eventTransferSpeedBps(event: Long): Long
+    @JvmStatic external fun eventTransferEtaSecs(event: Long): Long
     @JvmStatic external fun eventTransferTotalBytes(event: Long): Long
     @JvmStatic external fun eventTransferDestPath(event: Long): String?
     /** Accept an incoming file transfer (identified by hex transfer ID). */
@@ -115,6 +119,7 @@ object ClipRelayJni {
      * Returns 0 on success, -1 on error.
      */
     @JvmStatic external fun connectToPeer(handle: Long, ip: String, port: Int): Int
+    @JvmStatic external fun disconnectPeer(handle: Long, deviceId: String): Int
 
     /**
      * Returns this engine's stable device UUID as a hyphenated string
@@ -122,6 +127,14 @@ object ClipRelayJni {
      * Used to filter self-connections during NSD resolution.
      */
     @JvmStatic external fun getDeviceId(handle: Long): String?
+    @JvmStatic external fun peersJson(handle: Long): String?
+    @JvmStatic external fun sendFilePath(
+        handle: Long,
+        path: String,
+        displayName: String,
+        mimeType: String,
+        targetDeviceId: String?
+    ): Int
 
     /**
      * Push updated sync settings to the running engine atomically.
@@ -161,6 +174,12 @@ data class ActivityEntry(
     val fileTotalBytes: Long = 0L,
     /** Transfer progress 0-100. */
     val progressPercent: Int = 0,
+    /** Bytes written so far for an in-flight transfer. */
+    val transferBytesReceived: Long = 0L,
+    /** Bytes per second, or 0 if the engine has not estimated speed yet. */
+    val transferSpeedBps: Long = 0L,
+    /** Seconds remaining, or -1 if unknown. */
+    val transferEtaSecs: Long = -1L,
     /** Final destination path (file transfers). */
     val destPath: String = ""
 ) {
@@ -216,6 +235,7 @@ class ClipRelayService : Service() {
         const val ACTION_DISCONNECT_ALL     = "com.cliprelay.DISCONNECT_ALL"
         const val ACTION_PUSH_TEXT          = "com.cliprelay.PUSH_TEXT"
         const val ACTION_PUSH_SHARED_URI    = "com.cliprelay.PUSH_SHARED_URI"
+        const val ACTION_SCAN_NOW           = "com.cliprelay.SCAN_NOW"
         const val ACTION_STATUS_CHANGED     = "com.cliprelay.STATUS_CHANGED"
         const val ACTION_SETTINGS_CHANGED   = "com.cliprelay.SETTINGS_CHANGED"  // re-read prefs live
         const val ACTION_PUSH_CLIPBOARD     = "com.cliprelay.PUSH_CLIPBOARD"    // send Android clipboard to peers
@@ -229,7 +249,9 @@ class ClipRelayService : Service() {
         const val EXTRA_CONTENT_HASH        = "content_hash"   // SHA-256 hex; used for full-content apply via engine
         const val EXTRA_TRANSFER_ID         = "transfer_id"
         const val EXTRA_SHARED_URI          = "shared_uri"
+        const val EXTRA_SHARED_URIS         = "shared_uris"
         const val EXTRA_SHARED_NAME         = "shared_name"
+        const val EXTRA_TARGET_DEVICE_ID    = "target_device_id"
         const val PREF_SERVICE_RUNNING      = "service_running"
 
         // Poll intervals
@@ -362,6 +384,10 @@ class ClipRelayService : Service() {
             ACTION_PUSH_CLIPBOARD -> {
                 val h = engineHandle
                 if (h != 0L) {
+                    if (!hasConnectedPeers()) {
+                        Log.i(TAG, "PUSH_CLIPBOARD ignored: no connected peers")
+                        return START_STICKY
+                    }
                     val cm   = getSystemService(ClipboardManager::class.java)
                     val text = cm.primaryClip?.getItemAt(0)
                         ?.coerceToText(this)?.toString()
@@ -380,6 +406,10 @@ class ClipRelayService : Service() {
                         Log.w(TAG, "PUSH_CLIPBOARD: clipboard is empty")
                     }
                 }
+                return START_STICKY
+            }
+            ACTION_SCAN_NOW -> {
+                restartDiscoveryNow()
                 return START_STICKY
             }
             ACTION_PAUSE_SYNC   -> { setSyncEnabled(false); return START_STICKY }
@@ -475,17 +505,33 @@ class ClipRelayService : Service() {
 
             if (intent?.action == ACTION_PUSH_TEXT) {
                 intent.getStringExtra("text")?.takeIf { it.isNotBlank() }?.let { text ->
-                    if (isSyncEnabled() && engineHandle != 0L) {
+                    if (isSyncEnabled() && engineHandle != 0L && hasConnectedPeers()) {
                         ClipRelayJni.pushText(engineHandle, text)
+                    } else if (engineHandle != 0L) {
+                        Log.i(TAG, "PUSH_TEXT ignored: no connected peers")
+                    } else {
+                        Unit
                     }
                 }
             }
 
             if (intent?.action == ACTION_PUSH_SHARED_URI) {
                 val rawUri = intent.getStringExtra(EXTRA_SHARED_URI)
+                val rawUris = intent.getStringArrayListExtra(EXTRA_SHARED_URIS)
                 val preferredName = intent.getStringExtra(EXTRA_SHARED_NAME)
-                if (!rawUri.isNullOrBlank() && isSyncEnabled() && engineHandle != 0L) {
-                    pushSharedUri(rawUri, preferredName)
+                val targetDeviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID)
+                val uriStrings = buildList {
+                    if (!rawUri.isNullOrBlank()) add(rawUri)
+                    rawUris?.filter { it.isNotBlank() }?.let { addAll(it) }
+                }
+                if (uriStrings.isNotEmpty() && isSyncEnabled() && engineHandle != 0L) {
+                    if (!hasConnectedPeers()) {
+                        Log.i(TAG, "PUSH_SHARED_URI ignored: no connected peers")
+                    } else if (targetDeviceId != null && !isPeerConnected(targetDeviceId)) {
+                        Log.w(TAG, "PUSH_SHARED_URI ignored: target peer is no longer connected")
+                    } else {
+                        sendSharedUris(uriStrings, preferredName, targetDeviceId)
+                    }
                 }
             }
 
@@ -586,21 +632,37 @@ class ClipRelayService : Service() {
     }
 
     private fun disconnectAllPeers() {
-        // Signal the Rust engine to disconnect via a graceful shutdown + restart.
-        // We stop and restart the engine so sessions are torn down cleanly.
-        if (engineHandle != 0L) {
-            ClipRelayJni.stop(engineHandle)
-            engineHandle = 0L
-            engineStarted.set(false)
-            connectedPeerNames.clear()
+        val h = engineHandle
+        if (h != 0L) {
+            currentPeerSnapshots()
+                .filter { it.isConnected }
+                .forEach { peer -> ClipRelayJni.disconnectPeer(h, peer.id) }
         }
+        connectedPeerNames.clear()
+        persistStatus()
         updateForegroundNotification()
-        broadcastStatus()
+        handler.postDelayed({
+            persistStatus()
+            updateForegroundNotification()
+        }, 750L)
     }
 
     private fun shutdownAndStop() {
         disconnectAllPeers()
         stopSelf()
+    }
+
+    private fun restartDiscoveryNow() {
+        if (engineHandle == 0L) return
+        handler.post {
+            acquireMulticastLock()
+            stopNsdDiscovery()
+            startNsdDiscovery()
+            cancelNsdRetry()
+            nsdRetryCount.set(0L)
+            persistStatus()
+            updateForegroundNotification()
+        }
     }
 
     // ── Event drain (Rust → Kotlin) ───────────────────────────────────────────
@@ -643,7 +705,10 @@ class ClipRelayService : Service() {
             // ── Clipboard text — AUTO-APPLIED (legacy or auto-apply enabled) ─
             ClipRelayJni.CR_EVENT_CLIPBOARD_TEXT -> {
                 val text = ClipRelayJni.eventText(ev) ?: return
-                val from = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val from = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 // Track last-sync time per peer so dashboard can show "2m ago"
                 peerLastSync[from] = System.currentTimeMillis()
                 addActivity(ActivityEntry(
@@ -658,7 +723,10 @@ class ClipRelayService : Service() {
             // ── Clipboard text — TIMELINE-FIRST (available, not auto-applied) ─
             ClipRelayJni.CR_EVENT_CLIPBOARD_AVAILABLE -> {
                 val text = ClipRelayJni.eventText(ev) ?: return
-                val from = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val from = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 // Track last-sync time per peer
                 peerLastSync[from] = System.currentTimeMillis()
                 val autoApplied = ClipRelayJni.eventAutoApplied(ev) == 1
@@ -686,7 +754,10 @@ class ClipRelayService : Service() {
             ClipRelayJni.CR_EVENT_CLIPBOARD_IMAGE -> {
                 val bytes = ClipRelayJni.eventBinaryData(ev) ?: return
                 val mime  = ClipRelayJni.eventMimeType(ev) ?: "image/png"
-                val from  = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val from  = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 addActivity(ActivityEntry(deviceName = from, kind = ActivityKind.CLIPBOARD_IMAGE,
                     preview = "image ($mime)", appliedLocally = true))
                 applyBinaryClipboard(bytes, imageNameForMime(mime), mime, from, isFile = false)
@@ -696,7 +767,10 @@ class ClipRelayService : Service() {
             ClipRelayJni.CR_EVENT_CLIPBOARD_FILE -> {
                 val bytes = ClipRelayJni.eventBinaryData(ev) ?: return
                 val name  = ClipRelayJni.eventFileName(ev) ?: "ClipRelay_file"
-                val from  = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val from  = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 addActivity(ActivityEntry(deviceName = from, kind = ActivityKind.FILE_RECEIVED,
                     preview = name))
                 applyBinaryClipboard(bytes, name, null, from, isFile = true)
@@ -705,7 +779,10 @@ class ClipRelayService : Service() {
             // ── Dedicated file transfer: incoming ─────────────────────────────
             ClipRelayJni.CR_EVENT_FILE_TRANSFER_INCOMING -> {
                 val tid       = ClipRelayJni.eventTransferId(ev) ?: return
-                val from      = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val from      = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 val fileName  = ClipRelayJni.eventTransferFileName(ev) ?: "file"
                 val totalBytes = ClipRelayJni.eventTransferTotalBytes(ev)
                 addActivity(ActivityEntry(deviceName = from,
@@ -716,19 +793,41 @@ class ClipRelayService : Service() {
 
             // ── Dedicated file transfer: progress update ──────────────────────
             ClipRelayJni.CR_EVENT_FILE_TRANSFER_PROGRESS -> {
-                val tid     = ClipRelayJni.eventTransferId(ev) ?: return
-                val percent = ClipRelayJni.eventTransferProgressPercent(ev)
-                val name    = ClipRelayJni.eventTransferFileName(ev) ?: "file"
-                val from    = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val tid           = ClipRelayJni.eventTransferId(ev) ?: return
+                val percent       = ClipRelayJni.eventTransferProgressPercent(ev)
+                val bytesReceived = ClipRelayJni.eventTransferBytesReceived(ev)
+                val speedBps      = ClipRelayJni.eventTransferSpeedBps(ev)
+                val etaSecs       = ClipRelayJni.eventTransferEtaSecs(ev)
+                val name          = ClipRelayJni.eventTransferFileName(ev) ?: "file"
+                val from          = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 // Update existing activity entry in-place.
-                updateActivityTransferProgress(tid, percent)
-                updateFileTransferNotificationProgress(tid, name, percent)
+                updateActivityTransferProgress(
+                    tid = tid,
+                    percent = percent,
+                    bytesReceived = bytesReceived,
+                    speedBps = speedBps,
+                    etaSecs = etaSecs
+                )
+                updateFileTransferNotificationProgress(
+                    tid = tid,
+                    fileName = name,
+                    percent = percent,
+                    bytesReceived = bytesReceived,
+                    speedBps = speedBps,
+                    etaSecs = etaSecs
+                )
             }
 
             // ── Dedicated file transfer: complete ─────────────────────────────
             ClipRelayJni.CR_EVENT_FILE_TRANSFER_COMPLETE -> {
                 val tid      = ClipRelayJni.eventTransferId(ev) ?: return
-                val from     = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val from     = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 val fileName = ClipRelayJni.eventTransferFileName(ev) ?: "file"
                 val destPath = ClipRelayJni.eventTransferDestPath(ev) ?: ""
                 updateActivityTransferComplete(tid, destPath)
@@ -738,7 +837,10 @@ class ClipRelayService : Service() {
             // ── Dedicated file transfer: failed ───────────────────────────────
             ClipRelayJni.CR_EVENT_FILE_TRANSFER_FAILED -> {
                 val tid  = ClipRelayJni.eventTransferId(ev) ?: return
-                val from = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val from = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 updateActivityTransferFailed(tid)
                 cancelFileTransferNotification(tid)
             }
@@ -746,14 +848,17 @@ class ClipRelayService : Service() {
             // ── Trust (TOFU) prompt ───────────────────────────────────────────
             ClipRelayJni.CR_EVENT_TOFU_PROMPT -> {
                 val deviceId = ClipRelayJni.eventDeviceId(ev) ?: return
-                val name = ClipRelayJni.eventDeviceName(ev) ?: "Unknown device"
+                val name = resolvePeerDisplayName(deviceId, ClipRelayJni.eventDeviceName(ev))
                 val fp   = ClipRelayJni.eventFingerprint(ev) ?: ""
                 showPairingPrompt(deviceId, name, fp)
             }
 
             // ── Peer connected ────────────────────────────────────────────────
             ClipRelayJni.CR_EVENT_PEER_CONNECTED -> {
-                val name = ClipRelayJni.eventDeviceName(ev) ?: "Unknown"
+                val name = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
                 Log.i(TAG, "Peer connected: $name")
                 connectedPeerNames.add(name)
                 addActivity(ActivityEntry(deviceName = name,
@@ -768,15 +873,14 @@ class ClipRelayService : Service() {
 
             // ── Peer disconnected ─────────────────────────────────────────────
             ClipRelayJni.CR_EVENT_PEER_DISCONNECTED -> {
-                val name = ClipRelayJni.eventDeviceName(ev)
-                Log.i(TAG, "Peer disconnected: ${name ?: "unknown"}")
-                if (name != null) {
-                    connectedPeerNames.remove(name)
-                    addActivity(ActivityEntry(deviceName = name,
-                        kind = ActivityKind.PEER_DISCONNECTED, preview = "disconnected"))
-                } else {
-                    connectedPeerNames.clear()
-                }
+                val name = resolvePeerDisplayName(
+                    ClipRelayJni.eventDeviceId(ev),
+                    ClipRelayJni.eventDeviceName(ev)
+                )
+                Log.i(TAG, "Peer disconnected: $name")
+                connectedPeerNames.remove(name)
+                addActivity(ActivityEntry(deviceName = name,
+                    kind = ActivityKind.PEER_DISCONNECTED, preview = "disconnected"))
                 persistStatus()
                 updateForegroundNotification()
                 // If we're now peerless, schedule a retry scan so we reconnect
@@ -808,13 +912,22 @@ class ClipRelayService : Service() {
         broadcastActivityUpdated()
     }
 
-    private fun updateActivityTransferProgress(tid: String, percent: Int) {
+    private fun updateActivityTransferProgress(
+        tid: String,
+        percent: Int,
+        bytesReceived: Long,
+        speedBps: Long,
+        etaSecs: Long
+    ) {
         synchronized(feedLock) {
             val idx = activityFeed.indexOfFirst { it.transferId == tid }
             if (idx >= 0) {
                 activityFeed[idx] = activityFeed[idx].copy(
                     kind = ActivityKind.FILE_TRANSFER_PROGRESS,
-                    progressPercent = percent
+                    progressPercent = percent,
+                    transferBytesReceived = bytesReceived.coerceAtLeast(0L),
+                    transferSpeedBps = speedBps.coerceAtLeast(0L),
+                    transferEtaSecs = etaSecs
                 )
             } else {
                 return
@@ -935,11 +1048,18 @@ class ClipRelayService : Service() {
         notificationManager.notify(transferNotifId(tid), notif)
     }
 
-    private fun updateFileTransferNotificationProgress(tid: String, fileName: String, percent: Int) {
+    private fun updateFileTransferNotificationProgress(
+        tid: String,
+        fileName: String,
+        percent: Int,
+        bytesReceived: Long,
+        speedBps: Long,
+        etaSecs: Long
+    ) {
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Receiving $fileName")
-            .setContentText("$percent%")
+            .setContentText(buildTransferStatusLine(percent, bytesReceived, speedBps, etaSecs))
             .setProgress(100, percent, false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -985,6 +1105,32 @@ class ClipRelayService : Service() {
         else                -> "$bytes B"
     }
 
+    private fun formatEta(seconds: Long): String = when {
+        seconds < 0L -> ""
+        seconds < 60L -> "${seconds}s"
+        seconds < 3_600L -> "${seconds / 60}m"
+        else -> "${seconds / 3_600}h"
+    }
+
+    private fun buildTransferStatusLine(
+        percent: Int,
+        bytesReceived: Long,
+        speedBps: Long,
+        etaSecs: Long
+    ): String {
+        val parts = mutableListOf("${percent}%")
+        if (bytesReceived > 0L) {
+            parts += formatBytes(bytesReceived)
+        }
+        if (speedBps > 0L) {
+            parts += "${formatBytes(speedBps)}/s"
+        }
+        if (etaSecs >= 0L) {
+            parts += "ETA ${formatEta(etaSecs)}"
+        }
+        return parts.joinToString("  ·  ")
+    }
+
     private fun isCriticalFailure(msg: String): Boolean =
         msg.contains("heartbeat timeout", ignoreCase = true) ||
         msg.contains("network lost", ignoreCase = true) ||
@@ -1006,6 +1152,7 @@ class ClipRelayService : Service() {
 
     private fun checkClipboard() {
         if (engineHandle == 0L || !isSyncEnabled()) return
+        if (!hasConnectedPeers()) return
         if (suppressNext) { suppressNext = false; return }
 
         val clip = clipboardManager.primaryClip ?: return
@@ -1026,6 +1173,32 @@ class ClipRelayService : Service() {
         val sig = "uri:$uri"
         if (sig == lastClipboardSignature) return
 
+        val clipboardMime = contentResolver.getType(uri).orEmpty()
+        if (!clipboardMime.startsWith("image/")) {
+            val staged = stageSharedUri(uri, preferredName = null, fallbackIndex = 1)
+            if (staged != null) {
+                lastClipboardSignature = sig
+                val result = ClipRelayJni.sendFilePath(
+                    engineHandle,
+                    staged.localFile.absolutePath,
+                    staged.displayName,
+                    staged.mimeType,
+                    null
+                )
+                if (result == 1) {
+                    addToFeed(
+                        ActivityEntry(
+                            deviceName = resolvedDeviceName(),
+                            kind = ActivityKind.FILE_SENT,
+                            preview = staged.displayName
+                        )
+                    )
+                    broadcastStatus()
+                }
+                return
+            }
+        }
+
         when (val payload = readClipboardUri(uri)) {
             null -> Unit
             is OutgoingPayload.Image -> {
@@ -1039,32 +1212,60 @@ class ClipRelayService : Service() {
         }
     }
 
-    private fun pushSharedUri(rawUri: String, preferredName: String?) {
-        val uri = runCatching { Uri.parse(rawUri) }.getOrNull() ?: return
-        when (val payload = readOutgoingUri(uri, preferredName)) {
-            null -> Log.w(TAG, "Ignored shared URI with unsupported payload: $uri")
-            is OutgoingPayload.Image -> {
-                ClipRelayJni.pushImage(engineHandle, payload.mime, payload.data)
-                addToFeed(
-                    ActivityEntry(
-                        deviceName = resolvedDeviceName(),
-                        kind = ActivityKind.CLIPBOARD_IMAGE,
-                        preview = preferredName ?: imageNameForMime(payload.mime)
-                    )
-                )
-                broadcastStatus()
+    private fun sendSharedUris(
+        uriStrings: List<String>,
+        preferredName: String?,
+        targetDeviceId: String?
+    ) {
+        if (engineHandle == 0L) return
+        if (!hasConnectedPeers()) {
+            Log.i(TAG, "Ignoring shared URIs because no peers are connected")
+            return
+        }
+        if (targetDeviceId != null && !isPeerConnected(targetDeviceId)) {
+            Log.w(TAG, "Ignoring shared URIs because target peer is disconnected: $targetDeviceId")
+            return
+        }
+        var sentAny = false
+        uriStrings.forEachIndexed { index, rawUri ->
+            val uri = runCatching { Uri.parse(rawUri) }.getOrNull() ?: return@forEachIndexed
+            val staged = stageSharedUri(
+                uri = uri,
+                preferredName = preferredName?.takeIf { uriStrings.size == 1 },
+                fallbackIndex = index + 1,
+            )
+            if (staged == null) {
+                Log.w(TAG, "Unable to stage shared URI: $rawUri")
+                return@forEachIndexed
             }
-            is OutgoingPayload.File -> {
-                ClipRelayJni.pushFile(engineHandle, payload.name, payload.data)
+
+            val result = ClipRelayJni.sendFilePath(
+                engineHandle,
+                staged.localFile.absolutePath,
+                staged.displayName,
+                staged.mimeType,
+                targetDeviceId
+            )
+            if (result == 1) {
+                sentAny = true
+                Log.i(
+                    TAG,
+                    "Queued shared URI ${staged.displayName} (${staged.localFile.length()} bytes) for target=${targetDeviceId ?: "all"}"
+                )
                 addToFeed(
                     ActivityEntry(
                         deviceName = resolvedDeviceName(),
                         kind = ActivityKind.FILE_SENT,
-                        preview = payload.name
+                        preview = staged.displayName
                     )
                 )
-                broadcastStatus()
+            } else {
+                Log.w(TAG, "Failed to queue staged file transfer for ${staged.displayName}")
             }
+        }
+        if (sentAny) {
+            persistStatus()
+            broadcastStatus()
         }
     }
 
@@ -1169,18 +1370,13 @@ class ClipRelayService : Service() {
     private fun readClipboardUri(uri: Uri): OutgoingPayload? = readOutgoingUri(uri, preferredName = null)
 
     private fun readOutgoingUri(uri: Uri, preferredName: String?): OutgoingPayload? = runCatching {
-        val mime = contentResolver.getType(uri).orEmpty()
-        val name = run {
-            preferredName?.trim()?.takeIf { it.isNotEmpty() }?.let { return@run it }
-            val cursor = contentResolver.query(
-                uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
-            )
-            cursor?.use {
-                val col = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (col >= 0 && it.moveToFirst()) it.getString(col) else null
-            } ?: uri.lastPathSegment ?: "file"
-        }
-        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        val mime = resolveUriMimeType(uri).orEmpty()
+        val name = resolveUriDisplayName(
+            uri = uri,
+            preferredName = preferredName,
+            fallbackName = "file",
+        )
+        val bytes = openUriInputStream(uri)?.use { it.readBytes() } ?: return null
         if (mime.startsWith("image/")) OutgoingPayload.Image(mime.ifEmpty { "image/png" }, bytes)
         else OutgoingPayload.File(name, bytes)
     }.onFailure { Log.w(TAG, "Failed to read clipboard URI $uri", it) }.getOrNull()
@@ -1200,6 +1396,117 @@ class ClipRelayService : Service() {
     private sealed interface OutgoingPayload {
         data class Image(val mime: String, val data: ByteArray) : OutgoingPayload
         data class File(val name: String, val data: ByteArray) : OutgoingPayload
+    }
+
+    private data class StagedOutgoingFile(
+        val localFile: File,
+        val displayName: String,
+        val mimeType: String,
+    )
+
+    private fun stageSharedUri(
+        uri: Uri,
+        preferredName: String?,
+        fallbackIndex: Int,
+    ): StagedOutgoingFile? = runCatching {
+        val mime = resolveUriMimeType(uri)
+            ?.takeIf { it.isNotBlank() }
+            ?: "application/octet-stream"
+        val ext = MimeTypeMap.getSingleton()
+            .getExtensionFromMimeType(mime.substringBefore(';'))
+        val displayName = resolveUriDisplayName(
+            uri = uri,
+            preferredName = preferredName,
+            fallbackName = "Shared file $fallbackIndex",
+        )
+        val stagedDir = File(cacheDir, "shared-outgoing").also { it.mkdirs() }
+        cleanupStagedOutgoingFiles(stagedDir)
+        val stagedFile = uniqueFileInDir(stagedDir, sanitize(displayName, ext))
+        openUriInputStream(uri)?.use { input ->
+            FileOutputStream(stagedFile).use { output ->
+                input.copyTo(output, 256 * 1024)
+            }
+        } ?: return null
+        StagedOutgoingFile(stagedFile, displayName, mime)
+    }.onFailure { Log.w(TAG, "Failed to stage shared URI $uri", it) }.getOrNull()
+
+    private fun resolveUriDisplayName(
+        uri: Uri,
+        preferredName: String?,
+        fallbackName: String,
+    ): String {
+        preferredName?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+
+        if (uri.scheme.equals("file", ignoreCase = true)) {
+            uri.path
+                ?.let(::File)
+                ?.name
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return it }
+        }
+
+        val cursor = contentResolver.query(
+            uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
+        )
+        cursor?.use {
+            val col = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (col >= 0 && it.moveToFirst()) {
+                it.getString(col)?.takeIf(String::isNotBlank)?.let { displayName -> return displayName }
+            }
+        }
+
+        return uri.lastPathSegment?.takeIf { it.isNotBlank() } ?: fallbackName
+    }
+
+    private fun resolveUriMimeType(uri: Uri): String? {
+        contentResolver.getType(uri)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        if (uri.scheme.equals("file", ignoreCase = true)) {
+            val ext = uri.path
+                ?.let(::File)
+                ?.extension
+                ?.lowercase()
+                ?.takeIf { it.isNotBlank() }
+            if (ext != null) {
+                MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)?.let { return it }
+            }
+        }
+
+        return null
+    }
+
+    private fun openUriInputStream(uri: Uri): InputStream? {
+        if (uri.scheme.equals("file", ignoreCase = true)) {
+            val file = uri.path?.let(::File)?.takeIf(File::exists) ?: return null
+            return file.inputStream()
+        }
+
+        return contentResolver.openInputStream(uri)
+    }
+
+    private fun cleanupStagedOutgoingFiles(dir: File) {
+        val cutoff = System.currentTimeMillis() - 12 * 60 * 60 * 1000L
+        dir.listFiles()?.forEach { file ->
+            if (file.lastModified() < cutoff) {
+                runCatching { file.delete() }
+            }
+        }
+    }
+
+    private fun uniqueFileInDir(dir: File, fileName: String): File {
+        var candidate = File(dir, fileName)
+        if (!candidate.exists()) return candidate
+
+        val stem = candidate.nameWithoutExtension.ifBlank { "cliprelay-share" }
+        val ext = candidate.extension.takeIf { it.isNotBlank() }?.let { ".$it" }.orEmpty()
+        var index = 2
+        while (candidate.exists()) {
+            candidate = File(dir, "$stem-$index$ext")
+            index++
+        }
+        return candidate
     }
 
     // ── NSD (Network Service Discovery) ────────────────────────────────────────────────
@@ -1383,27 +1690,19 @@ class ClipRelayService : Service() {
             getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         }.getOrNull() ?: return
 
-        val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .build()
-
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                Log.i(TAG, "Network: WiFi available — restarting NSD")
+                Log.i(TAG, "Network: default network available — restarting discovery")
                 handler.post {
                     // Brief delay lets the IP stack settle before mDNS re-registers.
                     handler.postDelayed({
-                        acquireMulticastLock()
-                        stopNsdDiscovery()
-                        startNsdDiscovery()
-                        cancelNsdRetry()
-                        nsdRetryCount.set(0L)
+                        restartDiscoveryNow()
                     }, 1_200L)
                 }
             }
 
             override fun onLost(network: Network) {
-                Log.i(TAG, "Network: WiFi lost — stopping NSD, scheduling retry")
+                Log.i(TAG, "Network: default network lost — stopping discovery, scheduling retry")
                 handler.post {
                     stopNsdDiscovery()
                     scheduleNsdRetry()
@@ -1411,7 +1710,7 @@ class ClipRelayService : Service() {
             }
         }
 
-        runCatching { cm.registerNetworkCallback(request, cb) }
+        runCatching { cm.registerDefaultNetworkCallback(cb) }
             .onSuccess { networkCallback = cb }
             .onFailure { Log.w(TAG, "Network: failed to register callback", it) }
     }
@@ -1730,13 +2029,51 @@ class ClipRelayService : Service() {
     // Key: "last_sync_<peerName>", Value: System.currentTimeMillis() as String.
     private val peerLastSync = mutableMapOf<String, Long>()
 
+    private fun currentPeerSnapshots(): List<PeerSnapshot> {
+        val raw = if (engineHandle != 0L) {
+            ClipRelayJni.peersJson(engineHandle)
+        } else {
+            prefs().getString(PREF_PEER_SNAPSHOTS_JSON, null)
+        }
+        return parsePeerSnapshots(raw)
+    }
+
+    private fun hasConnectedPeers(): Boolean = connectedPeerNames.isNotEmpty()
+
+    private fun isPeerConnected(deviceId: String): Boolean =
+        currentPeerSnapshots().any { peer ->
+            peer.isConnected && peer.id.equals(deviceId, ignoreCase = true)
+        }
+
+    private fun resolvePeerDisplayName(deviceId: String?, fallbackName: String?): String {
+        val known = deviceId?.let { id ->
+            currentPeerSnapshots().firstOrNull { it.id.equals(id, ignoreCase = true) }?.name
+        }
+        return known?.takeIf { it.isNotBlank() }
+            ?: fallbackName?.takeIf { it.isNotBlank() }
+            ?: "Unknown device"
+    }
+
     private fun persistStatus() {
+        val rawPeerJson = if (engineHandle != 0L) {
+            ClipRelayJni.peersJson(engineHandle)
+        } else {
+            prefs().getString(PREF_PEER_SNAPSHOTS_JSON, null)
+        } ?: "[]"
+        val peers = parsePeerSnapshots(rawPeerJson)
+        connectedPeerNames.clear()
+        connectedPeerNames.addAll(peers.filter { it.isConnected }.map { it.name })
+        peers.forEach { peer ->
+            peer.lastSyncSecs?.let { peerLastSync[peer.name] = it * 1000L }
+        }
+
         val editor = prefs().edit()
             .putString("local_device_name", resolvedDeviceName())
             .putString("device_id", if (engineHandle != 0L) ClipRelayJni.getDeviceId(engineHandle) else null)
             .putBoolean("peer_connected", connectedPeerNames.isNotEmpty())
             .putInt("connected_count", connectedPeerNames.size)
             .putStringSet("connected_names", connectedPeerNames.toSet())
+            .putString(PREF_PEER_SNAPSHOTS_JSON, rawPeerJson)
         // Store last-sync times so the dashboard can show "Last sync: 2m ago" per peer.
         peerLastSync.forEach { (name, ts) ->
             editor.putLong("last_sync_${name.take(32)}", ts)

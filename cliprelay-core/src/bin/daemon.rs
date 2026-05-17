@@ -771,6 +771,23 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .await?;
             Ok(IpcResponse::ok(hex::encode(transfer_id)))
         }
+        IpcRequest::SendFilePath {
+            path,
+            name,
+            mime,
+            target_device,
+        } => {
+            let transfer_id = state
+                .engine
+                .send_file_path(
+                    std::path::PathBuf::from(path),
+                    name,
+                    mime,
+                    target_device.as_deref().map(parse_uuid).transpose()?,
+                )
+                .await?;
+            Ok(IpcResponse::ok(hex::encode(transfer_id)))
+        }
         IpcRequest::AcceptFileTransfer { transfer_id } => {
             state
                 .engine

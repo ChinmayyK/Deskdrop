@@ -30,6 +30,8 @@ use crate::protocol::FileTransferMetadata;
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -104,11 +106,15 @@ pub enum TransferStatus {
 
 // ── Sender state ──────────────────────────────────────────────────────────────
 
+enum OutboundSource {
+    Memory(Vec<Vec<u8>>),
+    FilePath(PathBuf),
+}
+
 pub struct OutboundTransfer {
     pub transfer_id: TransferId,
     pub meta: FileTransferMetadata,
-    /// All chunks pre-split (lazy: only loaded on demand to bound memory).
-    pub chunks: Vec<Vec<u8>>,
+    source: OutboundSource,
     pub total_chunks: u32,
     pub next_chunk: u32,
     pub last_acked_chunk: u32,
@@ -128,7 +134,7 @@ impl OutboundTransfer {
             // back to the sender's local outbound state.
             transfer_id: meta.transfer_id,
             meta,
-            chunks,
+            source: OutboundSource::Memory(chunks),
             total_chunks,
             next_chunk: 0,
             last_acked_chunk: 0,
@@ -138,20 +144,45 @@ impl OutboundTransfer {
         }
     }
 
+    pub fn from_path(
+        path: PathBuf,
+        meta: FileTransferMetadata,
+        target_device: Option<Uuid>,
+    ) -> Result<Self> {
+        let total_chunks = chunk_count(meta.size_bytes)?;
+        Ok(Self {
+            transfer_id: meta.transfer_id,
+            meta,
+            source: OutboundSource::FilePath(path),
+            total_chunks,
+            next_chunk: 0,
+            last_acked_chunk: 0,
+            status: TransferStatus::Pending,
+            created_at: Instant::now(),
+            target_device,
+        })
+    }
+
     /// Get next chunk message to send. Returns None when all sent.
-    pub fn next_chunk_message(&mut self) -> Option<FileTransferMessage> {
+    pub fn next_chunk_message(&mut self) -> Result<Option<FileTransferMessage>> {
         if self.next_chunk >= self.total_chunks {
-            return None;
+            return Ok(None);
         }
         let idx = self.next_chunk;
-        let data = self.chunks[idx as usize].clone();
+        let data = match &self.source {
+            OutboundSource::Memory(chunks) => chunks
+                .get(idx as usize)
+                .cloned()
+                .with_context(|| format!("missing outbound chunk {}", idx))?,
+            OutboundSource::FilePath(path) => read_file_chunk(path, idx, self.meta.size_bytes)?,
+        };
         self.next_chunk += 1;
-        Some(FileTransferMessage::Chunk {
+        Ok(Some(FileTransferMessage::Chunk {
             transfer_id: self.transfer_id,
             chunk_index: idx,
             total_chunks: self.total_chunks,
             data,
-        })
+        }))
     }
 
     /// Called when receiver acks chunks up to `last_confirmed`.
@@ -177,7 +208,7 @@ pub struct InboundTransfer {
     pub transfer_id: TransferId,
     pub meta: FileTransferMetadata,
     pub total_chunks: u32,
-    pub received_chunks: HashMap<u32, Vec<u8>>,
+    pub received_chunk_count: u32,
     pub last_confirmed_chunk: u32,
     pub status: TransferStatus,
     pub created_at: Instant,
@@ -189,6 +220,7 @@ pub struct InboundTransfer {
     pub dest_path: Option<PathBuf>,
     pub from_device: Uuid,
     pub from_device_name: String,
+    hasher: Sha256,
 }
 
 impl InboundTransfer {
@@ -199,7 +231,7 @@ impl InboundTransfer {
             transfer_id: meta.transfer_id,
             meta,
             total_chunks,
-            received_chunks: HashMap::new(),
+            received_chunk_count: 0,
             last_confirmed_chunk: 0,
             status: TransferStatus::Pending,
             created_at: Instant::now(),
@@ -209,6 +241,7 @@ impl InboundTransfer {
             dest_path: None,
             from_device,
             from_device_name,
+            hasher: Sha256::new(),
         }
     }
 
@@ -227,6 +260,11 @@ impl InboundTransfer {
         let tmp_name = format!(".cliprelay_tmp_{uid}_{safe_name}");
         self.tmp_path = Some(save_dir.join(&tmp_name));
         self.dest_path = Some(unique_dest_path(save_dir, &safe_name));
+        std::fs::create_dir_all(save_dir).context("creating save dir")?;
+        if let Some(tmp) = &self.tmp_path {
+            let _ = std::fs::remove_file(tmp);
+            File::create(tmp).with_context(|| format!("creating temp file {}", tmp.display()))?;
+        }
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
         Ok(())
@@ -240,15 +278,89 @@ impl InboundTransfer {
             chunk_index,
             self.total_chunks
         );
+        if chunk_index < self.received_chunk_count {
+            return Ok(self.progress_snapshot());
+        }
+        anyhow::ensure!(
+            chunk_index == self.received_chunk_count,
+            "out-of-order chunk: expected {}, got {}",
+            self.received_chunk_count,
+            chunk_index
+        );
+
+        self.append_chunk(&data)?;
         let len = data.len() as u64;
-        self.received_chunks.entry(chunk_index).or_insert_with(|| {
-            self.bytes_received += len;
-            data
-        });
+        self.bytes_received += len;
+        self.received_chunk_count += 1;
         self.last_confirmed_chunk = chunk_index;
 
-        let percent =
-            ((self.received_chunks.len() as f64 / self.total_chunks as f64) * 100.0) as u8;
+        Ok(self.progress_snapshot())
+    }
+
+    /// Verify SHA-256 and assemble the final file.
+    pub fn finalize(&mut self) -> Result<PathBuf> {
+        anyhow::ensure!(
+            self.received_chunk_count == self.total_chunks,
+            "missing chunks: got {} of {}",
+            self.received_chunk_count,
+            self.total_chunks
+        );
+
+        // Integrity verification.
+        let actual = {
+            let hasher = std::mem::replace(&mut self.hasher, Sha256::new());
+            hex::encode(hasher.finalize())
+        };
+        anyhow::ensure!(
+            actual == self.meta.sha256_checksum,
+            "SHA-256 mismatch: expected {}, got {}",
+            self.meta.sha256_checksum,
+            actual
+        );
+
+        let tmp = self.tmp_path.as_ref().context("no temp path")?;
+        let dest = self.dest_path.as_ref().context("no dest path")?;
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).context("creating save dir")?;
+        }
+        std::fs::rename(tmp, dest).with_context(|| {
+            format!(
+                "moving completed transfer from {} to {}",
+                tmp.display(),
+                dest.display()
+            )
+        })?;
+        self.tmp_path = None;
+        self.status = TransferStatus::Complete;
+        Ok(dest.clone())
+    }
+
+    /// Should we send a chunk ack now?
+    pub fn should_ack(&self) -> bool {
+        // `is_multiple_of` was stabilised in Rust 1.75 — using % avoids a
+        // silent build failure on older toolchains (HIGH-01).
+        self.last_confirmed_chunk > 0 && self.last_confirmed_chunk % FILE_ACK_EVERY_N_CHUNKS == 0
+    }
+
+    fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
+        let tmp = self.tmp_path.as_ref().context("transfer has not been accepted")?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(tmp)
+            .with_context(|| format!("opening temp file {}", tmp.display()))?;
+        file.write_all(data)
+            .with_context(|| format!("writing temp file {}", tmp.display()))?;
+        self.hasher.update(data);
+        Ok(())
+    }
+
+    fn progress_snapshot(&self) -> TransferProgress {
+        let percent = if self.total_chunks == 0 {
+            100
+        } else {
+            ((self.received_chunk_count as f64 / self.total_chunks as f64) * 100.0) as u8
+        };
         let elapsed = self.started_at.map(|s| s.elapsed()).unwrap_or_default();
         let speed_bps = if elapsed.as_secs() > 0 {
             Some(self.bytes_received / elapsed.as_secs())
@@ -260,58 +372,14 @@ impl InboundTransfer {
             remaining.checked_div(spd)
         });
 
-        Ok(TransferProgress {
+        TransferProgress {
             transfer_id: self.transfer_id,
             bytes_received: self.bytes_received,
             total_bytes: self.meta.size_bytes,
             percent,
             speed_bps,
             eta_secs,
-        })
-    }
-
-    /// Verify SHA-256 and assemble the final file.
-    pub fn finalize(&mut self) -> Result<PathBuf> {
-        anyhow::ensure!(
-            self.received_chunks.len() as u32 == self.total_chunks,
-            "missing chunks: got {} of {}",
-            self.received_chunks.len(),
-            self.total_chunks
-        );
-
-        // Reassemble in order.
-        let mut buf: Vec<u8> = Vec::with_capacity(self.meta.size_bytes as usize);
-        for i in 0..self.total_chunks {
-            let chunk = self
-                .received_chunks
-                .get(&i)
-                .with_context(|| format!("missing chunk {}", i))?;
-            buf.extend_from_slice(chunk);
         }
-
-        // Integrity verification.
-        let actual = hex::encode(Sha256::digest(&buf));
-        anyhow::ensure!(
-            actual == self.meta.sha256_checksum,
-            "SHA-256 mismatch: expected {}, got {}",
-            self.meta.sha256_checksum,
-            actual
-        );
-
-        let dest = self.dest_path.as_ref().context("no dest path")?;
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent).context("creating save dir")?;
-        }
-        std::fs::write(dest, &buf).context("writing final file")?;
-        self.status = TransferStatus::Complete;
-        Ok(dest.clone())
-    }
-
-    /// Should we send a chunk ack now?
-    pub fn should_ack(&self) -> bool {
-        // `is_multiple_of` was stabilised in Rust 1.75 — using % avoids a
-        // silent build failure on older toolchains (HIGH-01).
-        self.last_confirmed_chunk > 0 && self.last_confirmed_chunk % FILE_ACK_EVERY_N_CHUNKS == 0
     }
 }
 
@@ -373,6 +441,33 @@ impl FileTransferManager {
         Ok(self.outbound.get(&tid).unwrap())
     }
 
+    pub fn start_outbound_path(
+        &mut self,
+        path: PathBuf,
+        file_name: String,
+        mime_type: String,
+        target_device: Option<Uuid>,
+    ) -> Result<&OutboundTransfer> {
+        let size_bytes = std::fs::metadata(&path)
+            .with_context(|| format!("reading metadata for {}", path.display()))?
+            .len();
+        let checksum = checksum_file(&path)?;
+        let mut tid = [0u8; 16];
+        tid.copy_from_slice(Uuid::new_v4().as_bytes());
+
+        let meta = FileTransferMetadata {
+            transfer_id: tid,
+            file_name,
+            size_bytes,
+            mime_type,
+            sha256_checksum: checksum,
+        };
+        let transfer = OutboundTransfer::from_path(path, meta, target_device)?;
+        let tid = transfer.transfer_id;
+        self.outbound.insert(tid, transfer);
+        Ok(self.outbound.get(&tid).unwrap())
+    }
+
     pub fn get_outbound_mut(&mut self, tid: &TransferId) -> Option<&mut OutboundTransfer> {
         self.outbound.get_mut(tid)
     }
@@ -390,9 +485,17 @@ impl FileTransferManager {
         from_device_name: String,
     ) -> &mut InboundTransfer {
         let tid = meta.transfer_id;
-        let transfer = InboundTransfer::new(meta, from_device, from_device_name);
-        self.inbound.insert(tid, transfer);
-        self.inbound.get_mut(&tid).unwrap()
+        match self.inbound.entry(tid) {
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                let transfer = entry.into_mut();
+                transfer.from_device = from_device;
+                transfer.from_device_name = from_device_name;
+                transfer
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(InboundTransfer::new(meta, from_device, from_device_name))
+            }
+        }
     }
 
     pub fn accept_inbound(&mut self, tid: &TransferId) -> Result<u32> {
@@ -405,7 +508,7 @@ impl FileTransferManager {
     /// Accept inbound with resume support: if we have partial state, return resume chunk.
     pub fn accept_inbound_or_resume(&mut self, tid: &TransferId) -> Result<u32> {
         let transfer = self.inbound.get_mut(tid).context("unknown transfer")?;
-        let resume_from = if !transfer.received_chunks.is_empty() {
+        let resume_from = if transfer.received_chunk_count > 0 {
             transfer.last_confirmed_chunk + 1
         } else {
             0
@@ -419,10 +522,12 @@ impl FileTransferManager {
     }
 
     pub fn reject_inbound(&mut self, tid: &TransferId) {
-        if let Some(t) = self.inbound.get_mut(tid) {
+        if let Some(mut t) = self.inbound.remove(tid) {
             t.status = TransferStatus::Cancelled;
+            if let Some(tmp) = t.tmp_path.take() {
+                let _ = std::fs::remove_file(tmp);
+            }
         }
-        self.inbound.remove(tid);
     }
 
     pub fn get_inbound_mut(&mut self, tid: &TransferId) -> Option<&mut InboundTransfer> {
@@ -460,6 +565,26 @@ impl FileTransferManager {
             .values()
             .filter(|t| t.status == TransferStatus::Transferring)
             .count()
+    }
+
+    pub fn pending_outbound_announcements_for(&self, peer_id: Uuid) -> Vec<FileTransferMetadata> {
+        let mut pending: Vec<_> = self
+            .outbound
+            .values()
+            .filter(|transfer| {
+                matches!(transfer.status, TransferStatus::Pending | TransferStatus::Transferring)
+                    && match transfer.target_device {
+                        Some(target) => target == peer_id,
+                        None => true,
+                    }
+            })
+            .collect();
+
+        pending.sort_by_key(|transfer| transfer.created_at);
+        pending
+            .into_iter()
+            .map(|transfer| transfer.meta.clone())
+            .collect()
     }
 
     pub fn all_inbound(&self) -> Vec<&InboundTransfer> {
@@ -546,6 +671,53 @@ pub fn default_save_dir() -> PathBuf {
         .join("ClipRelay")
 }
 
+fn chunk_count(size_bytes: u64) -> Result<u32> {
+    let chunks = if size_bytes == 0 {
+        0
+    } else {
+        size_bytes
+            .saturating_add(FILE_CHUNK_SIZE as u64 - 1)
+            / FILE_CHUNK_SIZE as u64
+    };
+    u32::try_from(chunks).context("file is too large to address with 32-bit chunk indices")
+}
+
+fn read_file_chunk(path: &Path, chunk_index: u32, total_bytes: u64) -> Result<Vec<u8>> {
+    let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
+    let remaining = total_bytes.saturating_sub(offset);
+    let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
+        .context("chunk size exceeds addressable memory")?;
+
+    let mut file =
+        File::open(path).with_context(|| format!("opening outbound file {}", path.display()))?;
+    file.seek(SeekFrom::Start(offset))
+        .with_context(|| format!("seeking outbound file {}", path.display()))?;
+
+    let mut buf = vec![0u8; to_read];
+    file.read_exact(&mut buf)
+        .with_context(|| format!("reading outbound file {}", path.display()))?;
+    Ok(buf)
+}
+
+fn checksum_file(path: &Path) -> Result<String> {
+    let mut file =
+        File::open(path).with_context(|| format!("opening file for checksum {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1024 * 1024];
+
+    loop {
+        let read = file
+            .read(&mut buf)
+            .with_context(|| format!("reading file for checksum {}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buf[..read]);
+    }
+
+    Ok(hex::encode(hasher.finalize()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -568,7 +740,7 @@ mod tests {
         let announced_id = meta.transfer_id;
         let mut transfer = OutboundTransfer::new(data.clone(), meta, None);
         let mut collected: Vec<FileTransferMessage> = Vec::new();
-        while let Some(msg) = transfer.next_chunk_message() {
+        while let Some(msg) = transfer.next_chunk_message().unwrap() {
             collected.push(msg);
         }
         assert!(!collected.is_empty());

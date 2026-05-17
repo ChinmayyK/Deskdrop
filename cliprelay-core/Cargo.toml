@@ -39,6 +39,7 @@ bytes = "1"
 libc = "0.2"
 socket2 = { version = "0.5", features = ["all"] }
 image = { version = "0.24", optional = true }
+if-addrs = "0.13"
 
 # Logging
 tracing = "0.1"
@@ -58,7 +59,6 @@ thiserror = "1"
 anyhow = "1"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-if-addrs = "0.13"
 mdns-sd = "0.10"
 
 [target.'cfg(target_os = "android")'.dependencies]

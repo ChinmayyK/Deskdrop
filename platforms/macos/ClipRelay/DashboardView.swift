@@ -382,8 +382,8 @@ private struct DevicesSectionView: View {
                 if store.devices.isEmpty {
                     CREmptyState(
                         systemImage: "wifi.slash", title: "No devices discovered",
-                        message: "When another ClipRelay device appears on your network it will show up here.",
-                        accent: CRTheme.inkSoft,
+                        message: "Nearby devices on Wi-Fi or hotspot will appear here. Remembered devices can be pulled back with a fresh scan.",
+                        accent: CRTheme.brandElectric,
                         actionLabel: "Scan again",
                         onAction: { store.scanForDevices() }
                     )
@@ -624,6 +624,9 @@ private struct DeviceCard: View {
                     }
                     HStack(spacing: 6) {
                         CRTag(text: device.trustState.rawValue.capitalized, tint: device.trustState.color)
+                        if device.canReconnect {
+                            CRTag(text: "Auto reconnect", tint: CRTheme.brandElectric)
+                        }
                         if let ep = device.endpoint {
                             Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 10))
                             Label(ep, systemImage: "network")
@@ -667,6 +670,9 @@ private struct DeviceCard: View {
                 if device.isConnected {
                     Button("Disconnect") { store.disconnect(device) }
                         .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentOrange))
+                } else if device.canReconnect {
+                    Button("Reconnect") { store.scanForDevices() }
+                        .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                 }
                 if device.trustState != .trusted {
                     Button("Trust")  { store.trust(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
@@ -725,13 +731,13 @@ private struct FileShareCard: View {
     @State private var hovered = false
     var body: some View {
         HStack(spacing: 12) {
-            CRIconChip(systemName: "arrow.up.doc.fill", tint: CRTheme.accentIndigo, size: 28)
+            CRIconChip(systemName: "arrow.up.doc.fill", tint: CRTheme.brandElectric, size: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Send a File").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
                 Text("Push a document, image, or archive to peers").font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft)
             }
             Spacer()
-            Button("Send to all") { chooseTarget(nil) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentIndigo))
+            Button("Send to all") { chooseTarget(nil) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
             if !store.connectedDevices.isEmpty {
                 Menu("Choose…") {
                     ForEach(store.connectedDevices) { d in Button(d.name) { chooseTarget(d) } }
@@ -740,7 +746,7 @@ private struct FileShareCard: View {
             }
         }
         .padding(14).frame(maxWidth: .infinity)
-        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.accentIndigo)
+        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.brandElectric)
         .onHover { hovered = $0 }.animation(.crFast, value: hovered)
     }
 }

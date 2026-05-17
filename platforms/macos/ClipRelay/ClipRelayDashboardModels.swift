@@ -184,20 +184,33 @@ struct ManagedDevice: Identifiable {
     let endpoint: String?
     let connectionState: DeviceConnectionState
     let trustState: DeviceTrustState
+    let remembered: Bool
+    let autoConnect: Bool
     let fingerprint: String?
     let lastSeen: Date?
     let lastSync: Date?
     let lastError: String?
 
     var isConnected: Bool { connectionState == .connected }
+    var canReconnect: Bool { trustState == .trusted && remembered && autoConnect && connectionState != .connected }
 
     init(peer: PeerViewModel) {
         self.id              = peer.id
         self.name            = peer.displayName
         self.rawName         = peer.displayName
         self.endpoint        = nil
-        self.connectionState = peer.connected ? .connected : .disconnected
+        self.connectionState = if peer.connectionStatus == "connecting" {
+            .connecting
+        } else if peer.connected {
+            .connected
+        } else if peer.trusted && peer.remembered && peer.autoConnect {
+            .reconnectable
+        } else {
+            .disconnected
+        }
         self.trustState      = peer.trusted   ? .trusted   : .untrusted
+        self.remembered      = peer.remembered
+        self.autoConnect     = peer.autoConnect
         self.fingerprint     = nil
         self.lastSeen        = peer.lastSeen
         self.lastSync        = peer.lastSync
@@ -208,12 +221,13 @@ struct ManagedDevice: Identifiable {
 // MARK: - Device Connection State
 
 enum DeviceConnectionState {
-    case connected, connecting, disconnected
+    case connected, connecting, reconnectable, disconnected
 
     var label: String {
         switch self {
         case .connected:    return "Connected"
         case .connecting:   return "Connecting"
+        case .reconnectable:return "Ready"
         case .disconnected: return "Offline"
         }
     }
@@ -221,7 +235,8 @@ enum DeviceConnectionState {
     var color: Color {
         switch self {
         case .connected:    return PBTheme.accentGreen
-        case .connecting:   return PBTheme.accentGold
+        case .connecting:   return PBTheme.accentBlue
+        case .reconnectable:return PBTheme.brandElectric
         case .disconnected: return PBTheme.inkSoft
         }
     }

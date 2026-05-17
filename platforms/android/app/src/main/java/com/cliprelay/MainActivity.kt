@@ -17,8 +17,10 @@ import android.view.*
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.widget.*
+import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
+import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
 
@@ -51,6 +53,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var peerSection: LinearLayout
     private lateinit var peerRows: LinearLayout
     private lateinit var noPeersState: LinearLayout
+    private lateinit var noPeersTitle: TextView
+    private lateinit var noPeersMessage: TextView
     private lateinit var primaryActionBtn: AppCompatButton
     private lateinit var secondaryActionsContainer: LinearLayout
 
@@ -166,7 +170,7 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.MATCH_PARENT, 1f)
                 navItemDash = buildNavItem(
-                    icon = "⊟", label = "Dashboard", active = true,
+                    iconRes = R.drawable.ic_cr_dashboard, label = "Dashboard", active = true,
                     onClick = { switchTab(Tab.DASHBOARD) })
                 addView(navItemDash, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -183,7 +187,7 @@ class MainActivity : AppCompatActivity() {
                         FrameLayout.LayoutParams.MATCH_PARENT, dp(1))
                 }
                 navItemFeed = buildNavItem(
-                    icon = "≡", label = "Activity", active = false,
+                    iconRes = R.drawable.ic_cr_activity, label = "Activity", active = false,
                     onClick = { switchTab(Tab.FEED) })
                 addView(navItemFeed, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -194,7 +198,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildNavItem(icon: String, label: String, active: Boolean,
+    private fun buildNavItem(@DrawableRes iconRes: Int, label: String, active: Boolean,
                              onClick: () -> Unit): LinearLayout {
         val on  = cr(R.color.cr_nav_on)
         val off = cr(R.color.cr_nav_off)
@@ -222,15 +226,13 @@ class MainActivity : AppCompatActivity() {
             })
 
             // Icon
-            addView(TextView(this@MainActivity).apply {
+            addView(AppCompatImageView(this@MainActivity).apply {
                 tag = "icon"
-                text = icon
-                textSize = 20f
-                gravity = Gravity.CENTER
-                setTextColor(tint)
+                setImageResource(iconRes)
+                imageTintList = android.content.res.ColorStateList.valueOf(tint)
                 layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT).also {
+                    dp(22),
+                    dp(22)).also {
                     it.bottomMargin = dp(3)
                 }
             })
@@ -270,7 +272,8 @@ class MainActivity : AppCompatActivity() {
                 when (child.tag) {
                     "pill"  -> (child.background as? GradientDrawable)
                                    ?.setColor(if (isActive) tint else Color.TRANSPARENT)
-                    "icon",
+                    "icon"  -> (child as? AppCompatImageView)?.imageTintList =
+                        android.content.res.ColorStateList.valueOf(tint)
                     "label" -> (child as? TextView)?.setTextColor(tint)
                 }
             }
@@ -339,11 +342,10 @@ class MainActivity : AppCompatActivity() {
                     it.setColor(cr(R.color.cr_bg_inset))
                 })
             setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
-            addView(TextView(this@MainActivity).apply {
-                text = "⚙"
-                textSize = 16f
-                gravity = Gravity.CENTER
-                setTextColor(cr(R.color.cr_text_3))
+            addView(AppCompatImageView(this@MainActivity).apply {
+                setImageResource(R.drawable.ic_cr_settings)
+                imageTintList = android.content.res.ColorStateList.valueOf(cr(R.color.cr_text_3))
+                scaleType = ImageView.ScaleType.CENTER
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT)
@@ -414,17 +416,17 @@ class MainActivity : AppCompatActivity() {
         addView(vSpace(18))
 
         // Row 4: security tags
-        addView(LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
 
-            addView(infoTag("Noise protocol"))
-            addView(hSpace(6))
-            addView(infoTag("LAN only"))
-            addView(hSpace(6))
-            addView(infoTag("Zero cloud"))
-        })
-    }
+                addView(infoTag("Noise protocol"))
+                addView(hSpace(6))
+                addView(infoTag("LAN first"))
+                addView(hSpace(6))
+                addView(infoTag("Hotspot ready"))
+            })
+        }
 
     // Peers section (inside scroll content)
     private fun buildPeersSection(): LinearLayout {
@@ -435,21 +437,23 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(8), 0, dp(4))
 
-            addView(TextView(this@MainActivity).apply {
+            noPeersTitle = TextView(this@MainActivity).apply {
                 text = "No devices found"
                 textSize = 15f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(cr(R.color.cr_text_2))
                 gravity = Gravity.CENTER
-            })
+            }
+            addView(noPeersTitle)
             addView(vSpace(4))
-            addView(TextView(this@MainActivity).apply {
+            noPeersMessage = TextView(this@MainActivity).apply {
                 text = "Open the desktop app on the same Wi-Fi network"
                 textSize = 13f
                 setTextColor(cr(R.color.cr_text_3))
                 gravity = Gravity.CENTER
                 setLineSpacing(0f, 1.4f)
-            })
+            }
+            addView(noPeersMessage)
         }
 
         peerSection = card().apply {
@@ -503,9 +507,9 @@ class MainActivity : AppCompatActivity() {
         addView(vSpace(14))
 
         listOf(
-            Triple("Same network", "Keep both apps running on the same Wi-Fi.", cr(R.color.cr_accent)),
-            Triple("Pair once",    "Confirm the fingerprint — devices reconnect automatically.", cr(R.color.cr_green)),
-            Triple("Silent sync",  "Text, images, and files sync without any manual steps.", cr(R.color.cr_blue))
+            Triple("Wi-Fi or hotspot", "Discovery now rescans on network changes, including hotspot routing.", cr(R.color.cr_accent)),
+            Triple("Pair once", "Trusted devices stay remembered so reconnecting is one tap away.", cr(R.color.cr_green)),
+            Triple("Direct transfer", "Clipboard and files move device-to-device without a shared folder step.", cr(R.color.cr_blue))
         ).forEachIndexed { i, (title, desc, accent) ->
             if (i > 0) {
                 addView(View(this@MainActivity).apply {
@@ -561,16 +565,20 @@ class MainActivity : AppCompatActivity() {
         val syncOn  = prefs.getBoolean("sync_enabled", true)
         val myName  = prefs.getString("local_device_name", null)
                           ?.takeIf { it.isNotBlank() } ?: Build.MODEL
-        val peers   = prefs.getStringSet("connected_names", emptySet())
-                          ?.filter { it.isNotBlank() }?.sorted().orEmpty()
+        val peers = prefs.peerSnapshots()
+        val connectedPeers = peers.filter { it.isConnected }
+        val connectingPeers = peers.filter { it.isConnecting }
+        val reconnectablePeers = peers.filter { !it.isConnected && it.isReconnectable }
 
         // Hero headline
         heroHeadline.text = when {
-            !running           -> "Stopped"
-            !syncOn            -> "Sync paused"
-            peers.isNotEmpty() -> peers.take(3).joinToString(", ") +
-                                  if (peers.size > 3) " +${peers.size - 3}" else ""
-            else               -> "Waiting for devices"
+            !running -> "Sync stopped"
+            !syncOn -> "Sync paused"
+            connectedPeers.isNotEmpty() -> connectedPeers.take(3).joinToString(", ") { it.name } +
+                if (connectedPeers.size > 3) " +${connectedPeers.size - 3}" else ""
+            connectingPeers.isNotEmpty() -> "Reconnecting nearby devices"
+            reconnectablePeers.isNotEmpty() -> "Trusted devices ready"
+            else -> "Looking for nearby devices"
         }
 
         // Sub-line: "This device: MacBook Pro"
@@ -579,25 +587,43 @@ class MainActivity : AppCompatActivity() {
         // State label + dot
         val (stateText, dotColor, stateColor) = when {
             !running -> Triple("STOPPED", cr(R.color.cr_red), cr(R.color.cr_red))
-            !syncOn  -> Triple("PAUSED",  cr(R.color.cr_amber), cr(R.color.cr_amber))
-            peers.isNotEmpty() -> Triple(
-                if (peers.size == 1) "1 DEVICE CONNECTED" else "${peers.size} DEVICES CONNECTED",
+            !syncOn  -> Triple("PAUSED", cr(R.color.cr_amber), cr(R.color.cr_amber))
+            connectedPeers.isNotEmpty() -> Triple(
+                if (connectedPeers.size == 1) "1 DEVICE CONNECTED" else "${connectedPeers.size} DEVICES CONNECTED",
                 cr(R.color.cr_green), cr(R.color.cr_green))
-            else -> Triple("SEARCHING", cr(R.color.cr_text_3), cr(R.color.cr_text_3))
+            connectingPeers.isNotEmpty() -> Triple("RECONNECTING", cr(R.color.cr_blue), cr(R.color.cr_blue))
+            reconnectablePeers.isNotEmpty() -> Triple("READY TO RECONNECT", cr(R.color.cr_accent), cr(R.color.cr_accent))
+            else -> Triple("SCANNING", cr(R.color.cr_text_3), cr(R.color.cr_text_3))
         }
         heroStateLabel.text = stateText
         heroStateLabel.setTextColor(stateColor)
         (heroStatusDot.background as? GradientDrawable)?.setColor(dotColor)
-        animateStatusDot(running && syncOn && peers.isNotEmpty())
+        animateStatusDot(running && syncOn && (connectedPeers.isNotEmpty() || connectingPeers.isNotEmpty()))
 
         // Peers
+        updateNoPeersState(running, syncOn, reconnectablePeers.isNotEmpty())
         refreshPeerRows(peers, running && syncOn)
 
         // Primary button
-        primaryActionBtn.text = if (running) "Restart sync" else "Start sync"
+        primaryActionBtn.text = when {
+            !running -> "Start sync"
+            !syncOn -> "Resume sync"
+            else -> "Scan for devices"
+        }
+        primaryActionBtn.setOnClickListener {
+            when {
+                !running -> launchService()
+                !syncOn -> sendAction(ClipRelayService.ACTION_RESUME_SYNC)
+                else -> {
+                    sendAction(ClipRelayService.ACTION_SCAN_NOW)
+                    showSnack("Scanning for devices…")
+                }
+            }
+            refreshDashboard()
+        }
 
         // Secondary actions
-        buildSecondaryActions(running, syncOn)
+        buildSecondaryActions(running, syncOn, peers)
     }
 
     private fun animateStatusDot(pulse: Boolean) {
@@ -608,7 +634,22 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun refreshPeerRows(peers: List<String>, online: Boolean) {
+    private fun updateNoPeersState(running: Boolean, syncOn: Boolean, hasReconnectablePeers: Boolean) {
+        val (title, message) = when {
+            !running -> "Sync is stopped" to
+                "Start the background service to discover devices and exchange clipboard updates."
+            !syncOn -> "Sync is paused" to
+                "Resume sync to reconnect to your trusted devices."
+            hasReconnectablePeers -> "No device connected" to
+                "Your trusted devices are remembered. Scan again to reconnect over Wi-Fi or hotspot."
+            else -> "No devices found" to
+                "Open ClipRelay on the other device, then scan again on the same Wi-Fi or hotspot."
+        }
+        noPeersTitle.text = title
+        noPeersMessage.text = message
+    }
+
+    private fun refreshPeerRows(peers: List<PeerSnapshot>, serviceReady: Boolean) {
         peerRows.removeAllViews()
         if (peers.isEmpty()) {
             noPeersState.visibility = View.VISIBLE
@@ -618,24 +659,45 @@ class MainActivity : AppCompatActivity() {
         noPeersState.visibility = View.GONE
         peerRows.visibility     = View.VISIBLE
 
-        peers.forEachIndexed { i, name ->
+        peers.forEachIndexed { i, peer ->
             if (i > 0) peerRows.addView(View(this).apply {
                 setBackgroundColor(cr(R.color.cr_divider))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
                 ).also { it.setMargins(dp(52), 0, 0, 0) }
             })
-            peerRows.addView(buildPeerRow(name, online))
+            peerRows.addView(buildPeerRow(peer, serviceReady))
         }
     }
 
-    private fun buildPeerRow(name: String, online: Boolean): LinearLayout =
+    private fun buildPeerRow(peer: PeerSnapshot, serviceReady: Boolean): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(12), 0, dp(12))
             isClickable = true; isFocusable = true
             background = ripple(cr(R.color.cr_ripple))
+            val accent = when {
+                peer.isConnected -> cr(R.color.cr_green)
+                peer.isConnecting -> cr(R.color.cr_blue)
+                peer.isReconnectable -> cr(R.color.cr_accent)
+                else -> cr(R.color.cr_text_4)
+            }
+            val statusLabel = when {
+                peer.isConnected -> "Connected"
+                peer.isConnecting -> "Reconnecting"
+                peer.isReconnectable -> "Ready to reconnect"
+                else -> "Offline"
+            }
+            val lastSync = peer.lastSyncSecs?.times(1000)
+                ?: prefs().getLong("last_sync_${peer.name.take(32)}", 0L)
+            val detail = when {
+                lastSync > 0L -> "Last sync ${relativeTime(lastSync)}"
+                peer.lastSeenSecs != null -> "Seen ${relativeTime(peer.lastSeenSecs * 1000)}"
+                peer.isReconnectable -> "Trusted and remembered"
+                else -> "Waiting for this device"
+            }
+            val canReconnect = serviceReady && !peer.isConnected && (peer.isReconnectable || peer.isConnecting)
 
             // Avatar — accent-light circle with initial
             val av = dp(40)
@@ -647,11 +709,11 @@ class MainActivity : AppCompatActivity() {
                 }
                 // Initial
                 addView(TextView(this@MainActivity).apply {
-                    text = name.take(1).uppercase()
+                    text = peer.name.take(1).uppercase()
                     textSize = 16f
                     gravity = Gravity.CENTER
                     setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-                    setTextColor(cr(R.color.cr_accent))
+                    setTextColor(accent)
                     layoutParams = FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT)
@@ -661,7 +723,7 @@ class MainActivity : AppCompatActivity() {
                 addView(View(this@MainActivity).apply {
                     background = GradientDrawable().also {
                         it.shape = GradientDrawable.OVAL
-                        it.setColor(if (online) cr(R.color.cr_green) else cr(R.color.cr_text_4))
+                        it.setColor(accent)
                         it.setStroke(dp(2), cr(R.color.cr_bg_card))
                     }
                     layoutParams = FrameLayout.LayoutParams(ds, ds, Gravity.BOTTOM or Gravity.END)
@@ -670,21 +732,13 @@ class MainActivity : AppCompatActivity() {
 
             addView(hSpace(12))
 
-            // Name + status + last-sync
-            val lastSync = prefs().getLong("last_sync_${name.take(32)}", 0L)
-            val statusSub = when {
-                !online    -> "Offline"
-                lastSync > 0 -> "Syncing · Last ${relativeTime(lastSync)}"
-                else       -> "Syncing · Noise encrypted"
-            }
-
             addView(LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
                 addView(TextView(this@MainActivity).apply {
-                    text = name
+                    text = peer.name
                     textSize = 15f
                     setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
                     setTextColor(cr(R.color.cr_text_1))
@@ -697,40 +751,56 @@ class MainActivity : AppCompatActivity() {
                     addView(View(this@MainActivity).apply {
                         background = GradientDrawable().also {
                             it.shape = GradientDrawable.OVAL
-                            it.setColor(if (online) cr(R.color.cr_green) else cr(R.color.cr_text_4))
+                            it.setColor(accent)
                         }
                         layoutParams = LinearLayout.LayoutParams(dp(6), dp(6)).also {
                             it.rightMargin = dp(5)
                         }
                     })
                     addView(TextView(this@MainActivity).apply {
-                        text = statusSub
+                        text = "$statusLabel · $detail"
                         textSize = 12.5f
-                        setTextColor(if (online) cr(R.color.cr_green) else cr(R.color.cr_text_3))
+                        setTextColor(if (peer.isConnected || peer.isConnecting) accent else cr(R.color.cr_text_3))
                     })
                 })
             })
 
-            // Chevron
-            addView(TextView(this@MainActivity).apply {
-                text = "›"
-                textSize = 20f
-                setTextColor(cr(R.color.cr_text_4))
-                gravity = Gravity.CENTER_VERTICAL
-            })
+            if (canReconnect) {
+                addView(TextView(this@MainActivity).apply {
+                    text = if (peer.isConnecting) "Scanning" else "Reconnect"
+                    textSize = 11.5f
+                    setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+                    setTextColor(if (peer.isConnecting) cr(R.color.cr_blue) else cr(R.color.cr_accent))
+                    setPadding(dp(10), dp(6), dp(10), dp(6))
+                    background = GradientDrawable().also {
+                        it.cornerRadius = dp(18).toFloat()
+                        it.setColor(if (peer.isConnecting) cr(R.color.cr_blue_bg) else cr(R.color.cr_accent_bg))
+                    }
+                })
+                addView(hSpace(8))
+            }
+
+            addView(buildChevron())
+
+            setOnClickListener {
+                if (canReconnect) {
+                    sendAction(ClipRelayService.ACTION_SCAN_NOW)
+                    showSnack("Scanning for ${peer.name}…")
+                }
+            }
         }
 
-    private fun buildSecondaryActions(running: Boolean, syncOn: Boolean) {
+    private fun buildSecondaryActions(running: Boolean, syncOn: Boolean, peers: List<PeerSnapshot>) {
         secondaryActionsContainer.removeAllViews()
         if (!running) return
 
-        val peers = prefs().getStringSet("connected_names", emptySet())
-            ?.filter { it.isNotBlank() }.orEmpty()
+        val connectedPeers = peers.filter { it.isConnected }
+        val reconnectablePeers = peers.filter { !it.isConnected && it.isReconnectable }
 
         val items = buildList {
             // "Send clipboard" — most common cross-device action, shown first when connected.
             // Sends the current Android clipboard text to all paired Macs.
-            if (peers.isNotEmpty() && syncOn) {
+            if (connectedPeers.isNotEmpty() && syncOn) {
                 add(Triple("Send clipboard to Mac", cr(R.color.cr_accent)) {
                     val cm = getSystemService(ClipboardManager::class.java)
                     val clip = cm.primaryClip?.getItemAt(0)?.coerceToText(this@MainActivity)
@@ -742,15 +812,24 @@ class MainActivity : AppCompatActivity() {
                     }
                 })
             }
+            add(Triple(
+                if (reconnectablePeers.isNotEmpty()) "Reconnect remembered devices" else "Scan for devices",
+                cr(R.color.cr_accent)
+            ) {
+                sendAction(ClipRelayService.ACTION_SCAN_NOW)
+                showSnack("Scanning for devices…")
+            })
             val toggleLabel  = if (syncOn) "Pause sync" else "Resume sync"
             val toggleAction = if (syncOn) ClipRelayService.ACTION_PAUSE_SYNC
                                else        ClipRelayService.ACTION_RESUME_SYNC
             add(Triple(toggleLabel, cr(R.color.cr_text_2)) {
                 sendAction(toggleAction); refreshDashboard()
             })
-            add(Triple("Disconnect all", cr(R.color.cr_amber)) {
-                sendAction(ClipRelayService.ACTION_DISCONNECT_ALL); refreshDashboard()
-            })
+            if (connectedPeers.isNotEmpty()) {
+                add(Triple("Disconnect all", cr(R.color.cr_amber)) {
+                    sendAction(ClipRelayService.ACTION_DISCONNECT_ALL); refreshDashboard()
+                })
+            }
             add(Triple("Stop service", cr(R.color.cr_red)) {
                 stopService(Intent(this@MainActivity, ClipRelayService::class.java))
                 refreshDashboard()
@@ -786,11 +865,7 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
-            addView(TextView(this@MainActivity).apply {
-                text = "›"
-                textSize = 20f
-                setTextColor(cr(R.color.cr_text_4))
-            })
+            addView(buildChevron())
         }
 
     // ── Feed pane ─────────────────────────────────────────────────────────────
@@ -1191,9 +1266,10 @@ class MainActivity : AppCompatActivity() {
                         addView(buildProgressStrip(entry.progressPercent / 100.0))
                         addView(vSpace(3))
                         addView(TextView(this@MainActivity).apply {
-                            text = "${entry.progressPercent}% transferred"
+                            text = formatTransferProgress(entry)
                             textSize = 12f
                             setTextColor(cr(R.color.cr_text_3))
+                            setLineSpacing(0f, 1.2f)
                         })
                     }
 
@@ -1431,6 +1507,40 @@ class MainActivity : AppCompatActivity() {
     private fun alphaBlend(color: Int, alpha: Float): Int {
         val a = (255 * alpha).toInt().coerceIn(0, 255)
         return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
+    }
+
+    private fun buildChevron(): AppCompatImageView =
+        AppCompatImageView(this).apply {
+            setImageResource(R.drawable.ic_cr_chevron_right)
+            imageTintList = android.content.res.ColorStateList.valueOf(cr(R.color.cr_text_4))
+            layoutParams = LinearLayout.LayoutParams(dp(18), dp(18))
+        }
+
+    private fun formatTransferProgress(entry: ActivityEntry): String {
+        val parts = mutableListOf<String>()
+        parts += "${entry.progressPercent}% transferred"
+        if (entry.transferBytesReceived > 0L && entry.fileTotalBytes > 0L) {
+            parts += "${formatBytes(entry.transferBytesReceived)} of ${formatBytes(entry.fileTotalBytes)}"
+        }
+        if (entry.transferSpeedBps > 0L) {
+            parts += "${formatBytes(entry.transferSpeedBps)}/s"
+        }
+        if (entry.transferEtaSecs >= 0L) {
+            parts += "ETA ${formatEta(entry.transferEtaSecs)}"
+        }
+        return parts.joinToString("  ·  ")
+    }
+
+    private fun formatBytes(bytes: Long): String = when {
+        bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)
+        bytes >= 1_024L -> "%.0f KB".format(bytes / 1_024.0)
+        else -> "$bytes B"
+    }
+
+    private fun formatEta(seconds: Long): String = when {
+        seconds < 60L -> "${seconds}s"
+        seconds < 3_600L -> "${seconds / 60}m"
+        else -> "${seconds / 3_600}h"
     }
 
     private fun relativeTime(ms: Long): String {

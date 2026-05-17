@@ -155,6 +155,12 @@ pub enum IpcRequest {
         data_base64: String,
         target_device: Option<String>,
     },
+    SendFilePath {
+        path: String,
+        name: String,
+        mime: String,
+        target_device: Option<String>,
+    },
     /// Accept an incoming file transfer.
     AcceptFileTransfer { transfer_id: String },
     /// Reject an incoming file transfer.
@@ -867,6 +873,27 @@ pub mod client {
                                 Err(e) => IpcResponse::err(e.to_string()),
                             },
                             Err(e) => IpcResponse::err(format!("base64 decode: {}", e)),
+                        }
+                    }
+                    IpcRequest::SendFilePath {
+                        path,
+                        name,
+                        mime,
+                        target_device,
+                    } => {
+                        let tgt = match target_device {
+                            Some(ref s) => match crate::ipc::parse_uuid(s) {
+                                Ok(id) => Some(id),
+                                Err(_) => return IpcResponse::err("invalid target device id"),
+                            },
+                            None => None,
+                        };
+                        match eng
+                            .send_file_path(std::path::PathBuf::from(path), name, mime, tgt)
+                            .await
+                        {
+                            Ok(transfer_id) => IpcResponse::ok(hex::encode(transfer_id)),
+                            Err(e) => IpcResponse::err(e.to_string()),
                         }
                     }
                     IpcRequest::AcceptFileTransfer { transfer_id } => {
