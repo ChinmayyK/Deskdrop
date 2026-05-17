@@ -115,11 +115,12 @@ jobs:
       - name: Build native libs
         run: |
           cargo ndk \
+            -p 26 \
             -t aarch64-linux-android \
             -t armv7-linux-androideabi \
             -t x86_64-linux-android \
             -o platforms/android/app/src/main/jniLibs \
-            build --release -p cliprelay-core
+            build --lib --release -p cliprelay-core
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
 

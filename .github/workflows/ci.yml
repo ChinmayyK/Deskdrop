@@ -126,7 +126,7 @@ jobs:
 
       - name: Build for ${{ matrix.target }}
         run: |
-          cargo ndk -t ${{ matrix.target }} build --release -p cliprelay-core
+          cargo ndk -p 26 -t ${{ matrix.target }} build --lib --release -p cliprelay-core
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
 

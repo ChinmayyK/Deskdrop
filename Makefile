@@ -131,11 +131,12 @@ android: install-android-targets
 
 _android-native:
 	cargo ndk \
+		-p 26 \
 		-t aarch64-linux-android \
 		-t armv7-linux-androideabi \
 		-t x86_64-linux-android \
 		-o platforms/android/app/src/main/jniLibs \
-		build --release
+		build --lib --release -p cliprelay-core
 
 linux:
 	@echo -e "$(CYAN)Building Linux binaries...$(RESET)"
