@@ -12,10 +12,10 @@
     <color name="cr_divider">#E8E1D5</color>
 
     <!-- ── Accent — deep teal ─────────────────────────────────────── -->
-    <color name="cr_accent">#1D6B72</color>
-    <color name="cr_accent_dim">#3A858C</color>
-    <color name="cr_accent_bg">#DDECEC</color>
-    <color name="cr_accent_bg_strong">#CAE1E1</color>
+    <color name="cr_accent">#315F8C</color>
+    <color name="cr_accent_dim">#4A78A4</color>
+    <color name="cr_accent_bg">#DEE8F4</color>
+    <color name="cr_accent_bg_strong">#CCDDF0</color>
     <color name="cr_on_accent">#FFFFFF</color>
 
     <!-- ── Text ───────────────────────────────────────────────────── -->
@@ -37,8 +37,8 @@
     <color name="cr_purple_bg">#E9E1EE</color>
 
     <!-- ── Activity kind colours ──────────────────────────────────── -->
-    <color name="cr_k_text_fg">#1D6B72</color>
-    <color name="cr_k_text_bg">#DDECEC</color>
+    <color name="cr_k_text_fg">#315F8C</color>
+    <color name="cr_k_text_bg">#DEE8F4</color>
     <color name="cr_k_img_fg">#6B5C7A</color>
     <color name="cr_k_img_bg">#E9E1EE</color>
     <color name="cr_k_file_fg">#295D8F</color>
@@ -50,8 +50,9 @@
 
     <!-- ── Navigation ─────────────────────────────────────────────── -->
     <color name="cr_nav_bg">#FCFAF6</color>
-    <color name="cr_nav_on">#1D6B72</color>
+    <color name="cr_nav_on">#315F8C</color>
     <color name="cr_nav_off">#A1988C</color>
+    <color name="cr_icon_bg">#F3EEE5</color>
 
     <!-- ── Ripple ──────────────────────────────────────────────────── -->
     <color name="cr_ripple">#16120F12</color>

@@ -116,7 +116,22 @@ final class ClipboardWatcher {
             return
         }
 
-        // 4. File URLs.
+        // 4. Any other pasteboard-native image format macOS can decode
+        // (including HEIC/HEIF/AVIF-backed NSImage objects) is normalized to
+        // PNG so Android and other receivers get a broadly compatible payload.
+        if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
+           let image = images.first,
+           let tiffData = image.tiffRepresentation,
+           let bitmapRep = NSBitmapImageRep(data: tiffData),
+           let pngData = bitmapRep.representation(using: .png, properties: [:]) {
+            let captured = pngData
+            DispatchQueue.main.async { [weak self] in
+                self?.onImageChange?(captured, "image/png")
+            }
+            return
+        }
+
+        // 5. File URLs.
         let classes: [AnyClass] = [NSURL.self]
         let options: [NSPasteboard.ReadingOptionKey: Any] = [
             .urlReadingFileURLsOnly: true

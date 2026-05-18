@@ -25,6 +25,7 @@ struct PeerViewModel: Identifiable, Equatable {
     let connectionStatus: String
     let syncEnabled: Bool
     let autoConnect: Bool
+    let lastError: String?
 
     // ── Timing ────────────────────────────────────────────────────────────────
     let lastSeen: Date?
@@ -33,6 +34,10 @@ struct PeerViewModel: Identifiable, Equatable {
     /// Short status description shown under the device name.
     var statusLine: String {
         if connectionStatus == "connecting" { return "Reconnecting" }
+        if connectionStatus == "failed" {
+            if trusted { return "Needs attention" }
+            return "Trust required"
+        }
         if connected && !syncEnabled { return "Connected · Sync paused" }
         if connected { return "Connected · Syncing" }
         if trusted && remembered && autoConnect { return "Ready to reconnect" }

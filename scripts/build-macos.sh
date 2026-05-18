@@ -29,7 +29,7 @@ log() { echo "▶ $*"; }
 
 log "Building Rust core (${BUILD_TYPE})..."
 cd "${REPO_ROOT}"
-cargo build --release -p cliprelay-core --lib --bin cliprelay-daemon
+cargo build --release -p cliprelay-core --features compress --lib --bin cliprelay-daemon
 
 DYLIB_SRC="${TARGET_DIR}/libcliprelay_core.dylib"
 DAEMON_SRC="${TARGET_DIR}/cliprelay-daemon"

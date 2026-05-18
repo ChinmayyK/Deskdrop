@@ -141,14 +141,14 @@ if [[ "${BUILD_TYPE}" == "release" ]]; then
         -t armv7-linux-androideabi \
         -t x86_64-linux-android \
         -o "${JNI_DIR}" \
-        build --lib --release
+        build --features compress --lib --release
 else
     cargo ndk \
         -t aarch64-linux-android \
         -t armv7-linux-androideabi \
         -t x86_64-linux-android \
         -o "${JNI_DIR}" \
-        build --lib
+        build --features compress --lib
 fi
 
 log "JNI libs:"

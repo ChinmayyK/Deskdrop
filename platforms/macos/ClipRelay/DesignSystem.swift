@@ -28,9 +28,9 @@ extension Color {
 enum CRTheme {
 
     // ── Brand ─────────────────────────────────────────────────────────────────
-    static let brandElectric = Color(hex: 0x1E6B74)
-    static let brandViolet   = Color(hex: 0x5E7E79)
-    static let brandCyan     = Color(hex: 0x8FA89E)
+    static let brandElectric = Color(hex: 0x315F8C)
+    static let brandViolet   = Color(hex: 0x6B728A)
+    static let brandCyan     = Color(hex: 0x9CB3CC)
 
     // ── Sidebar — fully adaptive ───────────────────────────────────────────────
     static var sidebarBase: Color {
@@ -61,7 +61,7 @@ enum CRTheme {
     }
     /// Selected nav-button pill fill
     static var sidebarSelectedFill: Color {
-        Color(light: Color(hex: 0xFFFFFF).opacity(0.72), dark: Color(white: 1, opacity: 0.12))
+        Color(light: Color(hex: 0xF7F4ED).opacity(0.96), dark: Color(hex: 0x22303A).opacity(0.92))
     }
     /// Hovered nav-button pill fill
     static var sidebarHoverFill: Color {
@@ -69,7 +69,13 @@ enum CRTheme {
     }
     /// Selected nav-button border
     static var sidebarSelectedStroke: Color {
-        Color(light: Color(hex: 0xCBC0B3).opacity(0.75), dark: Color(white: 1, opacity: 0.08))
+        Color(light: Color(hex: 0xC8BFB3).opacity(0.96), dark: Color(hex: 0x3E5561).opacity(0.96))
+    }
+    static var sidebarSelectedInk: Color {
+        Color(light: Color(hex: 0x181613), dark: Color(white: 1, opacity: 0.97))
+    }
+    static var sidebarSelectedAccent: Color {
+        Color(light: Color(hex: 0x244B72), dark: Color(hex: 0xC0D3E6))
     }
     /// Stat-pill fill inside footer
     static var sidebarPillFill: Color {
@@ -93,7 +99,7 @@ enum CRTheme {
     static var rowSelected: Color { Color(light: .black.opacity(0.072), dark: .white.opacity(0.082)) }
 
     // ── System accent palette ─────────────────────────────────────────────────
-    static let accentBlue   = Color(hex: 0x2C6288)
+    static let accentBlue   = Color(hex: 0x315F8C)
     static let accentGreen  = Color(hex: 0x2D7B58)
     static let accentYellow = Color(hex: 0xD3AB49)
     static let accentOrange = Color(hex: 0xB77833)
@@ -623,13 +629,13 @@ struct SidebarNavButton: View {
             HStack(spacing: 8) {
                 Image(systemName: isSelected ? (icon + ".fill") : icon)
                     .font(.system(size: 13.5, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? CRTheme.brandElectric : CRTheme.sidebarInkSoft)
+                    .foregroundStyle(isSelected ? CRTheme.sidebarSelectedAccent : CRTheme.sidebarInkSoft)
                     .symbolRenderingMode(.hierarchical)
                     .frame(width: 18, alignment: .center)
 
                 Text(label)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? CRTheme.sidebarInk : CRTheme.sidebarInkSoft)
+                    .foregroundStyle(isSelected ? CRTheme.sidebarSelectedInk : CRTheme.sidebarInkSoft)
 
                 Spacer(minLength: 0)
 

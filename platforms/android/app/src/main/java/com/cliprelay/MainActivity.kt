@@ -22,6 +22,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlin.math.roundToInt
 
 // ─── Context helpers ──────────────────────────────────────────────────────────
@@ -73,6 +77,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var navItemFeed: LinearLayout
     private lateinit var dashPane: View
     private lateinit var feedPane: View
+    private lateinit var rootChrome: LinearLayout
+    private lateinit var contentHost: FrameLayout
+    private lateinit var bottomNavBar: LinearLayout
+
+    // ── Flow preview refs ─────────────────────────────────────────────────────
+    private lateinit var flowPreviewRows: LinearLayout
 
     // ── State ─────────────────────────────────────────────────────────────────
     private var activeFilter = "all"
@@ -105,6 +115,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
         setContentView(buildRoot())
+        configureEdgeToEdge()
         launchService()
         refreshDashboard()
     }
@@ -136,17 +147,46 @@ class MainActivity : AppCompatActivity() {
         dashPane = buildDashPane()
         feedPane = buildFeedPane().apply { visibility = View.GONE }
 
-        val content = FrameLayout(this).apply {
+        contentHost = FrameLayout(this).apply {
             addView(dashPane); addView(feedPane)
         }
-        return LinearLayout(this).apply {
+
+        bottomNavBar = buildBottomNav()
+        rootChrome = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(cr(R.color.cr_bg))
-            addView(content, LinearLayout.LayoutParams(
+            addView(contentHost, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-            addView(buildBottomNav(), LinearLayout.LayoutParams(
+            addView(bottomNavBar, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(66)))
         }
+
+        return FrameLayout(this).apply {
+            setBackgroundColor(cr(R.color.cr_bg))
+            addView(rootChrome, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+        }
+    }
+
+    private fun configureEdgeToEdge() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+
+        WindowInsetsControllerCompat(window, rootChrome).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootChrome) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            contentHost.setPadding(0, bars.top, 0, 0)
+            bottomNavBar.setPadding(0, 0, 0, bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(rootChrome)
     }
 
     // ── Bottom navigation ─────────────────────────────────────────────────────
@@ -305,6 +345,8 @@ class MainActivity : AppCompatActivity() {
                 addView(buildPeersSection())
                 addView(vSpace(12))
                 addView(buildActionsSection())
+                addView(vSpace(12))
+                addView(buildFlowPreviewSection())
                 addView(vSpace(12))
                 addView(buildInfoSection())
             })
@@ -501,6 +543,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun buildFlowPreviewSection(): LinearLayout {
+        flowPreviewRows = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        return card().apply {
+            addView(sectionEyebrow("Flow state"))
+            addView(vSpace(12))
+            addView(TextView(this@MainActivity).apply {
+                text = "Recent continuity activity stays visible here so the app feels like a live companion, not a settings screen."
+                textSize = 13f
+                setTextColor(cr(R.color.cr_text_3))
+                setLineSpacing(0f, 1.4f)
+            })
+            addView(vSpace(14))
+            addView(flowPreviewRows)
+        }
+    }
+
     // Info section — 3 clean rows with dot leaders
     private fun buildInfoSection(): LinearLayout = card().apply {
         addView(sectionEyebrow("How it works"))
@@ -569,6 +630,7 @@ class MainActivity : AppCompatActivity() {
         val connectedPeers = peers.filter { it.isConnected }
         val connectingPeers = peers.filter { it.isConnecting }
         val reconnectablePeers = peers.filter { !it.isConnected && it.isReconnectable }
+        val attentionPeers = peers.filter { it.needsAttention || it.needsTrust }
 
         // Hero headline
         heroHeadline.text = when {
@@ -577,6 +639,7 @@ class MainActivity : AppCompatActivity() {
             connectedPeers.isNotEmpty() -> connectedPeers.take(3).joinToString(", ") { it.name } +
                 if (connectedPeers.size > 3) " +${connectedPeers.size - 3}" else ""
             connectingPeers.isNotEmpty() -> "Reconnecting nearby devices"
+            attentionPeers.isNotEmpty() -> attentionPeers.first().name
             reconnectablePeers.isNotEmpty() -> "Trusted devices ready"
             else -> "Looking for nearby devices"
         }
@@ -592,6 +655,7 @@ class MainActivity : AppCompatActivity() {
                 if (connectedPeers.size == 1) "1 DEVICE CONNECTED" else "${connectedPeers.size} DEVICES CONNECTED",
                 cr(R.color.cr_green), cr(R.color.cr_green))
             connectingPeers.isNotEmpty() -> Triple("RECONNECTING", cr(R.color.cr_blue), cr(R.color.cr_blue))
+            attentionPeers.isNotEmpty() -> Triple("ACTION REQUIRED", cr(R.color.cr_amber), cr(R.color.cr_amber))
             reconnectablePeers.isNotEmpty() -> Triple("READY TO RECONNECT", cr(R.color.cr_accent), cr(R.color.cr_accent))
             else -> Triple("SCANNING", cr(R.color.cr_text_3), cr(R.color.cr_text_3))
         }
@@ -603,6 +667,7 @@ class MainActivity : AppCompatActivity() {
         // Peers
         updateNoPeersState(running, syncOn, reconnectablePeers.isNotEmpty())
         refreshPeerRows(peers, running && syncOn)
+        refreshFlowPreview()
 
         // Primary button
         primaryActionBtn.text = when {
@@ -680,12 +745,15 @@ class MainActivity : AppCompatActivity() {
             val accent = when {
                 peer.isConnected -> cr(R.color.cr_green)
                 peer.isConnecting -> cr(R.color.cr_blue)
+                peer.needsTrust || peer.needsAttention -> cr(R.color.cr_amber)
                 peer.isReconnectable -> cr(R.color.cr_accent)
                 else -> cr(R.color.cr_text_4)
             }
             val statusLabel = when {
                 peer.isConnected -> "Connected"
                 peer.isConnecting -> "Reconnecting"
+                peer.isRejected -> "Trust required"
+                peer.needsAttention -> "Needs attention"
                 peer.isReconnectable -> "Ready to reconnect"
                 else -> "Offline"
             }
@@ -693,6 +761,11 @@ class MainActivity : AppCompatActivity() {
                 ?: prefs().getLong("last_sync_${peer.name.take(32)}", 0L)
             val detail = when {
                 lastSync > 0L -> "Last sync ${relativeTime(lastSync)}"
+                peer.isRejected -> "Approve this Mac again to reconnect"
+                peer.needsAttention && !peer.lastError.isNullOrBlank() -> peer.lastError
+                    ?.replace("peer ", "")
+                    ?.take(72)
+                    ?: "Connection needs review"
                 peer.lastSeenSecs != null -> "Seen ${relativeTime(peer.lastSeenSecs * 1000)}"
                 peer.isReconnectable -> "Trusted and remembered"
                 else -> "Waiting for this device"
@@ -843,6 +916,100 @@ class MainActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
             })
             secondaryActionsContainer.addView(actionRow(label, color, action))
+        }
+    }
+
+    private fun refreshFlowPreview() {
+        flowPreviewRows.removeAllViews()
+        val preview = ClipRelayService.getFeedSnapshot().take(4)
+
+        if (preview.isEmpty()) {
+            flowPreviewRows.addView(TextView(this).apply {
+                text = "Nothing has moved across your devices yet. Clipboard drops, files, and reconnects will appear here."
+                textSize = 13f
+                setTextColor(cr(R.color.cr_text_3))
+                setLineSpacing(0f, 1.4f)
+            })
+            return
+        }
+
+        preview.forEachIndexed { index, entry ->
+            if (index > 0) {
+                flowPreviewRows.addView(View(this).apply {
+                    setBackgroundColor(cr(R.color.cr_divider))
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(1)
+                    ).also { it.setMargins(dp(38), dp(10), 0, dp(10)) }
+                })
+            }
+            flowPreviewRows.addView(flowPreviewRow(entry))
+        }
+    }
+
+    private fun flowPreviewRow(entry: ActivityEntry): LinearLayout {
+        val accent = when (entry.kind) {
+            ActivityKind.CLIPBOARD_TEXT -> cr(R.color.cr_k_text_fg)
+            ActivityKind.CLIPBOARD_IMAGE -> cr(R.color.cr_k_img_fg)
+            ActivityKind.FILE_SENT, ActivityKind.FILE_RECEIVED,
+            ActivityKind.FILE_TRANSFER_INCOMING, ActivityKind.FILE_TRANSFER_PROGRESS,
+            ActivityKind.FILE_TRANSFER_COMPLETE, ActivityKind.FILE_TRANSFER_FAILED -> cr(R.color.cr_k_file_fg)
+            ActivityKind.PEER_CONNECTED, ActivityKind.PEER_DISCONNECTED -> cr(R.color.cr_k_peer_fg)
+            ActivityKind.WARNING -> cr(R.color.cr_k_warn_fg)
+        }
+
+        val chip = when (entry.kind) {
+            ActivityKind.CLIPBOARD_TEXT, ActivityKind.CLIPBOARD_IMAGE -> "Clipboard"
+            ActivityKind.FILE_SENT, ActivityKind.FILE_RECEIVED,
+            ActivityKind.FILE_TRANSFER_INCOMING, ActivityKind.FILE_TRANSFER_PROGRESS,
+            ActivityKind.FILE_TRANSFER_COMPLETE, ActivityKind.FILE_TRANSFER_FAILED -> "Files"
+            ActivityKind.PEER_CONNECTED, ActivityKind.PEER_DISCONNECTED -> "Peers"
+            ActivityKind.WARNING -> "Alert"
+        }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+
+            addView(View(this@MainActivity).apply {
+                background = GradientDrawable().also {
+                    it.shape = GradientDrawable.OVAL
+                    it.setColor(accent)
+                }
+                layoutParams = LinearLayout.LayoutParams(dp(9), dp(9)).also {
+                    it.topMargin = dp(7)
+                    it.rightMargin = dp(12)
+                }
+            })
+
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+
+                addView(TextView(this@MainActivity).apply {
+                    text = flowHeadline(entry.preview)
+                    textSize = 14f
+                    setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+                    setTextColor(cr(R.color.cr_text_1))
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                })
+                addView(vSpace(3))
+                addView(TextView(this@MainActivity).apply {
+                    text = "$chip · ${entry.deviceName} · ${relativeTime(entry.timestamp)}"
+                    textSize = 12f
+                    setTextColor(cr(R.color.cr_text_3))
+                })
+            })
+        }
+    }
+
+    private fun flowHeadline(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return raw
+        return trimmed.replaceFirstChar { ch ->
+            if (ch.isLowerCase()) ch.titlecase() else ch.toString()
         }
     }
 
@@ -1488,14 +1655,41 @@ class MainActivity : AppCompatActivity() {
     private fun View.installPressFeedback() {
         stateListAnimator = null
         isHapticFeedbackEnabled = true
+        val slop = ViewConfiguration.get(context).scaledTouchSlop
+        var downX = 0f
+        var downY = 0f
+        var hapticEligible = false
         setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    hapticEligible = true
                     v.animate().cancel()
                     v.animate().scaleX(0.97f).scaleY(0.97f).alpha(0.88f).setDuration(70).start()
-                    v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_MOVE -> {
+                    if (hapticEligible &&
+                        (kotlin.math.abs(event.x - downX) > slop || kotlin.math.abs(event.y - downY) > slop)
+                    ) {
+                        hapticEligible = false
+                        v.animate().cancel()
+                        v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120).start()
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (hapticEligible &&
+                        event.x >= 0f && event.x <= v.width &&
+                        event.y >= 0f && event.y <= v.height
+                    ) {
+                        v.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    }
+                    hapticEligible = false
+                    v.animate().cancel()
+                    v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120).start()
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    hapticEligible = false
                     v.animate().cancel()
                     v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120).start()
                 }

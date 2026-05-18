@@ -12,6 +12,7 @@ struct IpcPeerRecord: Codable {
     let display_name: String?
     let platform: String?
     let status: String
+    let last_error: String?
     let trusted: Bool
     let remembered: Bool?
     let sync_enabled: Bool?

@@ -184,8 +184,17 @@ fn compress_blocking(
 
         let img = image::load_from_memory(data)?;
         let mut out = Vec::new();
+        let source_mime = mime.to_ascii_lowercase();
+        let must_normalize_losslessly = matches!(
+            source_mime.as_str(),
+            "image/heic" | "image/heif" | "image/avif" | "image/tiff"
+        );
 
         let (final_mime, _fmt) = match strategy {
+            _ if must_normalize_losslessly => {
+                img.write_to(&mut std::io::Cursor::new(&mut out), ImageFormat::Png)?;
+                ("image/png", ImageFormat::Png)
+            }
             CompressionStrategy::JpegLossy { quality } => {
                 let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality);
                 enc.encode_image(&img)?;
@@ -209,12 +218,13 @@ fn compress_blocking(
             }
         };
 
+        let compressed_len = out.len();
         Ok((
-            out.clone(),
+            out,
             final_mime.to_string(),
             CompressionStats {
                 original_bytes: data.len(),
-                compressed_bytes: out.len(),
+                compressed_bytes: compressed_len,
                 strategy,
                 duration_ms: start.elapsed().as_millis() as u64,
             },

@@ -10,6 +10,10 @@ struct DashboardRootView: View {
     @State private var density: CRDensityMode = .comfortable
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
+    private var pendingContinuityItems: [IpcActivityEntry] {
+        store.activityFeed.filter(\.isApplicable)
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             Sidebar(store: store)
@@ -18,7 +22,20 @@ struct DashboardRootView: View {
             DetailContent(store: store, density: $density, beginRename: beginRename)
         }
         .overlay(alignment: .topTrailing) {
-            CRToastStack(toasts: store.toasts).padding(18)
+            if let device = store.connectedDevices.first, store.selectedSection != .settings {
+                CompanionDeviceCard(device: device, connectedPeers: store.connectedDevices.count)
+                    .padding(.top, 26)
+                    .padding(.trailing, 26)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if !pendingContinuityItems.isEmpty {
+                ContinuityStagingDrawer(entries: Array(pendingContinuityItems.prefix(3)), store: store)
+                    .padding(.trailing, 26)
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .sheet(item: $renameTarget) { device in
             RenameDeviceSheet(
@@ -168,6 +185,11 @@ private struct DetailContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            DashboardCommandBar(store: store)
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 12)
+
             // Sticky section toolbar
             CRSectionToolbar(
                 title:    store.selectedSection.title,
@@ -236,6 +258,267 @@ private struct DetailContent: View {
         case .settings:
             EmptyView()
         }
+    }
+}
+
+// MARK: - Command Bar
+
+private struct DashboardCommandBar: View {
+    @ObservedObject var store: ClipRelayStore
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                store.openCommandPalette()
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(CRTheme.brandElectric.opacity(0.12))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(CRTheme.brandElectric)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Search commands, clipboard, and quick actions")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(CRTheme.ink)
+                        Text("Open the continuity command bar to push text, reconnect nearby devices, or jump through history.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    HStack(spacing: 6) {
+                        KbdChip("⌘", dark: false)
+                        KbdChip("K", dark: false)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .background {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.62))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(CRTheme.stroke.opacity(0.42), lineWidth: 0.5)
+                    }
+            }
+
+            if store.connectedCount > 0 {
+                Button {
+                    store.sendCurrentClipboard(to: nil)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Push active text")
+                            .font(.system(size: 12.5, weight: .semibold))
+                        Text("All peers")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    }
+                    .foregroundStyle(CRTheme.ink)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 13)
+                    .background {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.72))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(CRTheme.stroke.opacity(0.42), lineWidth: 0.5)
+                            }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// MARK: - Companion Card
+
+private struct CompanionDeviceCard: View {
+    let device: ManagedDevice
+    let connectedPeers: Int
+    @State private var isPulsing = false
+
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(CRTheme.brandElectric.opacity(0.10))
+                    .frame(width: 72, height: 72)
+                    .scaleEffect(isPulsing ? 1.06 : 0.94)
+                    .opacity(isPulsing ? 0.38 : 0.18)
+                Circle()
+                    .strokeBorder(CRTheme.brandElectric.opacity(0.16), lineWidth: 1)
+                    .frame(width: 72, height: 72)
+                    .scaleEffect(isPulsing ? 1.12 : 0.98)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "laptopcomputer")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(CRTheme.ink.opacity(0.72))
+                    Image(systemName: "iphone.gen3")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(CRTheme.brandElectric)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Companion nearby")
+                    .font(.system(size: 10.5, weight: .bold))
+                    .tracking(1.1)
+                    .foregroundStyle(CRTheme.brandElectric)
+                Text(device.name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(CRTheme.ink)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    StatusDot(isOnline: device.isConnected, size: 6)
+                    Text(device.connectionState == .connected ? "Clipboard ready" : device.connectionState.label)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(CRTheme.inkSoft)
+                    if connectedPeers > 1 {
+                        Text("·")
+                            .foregroundStyle(CRTheme.inkFaint)
+                        Text("+\(connectedPeers - 1) more")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(CRTheme.inkSubtle)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 312, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.72))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(CRTheme.stroke.opacity(0.36), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(0.06), radius: 18, x: 0, y: 8)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                isPulsing = true
+            }
+        }
+    }
+}
+
+// MARK: - Staging Drawer
+
+private struct ContinuityStagingDrawer: View {
+    let entries: [IpcActivityEntry]
+    @ObservedObject var store: ClipRelayStore
+
+    private var leadEntry: IpcActivityEntry? { entries.first }
+
+    var body: some View {
+        if let leadEntry {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(CRTheme.brandElectric.opacity(0.10))
+                            .frame(width: 38, height: 38)
+                        Image(systemName: leadEntry.text_preview.map(isLikelyURL) == true ? "link" : "text.cursor")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(CRTheme.brandElectric)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(isLikelyOTP(leadEntry.text_preview) ? "One-time code ready" : "Calm continuity staging")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(CRTheme.ink)
+                        Text(leadEntry.device_name)
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if entries.count > 1 {
+                        Text("+\(entries.count - 1)")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(CRTheme.brandElectric)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background {
+                                Capsule().fill(CRTheme.brandElectric.opacity(0.10))
+                            }
+                    }
+                }
+
+                if let preview = leadEntry.text_preview, !preview.isEmpty {
+                    Text(preview)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .lineLimit(3)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 9)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.white.opacity(0.6))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(CRTheme.stroke.opacity(0.36), lineWidth: 0.5)
+                                }
+                        }
+                }
+
+                HStack(spacing: 8) {
+                    Button(isLikelyOTP(leadEntry.text_preview) ? "Copy code" : "Copy") {
+                        Task { await store.applyClipboard(entry: leadEntry) }
+                    }
+                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+
+                    if let preview = leadEntry.text_preview,
+                       let url = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines)),
+                       isLikelyURL(preview)
+                    {
+                        Button("Open Link") {
+                            NSWorkspace.shared.open(url)
+                        }
+                        .buttonStyle(CRSecondaryButtonStyle())
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(16)
+            .frame(width: 336, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color(hex: 0xF7F1E8, opacity: 0.96))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(Color(hex: 0xDED3C7, opacity: 0.98), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.07), radius: 24, x: 0, y: 10)
+            }
+        }
+    }
+
+    private func isLikelyOTP(_ text: String?) -> Bool {
+        guard let text else { return false }
+        let condensed = text.lowercased()
+        let digitCount = text.filter(\.isNumber).count
+        return digitCount >= 6 && digitCount <= 8 && ["otp", "code", "auth", "verify"].contains { condensed.contains($0) }
+    }
+
+    private func isLikelyURL(_ text: String?) -> Bool {
+        guard let text else { return false }
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return value.hasPrefix("http://") || value.hasPrefix("https://")
     }
 }
 

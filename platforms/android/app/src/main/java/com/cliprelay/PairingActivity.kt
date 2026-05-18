@@ -434,14 +434,41 @@ class PairingActivity : AppCompatActivity() {
     private fun View.installPressFeedback() {
         stateListAnimator = null
         isHapticFeedbackEnabled = true
+        val slop = ViewConfiguration.get(context).scaledTouchSlop
+        var downX = 0f
+        var downY = 0f
+        var hapticEligible = false
         setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    hapticEligible = true
                     v.animate().cancel()
                     v.animate().scaleX(0.97f).scaleY(0.97f).alpha(0.9f).setDuration(70).start()
-                    v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_MOVE -> {
+                    if (hapticEligible &&
+                        (kotlin.math.abs(event.x - downX) > slop || kotlin.math.abs(event.y - downY) > slop)
+                    ) {
+                        hapticEligible = false
+                        v.animate().cancel()
+                        v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120).start()
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (hapticEligible &&
+                        event.x >= 0f && event.x <= v.width &&
+                        event.y >= 0f && event.y <= v.height
+                    ) {
+                        v.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    }
+                    hapticEligible = false
+                    v.animate().cancel()
+                    v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120).start()
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    hapticEligible = false
                     v.animate().cancel()
                     v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120).start()
                 }

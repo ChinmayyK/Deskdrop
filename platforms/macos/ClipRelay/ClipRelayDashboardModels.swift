@@ -112,6 +112,47 @@ struct ToastItem: Identifiable {
     let title: String
     let body: String
     let tint: Color
+    let systemImage: String
+    var detail: String?
+    var ttl: TimeInterval?
+    var progress: Double?
+    var primaryAction: ToastAction?
+    var secondaryAction: ToastAction?
+
+    init(
+        title: String,
+        body: String,
+        tint: Color,
+        systemImage: String = "sparkles.rectangle.stack",
+        detail: String? = nil,
+        ttl: TimeInterval? = 4.0,
+        progress: Double? = nil,
+        primaryAction: ToastAction? = nil,
+        secondaryAction: ToastAction? = nil
+    ) {
+        self.title = title
+        self.body = body
+        self.tint = tint
+        self.systemImage = systemImage
+        self.detail = detail
+        self.ttl = ttl
+        self.progress = progress
+        self.primaryAction = primaryAction
+        self.secondaryAction = secondaryAction
+    }
+}
+
+struct ToastAction {
+    enum Role {
+        case primary
+        case secondary
+        case positive
+        case destructive
+    }
+
+    let title: String
+    let role: Role
+    let handler: () -> Void
 }
 
 // MARK: - Quick Send Context
@@ -201,6 +242,8 @@ struct ManagedDevice: Identifiable {
         self.endpoint        = nil
         self.connectionState = if peer.connectionStatus == "connecting" {
             .connecting
+        } else if peer.connectionStatus == "failed" {
+            .attention
         } else if peer.connected {
             .connected
         } else if peer.trusted && peer.remembered && peer.autoConnect {
@@ -208,26 +251,33 @@ struct ManagedDevice: Identifiable {
         } else {
             .disconnected
         }
-        self.trustState      = peer.trusted   ? .trusted   : .untrusted
+        self.trustState      = if peer.trusted {
+            .trusted
+        } else if peer.lastError?.localizedCaseInsensitiveContains("rejected") == true {
+            .rejected
+        } else {
+            .untrusted
+        }
         self.remembered      = peer.remembered
         self.autoConnect     = peer.autoConnect
         self.fingerprint     = nil
         self.lastSeen        = peer.lastSeen
         self.lastSync        = peer.lastSync
-        self.lastError       = nil
+        self.lastError       = peer.lastError
     }
 }
 
 // MARK: - Device Connection State
 
 enum DeviceConnectionState {
-    case connected, connecting, reconnectable, disconnected
+    case connected, connecting, reconnectable, attention, disconnected
 
     var label: String {
         switch self {
         case .connected:    return "Connected"
         case .connecting:   return "Connecting"
         case .reconnectable:return "Ready"
+        case .attention:    return "Needs Attention"
         case .disconnected: return "Offline"
         }
     }
@@ -237,6 +287,7 @@ enum DeviceConnectionState {
         case .connected:    return PBTheme.accentGreen
         case .connecting:   return PBTheme.accentBlue
         case .reconnectable:return PBTheme.brandElectric
+        case .attention:    return PBTheme.accentGold
         case .disconnected: return PBTheme.inkSoft
         }
     }

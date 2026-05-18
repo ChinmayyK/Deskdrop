@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dashboardController:      NSWindowController?
     private var quickAccessController:    NSWindowController?
     private var commandPaletteController: NSWindowController?
+    private var toastWindowManager:       ClipRelayToastWindowManager?
     private var cancellables = Set<AnyCancellable>()
     private var daemonProcess: Process?
 
@@ -23,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         setupWindows()
         bindStore()
+        toastWindowManager = ClipRelayToastWindowManager(store: store)
         registerHotKeys()
         registerSleepWakeObservers()
         registerStoreNotifications()
@@ -35,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(openQuickAccess),
             name: .clipRelayOpenHistoryPanel,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(openCommandPalette),
+            name: .clipRelayOpenCommandPalette,
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -271,9 +279,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func handleSystemWake() {
-        // On wake, poll immediately (don't wait for next timer tick) so the
-        // menu bar and dashboard reflect the restored state right away.
-        Task { await store.refresh() }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // On wake, poll immediately and force a discovery rescan so we
+            // don't wait for the normal idle polling/discovery cadence.
+            await store.refresh()
+            store.scanForDevices()
+
+            try? await Task.sleep(nanoseconds: 850_000_000)
+            await store.refresh()
+            if let peer = store.connectedDevices.first {
+                store.showToast(
+                    title: "Connected to \(peer.name)",
+                    body: "Clipboard and files synchronized.",
+                    tint: CRTheme.accentGreen,
+                    systemImage: "link.badge.plus",
+                    ttl: 3.0
+                )
+            }
+        }
     }
 
     @objc private func handleSystemSleep() {
@@ -379,7 +403,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             id: detail.deviceId, displayName: detail.deviceName,
             platform: nil, trusted: false, remembered: false, connected: false,
             connectionStatus: "disconnected",
-            syncEnabled: true, autoConnect: false, lastSeen: detail.lastSeen, lastSync: nil
+            syncEnabled: true, autoConnect: false, lastError: nil,
+            lastSeen: detail.lastSeen, lastSync: nil
         ))
 
         let respond: (Bool) -> Void = { [weak self] approved in

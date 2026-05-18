@@ -13,6 +13,7 @@ import ServiceManagement
 extension Notification.Name {
     /// Posted by ClipRelayStore.openHistoryPanel() — observed by AppDelegate.
     static let clipRelayOpenHistoryPanel = Notification.Name("com.cliprelay.openHistoryPanel")
+    static let clipRelayOpenCommandPalette = Notification.Name("com.cliprelay.openCommandPalette")
     static let clipRelayEnsureDaemon = Notification.Name("com.cliprelay.ensureDaemon")
 }
 
@@ -407,6 +408,10 @@ final class ClipRelayStore: ObservableObject {
         NotificationCenter.default.post(name: .clipRelayOpenHistoryPanel, object: nil)
     }
 
+    func openCommandPalette() {
+        NotificationCenter.default.post(name: .clipRelayOpenCommandPalette, object: nil)
+    }
+
     /// Send the current local clipboard to all (or one) connected peer.
     func sendCurrentClipboard(to device: ManagedDevice?) {
         Task {
@@ -663,15 +668,47 @@ final class ClipRelayStore: ObservableObject {
 
     // MARK: - Toast system
 
-    func showToast(title: String, body: String, tint: Color) {
-        let toast = ToastItem(title: title, body: body, tint: tint)
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { toasts.append(toast) }
+    func showToast(
+        title: String,
+        body: String,
+        tint: Color,
+        systemImage: String = "sparkles.rectangle.stack",
+        detail: String? = nil,
+        ttl: TimeInterval? = 4.0,
+        progress: Double? = nil,
+        primaryAction: ToastAction? = nil,
+        secondaryAction: ToastAction? = nil
+    ) {
+        let toast = ToastItem(
+            title: title,
+            body: body,
+            tint: tint,
+            systemImage: systemImage,
+            detail: detail,
+            ttl: ttl,
+            progress: progress,
+            primaryAction: primaryAction,
+            secondaryAction: secondaryAction
+        )
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.82, blendDuration: 0.1)) {
+            toasts.append(toast)
+        }
+
+        guard let ttl else { return }
+
         let work = DispatchWorkItem { [weak self] in
-            withAnimation(.easeOut(duration: 0.25)) { self?.toasts.removeAll { $0.id == toast.id } }
-            self?.toastWorkItems.removeValue(forKey: toast.id)
+            self?.dismissToast(id: toast.id)
         }
         toastWorkItems[toast.id] = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + ttl, execute: work)
+    }
+
+    func dismissToast(id: UUID) {
+        toastWorkItems[id]?.cancel()
+        toastWorkItems.removeValue(forKey: id)
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.82, blendDuration: 0.1)) {
+            toasts.removeAll { $0.id == id }
+        }
     }
 
     // MARK: - Mapping
@@ -687,6 +724,7 @@ final class ClipRelayStore: ObservableObject {
             connectionStatus: raw.status,
             syncEnabled: raw.sync_enabled ?? true,
             autoConnect: raw.auto_connect ?? true,
+            lastError:   raw.last_error,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) }
         )

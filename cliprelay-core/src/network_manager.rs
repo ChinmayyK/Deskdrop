@@ -72,6 +72,21 @@ pub fn bind_address(port: u16) -> Result<SocketAddr> {
     Ok(SocketAddr::new(get_local_ip()?, port))
 }
 
+pub fn detect_android_hotspot_gateway(iface: &NetworkInterfaceInfo) -> Option<IpAddr> {
+    match iface.ip {
+        IpAddr::V4(ip)
+            if is_android_hotspot_subnet(ip)
+                || looks_like_usb_tether(&iface.name.to_lowercase()) =>
+        {
+            let octets = ip.octets();
+            Some(IpAddr::V4(Ipv4Addr::new(
+                octets[0], octets[1], octets[2], 1,
+            )))
+        }
+        _ => None,
+    }
+}
+
 pub fn resolve_snapshot(bind_ip: Option<IpAddr>, port: u16) -> Result<NetworkSnapshot> {
     if let Some(ip) = bind_ip {
         let active_interface = list_interfaces()
@@ -252,6 +267,11 @@ fn looks_like_usb_tether(name: &str) -> bool {
         || name.contains("bridge")
 }
 
+fn is_android_hotspot_subnet(ip: Ipv4Addr) -> bool {
+    let o = ip.octets();
+    matches!((o[0], o[1], o[2]), (192, 168, 43) | (192, 168, 49))
+}
+
 #[cfg(target_os = "linux")]
 fn spawn_platform_change_hints(tx: mpsc::Sender<()>) {
     tokio::task::spawn_blocking(move || {
@@ -371,5 +391,18 @@ mod tests {
         assert!(change.kinds.contains(&NetworkChangeKind::NetworkLost));
         assert!(change.kinds.contains(&NetworkChangeKind::InterfaceChanged));
         assert!(change.kinds.contains(&NetworkChangeKind::IpChanged));
+    }
+
+    #[test]
+    fn detects_android_hotspot_gateway() {
+        let iface = NetworkInterfaceInfo {
+            name: "en7".into(),
+            ip: IpAddr::V4(Ipv4Addr::new(192, 168, 43, 88)),
+            is_primary: true,
+        };
+        assert_eq!(
+            detect_android_hotspot_gateway(&iface),
+            Some(IpAddr::V4(Ipv4Addr::new(192, 168, 43, 1)))
+        );
     }
 }

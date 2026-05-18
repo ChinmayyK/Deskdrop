@@ -94,6 +94,20 @@ async fn run() -> Result<()> {
         shutdown: Arc::new(Notify::new()),
     };
 
+    {
+        let history_state = state.history.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                if let Err(error) = history_state.lock().await.purge_expired_sensitive_entries() {
+                    tracing::warn!("daemon sensitive-history pruning failed: {error:#}");
+                }
+            }
+        });
+    }
+
     let event_state = state.clone();
     tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {

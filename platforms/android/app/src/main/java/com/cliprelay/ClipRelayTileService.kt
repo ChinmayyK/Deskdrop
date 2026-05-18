@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.net.Uri
@@ -13,6 +14,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -162,10 +164,17 @@ class ClipRelayShareTarget : Activity() {
             finish()
         } else if (!sharedUris.isNullOrEmpty()) {
             setContentView(buildPicker(sharedUris, sharedName))
+            styleDialogWindow()
         } else {
             Toast.makeText(this, "Nothing to push", Toast.LENGTH_SHORT).show()
             finish()
         }
+    }
+
+    private fun styleDialogWindow() {
+        window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        val width = (resources.displayMetrics.widthPixels * 0.92f).roundToInt()
+        window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun buildPicker(sharedUris: List<Uri>, sharedName: String?): View {
@@ -181,60 +190,95 @@ class ClipRelayShareTarget : Activity() {
             selectionCards.forEach { (id, view) ->
                 val selected = id == targetId
                 view.background = cardBackground(selected)
+                view.findViewWithTag<View>("selected_indicator")?.background =
+                    GradientDrawable().also {
+                        it.shape = GradientDrawable.OVAL
+                        it.setColor(
+                            if (selected) c(R.color.cr_accent) else Color.TRANSPARENT
+                        )
+                        it.setStroke(
+                            dp(1),
+                            if (selected) c(R.color.cr_accent) else c(R.color.cr_border)
+                        )
+                    }
             }
         }
 
-        return ScrollView(this).apply {
-            setBackgroundColor(c(R.color.cr_bg))
-            addView(LinearLayout(this@ClipRelayShareTarget).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(20), dp(24), dp(20), dp(24))
+        return FrameLayout(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
 
-                addView(TextView(this@ClipRelayShareTarget).apply {
-                    text = "Send with ClipRelay"
-                    textSize = 24f
-                    setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-                    setTextColor(c(R.color.cr_text_1))
-                })
-                addView(space(6))
-                addView(TextView(this@ClipRelayShareTarget).apply {
-                    val noun = if (sharedUris.size == 1) "file" else "files"
-                    text = "Choose all connected devices or one destination for ${sharedUris.size} $noun."
-                    textSize = 14f
-                    setTextColor(c(R.color.cr_text_3))
-                    setLineSpacing(0f, 1.35f)
-                })
+            addView(ScrollView(this@ClipRelayShareTarget).apply {
+                overScrollMode = View.OVER_SCROLL_NEVER
+                isVerticalScrollBarEnabled = false
 
-                addView(space(18))
-
-                if (peers.isEmpty()) {
-                    addView(emptyState())
-                } else {
-                    val allCard = selectionCard(
-                        title = "All connected devices",
-                        subtitle = peers.joinToString(", ") { it.name },
-                        avatarLabel = "ALL"
-                    ) { updateSelection(null) }
-                    selectionCards += null to allCard
-                    addView(allCard)
-
-                    peers.forEach { peer ->
-                        addView(space(10))
-                        val card = selectionCard(
-                            title = peer.name,
-                            subtitle = "Connected now",
-                            avatarLabel = peer.name.firstOrNull()?.uppercase() ?: "?"
-                        ) { updateSelection(peer.id) }
-                        selectionCards += peer.id to card
-                        addView(card)
+                addView(LinearLayout(this@ClipRelayShareTarget).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(20), dp(22), dp(20), dp(20))
+                    background = GradientDrawable().also {
+                        it.cornerRadius = dp(26).toFloat()
+                        it.setColor(c(R.color.cr_bg_card))
+                        it.setStroke(dp(1), c(R.color.cr_border))
                     }
 
-                    updateSelection(null)
-                }
+                    addView(TextView(this@ClipRelayShareTarget).apply {
+                        text = "Send with ClipRelay"
+                        textSize = 24f
+                        setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+                        setTextColor(c(R.color.cr_text_1))
+                    })
+                    addView(space(6))
+                    addView(TextView(this@ClipRelayShareTarget).apply {
+                        val noun = if (sharedUris.size == 1) "file" else "files"
+                        text = "Choose all connected devices or one destination for ${sharedUris.size} $noun."
+                        textSize = 14f
+                        setTextColor(c(R.color.cr_text_3))
+                        setLineSpacing(0f, 1.35f)
+                    })
+                    addView(space(14))
+                    addView(TextView(this@ClipRelayShareTarget).apply {
+                        text = if (peers.size <= 1) "READY NOW" else "${peers.size} DESTINATIONS ONLINE"
+                        textSize = 10.5f
+                        letterSpacing = 0.12f
+                        setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+                        setTextColor(c(R.color.cr_accent))
+                    })
 
-                addView(space(22))
-                addView(buttonRow(sharedUris, sharedName, peers, selectedDevice))
-            })
+                    addView(space(14))
+
+                    if (peers.isEmpty()) {
+                        addView(emptyState())
+                    } else {
+                        val allCard = selectionCard(
+                            title = "All connected devices",
+                            subtitle = peers.joinToString(", ") { it.name },
+                            avatarLabel = "ALL"
+                        ) { updateSelection(null) }
+                        selectionCards += null to allCard
+                        addView(allCard)
+
+                        peers.forEach { peer ->
+                            addView(space(10))
+                            val card = selectionCard(
+                                title = peer.name,
+                                subtitle = "Connected now",
+                                avatarLabel = peer.name.firstOrNull()?.uppercase() ?: "?"
+                            ) { updateSelection(peer.id) }
+                            selectionCards += peer.id to card
+                            addView(card)
+                        }
+
+                        updateSelection(null)
+                    }
+
+                    addView(space(18))
+                    addView(buttonRow(sharedUris, sharedName, peers, selectedDevice))
+                })
+            }, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            ))
         }
     }
 
@@ -378,6 +422,16 @@ class ClipRelayShareTarget : Activity() {
                 textSize = 13f
                 setTextColor(c(R.color.cr_text_3))
             })
+        })
+
+        addView(View(this@ClipRelayShareTarget).apply {
+            tag = "selected_indicator"
+            background = GradientDrawable().also {
+                it.shape = GradientDrawable.OVAL
+                it.setColor(Color.TRANSPARENT)
+                it.setStroke(dp(1), c(R.color.cr_border))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(18), dp(18))
         })
     }
 

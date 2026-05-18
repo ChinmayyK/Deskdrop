@@ -35,6 +35,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const KEEPALIVE_IDLE: Duration = Duration::from_secs(30);
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
 const KEEPALIVE_RETRIES: u32 = 3;
+const SOCKET_BUFFER_MIN: usize = 512 * 1024;
+const SOCKET_BUFFER_PREFERRED: usize = 1024 * 1024;
 
 // ── TCP helpers ───────────────────────────────────────────────────────────────
 
@@ -73,8 +75,33 @@ pub fn optimize_stream(stream: &TcpStream, label: &'static str) {
         debug!(error = %err, %label, "TCP_NODELAY unavailable");
     }
 
+    if let Err(err) = apply_socket_buffers(stream) {
+        debug!(error = %err, %label, "socket buffer tuning unavailable");
+    }
+
     if let Err(err) = apply_keepalive(stream) {
         debug!(error = %err, %label, "TCP keepalive unavailable");
+    }
+}
+
+fn apply_socket_buffers(stream: &TcpStream) -> Result<()> {
+    use socket2::SockRef;
+
+    let sock_ref = SockRef::from(stream);
+    let mut target = SOCKET_BUFFER_PREFERRED;
+
+    loop {
+        let send_res = sock_ref.set_send_buffer_size(target);
+        let recv_res = sock_ref.set_recv_buffer_size(target);
+        if send_res.is_ok() && recv_res.is_ok() {
+            return Ok(());
+        }
+        if target == SOCKET_BUFFER_MIN {
+            send_res.context("setting SO_SNDBUF")?;
+            recv_res.context("setting SO_RCVBUF")?;
+            return Ok(());
+        }
+        target = SOCKET_BUFFER_MIN;
     }
 }
 
@@ -104,6 +131,7 @@ async fn send_frame<T: Serialize>(stream: &mut TcpStream, value: &T) -> Result<(
     let len = payload.len() as u32;
     stream.write_all(&len.to_le_bytes()).await?;
     stream.write_all(&payload).await?;
+    stream.flush().await?;
     Ok(())
 }
 
@@ -140,6 +168,7 @@ async fn send_encrypted(
     let len = cipher.len() as u32;
     stream.write_all(&len.to_le_bytes()).await?;
     stream.write_all(&cipher).await?;
+    stream.flush().await?;
     Ok(())
 }
 

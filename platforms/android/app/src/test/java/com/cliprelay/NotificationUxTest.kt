@@ -21,7 +21,11 @@ class NotificationUxTest {
 
         repeat(120) { i ->
             ClipRelayService.addToFeed(
-                ActivityEntry(deviceName = "Phone", kind = "text", preview = "item $i")
+                ActivityEntry(
+                    deviceName = "Phone",
+                    kind = ActivityKind.CLIPBOARD_TEXT,
+                    preview = "item $i"
+                )
             )
         }
 
@@ -35,9 +39,13 @@ class NotificationUxTest {
             ClipRelayService.activityFeed.clear()
         }
 
-        ClipRelayService.addToFeed(ActivityEntry(deviceName = "A", kind = "text", preview = "first"))
+        ClipRelayService.addToFeed(
+            ActivityEntry(deviceName = "A", kind = ActivityKind.CLIPBOARD_TEXT, preview = "first")
+        )
         Thread.sleep(2)
-        ClipRelayService.addToFeed(ActivityEntry(deviceName = "B", kind = "text", preview = "second"))
+        ClipRelayService.addToFeed(
+            ActivityEntry(deviceName = "B", kind = ActivityKind.CLIPBOARD_TEXT, preview = "second")
+        )
 
         val snapshot = ClipRelayService.getFeedSnapshot()
         assertEquals("second", snapshot.first().preview)
@@ -54,7 +62,11 @@ class NotificationUxTest {
             Thread {
                 repeat(10) { j ->
                     ClipRelayService.addToFeed(
-                        ActivityEntry(deviceName = "Dev$i", kind = "text", preview = "msg-$j")
+                        ActivityEntry(
+                            deviceName = "Dev$i",
+                            kind = ActivityKind.CLIPBOARD_TEXT,
+                            preview = "msg-$j"
+                        )
                     )
                 }
             }
@@ -70,7 +82,11 @@ class NotificationUxTest {
 
     @Test
     fun `text entry formatted line uses device name`() {
-        val entry = ActivityEntry(deviceName = "Chinmay's Pixel 8", kind = "text", preview = "hello")
+        val entry = ActivityEntry(
+            deviceName = "Chinmay's Pixel 8",
+            kind = ActivityKind.CLIPBOARD_TEXT,
+            preview = "hello"
+        )
         val line  = entry.formattedLine()
         assertTrue("Line must contain device name", line.contains("Chinmay's Pixel 8"))
         assertTrue("Line must not contain 'text' as raw type alone", !line.equals("text"))
@@ -78,7 +94,11 @@ class NotificationUxTest {
 
     @Test
     fun `file entry formatted line includes filename`() {
-        val entry = ActivityEntry(deviceName = "MacBook Pro", kind = "file", preview = "resume.pdf")
+        val entry = ActivityEntry(
+            deviceName = "MacBook Pro",
+            kind = ActivityKind.FILE_SENT,
+            preview = "resume.pdf"
+        )
         val line  = entry.formattedLine()
         assertTrue("Line must contain filename", line.contains("resume.pdf"))
         assertTrue("Line must contain device name", line.contains("MacBook Pro"))
@@ -86,7 +106,11 @@ class NotificationUxTest {
 
     @Test
     fun `image entry formatted correctly`() {
-        val entry = ActivityEntry(deviceName = "iPad", kind = "image", preview = "screenshot.png")
+        val entry = ActivityEntry(
+            deviceName = "iPad",
+            kind = ActivityKind.CLIPBOARD_IMAGE,
+            preview = "screenshot.png"
+        )
         val line  = entry.formattedLine()
         assertTrue("Image line must contain device name", line.contains("iPad"))
     }

@@ -5,10 +5,12 @@
         <item name="colorPrimaryDark">@color/cr_accent</item>
         <item name="colorAccent">@color/cr_accent</item>
         <item name="android:windowBackground">@color/cr_bg</item>
-        <item name="android:statusBarColor">@color/cr_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:navigationBarColor">@color/cr_nav_bg</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
     </style>
 
     <style name="Theme.ClipRelay.Dialog" parent="Theme.AppCompat.Light.Dialog">

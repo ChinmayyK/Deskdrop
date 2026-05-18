@@ -19,7 +19,7 @@ use crate::trust::{format_fingerprint, TrustRecord, TrustState, TrustStore};
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::path::PathBuf;
@@ -396,6 +396,7 @@ impl Engine {
 
         engine.spawn_network_monitor().await?;
         engine.spawn_peer_pruner();
+        engine.spawn_sensitive_history_pruner();
         Ok(engine)
     }
 
@@ -1289,16 +1290,23 @@ impl Engine {
     pub async fn connect_to_peer(&self, ip: String, port: u16) -> Result<()> {
         let addr = SocketAddr::new(ip.parse().context("invalid peer IP")?, port);
         self.shared.peer_manager.note_manual_target(addr);
-        let shared = self.shared.clone();
-        tokio::spawn(async move {
-            if let Err(err) = connect_loop(shared, addr, None, DiscoverySource::Manual).await {
-                warn!(%addr, error = %err, "manual peer connection failed");
+        match connect_once(self.shared.clone(), addr, None, DiscoverySource::Manual).await {
+            Ok(()) => {
+                self.shared.peer_manager.clear_manual_target(addr);
+                Ok(())
             }
-        });
-        Ok(())
+            Err(err) => {
+                self.shared.peer_manager.record_manual_failure(addr);
+                Err(err)
+            }
+        }
     }
 
     pub async fn disconnect_peer(&self, device_id: Uuid) -> Result<bool> {
+        let _ = self
+            .shared
+            .peer_manager
+            .set_explicit_disconnect(device_id, true)?;
         let session = self.shared.peer_manager.shutdown_peer_session(device_id)?;
         if let Some(session) = session {
             if let Some(shutdown_tx) = session.shutdown_tx {
@@ -1455,7 +1463,12 @@ impl Engine {
         EngineStatus {
             active_interface: state.active_interface,
             bind_address: state.bind_addr,
-            peers: self.shared.peer_manager.list(),
+            peers: display_peers_for_status(
+                self.shared.peer_manager.list(),
+                self.shared.config.device_id,
+                &self.shared.config.device_name,
+                state.bind_addr.ip(),
+            ),
             last_sync_at: self.shared.peer_manager.last_sync_at(),
         }
     }
@@ -1470,6 +1483,20 @@ impl Engine {
             loop {
                 interval.tick().await;
                 peer_manager.prune_stale_peers();
+            }
+        });
+    }
+
+    fn spawn_sensitive_history_pruner(&self) {
+        let history = self.shared.history.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                if let Err(err) = history.lock().await.purge_expired_sensitive_entries() {
+                    warn!(error = %err, "sensitive history pruning failed");
+                }
             }
         });
     }
@@ -1751,10 +1778,22 @@ fn describe_change_kinds(change: &NetworkChangeEvent) -> String {
 }
 
 async fn reconnect_known_peers(shared: EngineShared) {
+    let local_ip = shared.network_state.lock().await.bind_addr.ip();
     let peers = shared.peer_manager.list();
     let mut scheduled = HashSet::new();
 
     for peer in peers {
+        if is_obviously_local_peer(
+            peer.id,
+            &peer.friendly_name,
+            peer.ip,
+            shared.config.device_id,
+            &shared.config.device_name,
+            Some(local_ip),
+        ) {
+            continue;
+        }
+
         if !peer.should_auto_reconnect() && peer.discovery != DiscoverySource::Manual {
             continue;
         }
@@ -1775,6 +1814,25 @@ async fn reconnect_known_peers(shared: EngineShared) {
         }
     }
 
+    if scheduled.is_empty() {
+        if let Some(endpoint) = guessed_hotspot_gateway_endpoint(&shared).await {
+            shared.peer_manager.note_manual_target(endpoint);
+            let shared_clone = shared.clone();
+            tokio::spawn(async move {
+                if let Err(err) =
+                    connect_loop(shared_clone, endpoint, None, DiscoverySource::Manual).await
+                {
+                    warn!(
+                        addr = %endpoint,
+                        error = %err,
+                        "android-hotspot fallback connection failed"
+                    );
+                }
+            });
+            scheduled.insert(endpoint);
+        }
+    }
+
     for endpoint in shared.peer_manager.manual_targets() {
         if scheduled.contains(&endpoint) {
             continue;
@@ -1789,6 +1847,90 @@ async fn reconnect_known_peers(shared: EngineShared) {
             }
         });
     }
+}
+
+fn display_peers_for_status(
+    peers: Vec<PeerRecord>,
+    local_device_id: Uuid,
+    local_device_name: &str,
+    local_ip: IpAddr,
+) -> Vec<PeerRecord> {
+    let mut deduped: HashMap<(String, Option<IpAddr>), PeerRecord> = HashMap::new();
+
+    for peer in peers {
+        if is_obviously_local_peer(
+            peer.id,
+            &peer.friendly_name,
+            peer.ip,
+            local_device_id,
+            local_device_name,
+            Some(local_ip),
+        ) {
+            continue;
+        }
+
+        let key = (peer.friendly_name.trim().to_lowercase(), peer.ip);
+        match deduped.get(&key) {
+            Some(existing) if !peer_should_replace(existing, &peer) => {}
+            _ => {
+                deduped.insert(key, peer);
+            }
+        }
+    }
+
+    let mut peers: Vec<_> = deduped.into_values().collect();
+    peers.sort_by(|left, right| {
+        peer_display_rank(left)
+            .cmp(&peer_display_rank(right))
+            .then_with(|| left.friendly_name.cmp(&right.friendly_name))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    peers
+}
+
+fn is_obviously_local_peer(
+    peer_id: Uuid,
+    peer_name: &str,
+    peer_ip: Option<IpAddr>,
+    local_device_id: Uuid,
+    local_device_name: &str,
+    local_ip: Option<IpAddr>,
+) -> bool {
+    if peer_id == local_device_id {
+        return true;
+    }
+
+    match (peer_ip, local_ip) {
+        (Some(peer_ip), Some(local_ip))
+            if peer_ip == local_ip
+                && peer_name.trim().eq_ignore_ascii_case(local_device_name.trim()) =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn peer_should_replace(current: &PeerRecord, candidate: &PeerRecord) -> bool {
+    peer_display_rank(candidate) < peer_display_rank(current)
+}
+
+fn peer_display_rank(peer: &PeerRecord) -> (u8, u8, u8, std::cmp::Reverse<u64>, std::cmp::Reverse<u64>) {
+    let status_rank = match peer.status {
+        PeerConnectionState::Connected => 0,
+        PeerConnectionState::Connecting => 1,
+        PeerConnectionState::Failed => 2,
+        PeerConnectionState::Disconnected => 3,
+    };
+    let trust_rank = if peer.trusted { 0 } else { 1 };
+    let sync_rank = if peer.sync_enabled { 0 } else { 1 };
+    (
+        status_rank,
+        trust_rank,
+        sync_rank,
+        std::cmp::Reverse(peer.last_seen.unwrap_or(0)),
+        std::cmp::Reverse(peer.last_sync.unwrap_or(0)),
+    )
 }
 
 async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
@@ -1846,6 +1988,16 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         false,
     )
     .await?;
+
+    if shared
+        .peer_manager
+        .is_explicitly_disconnected(hs.peer_device_id)
+    {
+        anyhow::bail!(
+            "ignoring inbound session from {} because it was explicitly disconnected",
+            hs.peer_device_id
+        );
+    }
 
     let endpoint = stream.peer_addr().context("reading remote address")?;
     let trusted = observe_trust(
@@ -2042,6 +2194,9 @@ fn register_session(
     shared
         .peer_manager
         .upsert_peer(peer_id, peer_name.clone(), endpoint, trusted, discovery)?;
+    let _ = shared
+        .peer_manager
+        .set_explicit_disconnect(peer_id, false);
     let (session_id, replaced) = shared.peer_manager.replace_live_session(
         peer_id,
         endpoint,
@@ -2621,12 +2776,22 @@ fn should_initiate_session(
     peer_id: Uuid,
     discovery: DiscoverySource,
 ) -> bool {
+    if shared.peer_manager.is_explicitly_disconnected(peer_id) {
+        return false;
+    }
     match discovery {
         DiscoverySource::Manual => true,
         DiscoverySource::Mdns | DiscoverySource::Unknown => {
             shared.config.device_id.as_bytes() < peer_id.as_bytes()
         }
     }
+}
+
+async fn guessed_hotspot_gateway_endpoint(shared: &EngineShared) -> Option<SocketAddr> {
+    let state = shared.network_state.lock().await.clone();
+    let iface = state.active_interface.as_ref()?;
+    let gateway = network_manager::detect_android_hotspot_gateway(iface)?;
+    Some(SocketAddr::new(gateway, shared.config.port))
 }
 
 fn resolve_bind_address(

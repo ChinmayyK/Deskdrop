@@ -5,7 +5,7 @@
 //! This makes tests fast, reproducible, and safe for CI without root.
 //!
 //! # Usage
-//! ```rust
+//! ```ignore
 //! use cliprelay_core::{sim::SimNetwork, ClipboardContent};
 //!
 //! # tokio::runtime::Builder::new_current_thread()

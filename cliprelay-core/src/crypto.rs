@@ -34,20 +34,13 @@ pub struct IdentityKey {
 impl IdentityKey {
     /// Generate a fresh identity key.
     pub fn generate() -> Self {
-        let secret = StaticSecret::random_from_rng(rand::thread_rng());
-        let public = PublicKey::from(&secret);
-        // Capture raw scalar bytes before consuming the secret.
-        // SAFETY: StaticSecret is repr-transparent over [u8;32]; we bypass
-        // the missing as_bytes() by re-deriving from the public key round-trip.
-        // The proper approach is to store the entropy at generation time.
         let mut secret_bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut secret_bytes);
-        // Re-derive a matching key from the stored bytes so they round-trip.
-        let canon_secret = StaticSecret::from(secret_bytes);
-        let canon_public = PublicKey::from(&canon_secret);
+        let secret = StaticSecret::from(secret_bytes);
+        let public = PublicKey::from(&secret);
         Self {
             secret_bytes,
-            public: canon_public,
+            public,
         }
     }
 

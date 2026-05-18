@@ -75,6 +75,9 @@ pub struct PeerRecord {
     pub last_sync: Option<u64>,
     pub discovery: DiscoverySource,
     pub last_error: Option<String>,
+    /// User manually disconnected this peer and auto-reconnect must stay off
+    /// until a fresh, explicit reconnect action is initiated.
+    pub explicit_disconnect: bool,
 }
 
 impl Default for PeerRecord {
@@ -94,6 +97,7 @@ impl Default for PeerRecord {
             last_sync: None,
             discovery: DiscoverySource::Unknown,
             last_error: None,
+            explicit_disconnect: false,
         }
     }
 }
@@ -110,7 +114,7 @@ impl PeerRecord {
 
     /// Whether this peer should reconnect automatically.
     pub fn should_auto_reconnect(&self) -> bool {
-        self.trusted && self.remembered && self.auto_connect
+        self.trusted && self.remembered && self.auto_connect && !self.explicit_disconnect
     }
 }
 
@@ -231,6 +235,7 @@ impl PeerManager {
                 status: PeerConnectionState::Disconnected,
                 discovery,
                 last_error: None,
+                explicit_disconnect: false,
             });
 
             record.friendly_name = friendly_name;
@@ -307,6 +312,7 @@ impl PeerManager {
             entry.last_seen = Some(now_secs());
             entry.status = PeerConnectionState::Connected;
             entry.last_error = None;
+            entry.explicit_disconnect = false;
         }
 
         let replaced = self.live.write().unwrap().insert(
@@ -443,6 +449,36 @@ impl PeerManager {
             self.save()?;
         }
         Ok(found)
+    }
+
+    pub fn set_explicit_disconnect(&self, device_id: Uuid, explicit: bool) -> Result<bool> {
+        let found = {
+            let mut store = self.store.write().unwrap();
+            if let Some(entry) = store.peers.get_mut(&device_id) {
+                entry.explicit_disconnect = explicit;
+                if explicit {
+                    entry.status = PeerConnectionState::Disconnected;
+                    entry.last_error = Some("manually disconnected".to_string());
+                }
+                true
+            } else {
+                false
+            }
+        };
+        if found {
+            self.save()?;
+        }
+        Ok(found)
+    }
+
+    pub fn is_explicitly_disconnected(&self, device_id: Uuid) -> bool {
+        self.store
+            .read()
+            .unwrap()
+            .peers
+            .get(&device_id)
+            .map(|entry| entry.explicit_disconnect)
+            .unwrap_or(false)
     }
 
     /// Forget Device: removes persistent pairing without revoking trust.

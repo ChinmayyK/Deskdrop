@@ -14,6 +14,7 @@ pub const MAX_ENTRIES: usize = 500;
 pub const DEFAULT_ENTRIES: usize = 50;
 pub const DEFAULT_MAX_TEXT_BYTES: usize = 64 * 1024;
 pub const MAX_TEXT_PREVIEW: usize = 4096;
+const SENSITIVE_ENTRY_TTL_SECS: u64 = 120;
 
 fn now_secs() -> u64 {
     SystemTime::now()
@@ -81,6 +82,10 @@ pub struct HistoryEntry {
     /// User-defined labels for this entry.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sensitive_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sensitive_ttl_expires_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +121,10 @@ impl HistoryEntry {
         max_text_bytes: usize,
     ) -> Self {
         let hash = hex::encode(hash_content(content));
+        let sensitive_kind = content
+            .as_text()
+            .and_then(detect_sensitive_text)
+            .map(str::to_string);
         let payload = match content {
             ClipboardContent::Text(s) => {
                 let preview_len = s.len().min(MAX_TEXT_PREVIEW);
@@ -150,6 +159,8 @@ impl HistoryEntry {
             hash,
             pinned: false,
             tags: Vec::new(),
+            sensitive_kind: sensitive_kind.clone(),
+            sensitive_ttl_expires_at: sensitive_kind.map(|_| now_secs() + SENSITIVE_ENTRY_TTL_SECS),
         }
     }
 
@@ -167,6 +178,8 @@ impl HistoryEntry {
             hash: meta.hash.clone(),
             pinned: meta.pinned,
             tags: Vec::new(),
+            sensitive_kind: None,
+            sensitive_ttl_expires_at: None,
         }
     }
 
@@ -214,6 +227,12 @@ impl HistoryEntry {
     fn can_upgrade_from(&self, other: &HistoryEntry) -> bool {
         matches!(self.payload, HistoryPayload::Metadata { .. })
             && !matches!(other.payload, HistoryPayload::Metadata { .. })
+    }
+
+    fn is_sensitive_expired(&self, now: u64) -> bool {
+        self.sensitive_ttl_expires_at
+            .map(|expires_at| expires_at <= now)
+            .unwrap_or(false)
     }
 }
 
@@ -287,6 +306,7 @@ impl History {
             next_id,
             max_entries: clamp_entries(max_entries),
         };
+        let _ = history.purge_expired_sensitive_entries_with_now(now_secs())?;
         history.trim_to_limit();
         history.persist()?;
         Ok(history)
@@ -312,6 +332,7 @@ impl History {
         source_device: String,
         max_text_bytes: usize,
     ) -> Result<&HistoryEntry> {
+        let _ = self.purge_expired_sensitive_entries_with_now(now_secs())?;
         let id = self.next_id;
         self.next_id += 1;
         let entry = HistoryEntry::from_content(id, content, source_device, max_text_bytes);
@@ -539,12 +560,24 @@ impl History {
         // Atomic write: serialise to a .tmp file then rename so a crash during
         // write never leaves the history file in a partially-written state.
         let tmp_path = self.path.with_extension("tmp");
-        let bytes = serde_json::to_vec_pretty(
-            &self.entries.iter().cloned().collect::<Vec<HistoryEntry>>(),
-        )?;
+        let bytes = serde_json::to_vec_pretty(&self.entries)?;
         std::fs::write(&tmp_path, &bytes).context("writing history tmp")?;
         std::fs::rename(&tmp_path, &self.path).context("renaming history file")?;
         Ok(())
+    }
+
+    pub fn purge_expired_sensitive_entries(&mut self) -> Result<usize> {
+        self.purge_expired_sensitive_entries_with_now(now_secs())
+    }
+
+    fn purge_expired_sensitive_entries_with_now(&mut self, now: u64) -> Result<usize> {
+        let before = self.entries.len();
+        self.entries.retain(|entry| !entry.is_sensitive_expired(now));
+        let removed = before.saturating_sub(self.entries.len());
+        if removed > 0 {
+            self.persist()?;
+        }
+        Ok(removed)
     }
 
     /// Full-text search through stored history.
@@ -624,6 +657,154 @@ impl History {
         }
         out
     }
+}
+
+impl ClipboardContent {
+    fn as_text(&self) -> Option<&str> {
+        match self {
+            ClipboardContent::Text(text) => Some(text.as_str()),
+            _ => None,
+        }
+    }
+}
+
+fn detect_sensitive_text(text: &str) -> Option<&'static str> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if is_probable_otp(trimmed) {
+        return Some("otp");
+    }
+    if is_probable_payment_card(trimmed) {
+        return Some("payment_card");
+    }
+    if is_probable_api_token(trimmed) {
+        return Some("api_token");
+    }
+    None
+}
+
+fn is_probable_otp(text: &str) -> bool {
+    let lowered = text.to_lowercase();
+    if is_digit_run(text, 4, 8) {
+        return true;
+    }
+    let mentions_otp = ["otp", "2fa", "passcode", "verification code", "security code"]
+        .iter()
+        .any(|needle| lowered.contains(needle));
+    mentions_otp && contains_digit_run_in_range(text, 4, 8)
+}
+
+fn contains_digit_run_in_range(text: &str, min: usize, max: usize) -> bool {
+    let mut run = 0usize;
+    for ch in text.chars() {
+        if ch.is_ascii_digit() {
+            run += 1;
+            if run >= min && run <= max {
+                return true;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    false
+}
+
+fn is_digit_run(text: &str, min: usize, max: usize) -> bool {
+    let digits = text.chars().filter(|ch| ch.is_ascii_digit()).count();
+    digits >= min
+        && digits <= max
+        && text
+            .chars()
+            .all(|ch| ch.is_ascii_digit() || ch.is_whitespace())
+}
+
+fn is_probable_payment_card(text: &str) -> bool {
+    let digits: String = text.chars().filter(|ch| ch.is_ascii_digit()).collect();
+    if !(13..=19).contains(&digits.len()) {
+        return false;
+    }
+    let looks_formatted = text.chars().any(|ch| ch == ' ' || ch == '-');
+    looks_formatted && luhn_valid(&digits)
+}
+
+fn luhn_valid(digits: &str) -> bool {
+    let mut sum = 0u32;
+    let mut double = false;
+    for ch in digits.chars().rev() {
+        let mut digit = match ch.to_digit(10) {
+            Some(d) => d,
+            None => return false,
+        };
+        if double {
+            digit *= 2;
+            if digit > 9 {
+                digit -= 9;
+            }
+        }
+        sum += digit;
+        double = !double;
+    }
+    sum % 10 == 0
+}
+
+fn is_probable_api_token(text: &str) -> bool {
+    const PREFIXES: &[&str] = &[
+        "sk_live_",
+        "sk_test_",
+        "ghp_",
+        "github_pat_",
+        "xoxb-",
+        "xoxp-",
+        "AIza",
+    ];
+    let trimmed = text.trim_matches(|ch: char| ch.is_whitespace() || ch == '"' || ch == '\'');
+    if PREFIXES.iter().any(|prefix| trimmed.starts_with(prefix)) {
+        return true;
+    }
+
+    trimmed
+        .split_whitespace()
+        .map(|part| part.trim_matches(|ch: char| !is_token_char(ch)))
+        .any(|candidate| {
+            candidate.len() >= 24
+                && char_class_count(candidate) >= 3
+                && shannon_entropy(candidate) >= 3.5
+        })
+}
+
+fn is_token_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '/' | '=' | '.')
+}
+
+fn char_class_count(value: &str) -> usize {
+    let mut classes = 0usize;
+    if value.chars().any(|ch| ch.is_ascii_lowercase()) {
+        classes += 1;
+    }
+    if value.chars().any(|ch| ch.is_ascii_uppercase()) {
+        classes += 1;
+    }
+    if value.chars().any(|ch| ch.is_ascii_digit()) {
+        classes += 1;
+    }
+    if value.chars().any(|ch| !ch.is_ascii_alphanumeric()) {
+        classes += 1;
+    }
+    classes
+}
+
+fn shannon_entropy(value: &str) -> f64 {
+    let mut counts = std::collections::HashMap::new();
+    for byte in value.bytes() {
+        *counts.entry(byte).or_insert(0usize) += 1;
+    }
+    let len = value.len() as f64;
+    counts.values().fold(0.0, |entropy, count| {
+        let probability = *count as f64 / len;
+        entropy - (probability * probability.log2())
+    })
 }
 
 #[cfg(test)]
@@ -1041,5 +1222,47 @@ mod tests {
         let tmp = NamedTempFile::new().unwrap();
         let history = History::load_with_limit(tmp.path(), 500).unwrap();
         assert_eq!(history.entries().len(), 0); // empty, just checks no panic
+    }
+
+    #[test]
+    fn sensitive_entries_get_ttl() {
+        let tmp = NamedTempFile::new().unwrap();
+        let mut history = History::load_with_limit(tmp.path(), 50).unwrap();
+        history
+            .push_with_options(
+                &ClipboardContent::Text("OTP 482991".into()),
+                "Pixel".into(),
+                1024,
+            )
+            .unwrap();
+
+        let entry = history.entries().back().unwrap();
+        assert_eq!(entry.sensitive_kind.as_deref(), Some("otp"));
+        assert!(entry.sensitive_ttl_expires_at.is_some());
+    }
+
+    #[test]
+    fn expired_sensitive_entries_are_purged() {
+        let tmp = NamedTempFile::new().unwrap();
+        let mut history = History::load_with_limit(tmp.path(), 50).unwrap();
+        history
+            .push_with_options(
+                &ClipboardContent::Text("4111 1111 1111 1111".into()),
+                "Phone".into(),
+                1024,
+            )
+            .unwrap();
+        assert_eq!(history.entries().len(), 1);
+
+        let expires_at = history
+            .entries()
+            .back()
+            .and_then(|entry| entry.sensitive_ttl_expires_at)
+            .unwrap();
+        let removed = history
+            .purge_expired_sensitive_entries_with_now(expires_at + 1)
+            .unwrap();
+        assert_eq!(removed, 1);
+        assert!(history.entries().is_empty());
     }
 }
