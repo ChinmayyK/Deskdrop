@@ -48,6 +48,9 @@ final class ClipRelayStore: ObservableObject {
     @Published var pinnedItemIds: Set<Int64> = []
     /// Active phone call from a connected Android device (nil = no active call).
     @Published var activeCall: IncomingCallState? = nil
+    private var suppressCallUpdatesUntil: Date? = nil
+    /// Battery levels for connected peer devices.
+    @Published var peerBatteries: [DeviceBatteryState] = []
 
     private var lastActivityId: Int64 = 0
     private var lastMirroredAutoAppliedEntryId: Int64 = 0
@@ -220,20 +223,38 @@ final class ClipRelayStore: ObservableObject {
             // which was silently breaking button hit-testing (mouse-down and
             // mouse-up land on different view instances when the view rebuilds
             // between the two events).
-            if let call = s.active_call, call.state.lowercased() != "idle" {
-                let incoming = IncomingCallState(
-                    deviceId: call.device_id,
-                    deviceName: call.device_name,
-                    state: call.state,
-                    phoneNumber: call.number,
-                    contactName: call.contact_name
-                )
-                if activeCall != incoming {
-                    activeCall = incoming
+            if let suppress = suppressCallUpdatesUntil, suppress > Date() {
+                // Ignore status updates for activeCall during optimistic UI wait
+            } else {
+                if let call = s.active_call, call.state.lowercased() != "idle" {
+                    let incoming = IncomingCallState(
+                        deviceId: call.device_id,
+                        deviceName: call.device_name,
+                        state: call.state,
+                        phoneNumber: call.number,
+                        contactName: call.contact_name
+                    )
+                    if activeCall != incoming {
+                        activeCall = incoming
+                    }
+                } else if activeCall != nil {
+                    activeCall = nil
                 }
-            } else if activeCall != nil {
-                activeCall = nil
             }
+
+            // ── Battery Sync (F20) ────────────────────────────────────────────
+            let incomingBatteries = (s.peer_batteries ?? []).map { pb in
+                DeviceBatteryState(
+                    deviceId: pb.device_id,
+                    deviceName: pb.device_name,
+                    level: pb.level,
+                    charging: pb.charging
+                )
+            }
+            if peerBatteries != incomingBatteries {
+                peerBatteries = incomingBatteries
+            }
+
             dashboardStatus = StatusSnapshot(
                 peerCount:    connectedCount,
                 trustedCount: s.peers.filter { $0.trusted }.count,
@@ -772,19 +793,24 @@ final class ClipRelayStore: ObservableObject {
     func acceptCall() {
         NSSound.beep()
         guard let call = activeCall else { return }
+        suppressCallUpdatesUntil = Date().addingTimeInterval(3.0)
+        // Temporarily mark as offhook locally for immediate feedback
+        var updated = call
+        updated.state = "offhook"
+        activeCall = updated
         Task {
             try? await ipc.callAction(action: "accept", targetDevice: call.deviceId)
         }
-        // Do NOT clear — wait for 'offhook' state from Android to switch UI to ongoing call mode.
     }
 
     func declineCall() {
         NSSound.beep()
         guard let call = activeCall else { return }
+        suppressCallUpdatesUntil = Date().addingTimeInterval(3.0)
+        withAnimation(.crSpring) { activeCall = nil }
         Task {
             try? await ipc.callAction(action: "decline", targetDevice: call.deviceId)
         }
-        withAnimation(.crSpring) { activeCall = nil }
     }
 
     func routeAudio(to route: String) {

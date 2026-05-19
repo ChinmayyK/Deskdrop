@@ -66,6 +66,7 @@ object ClipRelayJni {
     const val CR_EVENT_ACTIVITY_UPDATED        = 16
     const val CR_EVENT_CALL_STATE_CHANGED       = 17
     const val CR_EVENT_CALL_ACTION              = 18
+    const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
@@ -164,6 +165,10 @@ object ClipRelayJni {
     @JvmStatic external fun eventCallContactName(event: Long): String?
     /** Get the action string ("accept"/"decline") from a CR_EVENT_CALL_ACTION event. */
     @JvmStatic external fun eventCallAction(event: Long): String?
+    // ── Battery synchronization (F20) ─────────────────────────────────────────
+    @JvmStatic external fun pushBatteryStatus(
+        handle: Long, level: Int, charging: Boolean
+    ): Int
 }
 
 // ── Activity feed model ───────────────────────────────────────────────────────
@@ -261,6 +266,7 @@ class ClipRelayService : Service() {
         const val ACTION_ACCEPT_FILE_TRANSFER = "com.cliprelay.ACCEPT_FILE_TRANSFER"
         const val ACTION_REJECT_FILE_TRANSFER = "com.cliprelay.REJECT_FILE_TRANSFER"
         const val ACTION_CANCEL_FILE_TRANSFER = "com.cliprelay.CANCEL_FILE_TRANSFER"
+        const val ACTION_CONNECT_MANUAL     = "com.cliprelay.CONNECT_MANUAL"
 
         // Intent extras
         const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
@@ -435,6 +441,15 @@ class ClipRelayService : Service() {
             ACTION_DISCONNECT_ALL -> { disconnectAllPeers(); return START_STICKY }
             ClipRelayTileService.ACTION_SYNC_DISABLE -> { setSyncEnabled(false); return START_STICKY }
             ClipRelayTileService.ACTION_SYNC_ENABLE  -> { setSyncEnabled(true);  return START_STICKY }
+            ACTION_CONNECT_MANUAL -> {
+                val ip = intent?.getStringExtra("ip")
+                val port = intent?.getIntExtra("port", 47823) ?: 47823
+                if (!ip.isNullOrBlank() && engineHandle != 0L) {
+                    val result = ClipRelayJni.connectToPeer(engineHandle, ip, port)
+                    Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
+                }
+                return START_STICKY
+            }
 
             // Timeline-first: user tapped "Apply" on a notification or feed item.
             // Prefer hash-based apply (full content via engine) over truncated preview text.
@@ -519,6 +534,7 @@ class ClipRelayService : Service() {
                 startNsdDiscovery()   // advertise + browse so the Mac can find us
                 registerNetworkCallback() // restart NSD on WiFi changes
                 startCallStateMonitor()   // call continuity: relay phone state to peers
+                startBatteryMonitor()     // F20: relay battery status to peers
                 persistStatus()
             } else {
                 // Engine was already running — permission may have just been granted.
@@ -526,6 +542,7 @@ class ClipRelayService : Service() {
                 if (hasCallPermissions() && callStateReceiver == null) {
                     startCallStateMonitor()
                 }
+                startBatteryMonitor()
             }
 
             if (intent?.action == ACTION_PUSH_TEXT) {
@@ -572,6 +589,7 @@ class ClipRelayService : Service() {
     override fun onDestroy() {
         stopNsdDiscovery()
         stopCallStateMonitor()
+        stopBatteryMonitor()
         unregisterNetworkCallback()
         cancelNsdRetry()
         releaseMulticastLock()
@@ -607,7 +625,7 @@ class ClipRelayService : Service() {
     // ── WakeLock & WifiLock ───────────────────────────────────────────────────
 
     private fun acquireWakeLockIfNeeded() {
-        if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE && wakeLock == null) {
+        if (wakeLock == null) {
             wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
                 .newWakeLock(
                     PowerManager.PARTIAL_WAKE_LOCK,
@@ -949,6 +967,10 @@ class ClipRelayService : Service() {
                 val action = ClipRelayJni.eventCallAction(ev) ?: return
                 Log.i(TAG, "Remote call action received: $action")
                 handleRemoteCallAction(action)
+            }
+
+            ClipRelayJni.CR_EVENT_BATTERY_STATE_CHANGED -> {
+                Log.d(TAG, "BatteryStateChanged event received (no-op on Android)")
             }
         }
     }
@@ -1683,6 +1705,15 @@ class ClipRelayService : Service() {
 
     @Suppress("DEPRECATION")
     private fun handleRemoteCallAction(action: String) {
+        if (action == "accept" || action == "decline") {
+            Log.i(TAG, "Attempting remote call action '$action' via NotificationListener...")
+            if (ClipRelayNotificationListener.triggerCallAction(action)) {
+                Log.i(TAG, "Remote call action '$action' successfully triggered via NotificationListener!")
+                return
+            }
+            Log.i(TAG, "NotificationListener could not handle call action '$action' (maybe not enabled or call notif not found), falling back to TelecomManager...")
+        }
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val tm = getSystemService(TELECOM_SERVICE) as? android.telecom.TelecomManager ?: return
             when (action) {
@@ -1736,6 +1767,50 @@ class ClipRelayService : Service() {
         }
     }
 
+    // ── F20: Battery status monitor ────────────────────────────────────────────────────
+    private var batteryReceiver: android.content.BroadcastReceiver? = null
+
+    private fun startBatteryMonitor() {
+        if (batteryReceiver != null) return
+        val receiver = object : android.content.BroadcastReceiver() {
+            private var lastLevel = -1
+            private var lastChargingState: Boolean? = null
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == Intent.ACTION_BATTERY_CHANGED) {
+                    val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                    val status = intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+                    val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                                   status == android.os.BatteryManager.BATTERY_STATUS_FULL
+
+                    val levelChanged = Math.abs(level - lastLevel) >= 5
+                    val statusChanged = charging != lastChargingState
+
+                    if (levelChanged || statusChanged || lastLevel == -1) {
+                        lastLevel = level
+                        lastChargingState = charging
+
+                        val h = engineHandle
+                        if (h != 0L && level >= 0) {
+                            Log.i(TAG, "Battery status update: level=$level charging=$charging")
+                            ClipRelayJni.pushBatteryStatus(h, level, charging)
+                        }
+                    }
+                }
+            }
+        }
+        val filter = android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        registerReceiver(receiver, filter)
+        batteryReceiver = receiver
+        Log.i(TAG, "Battery status monitor started")
+    }
+
+    private fun stopBatteryMonitor() {
+        batteryReceiver?.let {
+            runCatching { unregisterReceiver(it) }
+        }
+        batteryReceiver = null
+        Log.i(TAG, "Battery status monitor stopped")
+    }
 
     // ── NSD (Network Service Discovery) ────────────────────────────────────────────────
     //

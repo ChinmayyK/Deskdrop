@@ -123,6 +123,11 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         refreshDashboard()
         if (tab == Tab.FEED) rebuildFeed()
+        try {
+            startService(Intent(this, ClipRelayService::class.java))
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to refresh service onResume", e)
+        }
     }
 
     override fun onStart() {
@@ -920,6 +925,9 @@ class MainActivity : AppCompatActivity() {
             ) {
                 sendAction(ClipRelayService.ACTION_SCAN_NOW)
                 showSnack("Scanning for devices…")
+            })
+            add(Triple("Pair via Magic Link", cr(R.color.cr_green)) {
+                showMagicLinkPairingDialog()
             })
             val toggleLabel  = if (syncOn) "Pause sync" else "Resume sync"
             val toggleAction = if (syncOn) ClipRelayService.ACTION_PAUSE_SYNC
@@ -1861,5 +1869,100 @@ class MainActivity : AppCompatActivity() {
                 startService(Intent(this, ClipRelayService::class.java))
             }
         }
+    }
+
+    private fun showMagicLinkPairingDialog() {
+        val ctx = this
+        val dialogView = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(16))
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            layoutParams = lp
+        }
+
+        val title = TextView(ctx).apply {
+            text = "Magic Link Pairing"
+            textSize = 18f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(cr(R.color.cr_text_1))
+            setPadding(0, 0, 0, dp(12))
+        }
+        dialogView.addView(title)
+
+        val desc = TextView(ctx).apply {
+            text = "Paste the pairing link from your Mac's screen, or enter its IP address directly to connect instantly."
+            textSize = 13f
+            setTextColor(cr(R.color.cr_text_3))
+            setPadding(0, 0, 0, dp(16))
+        }
+        dialogView.addView(desc)
+
+        val inputField = EditText(ctx).apply {
+            hint = "cliprelay://pair?name=... or 192.168.1.10"
+            textSize = 14f
+            setTextColor(cr(R.color.cr_text_1))
+            setHintTextColor(cr(R.color.cr_text_3))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            isSingleLine = true
+        }
+        dialogView.addView(inputField)
+
+        val dialog = android.app.AlertDialog.Builder(ctx)
+            .setView(dialogView)
+            .setPositiveButton("Connect", null)
+            .setNegativeButton("Cancel") { d, _ -> d.dismiss() }
+            .create()
+
+        dialog.setOnShowListener {
+            val connectButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            connectButton.setOnClickListener {
+                val input = inputField.text.toString().trim()
+                if (input.isBlank()) {
+                    inputField.error = "Input cannot be empty"
+                    return@setOnClickListener
+                }
+
+                if (input.startsWith("cliprelay://pair")) {
+                    val uri = android.net.Uri.parse(input)
+                    val ip = uri.getQueryParameter("ip")
+                    val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 47823
+                    if (ip != null) {
+                        ContextCompat.startForegroundService(ctx,
+                            Intent(ctx, ClipRelayService::class.java).apply {
+                                action = ClipRelayService.ACTION_CONNECT_MANUAL
+                                putExtra("ip", ip)
+                                putExtra("port", port)
+                            }
+                        )
+                        showSnack("Connecting to $ip:$port...")
+                        dialog.dismiss()
+                    } else {
+                        inputField.error = "Invalid Pairing URL: Missing IP"
+                    }
+                } else {
+                    val parts = input.split(":")
+                    val ip = parts[0].trim()
+                    val port = if (parts.size > 1) parts[1].trim().toIntOrNull() ?: 47823 else 47823
+                    if (ip.matches(Regex("""\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"""))) {
+                        ContextCompat.startForegroundService(ctx,
+                            Intent(ctx, ClipRelayService::class.java).apply {
+                                action = ClipRelayService.ACTION_CONNECT_MANUAL
+                                putExtra("ip", ip)
+                                putExtra("port", port)
+                            }
+                        )
+                        showSnack("Connecting to $ip:$port...")
+                        dialog.dismiss()
+                    } else {
+                        inputField.error = "Invalid IP address or pairing link"
+                    }
+                }
+            }
+        }
+
+        dialog.show()
     }
 }

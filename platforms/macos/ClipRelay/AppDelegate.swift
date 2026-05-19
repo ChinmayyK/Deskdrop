@@ -209,6 +209,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sendFileItem = NSMenuItem(title: "Send File to Device…", action: #selector(sendFileFromMenu), keyEquivalent: "")
         menu.addItem(sendFileItem)
 
+        // ── F24: Push clipboard on demand ─────────────────────────────────────
+        let pushClipItem = NSMenuItem(title: "Push Clipboard Now", action: #selector(pushClipboardFromMenu), keyEquivalent: "c")
+        pushClipItem.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(pushClipItem)
+
+        // ── F22: Send URL from frontmost browser ──────────────────────────────
+        let sendUrlItem = NSMenuItem(title: "Send Browser URL to Device", action: #selector(sendBrowserUrlToDevice), keyEquivalent: "")
+        menu.addItem(sendUrlItem)
+
         // ── Connect manually ───────────────────────────────────────────────────
         let connectItem = NSMenuItem(title: "Connect to IP…", action: #selector(connectManually), keyEquivalent: "")
         menu.addItem(connectItem)
@@ -644,6 +653,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.message                 = "Choose files to send to connected devices"
         if panel.runModal() == .OK {
             panel.urls.forEach { store.sendFile(url: $0, to: nil) }
+        }
+    }
+
+    @objc private func pushClipboardFromMenu() {
+        forcePushClipboard()
+    }
+
+    /// F22: Grab the active URL from the frontmost browser and push it to the connected device.
+    @objc private func sendBrowserUrlToDevice() {
+        guard store.connectedCount > 0 else {
+            store.showToast(
+                title: "No Devices Connected",
+                body: "Connect a device first.",
+                tint: CRTheme.inkSoft,
+                systemImage: "wifi.slash",
+                ttl: 2.5
+            )
+            return
+        }
+
+        // Try multiple browsers: Safari, Chrome, Arc, Brave, Edge
+        let scripts: [(String, String)] = [
+            ("Safari",            "tell application \"Safari\" to get URL of front document"),
+            ("Google Chrome",     "tell application \"Google Chrome\" to get URL of active tab of front window"),
+            ("Arc",               "tell application \"Arc\" to get URL of active tab of front window"),
+            ("Brave Browser",     "tell application \"Brave Browser\" to get URL of active tab of front window"),
+            ("Microsoft Edge",    "tell application \"Microsoft Edge\" to get URL of active tab of front window"),
+        ]
+
+        var foundUrl: String?
+        let workspace = NSWorkspace.shared
+        for (appName, script) in scripts {
+            // Only try browsers that are actually running
+            if workspace.runningApplications.contains(where: {
+                $0.localizedName == appName && $0.isActive
+            }) || workspace.frontmostApplication?.localizedName == appName {
+                if let appleScript = NSAppleScript(source: script) {
+                    var error: NSDictionary?
+                    let result = appleScript.executeAndReturnError(&error)
+                    if error == nil, let url = result.stringValue, url.hasPrefix("http") {
+                        foundUrl = url
+                        break
+                    }
+                }
+            }
+        }
+
+        // Fallback: check if the clipboard already contains a URL
+        if foundUrl == nil {
+            if let clipboardText = NSPasteboard.general.string(forType: .string),
+               clipboardText.hasPrefix("http://") || clipboardText.hasPrefix("https://") {
+                foundUrl = clipboardText
+            }
+        }
+
+        guard let url = foundUrl else {
+            store.showToast(
+                title: "No URL Found",
+                body: "Open a browser tab with a URL, or copy a URL to your clipboard.",
+                tint: CRTheme.inkSoft,
+                systemImage: "safari",
+                ttl: 3.0
+            )
+            return
+        }
+
+        // Set the URL on the clipboard and push it
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url, forType: .string)
+
+        Task {
+            do {
+                try await ClipRelayIPCClient.shared.sendClipboardCurrent(targetDeviceId: nil)
+                store.showToast(
+                    title: "URL Sent",
+                    body: url,
+                    tint: CRTheme.accentBlue,
+                    systemImage: "link.circle.fill",
+                    ttl: 2.5
+                )
+            } catch {
+                store.showToast(
+                    title: "Send Failed",
+                    body: error.localizedDescription,
+                    tint: Color.red,
+                    systemImage: "exclamationmark.triangle",
+                    ttl: 3.0
+                )
+            }
         }
     }
 

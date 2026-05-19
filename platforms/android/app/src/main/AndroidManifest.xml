@@ -109,6 +109,17 @@
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
+        <!-- ── Notification listener service ─────────────────────────── -->
+        <service
+            android:name=".ClipRelayNotificationListener"
+            android:label="ClipRelay Notification Listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- ── Quick Settings tile ───────────────────────────────────── -->
         <service
             android:name=".ClipRelayTileService"

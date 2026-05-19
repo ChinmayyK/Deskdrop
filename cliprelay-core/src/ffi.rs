@@ -171,6 +171,7 @@ pub const PB_EVENT_FILE_TRANSFER_FAILED: c_int = 15;
 pub const PB_EVENT_ACTIVITY_UPDATED: c_int = 16;
 pub const PB_EVENT_CALL_STATE_CHANGED: c_int = 17;
 pub const PB_EVENT_CALL_ACTION: c_int = 18;
+pub const PB_EVENT_BATTERY_STATE_CHANGED: c_int = 19;
 
 /// Opaque event payload. Call `cliprelay_event_*` accessors to read fields.
 /// Must be freed with `cliprelay_free_event`.
@@ -243,6 +244,7 @@ pub unsafe extern "C" fn cliprelay_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::ActivityFeedUpdated { .. } => PB_EVENT_ACTIVITY_UPDATED,
         EngineEvent::CallStateChanged { .. } => PB_EVENT_CALL_STATE_CHANGED,
         EngineEvent::CallActionRequest { .. } => PB_EVENT_CALL_ACTION,
+        EngineEvent::BatteryStateChanged { .. } => PB_EVENT_BATTERY_STATE_CHANGED,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
     }
 }

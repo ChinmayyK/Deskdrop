@@ -1041,6 +1041,10 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state.engine.push_call_state(call_state, number, contact_name).await;
             Ok(IpcResponse::ok_empty())
         }
+        IpcRequest::PushBatteryStatus { level, charging } => {
+            state.engine.push_battery_status(level, charging).await;
+            Ok(IpcResponse::ok_empty())
+        }
 
         IpcRequest::Shutdown => {
             state.shutdown.notify_waiters();

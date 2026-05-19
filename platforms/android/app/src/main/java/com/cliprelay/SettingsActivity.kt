@@ -34,6 +34,25 @@ class SettingsActivity : AppCompatActivity() {
         configureEdgeToEdge()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Re-inflate content list to update dynamic permission statuses dynamically
+        if (::contentHost.isInitialized) {
+            contentHost.removeAllViews()
+            val newContent = buildContent()
+            while (newContent.childCount > 0) {
+                val child = newContent.getChildAt(0)
+                newContent.removeViewAt(0)
+                contentHost.addView(child)
+            }
+        }
+        try {
+            startService(Intent(this, ClipRelayService::class.java))
+        } catch (e: Exception) {
+            android.util.Log.e("SettingsActivity", "Failed to refresh service onResume", e)
+        }
+    }
+
     private lateinit var contentHost: LinearLayout
 
     private fun configureEdgeToEdge() {
@@ -132,6 +151,10 @@ class SettingsActivity : AppCompatActivity() {
 
             // Battery
             addView(buildBatterySection())
+            addView(vSpace(14))
+
+            // Call continuity remote control bypass for Android 10+
+            addView(buildCallContinuitySection())
             addView(vSpace(14))
 
             // About
@@ -316,14 +339,130 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun buildBatterySection(): LinearLayout = section("Battery") {
         addView(TextView(this@SettingsActivity).apply {
-            text = "On Samsung, Xiaomi, OnePlus, and Oppo devices, background apps are killed " +
-                   "aggressively. Add ClipRelay to your battery whitelist for reliable sync."
+            text = "On OnePlus, Oppo, Realme, and Xiaomi devices, the OS will freeze the background sync when your screen is turned off.\n\n" +
+                   "To prevent this, go to: Settings -> Apps -> App management -> ClipRelay -> Battery, and enable both 'Allow background activity' and 'Allow auto-launch'."
             textSize = 13f
             setTextColor(cr(R.color.cr_text_3))
             setLineSpacing(0f, 1.4f)
             setPadding(0, 0, 0, dp(14))
         })
         addView(primaryButton("Open battery settings") { openBatterySettings() })
+    }
+
+    // ── Call Continuity ───────────────────────────────────────────────────────
+
+    private fun isNotificationServiceEnabled(): Boolean {
+        val pkgName = packageName
+        val flat = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        if (!flat.isNullOrEmpty()) {
+            val names = flat.split(":")
+            for (name in names) {
+                val cn = android.content.ComponentName.unflattenFromString(name)
+                if (cn != null && cn.packageName == pkgName) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private fun checkAndRequestCallPermissions() {
+        val permissions = mutableListOf<String>()
+        if (checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            permissions.add(android.Manifest.permission.READ_PHONE_STATE)
+        }
+        if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            permissions.add(android.Manifest.permission.ANSWER_PHONE_CALLS)
+        }
+        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            permissions.add(android.Manifest.permission.READ_CONTACTS)
+        }
+        if (checkSelfPermission(android.Manifest.permission.READ_CALL_LOG) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            permissions.add(android.Manifest.permission.READ_CALL_LOG)
+        }
+
+        if (permissions.isNotEmpty()) {
+            requestPermissions(permissions.toTypedArray(), 1002)
+        } else {
+            Toast.makeText(this, "All call continuity permissions are already granted!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun buildCallContinuitySection(): LinearLayout = section("Call Remote Control") {
+        addView(TextView(this@SettingsActivity).apply {
+            text = "Android 10+ restricts background apps from accepting or declining cellular calls. " +
+                   "Ensure you grant both the system telephony permissions and Notification Access to allow ClipRelay to monitor and control calls from your Mac."
+            textSize = 13f
+            setTextColor(cr(R.color.cr_text_3))
+            setLineSpacing(0f, 1.4f)
+            setPadding(0, 0, 0, dp(14))
+        })
+
+        // 1. System Call Permissions Status
+        val hasPhoneState = checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasAnswerCalls = checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasContacts = checkSelfPermission(android.Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasCallLog = checkSelfPermission(android.Manifest.permission.READ_CALL_LOG) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val allRuntimeGranted = hasPhoneState && hasAnswerCalls && hasContacts && hasCallLog
+
+        addView(LinearLayout(this@SettingsActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(2), 0, dp(6))
+
+            addView(TextView(this@SettingsActivity).apply {
+                text = "System Call Access: "
+                textSize = 14f
+                setTextColor(cr(R.color.cr_text_2))
+            })
+
+            addView(TextView(this@SettingsActivity).apply {
+                text = if (allRuntimeGranted) "Granted (Ready)" else "Missing Permissions"
+                textSize = 14f
+                setTypeface(Typeface.DEFAULT_BOLD)
+                setTextColor(if (allRuntimeGranted) Color.parseColor("#30D158") else Color.parseColor("#FF453A"))
+            })
+        })
+
+        if (!allRuntimeGranted) {
+            addView(primaryButton("Grant Call Permissions") {
+                checkAndRequestCallPermissions()
+            })
+            addView(vSpace(10))
+        }
+
+        // 2. Notification Access Status
+        val enabled = isNotificationServiceEnabled()
+        addView(LinearLayout(this@SettingsActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(4), 0, dp(12))
+
+            addView(TextView(this@SettingsActivity).apply {
+                text = "Notification Listener: "
+                textSize = 14f
+                setTextColor(cr(R.color.cr_text_2))
+            })
+
+            addView(TextView(this@SettingsActivity).apply {
+                text = if (enabled) "Enabled (Ready)" else "Disabled (Required)"
+                textSize = 14f
+                setTypeface(Typeface.DEFAULT_BOLD)
+                setTextColor(if (enabled) Color.parseColor("#30D158") else Color.parseColor("#FF453A"))
+            })
+        })
+
+        addView(primaryButton(if (enabled) "Modify Notification Access" else "Enable Notification Access") {
+            try {
+                startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+            } catch (e: Exception) {
+                Toast.makeText(this@SettingsActivity, "Please open Settings -> Notification Access and enable ClipRelay", Toast.LENGTH_LONG).show()
+            }
+        })
     }
 
     // ── About ─────────────────────────────────────────────────────────────────

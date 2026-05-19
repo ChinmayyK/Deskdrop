@@ -30,6 +30,8 @@ struct IpcStatusResponse: Codable {
     let local_fingerprint: String?
     /// Active phone call state from a connected Android device (nil if no active call).
     let active_call: IpcActiveCallState?
+    /// Battery levels for connected peer devices.
+    let peer_batteries: [IpcPeerBatteryState]?
 }
 
 /// Active call state from the daemon's status response.
@@ -39,6 +41,14 @@ struct IpcActiveCallState: Codable {
     let state: String
     let number: String
     let contact_name: String
+}
+
+/// Peer battery status.
+struct IpcPeerBatteryState: Codable {
+    let device_id: String
+    let device_name: String
+    let level: Int
+    let charging: Bool
 }
 
 struct IpcResponse<T: Codable>: Codable {

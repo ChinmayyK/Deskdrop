@@ -319,6 +319,14 @@ pub enum IpcRequest {
         /// Resolved contact name (may be empty)
         contact_name: String,
     },
+    // ── Battery synchronization (F20) ─────────────────────────────────────────
+    /// Push battery status from the local device to all peers.
+    PushBatteryStatus {
+        /// Battery level (0–100)
+        level: u8,
+        /// Whether the device is charging
+        charging: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -528,6 +536,7 @@ pub mod client {
                         let fp = eng.local_fingerprint();
                         let pending = eng.pending_remote_clipboards().await.len();
                         let active_call = eng.active_call().await;
+                        let peer_batteries = eng.peer_batteries().await;
                         IpcResponse::ok(serde_json::json!({
                             "peers": snap.peers,
                             "peer_count": snap.peers.iter().filter(|p| p.status == crate::peer_manager::PeerConnectionState::Connected).count(),
@@ -535,6 +544,7 @@ pub mod client {
                             "pending_clipboard_count": pending,
                             "local_fingerprint": fp,
                             "active_call": active_call,
+                            "peer_batteries": peer_batteries,
                         }))
                     }
                     IpcRequest::RescanPeers => {
@@ -605,6 +615,10 @@ pub mod client {
                     }
                     IpcRequest::PushCallState { state, number, contact_name } => {
                         eng.push_call_state(state, number, contact_name).await;
+                        IpcResponse::ok_empty()
+                    }
+                    IpcRequest::PushBatteryStatus { level, charging } => {
+                        eng.push_battery_status(level, charging).await;
                         IpcResponse::ok_empty()
                     }
                     // ── Metrics ────────────────────────────────────────────────────────

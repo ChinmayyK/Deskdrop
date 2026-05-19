@@ -310,6 +310,16 @@ pub enum AppMessage {
         action: String,
         origin_device: Uuid,
     },
+    /// Battery status from a connected device. Pushed periodically
+    /// (every 5 min or on ≥5% change) for passive display on peers.
+    BatteryStatus {
+        /// Battery level 0–100
+        level: u8,
+        /// Whether the device is currently charging
+        charging: bool,
+        origin_device: Uuid,
+        origin_device_name: String,
+    },
     Ping {
         timestamp_ms: u64,
     },

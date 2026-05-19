@@ -183,7 +183,7 @@ struct IncomingCallState: Equatable {
     let deviceId: String
     let deviceName: String
     /// "ringing", "offhook", "idle"
-    let state: String
+    var state: String
     let phoneNumber: String
     let contactName: String
 
@@ -194,4 +194,13 @@ struct IncomingCallState: Equatable {
 
     var isRinging: Bool { state.lowercased() == "ringing" }
     var isOffhook: Bool { state.lowercased() == "offhook" }
+}
+
+/// Device battery state (F20).
+struct DeviceBatteryState: Equatable, Identifiable {
+    var id: String { deviceId }
+    let deviceId: String
+    let deviceName: String
+    let level: Int
+    let charging: Bool
 }

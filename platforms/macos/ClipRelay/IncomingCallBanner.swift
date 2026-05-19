@@ -19,7 +19,7 @@ import SwiftUI
 final class CallBannerWindowManager: NSObject {
     private let store: ClipRelayStore
     private let panel: CallBannerPanel
-    private let hostingView: NSHostingView<CallBannerContainerView>
+    private let hostingView: CallBannerHostingView<CallBannerContainerView>
     private var audioPlayer: AVAudioPlayer?
     private var ringRepeatTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -27,10 +27,9 @@ final class CallBannerWindowManager: NSObject {
     init(store: ClipRelayStore) {
         self.store = store
         self.panel = CallBannerPanel()
-        self.hostingView = NSHostingView(rootView: CallBannerContainerView(store: store))
+        self.hostingView = CallBannerHostingView(rootView: CallBannerContainerView(store: store))
         super.init()
 
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
         panel.contentView = hostingView
 
         NotificationCenter.default.addObserver(
@@ -42,6 +41,7 @@ final class CallBannerWindowManager: NSObject {
 
         store.$activeCall
             .receive(on: RunLoop.main)
+            .removeDuplicates()
             .sink { [weak self] call in
                 self?.handleCallUpdate(call)
             }
@@ -134,31 +134,42 @@ final class CallBannerWindowManager: NSObject {
 
 // MARK: - Panel
 
+private final class CallBannerHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let view = super.hitTest(point)
+        NSLog("ClipRelay DEBUG: CallBannerHostingView hitTest at point: \(point), returned: \(String(describing: view))")
+        return view
+    }
+}
+
 private final class CallBannerPanel: NSPanel {
     init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 160),
-            styleMask: [.titled, .fullSizeContentView],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        titlebarAppearsTransparent = true
-        titleVisibility = .hidden
-        standardWindowButton(.closeButton)?.isHidden = true
-        standardWindowButton(.miniaturizeButton)?.isHidden = true
-        standardWindowButton(.zoomButton)?.isHidden = true
         
-        level = .floating
+        level = .statusBar
         hasShadow = true
         isOpaque = false
         backgroundColor = .clear
         hidesOnDeactivate = false
         ignoresMouseEvents = false
+        becomesKeyOnlyIfNeeded = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
     }
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown {
+            NSLog("ClipRelay DEBUG: Window received leftMouseDown event at location: \(event.locationInWindow)")
+        }
+        super.sendEvent(event)
+    }
 }
 
 // MARK: - SwiftUI Container
@@ -180,7 +191,17 @@ private struct CallBannerContainerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(8)
-        .animation(.spring(response: 0.4, dampingFraction: 0.78, blendDuration: 0.1), value: store.activeCall)
+        .animation(.crSpring, value: store.activeCall)
+    }
+}
+
+// MARK: - Call Button Style
+private struct CallButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .animation(.crSpring, value: configuration.isPressed)
     }
 }
 
@@ -274,7 +295,10 @@ private struct CallBannerView: View {
             // ── Action buttons ────────────────────────────────────────────
             if call.isRinging {
                 VStack(spacing: 8) {
-                    Button(action: onAccept) {
+                    Button(action: {
+                        NSLog("ClipRelay DEBUG: Accept button clicked inside CallBannerView!")
+                        onAccept()
+                    }) {
                         ZStack {
                             Circle().fill(acceptGreen)
                             Image(systemName: "phone.fill")
@@ -284,10 +308,13 @@ private struct CallBannerView: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(CallButtonStyle())
                     .shadow(color: acceptGreen.opacity(0.4), radius: 8, y: 2)
 
-                    Button(action: onDecline) {
+                    Button(action: {
+                        NSLog("ClipRelay DEBUG: Decline button clicked inside CallBannerView!")
+                        onDecline()
+                    }) {
                         ZStack {
                             Circle().fill(declineRed)
                             Image(systemName: "phone.down.fill")
@@ -297,7 +324,7 @@ private struct CallBannerView: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(CallButtonStyle())
                     .shadow(color: declineRed.opacity(0.4), radius: 8, y: 2)
                 }
             } else {
@@ -323,9 +350,12 @@ private struct CallBannerView: View {
                     }
                     .menuStyle(.borderlessButton)
                     .frame(width: 44, height: 44)
-                    .buttonStyle(.plain)
+                    .buttonStyle(CallButtonStyle())
 
-                    Button(action: onDecline) {
+                    Button(action: {
+                        NSLog("ClipRelay DEBUG: Ongoing decline button clicked inside CallBannerView!")
+                        onDecline()
+                    }) {
                         ZStack {
                             Circle().fill(declineRed)
                             Image(systemName: "phone.down.fill")
@@ -335,7 +365,7 @@ private struct CallBannerView: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(CallButtonStyle())
                     .shadow(color: declineRed.opacity(0.4), radius: 8, y: 2)
                 }
             }
@@ -355,6 +385,9 @@ private struct CallBannerView: View {
                         .strokeBorder(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.1), lineWidth: 0.5)
                 }
                 .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
+        }
+        .onTapGesture {
+            NSLog("ClipRelay DEBUG: Entire CallBannerView card tapped!")
         }
     }
 }

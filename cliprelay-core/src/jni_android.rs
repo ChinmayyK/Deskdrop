@@ -248,6 +248,7 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventType(
         ActivityFeedUpdated { .. } => 16,
         CallStateChanged { .. } => 17,
         CallActionRequest { .. } => 18,
+        BatteryStateChanged { .. } => 19,
         Warning(_) => 7,
     }
 }
@@ -1104,4 +1105,20 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventCallAction(
     val.and_then(|s| env.new_string(s).ok())
         .map(|s| s.into_raw())
         .unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_pushBatteryStatus(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    level: jint,
+    charging: jboolean,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.push_battery_status(level as u8, charging != 0));
+    0
 }

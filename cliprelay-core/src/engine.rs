@@ -162,6 +162,13 @@ pub enum EngineEvent {
         action: String,
         from_device: Uuid,
     },
+    /// A connected peer device reported a battery status change (F20).
+    BatteryStateChanged {
+        from_device: Uuid,
+        from_name: String,
+        level: u8,
+        charging: bool,
+    },
     Warning(String),
 }
 
@@ -286,6 +293,16 @@ pub struct ActiveCallState {
     pub contact_name: String,
 }
 
+/// Battery level from a connected peer device (F20).
+/// Updated when a BatteryStatus message is received.
+#[derive(Debug, Clone, Serialize)]
+pub struct PeerBatteryState {
+    pub device_id: Uuid,
+    pub device_name: String,
+    pub level: u8,
+    pub charging: bool,
+}
+
 #[derive(Clone)]
 struct EngineShared {
     config: EngineConfig,
@@ -320,6 +337,8 @@ struct EngineShared {
     feedback: Arc<Mutex<crate::engine_support::FeedbackLog>>,
     /// Active phone call state (set on ringing/offhook, cleared on idle).
     active_call: Arc<Mutex<Option<ActiveCallState>>>,
+    /// Per-peer battery levels (F20). Keyed by device UUID.
+    peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
 }
 
 pub struct Engine {
@@ -399,6 +418,7 @@ impl Engine {
             })),
             feedback: Arc::new(Mutex::new(crate::engine_support::FeedbackLog::new(200))),
             active_call: Arc::new(Mutex::new(None)),
+            peer_batteries: Arc::new(Mutex::new(std::collections::HashMap::new())),
         };
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
@@ -444,7 +464,7 @@ impl Engine {
             origin_device_name: self.shared.config.device_name.clone(),
         };
 
-        let peers = self.shared.peer_manager.active_senders();
+        let peers = self.shared.peer_manager.all_connected_senders();
         for (peer_id, tx) in peers {
             let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
             if !peer.trusted { continue; }
@@ -455,14 +475,21 @@ impl Engine {
     /// Send an accept/decline call action to a specific Android peer.
     /// Called by the macOS IPC layer when the user taps Accept or Decline.
     pub async fn send_call_action(&self, action: String, target_device: Uuid) {
+        tracing::info!("send_call_action: action={}, target_device={}", action, target_device);
         let msg = AppMessage::CallAction {
             action,
             origin_device: self.shared.config.device_id,
         };
 
-        let peers = self.shared.peer_manager.active_senders();
+        let peers = self.shared.peer_manager.all_connected_senders();
+        tracing::info!("send_call_action: all connected peers count={}", peers.len());
         for (peer_id, tx) in peers {
-            if peer_id != target_device { continue; }
+            tracing::info!("send_call_action: checking peer_id={}", peer_id);
+            if peer_id != target_device {
+                tracing::info!("send_call_action: peer_id mismatch (expected {}, got {})", target_device, peer_id);
+                continue;
+            }
+            tracing::info!("send_call_action: peer MATCHED! Sending call action message over socket...");
             let _ = tx.send(msg.clone()).await;
         }
     }
@@ -471,6 +498,30 @@ impl Engine {
     /// Returns None when no call is in progress.
     pub async fn active_call(&self) -> Option<ActiveCallState> {
         self.shared.active_call.lock().await.clone()
+    }
+
+    // ── F20: Battery synchronization ──────────────────────────────────────────
+
+    /// Push this device's battery status to all connected trusted peers.
+    pub async fn push_battery_status(&self, level: u8, charging: bool) {
+        let msg = AppMessage::BatteryStatus {
+            level,
+            charging,
+            origin_device: self.shared.config.device_id,
+            origin_device_name: self.shared.config.device_name.clone(),
+        };
+
+        let peers = self.shared.peer_manager.active_senders();
+        for (peer_id, tx) in peers {
+            let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
+            if !peer.trusted { continue; }
+            let _ = tx.send(msg.clone()).await;
+        }
+    }
+
+    /// Get battery states for all peers that have reported their level.
+    pub async fn peer_batteries(&self) -> Vec<PeerBatteryState> {
+        self.shared.peer_batteries.lock().await.values().cloned().collect()
     }
 
     pub async fn push_clipboard(&self, content: ClipboardContent) -> usize {
@@ -2787,8 +2838,33 @@ fn register_session(
                                 contact_name,
                             }).await;
                         }
+                        Ok(AppMessage::BatteryStatus {
+                            level,
+                            charging,
+                            origin_device,
+                            origin_device_name,
+                        }) => {
+                            last_seen = Instant::now();
+                            // Persist in shared state for IPC status polling.
+                            {
+                                let mut batteries = shared.peer_batteries.lock().await;
+                                batteries.insert(origin_device, PeerBatteryState {
+                                    device_id: origin_device,
+                                    device_name: origin_device_name.clone(),
+                                    level,
+                                    charging,
+                                });
+                            }
+                            let _ = shared.event_tx.send(EngineEvent::BatteryStateChanged {
+                                from_device: origin_device,
+                                from_name: origin_device_name,
+                                level,
+                                charging,
+                            }).await;
+                        }
                         Ok(AppMessage::CallAction { action, origin_device }) => {
                             last_seen = Instant::now();
+                            tracing::info!("Received CallAction: {} from {:?}", action, origin_device);
                             let _ = shared.event_tx.send(EngineEvent::CallActionRequest {
                                 action,
                                 from_device: origin_device,
@@ -2812,6 +2888,7 @@ fn register_session(
             .mark_disconnected_if_current(peer_id, session_id, reason.clone())
         {
             Ok(true) => {
+                tracing::warn!("peer disconnected: peer_id={}, reason={:?}", peer_id, reason);
                 let _ = shared
                     .event_tx
                     .send(EngineEvent::PeerDisconnected {
