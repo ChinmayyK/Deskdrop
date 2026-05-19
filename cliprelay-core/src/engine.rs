@@ -511,7 +511,7 @@ impl Engine {
             origin_device_name: self.shared.config.device_name.clone(),
         };
 
-        let peers = self.shared.peer_manager.active_senders();
+        let peers = self.shared.peer_manager.all_trusted_senders();
         for (peer_id, tx) in peers {
             let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
             if !peer.trusted { continue; }
@@ -1212,7 +1212,7 @@ impl Engine {
                 resume_from_chunk: resume_from,
                 reject_reason: None,
             };
-            let peers = self.shared.peer_manager.active_senders();
+            let peers = self.shared.peer_manager.all_trusted_senders();
             for (peer_id, tx) in peers {
                 if peer_id == from_device {
                     let _ = tx.try_send(accept_msg);
@@ -1232,7 +1232,7 @@ impl Engine {
     ) -> Result<()> {
         let transfer_id = meta.transfer_id;
         let announce = AppMessage::FileTransferAnnounce { meta };
-        let peers = self.shared.peer_manager.active_senders();
+        let peers = self.shared.peer_manager.all_connected_senders();
         let mut announced_to = 0usize;
         for (peer_id, tx) in peers {
             let should_send = match target_device {
@@ -1298,7 +1298,7 @@ impl Engine {
                 resume_from_chunk: 0,
                 reject_reason: Some(reason),
             };
-            let peers = self.shared.peer_manager.active_senders();
+            let peers = self.shared.peer_manager.all_trusted_senders();
             for (peer_id, tx) in peers {
                 if peer_id == from_device {
                     let _ = tx.try_send(reject_msg);
@@ -1322,7 +1322,7 @@ impl Engine {
             mgr.cancel_outbound(&transfer_id);
         }
         // Notify all peers.
-        let peers = self.shared.peer_manager.active_senders();
+        let peers = self.shared.peer_manager.all_trusted_senders();
         for (_, tx) in peers {
             let _ = tx.try_send(cancel_msg.clone());
         }
@@ -2315,9 +2315,13 @@ fn register_session(
 ) -> Result<()> {
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(256);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
-    shared
-        .peer_manager
-        .upsert_peer(peer_id, peer_name.clone(), endpoint, trusted, discovery)?;
+    match shared.peer_manager.upsert_peer(peer_id, peer_name.clone(), endpoint, trusted, discovery) {
+        Ok(_) => {}
+        Err(e) => {
+            warn!("peer discovery connect failed error={:?}", e);
+            return Err(e.into());
+        }
+    }
     let _ = shared
         .peer_manager
         .set_explicit_disconnect(peer_id, false);
@@ -2379,6 +2383,7 @@ fn register_session(
     // MED-02: wrap the session task in a JoinHandle watcher so that panics
     // are logged rather than silently swallowed by the Tokio runtime.
     let panic_peer_name = peer_name.clone();
+    let session_outbox_tx = outbox_tx.clone();
     let session_handle = tokio::spawn(async move {
         let mut sess = PeerSession {
             stream,
@@ -2596,61 +2601,59 @@ fn register_session(
                                         transfer.resume_from(resume_from_chunk);
                                     }
                                 }
+                                let bg_outbox = session_outbox_tx.clone();
+                                let bg_shared = shared.clone();
+                                let bg_transfer_id = transfer_id;
+                                tokio::spawn(async move {
+                                    loop {
+                                        let next_chunk = {
+                                            let mut mgr = bg_shared.file_transfers.lock().await;
+                                            match mgr.get_outbound_mut(&bg_transfer_id) {
+                                                Some(transfer) => transfer.next_chunk_message(),
+                                                None => Ok(None),
+                                            }
+                                        };
 
-                                let mut stream_failed = false;
-                                loop {
-                                    let next_chunk = {
-                                        let mut mgr = shared.file_transfers.lock().await;
-                                        match mgr.get_outbound_mut(&transfer_id) {
-                                            Some(transfer) => transfer.next_chunk_message(),
-                                            None => Ok(None),
-                                        }
-                                    };
+                                        let Some(chunk_msg) = (match next_chunk {
+                                            Ok(value) => value,
+                                            Err(err) => {
+                                                warn!(error = %err, "failed to read outbound file chunk");
+                                                bg_shared.file_transfers.lock().await.cancel_outbound(&bg_transfer_id);
+                                                break;
+                                            }
+                                        }) else {
+                                            break;
+                                        };
 
-                                    let Some(chunk_msg) = (match next_chunk {
-                                        Ok(value) => value,
-                                        Err(err) => {
-                                            warn!(error = %err, "failed to read outbound file chunk");
-                                            shared.file_transfers.lock().await.cancel_outbound(&transfer_id);
-                                            stream_failed = true;
+                                        let wire_msg = match chunk_msg {
+                                            FileTransferMessage::Chunk {
+                                                transfer_id,
+                                                chunk_index,
+                                                total_chunks,
+                                                data,
+                                            } => AppMessage::FileChunk {
+                                                transfer_id,
+                                                chunk_index,
+                                                total_chunks,
+                                                data,
+                                            },
+                                            _ => continue,
+                                        };
+                                        if bg_outbox.send(wire_msg).await.is_err() {
                                             break;
                                         }
-                                    }) else {
-                                        break;
-                                    };
-
-                                    let wire_msg = match chunk_msg {
-                                        FileTransferMessage::Chunk {
-                                            transfer_id,
-                                            chunk_index,
-                                            total_chunks,
-                                            data,
-                                        } => AppMessage::FileChunk {
-                                            transfer_id,
-                                            chunk_index,
-                                            total_chunks,
-                                            data,
-                                        },
-                                        _ => continue,
-                                    };
-                                    if let Err(e) = sess.send(&wire_msg).await {
-                                        warn!("file chunk send error: {}", e);
-                                        stream_failed = true;
-                                        break;
                                     }
-                                }
 
-                                if !stream_failed {
                                     let all_sent = {
-                                        let mut mgr = shared.file_transfers.lock().await;
-                                        mgr.get_outbound_mut(&transfer_id)
+                                        let mut mgr = bg_shared.file_transfers.lock().await;
+                                        mgr.get_outbound_mut(&bg_transfer_id)
                                             .map(|transfer| transfer.is_all_sent())
                                             .unwrap_or(false)
                                     };
                                     if all_sent {
-                                        let _ = sess.send(&AppMessage::FileTransferComplete { transfer_id }).await;
+                                        let _ = bg_outbox.send(AppMessage::FileTransferComplete { transfer_id: bg_transfer_id }).await;
                                     }
-                                }
+                                });
                             }
                         }
                         Ok(AppMessage::FileChunk { transfer_id, chunk_index, total_chunks: _, data }) => {

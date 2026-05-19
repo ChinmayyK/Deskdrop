@@ -16,6 +16,16 @@
         <item name="android:forceDarkAllowed">false</item>
     </style>
 
+    <style name="Theme.ClipRelay.ShareTarget" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="colorPrimary">@color/cr_accent</item>
+        <item name="colorSurface">@color/cr_bg_card</item>
+    </style>
+
     <style name="Theme.ClipRelay.Dialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
         <item name="colorPrimary">@color/cr_accent</item>
         <item name="colorSurface">@color/cr_bg_card</item>

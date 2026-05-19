@@ -529,6 +529,24 @@ impl PeerManager {
             .collect()
     }
 
+    /// All connected AND trusted peers (for manual file transfers, ignoring sync_enabled).
+    pub fn all_trusted_senders(&self) -> Vec<(Uuid, mpsc::Sender<AppMessage>)> {
+        let store = self.store.read().unwrap();
+        self.live
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(id, _)| {
+                store
+                    .peers
+                    .get(*id)
+                    .map(|p| p.trusted)
+                    .unwrap_or(false)
+            })
+            .map(|(id, session)| (*id, session.sender.clone()))
+            .collect()
+    }
+
     pub fn is_connected(&self, device_id: Uuid) -> bool {
         self.live.read().unwrap().contains_key(&device_id)
     }

@@ -547,7 +547,7 @@ class ClipRelayService : Service() {
 
             if (intent?.action == ACTION_PUSH_TEXT) {
                 intent.getStringExtra("text")?.takeIf { it.isNotBlank() }?.let { text ->
-                    if (isSyncEnabled() && engineHandle != 0L && hasConnectedPeers()) {
+                    if (engineHandle != 0L && hasConnectedPeers()) {
                         ClipRelayJni.pushText(engineHandle, text)
                     } else if (engineHandle != 0L) {
                         Log.i(TAG, "PUSH_TEXT ignored: no connected peers")
@@ -566,7 +566,7 @@ class ClipRelayService : Service() {
                     if (!rawUri.isNullOrBlank()) add(rawUri)
                     rawUris?.filter { it.isNotBlank() }?.let { addAll(it) }
                 }
-                if (uriStrings.isNotEmpty() && isSyncEnabled() && engineHandle != 0L) {
+                if (uriStrings.isNotEmpty() && engineHandle != 0L) {
                     if (!hasConnectedPeers()) {
                         Log.i(TAG, "PUSH_SHARED_URI ignored: no connected peers")
                     } else if (targetDeviceId != null && !isPeerConnected(targetDeviceId)) {
@@ -843,7 +843,13 @@ class ClipRelayService : Service() {
                 addActivity(ActivityEntry(deviceName = from,
                     kind = ActivityKind.FILE_TRANSFER_INCOMING, preview = fileName,
                     transferId = tid, fileTotalBytes = totalBytes))
-                showFileTransferIncomingNotification(from, fileName, totalBytes, tid)
+                
+                // Automatically accept incoming file transfers from trusted connected peers for seamless multi-file sharing!
+                if (engineHandle != 0L) {
+                    ClipRelayJni.acceptFileTransfer(engineHandle, tid)
+                } else {
+                    showFileTransferIncomingNotification(from, fileName, totalBytes, tid)
+                }
             }
 
             // ── Dedicated file transfer: progress update ──────────────────────
@@ -885,7 +891,14 @@ class ClipRelayService : Service() {
                 )
                 val fileName = ClipRelayJni.eventTransferFileName(ev) ?: "file"
                 val destPath = ClipRelayJni.eventTransferDestPath(ev) ?: ""
-                updateActivityTransferComplete(tid, destPath)
+                
+                // Copy the file from private app storage to public Downloads!
+                val publicFile = if (destPath.isNotEmpty()) {
+                    saveFileToPublicDownloads(File(destPath))
+                } else null
+                
+                val finalPath = publicFile?.absolutePath ?: destPath
+                updateActivityTransferComplete(tid, finalPath)
                 cancelFileTransferNotification(tid)
                 showFileTransferCompleteNotification(from, fileName, destPath)
             }
@@ -1163,7 +1176,11 @@ class ClipRelayService : Service() {
             .setContentText(fileName)
             .setAutoCancel(true)
         if (openPi != null) builder.setContentIntent(openPi)
-        notificationManager.notify(NOTIF_ID_FILE, builder.build())
+        
+        // Use a dynamic notification ID unique to the file (destPath.hashCode() and 0xFFF)
+        // so multiple files don't overwrite each other!
+        val notifId = NOTIF_ID_FILE_BASE + (destPath.hashCode() and 0xFFF)
+        notificationManager.notify(notifId, builder.build())
     }
 
     private fun cancelFileTransferNotification(tid: String) {
@@ -1377,11 +1394,18 @@ class ClipRelayService : Service() {
         val saveDir = if (isFile) getDownloadsDir() else cacheDir
         val file = writeBinaryFile(name, data, mime, saveDir)
 
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        // Copy file to public Downloads if it is a file
+        val finalFile = if (isFile) {
+            saveFileToPublicDownloads(file) ?: file
+        } else {
+            file
+        }
+
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file) // use secure private file for URI
         suppressNext = true
         lastClipboardSignature = "uri:$uri"
         clipboardManager.setPrimaryClip(
-            android.content.ClipData.newUri(contentResolver, file.name, uri)
+            android.content.ClipData.newUri(contentResolver, finalFile.name, uri)
         )
 
         val kind = if (mime?.startsWith("image/") == true) {
@@ -1389,12 +1413,12 @@ class ClipRelayService : Service() {
         } else {
             ActivityKind.FILE_RECEIVED
         }
-        addToFeed(ActivityEntry(deviceName = from, kind = kind, preview = file.name))
+        addToFeed(ActivityEntry(deviceName = from, kind = kind, preview = finalFile.name))
         broadcastStatus()
 
         if (isFile) {
             // Files always get an explicit notification — user needs to know where it landed
-            showFileReceivedNotification(from, file.name, uri)
+            showFileReceivedNotification(from, finalFile.name, uri)
         }
         // Images and clipboard binary: silent — activity feed only
     }
@@ -1402,12 +1426,48 @@ class ClipRelayService : Service() {
     // ── File I/O ──────────────────────────────────────────────────────────────
 
     private fun getDownloadsDir(): File {
-        val base = try {
-            android.os.Environment.getExternalStoragePublicDirectory(
-                android.os.Environment.DIRECTORY_DOWNLOADS
-            )
-        } catch (_: Exception) { filesDir }
+        val base = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: filesDir
         return File(base, "ClipRelay").also { it.mkdirs() }
+    }
+
+    private fun saveFileToPublicDownloads(sourceFile: File): File? {
+        if (!sourceFile.exists()) return null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = contentResolver
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, sourceFile.name)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "*/*")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return null
+            try {
+                resolver.openOutputStream(uri)?.use { outStream ->
+                    java.io.FileInputStream(sourceFile).use { inStream ->
+                        inStream.copyTo(outStream)
+                    }
+                }
+                return File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), sourceFile.name)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to copy file to public Downloads using MediaStore", e)
+                return null
+            }
+        } else {
+            // For Android 9 and below, write directly using file system
+            val destDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            destDir.mkdirs()
+            val destFile = File(destDir, sourceFile.name)
+            try {
+                java.io.FileInputStream(sourceFile).use { inStream ->
+                    java.io.FileOutputStream(destFile).use { outStream ->
+                        inStream.copyTo(outStream)
+                    }
+                }
+                return destFile
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to copy file to public Downloads using file APIs", e)
+                return null
+            }
+        }
     }
 
     private fun writeBinaryFile(
@@ -2316,7 +2376,10 @@ class ClipRelayService : Service() {
             .apply { if (openPi != null) setContentIntent(openPi) }
             .build()
 
-        getSystemService(NotificationManager::class.java).notify(NOTIF_ID_FILE, notif)
+        // Use a dynamic notification ID unique to the file (fileName.hashCode() and 0xFFF)
+        // so multiple files don't overwrite each other!
+        val notifId = NOTIF_ID_FILE_BASE + (fileName.hashCode() and 0xFFF)
+        getSystemService(NotificationManager::class.java).notify(notifId, notif)
     }
 
     private fun showFailureNotification(message: String) {

@@ -625,9 +625,10 @@ private struct DevicesSectionView: View {
             }
             .padding(.horizontal, 20).padding(.bottom, 24)
         }
-        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item]) { result in
-            if case let .success(url) = result {
-                store.sendFile(url: url, to: pendingFileTarget); pendingFileTarget = nil
+        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            if case let .success(urls) = result {
+                store.sendFiles(urls: urls, to: pendingFileTarget)
+                pendingFileTarget = nil
             }
         }
     }
@@ -1064,7 +1065,7 @@ struct UnifiedDashboardView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
-                for url in urls { store.sendFile(url: url, to: nil) }
+                store.sendFiles(urls: urls, toPeer: nil)
             }
         }
     }
@@ -1206,7 +1207,7 @@ struct UnifiedDashboardView: View {
                 showingFilePicker = true
             }
             .dropDestination(for: URL.self) { urls, _ in
-                urls.forEach { store.sendFile(url: $0, to: nil) }
+                store.sendFiles(urls: urls, toPeer: nil)
                 return !urls.isEmpty
             } isTargeted: { isFileDragTargeted = $0 }
 

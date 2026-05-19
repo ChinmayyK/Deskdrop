@@ -277,7 +277,7 @@ class SettingsActivity : AppCompatActivity() {
         addView(rowDivider())
         addView(toggleRow("Sync images",    null,                             "sync_images",   true,  onChanged = { notifyServiceSettingsChanged() }))
         addView(rowDivider())
-        addView(toggleRow("Sync files",     "Saved to the app's Downloads/ClipRelay folder",  "sync_files",    true,  onChanged = { notifyServiceSettingsChanged() }))
+        addView(toggleRow("Sync files",     "Saved directly to your device's Downloads folder",  "sync_files",    true,  onChanged = { notifyServiceSettingsChanged() }))
     }
 
     /** Sends a broadcast so the running service re-reads SharedPreferences without restarting. */

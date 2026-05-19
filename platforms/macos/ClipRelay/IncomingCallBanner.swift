@@ -236,20 +236,20 @@ private struct CallBannerView: View {
             ZStack {
                 if call.isRinging {
                     Circle()
-                        .fill(acceptGreen.opacity(0.15))
-                        .frame(width: 56, height: 56)
-                        .scaleEffect(ringPulse ? 1.25 : 1.0)
-                        .opacity(ringPulse ? 0.0 : 0.4)
+                        .fill(acceptGreen.opacity(0.2))
+                        .frame(width: 64, height: 64)
+                        .scaleEffect(ringPulse ? 1.3 : 1.0)
+                        .opacity(ringPulse ? 0.0 : 0.6)
                 }
 
                 Circle()
-                    .fill(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.1))
-                    .frame(width: 48, height: 48)
-
-                Image(systemName: call.isOffhook ? "phone.connection" : "phone.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(call.isOffhook ? activeBlue : acceptGreen)
-                    .rotationEffect(.degrees((call.isRinging && ringPulse) ? -15 : (call.isRinging ? 15 : 0)))
+                    .fill(LinearGradient(colors: [Color.blue.opacity(0.7), Color.purple.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 52, height: 52)
+                    .shadow(color: Color.purple.opacity(0.3), radius: 8, y: 4)
+                    
+                Text(String(call.displayName.prefix(1)).uppercased())
+                    .font(.system(size: 24, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
             }
             .onAppear {
                 if call.isRinging {
@@ -308,7 +308,7 @@ private struct CallBannerView: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(CallButtonStyle())
+                    .buttonStyle(.plain)
                     .shadow(color: acceptGreen.opacity(0.4), radius: 8, y: 2)
 
                     Button(action: {
@@ -324,7 +324,7 @@ private struct CallBannerView: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(CallButtonStyle())
+                    .buttonStyle(.plain)
                     .shadow(color: declineRed.opacity(0.4), radius: 8, y: 2)
                 }
             } else {
@@ -350,7 +350,7 @@ private struct CallBannerView: View {
                     }
                     .menuStyle(.borderlessButton)
                     .frame(width: 44, height: 44)
-                    .buttonStyle(CallButtonStyle())
+                    .buttonStyle(.plain)
 
                     Button(action: {
                         NSLog("ClipRelay DEBUG: Ongoing decline button clicked inside CallBannerView!")
@@ -365,27 +365,18 @@ private struct CallBannerView: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(CallButtonStyle())
+                    .buttonStyle(.plain)
                     .shadow(color: declineRed.opacity(0.4), radius: 8, y: 2)
                 }
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
-        .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.clear)
-                .background(CRHUDMaterial().clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous)))
-                .background {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(colorScheme == .dark ? Color.black.opacity(0.4) : Color.white.opacity(0.4))
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.1), lineWidth: 0.5)
-                }
-                .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
-        }
+        .background(
+            CRHUDMaterial()
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .shadow(color: .black.opacity(0.2), radius: 24, y: 12)
+        )
         .onTapGesture {
             NSLog("ClipRelay DEBUG: Entire CallBannerView card tapped!")
         }

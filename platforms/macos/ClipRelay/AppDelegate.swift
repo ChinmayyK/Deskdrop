@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = ClipRelayStore()
     private var statusItem: NSStatusItem!
     private var menuBarDropView: MenuBarDropView?
+    private var statusBarMenu: NSMenu!  // stored separately — NOT assigned to statusItem.menu
     private var previousConnectedCount = 0
     private let statusMenuItem  = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
     private let lastSyncMenuItem = NSMenuItem(title: "Last sync: —", action: nil, keyEquivalent: "")
@@ -174,6 +175,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // ── Replace the default button with a custom drag-and-drop view ──────────
         if let button = statusItem.button {
+            // Register drag types on the button itself so the menu bar
+            // item participates in drag sessions.
+            button.registerForDraggedTypes([
+                .fileURL,
+                .init(rawValue: "com.apple.pasteboard.promised-file-url"),
+                .init(rawValue: "com.apple.NSFilePromiseItemMetaData"),
+            ])
+
             let dropView = MenuBarDropView(frame: button.bounds)
             dropView.autoresizingMask = [.width, .height]
             dropView.iconImage = statusBarImage()
@@ -228,7 +237,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit ClipRelay", action: #selector(quitApp), keyEquivalent: "q"))
-        statusItem.menu = menu
+        // IMPORTANT: Do NOT set statusItem.menu — that would cause macOS
+        // to intercept all mouse events (including drags) to show the menu,
+        // which prevents drag-and-drop from working on the menu bar icon.
+        // Instead, store the menu and show it programmatically on click.
+        statusBarMenu = menu
     }
 
     private func statusBarImage() -> NSImage? {
@@ -651,8 +664,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.canChooseDirectories    = false
         panel.prompt                  = "Send"
         panel.message                 = "Choose files to send to connected devices"
-        if panel.runModal() == .OK {
-            panel.urls.forEach { store.sendFile(url: $0, to: nil) }
+        if panel.runModal() == .OK, !panel.urls.isEmpty {
+            store.sendFiles(urls: panel.urls, toPeer: nil)
         }
     }
 
@@ -857,7 +870,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: MenuBarDropViewDelegate {
     func menuBarDropView(_ view: MenuBarDropView, didReceiveFiles urls: [URL]) {
-        urls.forEach { store.sendFile(url: $0, to: nil) }
+        store.sendFiles(urls: urls, toPeer: nil)
         // Brief visual feedback
         store.showToast(
             title: "Sending \(urls.count) file\(urls.count == 1 ? "" : "s")",
@@ -869,7 +882,9 @@ extension AppDelegate: MenuBarDropViewDelegate {
     }
 
     func menuBarDropViewDidClick(_ view: MenuBarDropView) {
-        // Pop the menu as normal
-        statusItem.button?.performClick(nil)
+        // Show the menu programmatically — we don't set statusItem.menu
+        // so that drag-and-drop events aren't intercepted by the menu system.
+        guard let button = statusItem.button else { return }
+        statusBarMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
     }
 }

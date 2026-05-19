@@ -360,11 +360,27 @@ final class ClipRelayStore: ObservableObject {
     }
 
 
+    // Single-URL convenience wrappers
     func sendFile(url: URL, to device: ManagedDevice?) {
-        Task { _ = try? await ipc.sendFile(url: url, targetDeviceId: device?.id) }
+        sendFiles(urls: [url], to: device)
     }
     func sendFile(url: URL, toPeer deviceId: String? = nil) {
-        Task { _ = try? await ipc.sendFile(url: url, targetDeviceId: deviceId) }
+        sendFiles(urls: [url], toPeer: deviceId)
+    }
+
+    func sendFiles(urls: [URL], to device: ManagedDevice?) {
+        Task {
+            for url in urls {
+                _ = try? await ipc.sendFile(url: url, targetDeviceId: device?.id)
+            }
+        }
+    }
+    func sendFiles(urls: [URL], toPeer deviceId: String? = nil) {
+        Task {
+            for url in urls {
+                _ = try? await ipc.sendFile(url: url, targetDeviceId: deviceId)
+            }
+        }
     }
 
     // MARK: - Trust prompts (legacy TrustPrompt model)
