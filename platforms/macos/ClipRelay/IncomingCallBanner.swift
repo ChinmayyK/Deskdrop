@@ -1,4 +1,4 @@
-// IncomingCallBanner.swift — ClipRelay macOS
+// IncomingCallBanner.swift — Deskdrop macOS
 // Apple-style incoming call banner overlay.
 //
 // Architecture mirrors NotificationOverlayWindow.swift:
@@ -17,14 +17,14 @@ import SwiftUI
 
 @MainActor
 final class CallBannerWindowManager: NSObject {
-    private let store: ClipRelayStore
+    private let store: DeskdropStore
     private let panel: CallBannerPanel
     private let hostingView: CallBannerHostingView<CallBannerContainerView>
     private var audioPlayer: AVAudioPlayer?
     private var ringRepeatTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
-    init(store: ClipRelayStore) {
+    init(store: DeskdropStore) {
         self.store = store
         self.panel = CallBannerPanel()
         self.hostingView = CallBannerHostingView(rootView: CallBannerContainerView(store: store))
@@ -106,7 +106,7 @@ final class CallBannerWindowManager: NSObject {
                 audioPlayer?.play()
                 return
             } catch {
-                NSLog("ClipRelay: failed to load bundled ringtone: \(error)")
+                NSLog("Deskdrop: failed to load bundled ringtone: \(error)")
             }
         }
 
@@ -137,7 +137,7 @@ final class CallBannerWindowManager: NSObject {
 private final class CallBannerHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let view = super.hitTest(point)
-        NSLog("ClipRelay DEBUG: CallBannerHostingView hitTest at point: \(point), returned: \(String(describing: view))")
+        NSLog("Deskdrop DEBUG: CallBannerHostingView hitTest at point: \(point), returned: \(String(describing: view))")
         return view
     }
 }
@@ -166,7 +166,7 @@ private final class CallBannerPanel: NSPanel {
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown {
-            NSLog("ClipRelay DEBUG: Window received leftMouseDown event at location: \(event.locationInWindow)")
+            NSLog("Deskdrop DEBUG: Window received leftMouseDown event at location: \(event.locationInWindow)")
         }
         super.sendEvent(event)
     }
@@ -175,7 +175,7 @@ private final class CallBannerPanel: NSPanel {
 // MARK: - SwiftUI Container
 
 private struct CallBannerContainerView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
 
     var body: some View {
         Group {
@@ -296,7 +296,7 @@ private struct CallBannerView: View {
             if call.isRinging {
                 VStack(spacing: 8) {
                     Button(action: {
-                        NSLog("ClipRelay DEBUG: Accept button clicked inside CallBannerView!")
+                        NSLog("Deskdrop DEBUG: Accept button clicked inside CallBannerView!")
                         onAccept()
                     }) {
                         ZStack {
@@ -312,7 +312,7 @@ private struct CallBannerView: View {
                     .shadow(color: acceptGreen.opacity(0.4), radius: 8, y: 2)
 
                     Button(action: {
-                        NSLog("ClipRelay DEBUG: Decline button clicked inside CallBannerView!")
+                        NSLog("Deskdrop DEBUG: Decline button clicked inside CallBannerView!")
                         onDecline()
                     }) {
                         ZStack {
@@ -353,7 +353,7 @@ private struct CallBannerView: View {
                     .buttonStyle(.plain)
 
                     Button(action: {
-                        NSLog("ClipRelay DEBUG: Ongoing decline button clicked inside CallBannerView!")
+                        NSLog("Deskdrop DEBUG: Ongoing decline button clicked inside CallBannerView!")
                         onDecline()
                     }) {
                         ZStack {
@@ -378,7 +378,7 @@ private struct CallBannerView: View {
                 .shadow(color: .black.opacity(0.2), radius: 24, y: 12)
         )
         .onTapGesture {
-            NSLog("ClipRelay DEBUG: Entire CallBannerView card tapped!")
+            NSLog("Deskdrop DEBUG: Entire CallBannerView card tapped!")
         }
     }
 }

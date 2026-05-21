@@ -67,7 +67,7 @@ impl Default for ClipboardStore {
 /// Thin platform abstraction over the OS clipboard.
 ///
 /// On Linux/macOS the daemon doesn't own a display connection, so we fall back
-/// to reading the `CLIPRELAY_CLIPBOARD_TEXT` environment variable (set by the
+/// to reading the `DESKDROP_CLIPBOARD_TEXT` environment variable (set by the
 /// platform agent) or return `None`.  On Windows the daemon can call
 /// `GetClipboardData` directly through the `clipboard-win` crate if enabled.
 ///
@@ -93,12 +93,12 @@ impl LocalClipboard {
     ///
     /// Priority:
     /// 1. Value injected by the platform layer via `set_text`.
-    /// 2. `CLIPRELAY_CLIPBOARD_TEXT` env var (useful for testing / scripting).
+    /// 2. `DESKDROP_CLIPBOARD_TEXT` env var (useful for testing / scripting).
     pub fn read_text(&self) -> anyhow::Result<Option<String>> {
         if let Some(ref t) = self.cached {
             return Ok(Some(t.clone()));
         }
-        if let Ok(env_val) = std::env::var("CLIPRELAY_CLIPBOARD_TEXT") {
+        if let Ok(env_val) = std::env::var("DESKDROP_CLIPBOARD_TEXT") {
             if !env_val.is_empty() {
                 return Ok(Some(env_val));
             }

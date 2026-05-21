@@ -1,4 +1,4 @@
-//! ClipRelay network transport layer.
+//! Deskdrop network transport layer.
 //!
 //! Wire format (per frame):
 //!   [u32 LE length][payload bytes]
@@ -381,7 +381,7 @@ impl Server {
         let listener = TcpListener::bind(addr)
             .await
             .context(format!("binding to {}", addr))?;
-        info!("ClipRelay server listening on {}", addr);
+        info!("Deskdrop server listening on {}", addr);
         Ok(Self { listener })
     }
 
@@ -412,14 +412,14 @@ mod tests {
 
         let send_handle = tokio::spawn(async move {
             let mut stream = TcpStream::connect(addr).await.unwrap();
-            send_frame::<String>(&mut stream, &"hello ClipRelay v3".to_string())
+            send_frame::<String>(&mut stream, &"hello Deskdrop v3".to_string())
                 .await
                 .unwrap();
         });
 
         let (mut server_stream, _) = listener.accept().await.unwrap();
         let received: String = recv_frame(&mut server_stream).await.unwrap();
-        assert_eq!(received, "hello ClipRelay v3");
+        assert_eq!(received, "hello Deskdrop v3");
         send_handle.await.unwrap();
     }
 

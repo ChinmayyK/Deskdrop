@@ -6,8 +6,8 @@
 //!
 //! # Storage strategy
 //! The 32-byte raw scalar is stored at:
-//!   Linux/macOS: `$XDG_DATA_HOME/cliprelay/identity.key`  (mode 0600)
-//!   Windows:     `%LOCALAPPDATA%\cliprelay\identity.key`
+//!   Linux/macOS: `$XDG_DATA_HOME/deskdrop/identity.key`  (mode 0600)
+//!   Windows:     `%LOCALAPPDATA%\deskdrop\identity.key`
 //!
 //! On macOS and Windows we additionally try to store the key in the OS
 //! keychain / credential store (Keychain Services / DPAPI) for extra
@@ -20,7 +20,7 @@
 //!   Linux: `libsecret`         — via the `secret-service` crate
 //!
 //! # Key rotation
-//! `cliprelay-cli devices rotate-key` calls `IdentityStore::rotate()` which:
+//! `deskdrop-cli devices rotate-key` calls `IdentityStore::rotate()` which:
 //!   1. Generates a new keypair.
 //!   2. Writes it to disk (atomically).
 //!   3. Broadcasts a `KeyRotated` AppMessage to all connected peers so they
@@ -125,7 +125,7 @@ impl IdentityStore {
     pub fn default_path() -> PathBuf {
         dirs::data_local_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("cliprelay")
+            .join("deskdrop")
             .join("identity.key")
     }
 

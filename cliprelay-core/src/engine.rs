@@ -142,6 +142,14 @@ pub enum EngineEvent {
         from_device: Uuid,
         reason: String,
     },
+    /// File transfer was paused.
+    FileTransferPaused {
+        transfer_id: [u8; 16],
+    },
+    /// File transfer was resumed.
+    FileTransferResumed {
+        transfer_id: [u8; 16],
+    },
     /// Activity feed snapshot (full or incremental). Used to update the UI.
     ActivityFeedUpdated {
         entries: Vec<crate::activity::ActivityEntry>,
@@ -235,9 +243,9 @@ impl Default for EngineConfig {
             trust_store_path: default_trust_store_path(),
             peer_store_path: default_peer_store_path(),
             identity_path: IdentityStore::default_path(),
-            connect_timeout: Duration::from_secs(2),
-            heartbeat_interval: Duration::from_secs(10),
-            heartbeat_timeout: Duration::from_secs(30),
+            connect_timeout: Duration::from_secs(5),
+            heartbeat_interval: Duration::from_secs(45),
+            heartbeat_timeout: Duration::from_secs(120),
             bind_ip: None,
             enable_discovery: true,
             network_poll_interval: Duration::from_secs(2),
@@ -410,7 +418,7 @@ impl Engine {
                     |_| {
                         // If the history file is missing or corrupt, start fresh
                         // in a temp path so the daemon always starts successfully.
-                        let tmp = std::env::temp_dir().join("cliprelay_history_fallback.json");
+                        let tmp = std::env::temp_dir().join("deskdrop_history_fallback.json");
                         crate::history::History::load_with_limit(&tmp, limit)
                             .expect("cannot create fallback history store")
                     },
@@ -1329,6 +1337,57 @@ impl Engine {
         Ok(())
     }
 
+    /// Pause an active file transfer.
+    pub async fn pause_file_transfer(&self, transfer_id: [u8; 16]) -> Result<()> {
+        let pause_msg = AppMessage::FileTransferPause { transfer_id };
+        {
+            let mut mgr = self.shared.file_transfers.lock().await;
+            if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                t.paused = true;
+            } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                t.paused = true;
+            }
+        }
+        let peers = self.shared.peer_manager.all_trusted_senders();
+        for (_, tx) in peers {
+            let _ = tx.try_send(pause_msg.clone());
+        }
+        let _ = self.shared.event_tx.send(EngineEvent::FileTransferPaused { transfer_id }).await;
+        Ok(())
+    }
+
+    /// Resume a paused file transfer.
+    pub async fn resume_file_transfer(&self, transfer_id: [u8; 16]) -> Result<()> {
+        let resume_msg = AppMessage::FileTransferResume { transfer_id };
+        {
+            let mut mgr = self.shared.file_transfers.lock().await;
+            if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                t.paused = false;
+            } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                t.paused = false;
+            }
+        }
+        let peers = self.shared.peer_manager.all_trusted_senders();
+        for (_, tx) in peers {
+            let _ = tx.try_send(resume_msg.clone());
+        }
+        
+        // If we are the sender, we need to restart the chunking loop!
+        // We will do this by sending an internal `FileTransferResume` to ourselves?
+        // Actually, `resume_msg` goes out to peers. 
+        // Wait! The background `tokio::spawn` task inside `FileTransferAccept` died when we returned `Ok(None)`.
+        // So we need to re-spawn it. Where does it get spawned? 
+        // It gets spawned in `handle_peer_session`. Since we are outside the session, we can't easily get the `session_outbox_tx`.
+        // What if we just send `resume_msg` to ALL peers, and when our OWN receiver receives it, it ignores it?
+        // No, we need the session outbox tx.
+        // I will instead send a dummy `FileTransferAccept` to ourselves! No, wait. 
+        // The easiest way is to let the RECEIVER send a `FileTransferResume`. 
+        // When the SENDER receives `FileTransferResume` via the network loop (in `handle_peer_session`), the sender will spawn the chunk loop!
+        
+        let _ = self.shared.event_tx.send(EngineEvent::FileTransferResumed { transfer_id }).await;
+        Ok(())
+    }
+
     /// Trigger a fresh mDNS browse query without restarting the advertisement.
     /// Called by the Mac "Scan" button — surfaces peers that came online
     /// since the last browse without a full discovery restart.
@@ -1516,6 +1575,7 @@ impl Engine {
         };
         if changed.is_some() {
             self.shared.peer_manager.update_trust(device_id, true)?;
+            let _ = self.shared.peer_manager.set_auto_connect(device_id, true);
         }
         Ok(())
     }
@@ -1595,6 +1655,10 @@ impl Engine {
             ),
             last_sync_at: self.shared.peer_manager.last_sync_at(),
         }
+    }
+    
+    pub async fn active_transfers(&self) -> Vec<serde_json::Value> {
+        self.shared.file_transfers.lock().await.active_transfers()
     }
 
     /// Spawn a background task that periodically prunes transient, untrusted
@@ -1858,17 +1922,25 @@ async fn handle_network_change(shared: EngineShared, change: NetworkChangeEvent)
         describe_change_kinds(&change)
     );
 
-    let sessions = shared.peer_manager.shutdown_all_sessions(&reason)?;
-    for session in sessions {
-        if let Some(shutdown_tx) = session.shutdown_tx {
-            let _ = shutdown_tx.send(SessionShutdown {
-                reason: reason.clone(),
-                send_bye: false,
-            });
+    let should_rebind = previous_addr != current_addr;
+    let should_shutdown_sessions = should_rebind || change.kinds.contains(&crate::network_manager::NetworkChangeKind::NetworkLost);
+
+    if should_shutdown_sessions {
+        let sessions = shared.peer_manager.shutdown_all_sessions(&reason)?;
+        for session in sessions {
+            if let Some(shutdown_tx) = session.shutdown_tx {
+                let _ = shutdown_tx.send(SessionShutdown {
+                    reason: reason.clone(),
+                    send_bye: false,
+                });
+            }
         }
     }
 
-    send_listener_rebind(&shared, current_addr).await?;
+    if should_rebind {
+        send_listener_rebind(&shared, current_addr).await?;
+    }
+    
     if let Some(discovery_tx) = &shared.discovery_tx {
         let _ = discovery_tx
             .send(DiscoveryCommand::Restart {
@@ -2813,6 +2885,97 @@ fn register_session(
                                 from_device: peer_id,
                                 reason,
                             }).await;
+                        }
+                        Ok(AppMessage::FileTransferPause { transfer_id }) => {
+                            last_seen = Instant::now();
+                            {
+                                let mut mgr = shared.file_transfers.lock().await;
+                                if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                                    t.paused = true;
+                                } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                    t.paused = true;
+                                }
+                            }
+                            let _ = shared.event_tx.send(EngineEvent::FileTransferPaused {
+                                transfer_id,
+                            }).await;
+                        }
+                        Ok(AppMessage::FileTransferResume { transfer_id }) => {
+                            last_seen = Instant::now();
+                            let mut was_outbound = false;
+                            {
+                                let mut mgr = shared.file_transfers.lock().await;
+                                if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                                    t.paused = false;
+                                    was_outbound = true;
+                                } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                    t.paused = false;
+                                }
+                            }
+                            let _ = shared.event_tx.send(EngineEvent::FileTransferResumed {
+                                transfer_id,
+                            }).await;
+
+                            if was_outbound {
+                                // Resume the background chunk loop if we are the sender
+                                let bg_outbox = session_outbox_tx.clone();
+                                let bg_shared = shared.clone();
+                                let bg_transfer_id = transfer_id;
+                                tokio::spawn(async move {
+                                    const BATCH_SIZE: usize = 8;
+                                    'outer: loop {
+                                        let batch: Vec<AppMessage> = {
+                                            let mut mgr = bg_shared.file_transfers.lock().await;
+                                            let mut msgs = Vec::with_capacity(BATCH_SIZE);
+                                            for _ in 0..BATCH_SIZE {
+                                                match mgr.get_outbound_mut(&bg_transfer_id) {
+                                                    Some(transfer) => match transfer.next_chunk_message() {
+                                                        Ok(Some(FileTransferMessage::Chunk {
+                                                            transfer_id,
+                                                            chunk_index,
+                                                            total_chunks,
+                                                            data,
+                                                        })) => msgs.push(AppMessage::FileChunk {
+                                                            transfer_id,
+                                                            chunk_index,
+                                                            total_chunks,
+                                                            data,
+                                                        }),
+                                                        Ok(None) => break,
+                                                        Ok(_) => continue,
+                                                        Err(err) => {
+                                                            warn!(error = %err, "failed to read outbound file chunk on resume");
+                                                            mgr.cancel_outbound(&bg_transfer_id);
+                                                            break 'outer;
+                                                        }
+                                                    },
+                                                    None => break,
+                                                }
+                                            }
+                                            msgs
+                                        };
+
+                                        if batch.is_empty() {
+                                            break;
+                                        }
+                                        for wire_msg in batch {
+                                            if bg_outbox.send(wire_msg).await.is_err() {
+                                                break 'outer;
+                                            }
+                                        }
+                                    }
+
+                                    let all_sent = {
+                                        let mut mgr = bg_shared.file_transfers.lock().await;
+                                        mgr.get_outbound_mut(&bg_transfer_id)
+                                            .map(|transfer| transfer.is_all_sent())
+                                            .unwrap_or(false)
+                                    };
+                                    if all_sent {
+                                        let _ = bg_outbox.send(AppMessage::FileTransferComplete { transfer_id: bg_transfer_id }).await;
+                                    }
+                                });
+                            }
                         }
                         Ok(AppMessage::HistoryMetadata { entry }) => {
                             last_seen = Instant::now();

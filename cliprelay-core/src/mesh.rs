@@ -1,4 +1,4 @@
-//! ClipRelay Mesh — true multi-device fanout engine.
+//! Deskdrop Mesh — true multi-device fanout engine.
 //!
 //! Replaces pairwise session assumptions with an independent per-peer model.
 //!

@@ -1,9 +1,9 @@
-//! ClipRelay Linux — headless daemon + optional GTK4 tray.
+//! Deskdrop Linux — headless daemon + optional GTK4 tray.
 //! Without --features gtk, runs as a pure headless daemon.
 //!
 //! Key guarantees vs the original:
 //!  • No echo loop — suppress counter prevents re-pushing received clipboard.
-//!  • IPC socket started so cliprelay-cli works on Linux.
+//!  • IPC socket started so deskdrop-cli works on Linux.
 //!  • TOFU prompts give actionable CLI instructions.
 //!  • notify-send is rate-limited (max 1 per 2 s).
 //!  • Clipboard poll backs off to 500 ms when idle.
@@ -52,7 +52,7 @@ fn should_suppress() -> bool {
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("CLIPRELAY_LOG")
+            tracing_subscriber::EnvFilter::try_from_env("DESKDROP_LOG")
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
@@ -63,16 +63,16 @@ fn main() {
 
     let engine = Arc::new(
         rt.block_on(Engine::start(config, event_tx))
-            .expect("ClipRelay engine failed to start"),
+            .expect("Deskdrop engine failed to start"),
     );
 
     tracing::info!(
-        "ClipRelay Linux started. IPC socket: {:?}",
+        "Deskdrop Linux started. IPC socket: {:?}",
         cliprelay_core::ipc::socket_path()
     );
 
     // ── IPC server ────────────────────────────────────────────────────────────
-    // Starts the Unix socket so `cliprelay-cli` can communicate with us.
+    // Starts the Unix socket so `deskdrop-cli` can communicate with us.
     // The IPC server deserializes commands, calls engine methods, and returns JSON.
     {
         let engine_ipc = engine.clone();
@@ -176,13 +176,13 @@ async fn handle_event(event: EngineEvent, engine: &Arc<Engine>, last_notify: &mu
             auto_applied,
             ..
         } => {
-            tracing::info!("📋 {} from '{}'", content.kind_str(), from_name);
+            tracing::info!("{} from '{}'", content.kind_str(), from_name);
             if auto_applied {
                 suppress_next();
                 match apply_clipboard_content(&content) {
                     Ok(()) => rate_limited_notify(
                         last_notify,
-                        "ClipRelay",
+                        "Deskdrop",
                         &format!("Clipboard from {from_name}"),
                     ),
                     Err(e) => {
@@ -201,7 +201,7 @@ async fn handle_event(event: EngineEvent, engine: &Arc<Engine>, last_notify: &mu
         }
 
         EngineEvent::ClipboardSynced { peer_name, .. } => {
-            tracing::debug!("✅ synced to {}", peer_name);
+            tracing::debug!("synced to {}", peer_name);
         }
 
         EngineEvent::ClipboardSyncFailed {
@@ -211,23 +211,23 @@ async fn handle_event(event: EngineEvent, engine: &Arc<Engine>, last_notify: &mu
         }
 
         EngineEvent::PeerConnected { device_name, .. } => {
-            tracing::info!("📡 connected to {}", device_name);
+            tracing::info!("connected to {}", device_name);
             rate_limited_notify(
                 last_notify,
-                "ClipRelay",
+                "Deskdrop",
                 &format!("Connected to {device_name}"),
             );
         }
 
         EngineEvent::PeerDisconnected { device_name, .. } => {
             tracing::info!(
-                "🔌 {} disconnected",
+                "{} disconnected",
                 device_name.as_deref().unwrap_or("peer")
             );
         }
 
         // New device wants to pair.
-        // Headless: log prominently + notify; user responds via cliprelay-cli.
+        // Headless: log prominently + notify; user responds via deskdrop-cli.
         EngineEvent::TofuPrompt {
             device_id,
             device_name,
@@ -242,8 +242,8 @@ async fn handle_event(event: EngineEvent, engine: &Arc<Engine>, last_notify: &mu
 
             tracing::warn!(
                 "🔐 Trust prompt for '{}' ({})\n{fp}\n\n\
-                 To trust:  cliprelay-cli trust {}\n\
-                 To reject: cliprelay-cli reject {}",
+                 To trust:  deskdrop-cli trust {}\n\
+                 To reject: deskdrop-cli reject {}",
                 device_name,
                 device_id,
                 device_id,
@@ -253,7 +253,7 @@ async fn handle_event(event: EngineEvent, engine: &Arc<Engine>, last_notify: &mu
             rate_limited_notify(
                 last_notify,
                 &format!("New device: {device_name}"),
-                &format!("Run: cliprelay-cli trust {device_id}"),
+                &format!("Run: deskdrop-cli trust {device_id}"),
             );
         }
 
@@ -315,7 +315,7 @@ fn rate_limited_notify(last: &mut Instant, summary: &str, body: &str) {
 fn notify(summary: &str, body: &str) {
     let _ = std::process::Command::new("notify-send")
         .args([
-            "--app-name=ClipRelay",
+            "--app-name=Deskdrop",
             "--icon=edit-paste",
             "--urgency=normal",
             "--expire-time=3000",

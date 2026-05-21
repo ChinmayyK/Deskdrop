@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ClipRelay Linux installer
+# Deskdrop Linux installer
 # Usage: ./install.sh [--uninstall]
 #
 # Installs the daemon binary, systemd user service, and .desktop file.
@@ -7,8 +7,8 @@
 
 set -euo pipefail
 
-BIN_NAME="cliprelay-gtk"
-CLI_NAME="cliprelay-cli"
+BIN_NAME="deskdrop-gtk"
+CLI_NAME="deskdrop-cli"
 INSTALL_DIR="$HOME/.local/bin"
 SERVICE_DIR="$HOME/.config/systemd/user"
 DESKTOP_DIR="$HOME/.local/share/applications"
@@ -25,22 +25,22 @@ bold()   { echo -e "\033[1m$*\033[0m"; }
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 
 if [[ "${1:-}" == "--uninstall" ]]; then
-    bold "Uninstalling ClipRelay…"
-    systemctl --user stop    cliprelay.service 2>/dev/null || true
-    systemctl --user disable cliprelay.service 2>/dev/null || true
-    rm -f "$SERVICE_DIR/cliprelay.service"
-    rm -f "$DESKTOP_DIR/cliprelay.desktop"
+    bold "Uninstalling Deskdrop…"
+    systemctl --user stop    deskdrop.service 2>/dev/null || true
+    systemctl --user disable deskdrop.service 2>/dev/null || true
+    rm -f "$SERVICE_DIR/deskdrop.service"
+    rm -f "$DESKTOP_DIR/deskdrop.desktop"
     rm -f "$INSTALL_DIR/$BIN_NAME"
     rm -f "$INSTALL_DIR/$CLI_NAME"
     systemctl --user daemon-reload 2>/dev/null || true
     update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-    green "ClipRelay uninstalled."
+    green "Deskdrop uninstalled."
     exit 0
 fi
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
 
-bold "ClipRelay Linux Installer"
+bold "Deskdrop Linux Installer"
 echo ""
 
 # Check for required tools.
@@ -87,24 +87,24 @@ fi
 # Systemd user service.
 echo "Installing systemd user service…"
 # Substitute actual binary path.
-sed "s|/usr/local/bin/cliprelay-gtk|$INSTALL_DIR/$BIN_NAME|g" \
-    "$SCRIPT_DIR/cliprelay.service" > "$SERVICE_DIR/cliprelay.service"
+sed "s|/usr/local/bin/deskdrop-gtk|$INSTALL_DIR/$BIN_NAME|g" \
+    "$SCRIPT_DIR/deskdrop.service" > "$SERVICE_DIR/deskdrop.service"
 
 # .desktop file.
 echo "Installing desktop entry…"
-sed "s|/usr/local/bin/cliprelay-gtk|$INSTALL_DIR/$BIN_NAME|g;s|/usr/local/bin/cliprelay-cli|$INSTALL_DIR/$CLI_NAME|g" \
-    "$SCRIPT_DIR/cliprelay.desktop" > "$DESKTOP_DIR/cliprelay.desktop"
+sed "s|/usr/local/bin/deskdrop-gtk|$INSTALL_DIR/$BIN_NAME|g;s|/usr/local/bin/deskdrop-cli|$INSTALL_DIR/$CLI_NAME|g" \
+    "$SCRIPT_DIR/deskdrop.desktop" > "$DESKTOP_DIR/deskdrop.desktop"
 
 # ── Enable service ────────────────────────────────────────────────────────────
 
 systemctl --user daemon-reload
 
-if systemctl --user is-active cliprelay.service &>/dev/null; then
-    echo "Restarting ClipRelay service…"
-    systemctl --user restart cliprelay.service
+if systemctl --user is-active deskdrop.service &>/dev/null; then
+    echo "Restarting Deskdrop service…"
+    systemctl --user restart deskdrop.service
 else
-    echo "Enabling and starting ClipRelay service…"
-    systemctl --user enable --now cliprelay.service
+    echo "Enabling and starting Deskdrop service…"
+    systemctl --user enable --now deskdrop.service
 fi
 
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
@@ -112,12 +112,12 @@ update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
-green "✅ ClipRelay installed successfully."
+green "✅ Deskdrop installed successfully."
 echo ""
-echo "  Status: systemctl --user status cliprelay"
-echo "  Logs:   journalctl --user -u cliprelay -f"
-echo "  Stop:   systemctl --user stop cliprelay"
+echo "  Status: systemctl --user status deskdrop"
+echo "  Logs:   journalctl --user -u deskdrop -f"
+echo "  Stop:   systemctl --user stop deskdrop"
 echo "  Remove: $SCRIPT_DIR/install.sh --uninstall"
 echo ""
-echo "ClipRelay is now running in the background."
+echo "Deskdrop is now running in the background."
 echo "It will discover nearby devices automatically via mDNS."

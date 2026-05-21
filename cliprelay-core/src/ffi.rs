@@ -2,7 +2,7 @@
 //!
 //! Platform wrappers load the shared library and call these functions.
 //! All heap-allocated strings/bytes are freed via the corresponding
-//! `cliprelay_free_*` functions — never call the system free() on them.
+//! `deskdrop_free_*` functions — never call the system free() on them.
 //!
 //! Thread safety: all functions are safe to call from any thread.
 //! The engine uses Tokio internally; we create a dedicated runtime here.
@@ -28,7 +28,7 @@ fn runtime() -> &'static Runtime {
 
 // ── Engine handle ─────────────────────────────────────────────────────────────
 
-pub struct ClipRelayHandle {
+pub struct DeskdropHandle {
     engine: Engine,
     event_rx: mpsc::Receiver<EngineEvent>,
 }
@@ -39,10 +39,10 @@ pub struct ClipRelayHandle {
 /// - `device_name`: UTF-8 C string; use NULL for auto-detected hostname.
 /// - `port`: 0 → use default port (47823).
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_start(
+pub unsafe extern "C" fn deskdrop_start(
     device_name: *const c_char,
     port: u16,
-) -> *mut ClipRelayHandle {
+) -> *mut DeskdropHandle {
     let name = if device_name.is_null() {
         whoami::devicename()
     } else {
@@ -66,9 +66,9 @@ pub unsafe extern "C" fn cliprelay_start(
     let (event_tx, event_rx) = mpsc::channel(256);
 
     match runtime().block_on(Engine::start(config, event_tx)) {
-        Ok(engine) => Box::into_raw(Box::new(ClipRelayHandle { engine, event_rx })),
+        Ok(engine) => Box::into_raw(Box::new(DeskdropHandle { engine, event_rx })),
         Err(e) => {
-            eprintln!("cliprelay_start error: {:#}", e);
+            eprintln!("deskdrop_start error: {:#}", e);
             std::ptr::null_mut()
         }
     }
@@ -77,10 +77,10 @@ pub unsafe extern "C" fn cliprelay_start(
 /// Stop and free the engine.
 ///
 /// # Safety
-/// `handle` must be a pointer returned by `cliprelay_start` and must not be
+/// `handle` must be a pointer returned by `deskdrop_start` and must not be
 /// used again after this call.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_stop(handle: *mut ClipRelayHandle) {
+pub unsafe extern "C" fn deskdrop_stop(handle: *mut DeskdropHandle) {
     if !handle.is_null() {
         drop(Box::from_raw(handle));
     }
@@ -93,8 +93,8 @@ pub unsafe extern "C" fn cliprelay_stop(handle: *mut ClipRelayHandle) {
 /// # Safety
 /// `text` must be a valid, non-null UTF-8 C string.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_push_text(
-    handle: *mut ClipRelayHandle,
+pub unsafe extern "C" fn deskdrop_push_text(
+    handle: *mut DeskdropHandle,
     text: *const c_char,
 ) -> c_int {
     if handle.is_null() || text.is_null() {
@@ -110,8 +110,8 @@ pub unsafe extern "C" fn cliprelay_push_text(
 /// # Safety
 /// `data` must point to `len` valid bytes; `mime` must be a valid C string.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_push_image(
-    handle: *mut ClipRelayHandle,
+pub unsafe extern "C" fn deskdrop_push_image(
+    handle: *mut DeskdropHandle,
     mime: *const c_char,
     data: *const u8,
     len: usize,
@@ -133,8 +133,8 @@ pub unsafe extern "C" fn cliprelay_push_image(
 /// # Safety
 /// `name` must be a valid C string; `data` must point to `len` valid bytes.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_push_file(
-    handle: *mut ClipRelayHandle,
+pub unsafe extern "C" fn deskdrop_push_file(
+    handle: *mut DeskdropHandle,
     name: *const c_char,
     data: *const u8,
     len: usize,
@@ -153,7 +153,7 @@ pub unsafe extern "C" fn cliprelay_push_file(
 
 // ── Poll for events ───────────────────────────────────────────────────────────
 
-/// Event type codes returned by `cliprelay_poll_event`.
+/// Event type codes returned by `deskdrop_poll_event`.
 pub const PB_EVENT_NONE: c_int = 0;
 pub const PB_EVENT_CLIPBOARD_TEXT: c_int = 1;
 pub const PB_EVENT_CLIPBOARD_IMAGE: c_int = 2;
@@ -172,9 +172,11 @@ pub const PB_EVENT_ACTIVITY_UPDATED: c_int = 16;
 pub const PB_EVENT_CALL_STATE_CHANGED: c_int = 17;
 pub const PB_EVENT_CALL_ACTION: c_int = 18;
 pub const PB_EVENT_BATTERY_STATE_CHANGED: c_int = 19;
+pub const PB_EVENT_FILE_TRANSFER_PAUSED: c_int = 20;
+pub const PB_EVENT_FILE_TRANSFER_RESUMED: c_int = 21;
 
-/// Opaque event payload. Call `cliprelay_event_*` accessors to read fields.
-/// Must be freed with `cliprelay_free_event`.
+/// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
+/// Must be freed with `deskdrop_free_event`.
 pub struct PbEvent {
     inner: EngineEvent,
     // Cached C-string allocations for accessors.
@@ -190,7 +192,7 @@ pub struct PbEvent {
 /// # Safety
 /// `handle` must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_poll_event(handle: *mut ClipRelayHandle) -> *mut PbEvent {
+pub unsafe extern "C" fn deskdrop_poll_event(handle: *mut DeskdropHandle) -> *mut PbEvent {
     if handle.is_null() {
         return std::ptr::null_mut();
     }
@@ -210,7 +212,7 @@ pub unsafe extern "C" fn cliprelay_poll_event(handle: *mut ClipRelayHandle) -> *
 
 /// Returns the event type code for `event`.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_type(event: *const PbEvent) -> c_int {
+pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
     if event.is_null() {
         return PB_EVENT_NONE;
     }
@@ -241,6 +243,8 @@ pub unsafe extern "C" fn cliprelay_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::FileTransferProgress { .. } => PB_EVENT_FILE_TRANSFER_PROGRESS,
         EngineEvent::FileTransferComplete { .. } => PB_EVENT_FILE_TRANSFER_COMPLETE,
         EngineEvent::FileTransferFailed { .. } => PB_EVENT_FILE_TRANSFER_FAILED,
+        EngineEvent::FileTransferPaused { .. } => PB_EVENT_FILE_TRANSFER_PAUSED,
+        EngineEvent::FileTransferResumed { .. } => PB_EVENT_FILE_TRANSFER_RESUMED,
         EngineEvent::ActivityFeedUpdated { .. } => PB_EVENT_ACTIVITY_UPDATED,
         EngineEvent::CallStateChanged { .. } => PB_EVENT_CALL_STATE_CHANGED,
         EngineEvent::CallActionRequest { .. } => PB_EVENT_CALL_ACTION,
@@ -249,9 +253,9 @@ pub unsafe extern "C" fn cliprelay_event_type(event: *const PbEvent) -> c_int {
     }
 }
 
-/// Get the text payload (for TEXT events). Lifetime: until `cliprelay_free_event`.
+/// Get the text payload (for TEXT events). Lifetime: until `deskdrop_free_event`.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_text(event: *mut PbEvent) -> *const c_char {
+pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
     if let EngineEvent::ClipboardReceived {
         content: ClipboardContent::Text(ref s),
@@ -268,7 +272,7 @@ pub unsafe extern "C" fn cliprelay_event_text(event: *mut PbEvent) -> *const c_c
 
 /// Get the device name associated with the event.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_device_name(event: *mut PbEvent) -> *const c_char {
+pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
     let name: Option<&str> = match &e.inner {
         EngineEvent::ClipboardReceived { from_name, .. } => Some(from_name.as_str()),
@@ -292,7 +296,7 @@ pub unsafe extern "C" fn cliprelay_event_device_name(event: *mut PbEvent) -> *co
 
 /// Returns 1 if this ClipboardReceived was auto-applied; 0 if timeline-first.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_auto_applied(event: *const PbEvent) -> c_int {
+pub unsafe extern "C" fn deskdrop_event_auto_applied(event: *const PbEvent) -> c_int {
     if event.is_null() {
         return 0;
     }
@@ -309,7 +313,7 @@ pub unsafe extern "C" fn cliprelay_event_auto_applied(event: *const PbEvent) -> 
 
 /// Returns the activity feed entry ID for a ClipboardReceived event (-1 if not applicable).
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_activity_id(event: *const PbEvent) -> i64 {
+pub unsafe extern "C" fn deskdrop_event_activity_id(event: *const PbEvent) -> i64 {
     if event.is_null() {
         return -1;
     }
@@ -322,16 +326,18 @@ pub unsafe extern "C" fn cliprelay_event_activity_id(event: *const PbEvent) -> i
 
 /// Get the transfer ID (hex string) for file transfer events.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_transfer_id(event: *mut PbEvent) -> *const c_char {
+pub unsafe extern "C" fn deskdrop_event_transfer_id(event: *mut PbEvent) -> *const c_char {
     if event.is_null() {
         return std::ptr::null();
     }
     let e = &mut *event;
     let tid = match &e.inner {
-        EngineEvent::FileTransferIncoming { transfer_id, .. } => Some(hex::encode(transfer_id)),
-        EngineEvent::FileTransferProgress { transfer_id, .. } => Some(hex::encode(transfer_id)),
-        EngineEvent::FileTransferComplete { transfer_id, .. } => Some(hex::encode(transfer_id)),
-        EngineEvent::FileTransferFailed { transfer_id, .. } => Some(hex::encode(transfer_id)),
+        EngineEvent::FileTransferIncoming { transfer_id, .. }
+        | EngineEvent::FileTransferProgress { transfer_id, .. }
+        | EngineEvent::FileTransferComplete { transfer_id, .. }
+        | EngineEvent::FileTransferPaused { transfer_id, .. }
+        | EngineEvent::FileTransferResumed { transfer_id, .. }
+        | EngineEvent::FileTransferFailed { transfer_id, .. } => Some(hex::encode(transfer_id)),
         _ => None,
     };
     if let Some(s) = tid {
@@ -345,7 +351,7 @@ pub unsafe extern "C" fn cliprelay_event_transfer_id(event: *mut PbEvent) -> *co
 
 /// Get file name for file transfer events.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_transfer_file_name(event: *mut PbEvent) -> *const c_char {
+pub unsafe extern "C" fn deskdrop_event_transfer_file_name(event: *mut PbEvent) -> *const c_char {
     if event.is_null() {
         return std::ptr::null();
     }
@@ -367,7 +373,7 @@ pub unsafe extern "C" fn cliprelay_event_transfer_file_name(event: *mut PbEvent)
 
 /// Get progress percentage (0-100) for FileTransferProgress events; -1 otherwise.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_transfer_percent(event: *const PbEvent) -> c_int {
+pub unsafe extern "C" fn deskdrop_event_transfer_percent(event: *const PbEvent) -> c_int {
     if event.is_null() {
         return -1;
     }
@@ -380,7 +386,7 @@ pub unsafe extern "C" fn cliprelay_event_transfer_percent(event: *const PbEvent)
 
 /// Get total bytes for FileTransferIncoming/Progress events; -1 otherwise.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_transfer_total_bytes(event: *const PbEvent) -> i64 {
+pub unsafe extern "C" fn deskdrop_event_transfer_total_bytes(event: *const PbEvent) -> i64 {
     if event.is_null() {
         return -1;
     }
@@ -393,7 +399,7 @@ pub unsafe extern "C" fn cliprelay_event_transfer_total_bytes(event: *const PbEv
 
 /// Get the destination path for FileTransferComplete events.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_transfer_dest_path(event: *mut PbEvent) -> *const c_char {
+pub unsafe extern "C" fn deskdrop_event_transfer_dest_path(event: *mut PbEvent) -> *const c_char {
     if event.is_null() {
         return std::ptr::null();
     }
@@ -410,7 +416,7 @@ pub unsafe extern "C" fn cliprelay_event_transfer_dest_path(event: *mut PbEvent)
 
 /// Get the fingerprint display string for TOFU_PROMPT events.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_event_fingerprint(event: *mut PbEvent) -> *const c_char {
+pub unsafe extern "C" fn deskdrop_event_fingerprint(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
     if let EngineEvent::TofuPrompt {
         fingerprint_display,
@@ -431,8 +437,8 @@ pub unsafe extern "C" fn cliprelay_event_fingerprint(event: *mut PbEvent) -> *co
 /// # Safety
 /// `handle` and `hash_ptr` must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_apply_clipboard(
-    handle: *mut ClipRelayHandle,
+pub unsafe extern "C" fn deskdrop_apply_clipboard(
+    handle: *mut DeskdropHandle,
     hash_ptr: *const c_char,
 ) -> c_int {
     if handle.is_null() || hash_ptr.is_null() {
@@ -454,8 +460,8 @@ pub unsafe extern "C" fn cliprelay_apply_clipboard(
 /// # Safety
 /// `handle` and `transfer_id_hex` must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_accept_file_transfer(
-    handle: *mut ClipRelayHandle,
+pub unsafe extern "C" fn deskdrop_accept_file_transfer(
+    handle: *mut DeskdropHandle,
     transfer_id_hex: *const c_char,
 ) -> c_int {
     if handle.is_null() || transfer_id_hex.is_null() {
@@ -482,8 +488,8 @@ pub unsafe extern "C" fn cliprelay_accept_file_transfer(
 ///
 /// # Safety
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_reject_file_transfer(
-    handle: *mut ClipRelayHandle,
+pub unsafe extern "C" fn deskdrop_reject_file_transfer(
+    handle: *mut DeskdropHandle,
     transfer_id_hex: *const c_char,
 ) -> c_int {
     if handle.is_null() || transfer_id_hex.is_null() {
@@ -506,12 +512,93 @@ pub unsafe extern "C" fn cliprelay_reject_file_transfer(
     }
 }
 
-/// Free an event returned by `cliprelay_poll_event`.
+/// Cancel an active file transfer.
 ///
 /// # Safety
-/// `event` must be a pointer returned by `cliprelay_poll_event`.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_free_event(event: *mut PbEvent) {
+pub unsafe extern "C" fn deskdrop_cancel_file_transfer(
+    handle: *mut DeskdropHandle,
+    transfer_id_hex: *const c_char,
+) -> c_int {
+    if handle.is_null() || transfer_id_hex.is_null() {
+        return 0;
+    }
+    let tid_str = match CStr::from_ptr(transfer_id_hex).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let tid = if let Ok(parsed) = crate::ipc::parse_transfer_id(tid_str) {
+        parsed
+    } else {
+        return 0;
+    };
+    let h = &*handle;
+    match runtime().block_on(h.engine.cancel_file_transfer(tid)) {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// Pause an active file transfer.
+///
+/// # Safety
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_pause_file_transfer(
+    handle: *mut DeskdropHandle,
+    transfer_id_hex: *const c_char,
+) -> c_int {
+    if handle.is_null() || transfer_id_hex.is_null() {
+        return 0;
+    }
+    let tid_str = match CStr::from_ptr(transfer_id_hex).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let tid = if let Ok(parsed) = crate::ipc::parse_transfer_id(tid_str) {
+        parsed
+    } else {
+        return 0;
+    };
+    let h = &*handle;
+    match runtime().block_on(h.engine.pause_file_transfer(tid)) {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// Resume a paused file transfer.
+///
+/// # Safety
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_resume_file_transfer(
+    handle: *mut DeskdropHandle,
+    transfer_id_hex: *const c_char,
+) -> c_int {
+    if handle.is_null() || transfer_id_hex.is_null() {
+        return 0;
+    }
+    let tid_str = match CStr::from_ptr(transfer_id_hex).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let tid = if let Ok(parsed) = crate::ipc::parse_transfer_id(tid_str) {
+        parsed
+    } else {
+        return 0;
+    };
+    let h = &*handle;
+    match runtime().block_on(h.engine.resume_file_transfer(tid)) {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// Free an event returned by `deskdrop_poll_event`.
+///
+/// # Safety
+/// `event` must be a pointer returned by `deskdrop_poll_event`.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_free_event(event: *mut PbEvent) {
     if !event.is_null() {
         drop(Box::from_raw(event));
     }
@@ -525,8 +612,8 @@ pub unsafe extern "C" fn cliprelay_free_event(event: *mut PbEvent) {
 /// # Safety
 /// `handle` and `device_name_ptr` must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_trust_peer(
-    handle: *mut ClipRelayHandle,
+pub unsafe extern "C" fn deskdrop_trust_peer(
+    handle: *mut DeskdropHandle,
     device_name_ptr: *const std::ffi::c_char,
     trust: std::ffi::c_int,
 ) -> std::ffi::c_int {
@@ -557,14 +644,14 @@ pub unsafe extern "C" fn cliprelay_trust_peer(
     0
 }
 
-/// Alias for `cliprelay_apply_clipboard` for Windows P/Invoke compatibility.
+/// Alias for `deskdrop_apply_clipboard` for Windows P/Invoke compatibility.
 ///
 /// # Safety
 /// `handle` and `hash_ptr` must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn cliprelay_apply_by_hash(
-    handle: *mut ClipRelayHandle,
+pub unsafe extern "C" fn deskdrop_apply_by_hash(
+    handle: *mut DeskdropHandle,
     hash_ptr: *const std::ffi::c_char,
 ) -> std::ffi::c_int {
-    cliprelay_apply_clipboard(handle, hash_ptr)
+    deskdrop_apply_clipboard(handle, hash_ptr)
 }

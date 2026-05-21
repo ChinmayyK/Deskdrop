@@ -28,16 +28,18 @@ data class PeerSnapshot(
 fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
     if (raw.isNullOrBlank()) return emptyList()
     val array = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
-    val peers = ArrayList<PeerSnapshot>(array.length())
+    val uniquePeers = mutableMapOf<String, PeerSnapshot>()
     for (i in 0 until array.length()) {
         val obj = array.optJSONObject(i) ?: continue
         val id = obj.optString("id")
         if (id.isBlank()) continue
         val displayName = obj.optString("display_name")
         val friendlyName = obj.optString("friendly_name")
-        peers += PeerSnapshot(
+        val name = displayName.ifBlank { friendlyName }.ifBlank { "Unknown device" }
+        
+        val peer = PeerSnapshot(
             id = id,
-            name = displayName.ifBlank { friendlyName }.ifBlank { "Unknown device" },
+            name = name,
             status = obj.optString("status", "disconnected"),
             trusted = obj.optBoolean("trusted", false),
             remembered = obj.optBoolean("remembered", true),
@@ -46,8 +48,24 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             lastSyncSecs = obj.takeIf { !it.isNull("last_sync") }?.optLong("last_sync"),
             lastError = obj.takeIf { !it.isNull("last_error") }?.optString("last_error"),
         )
+        
+        val existing = uniquePeers[name]
+        if (existing == null) {
+            uniquePeers[name] = peer
+        } else {
+            val peerPriority = if (peer.isConnected) 2 else if (peer.isConnecting) 1 else 0
+            val existingPriority = if (existing.isConnected) 2 else if (existing.isConnecting) 1 else 0
+            
+            if (peerPriority > existingPriority) {
+                uniquePeers[name] = peer
+            } else if (peerPriority == existingPriority) {
+                if ((peer.lastSeenSecs ?: 0) > (existing.lastSeenSecs ?: 0)) {
+                    uniquePeers[name] = peer
+                }
+            }
+        }
     }
-    return peers.sortedWith(
+    return uniquePeers.values.sortedWith(
         compareBy<PeerSnapshot>(
             { if (it.isConnected) 0 else if (it.isConnecting) 1 else 2 },
             { it.name.lowercase() }

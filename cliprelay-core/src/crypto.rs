@@ -1,4 +1,4 @@
-//! ClipRelay Cryptography
+//! Deskdrop Cryptography
 //!
 //! # Session key establishment
 //! 1. Both peers generate an ephemeral X25519 keypair.
@@ -122,7 +122,7 @@ impl EphemeralKeypair {
         // Changing PROTOCOL_VERSION in protocol.rs automatically invalidates
         // old session keys — peers on different protocol versions cannot
         // decrypt each other's frames even if they share an ephemeral key.
-        let info = format!("cliprelay-v{}-session", crate::protocol::PROTOCOL_VERSION);
+        let info = format!("deskdrop-v{}-session", crate::protocol::PROTOCOL_VERSION);
         let hk = Hkdf::<Sha256>::new(None, &shared_bytes);
 
         // Zeroize the raw DH secret immediately after feeding it into HKDF;
@@ -304,7 +304,7 @@ mod tests {
         let mut alice_sess = alice.derive_session_key(bob_pub).unwrap();
         let mut bob_sess = bob.derive_session_key(alice_pub).unwrap();
 
-        let msg = b"hello cliprelay!";
+        let msg = b"hello deskdrop!";
         let ct = alice_sess.encrypt(msg).unwrap();
         let pt = bob_sess.decrypt(&ct).unwrap();
         assert_eq!(pt, msg);

@@ -1,13 +1,13 @@
-# ClipRelay v0.2 — Change Log
+# Deskdrop v0.2 — Change Log
 
 ## Architecture Changes
 
-### 1. Complete product rebrand: ClipRelay → ClipRelay
+### 1. Complete product rebrand: Deskdrop → Deskdrop
 - All user-facing strings, app names, bundle IDs, package names updated
-- mDNS service type: `_cliprelay._tcp.local.`
-- IPC socket: `cliprelay.sock` / `\\.\pipe\cliprelay`
-- Android package: `com.cliprelay`
-- macOS bundle: `com.cliprelay`
+- mDNS service type: `_deskdrop._tcp.local.`
+- IPC socket: `deskdrop.sock` / `\\.\pipe\deskdrop`
+- Android package: `com.deskdrop`
+- macOS bundle: `com.deskdrop`
 
 ### 2. Device state refactor (`peer_manager.rs`)
 Replaced the binary `trusted == connected` model with a proper five-layer lifecycle:
@@ -56,7 +56,7 @@ Replaced global `last_sent` / `last_received` with:
 - Verified before `ReassemblerOutput::Complete` is emitted
 - `ReassemblerOutput::ChecksumMismatch` returned on corruption
 - Progress reported as `percent: u8` in `ReassemblerOutput::InProgress`
-- Files saved to `Downloads/ClipRelay/` on Android and macOS
+- Files saved to `Downloads/Deskdrop/` on Android and macOS
 - `FileTransferMetadata` wire type for pre-transfer announcement
 
 ### 7. IPC protocol (`ipc.rs`)
@@ -66,7 +66,7 @@ New commands:
 - `ForgetDevice { device_id }`
 - `SetAutoConnect { device_id, enabled }`
 
-### 8. Android notification UX (`ClipRelayService.kt`)
+### 8. Android notification UX (`DeskdropService.kt`)
 **Before:** notification on every clipboard sync.  
 **After:**
 - ONE quiet persistent foreground notification (`IMPORTANCE_MIN`)
@@ -77,7 +77,7 @@ New commands:
 - `notify_on_remote_copy` setting (default: false)
 - `activityFeed: ArrayDeque<ActivityEntry>` for in-app history
 
-### 9. macOS UI (`DashboardView.swift`, `ClipRelayStore.swift`)
+### 9. macOS UI (`DashboardView.swift`, `DeskdropStore.swift`)
 - Device cards show friendly name + platform icon
 - Primary actions: Pause Sync / Disconnect
 - Secondary actions (menu): Rename, Auto-connect toggle, Forget, Revoke
@@ -87,15 +87,15 @@ New commands:
 ## Files Changed
 | File | Change |
 |---|---|
-| `cliprelay-core/src/peer_manager.rs` | Full rewrite — five-layer device model |
-| `cliprelay-core/src/dedup.rs` | Mesh-aware per-peer dedup |
-| `cliprelay-core/src/protocol.rs` | DeviceMetadata, friendly names in HistoryMetadata |
-| `cliprelay-core/src/chunked.rs` | SHA-256 verification, progress percent |
-| `cliprelay-core/src/engine.rs` | New lifecycle methods, reconnect logic fix |
-| `cliprelay-core/src/ipc.rs` | New device control commands |
-| `cliprelay-core/tests/mesh_test.rs` | New mesh + lifecycle tests |
-| `platforms/android/…/ClipRelayService.kt` | Notification redesign, activity feed |
+| `deskdrop-core/src/peer_manager.rs` | Full rewrite — five-layer device model |
+| `deskdrop-core/src/dedup.rs` | Mesh-aware per-peer dedup |
+| `deskdrop-core/src/protocol.rs` | DeviceMetadata, friendly names in HistoryMetadata |
+| `deskdrop-core/src/chunked.rs` | SHA-256 verification, progress percent |
+| `deskdrop-core/src/engine.rs` | New lifecycle methods, reconnect logic fix |
+| `deskdrop-core/src/ipc.rs` | New device control commands |
+| `deskdrop-core/tests/mesh_test.rs` | New mesh + lifecycle tests |
+| `platforms/android/…/DeskdropService.kt` | Notification redesign, activity feed |
 | `platforms/macos/…/DashboardView.swift` | Device card with lifecycle controls |
-| `platforms/macos/…/ClipRelayModels.swift` | Friendly-name-first view models |
-| `platforms/macos/…/ClipRelayStore.swift` | Lifecycle action methods |
-| `platforms/macos/…/ClipRelayIPCClient.swift` | New IPC command bindings |
+| `platforms/macos/…/DeskdropModels.swift` | Friendly-name-first view models |
+| `platforms/macos/…/DeskdropStore.swift` | Lifecycle action methods |
+| `platforms/macos/…/DeskdropIPCClient.swift` | New IPC command bindings |

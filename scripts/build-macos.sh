@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-macos.sh — Build the ClipRelay.app bundle for macOS
+# build-macos.sh — Build the Deskdrop.app bundle for macOS
 #
 # Requirements:
 #   - Rust toolchain (cargo)
@@ -16,7 +16,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CORE_DIR="${REPO_ROOT}/cliprelay-core"
 MACOS_DIR="${REPO_ROOT}/platforms/macos"
 SOURCE_DIR_NAME="ClipRelay"
-PRODUCT_NAME="ClipRelay"
+PRODUCT_NAME="Deskdrop"
 BUILD_TYPE="${1:---release}"
 APP_BUNDLE="${MACOS_DIR}/build/${PRODUCT_NAME}.app"
 TARGET_DIR="${REPO_ROOT}/target/release"
@@ -85,7 +85,7 @@ cp "${STATUS_ICON_SRC}" "${APP_BUNDLE}/Contents/Resources/StatusBarIcon.png"
 # Generate AppIcon.icns from the bundled source PNG.
 if [[ -f "${ICON_SRC}" ]]; then
     log "Generating app icon..."
-    ICON_TMP_DIR="$(mktemp -d /tmp/cliprelay-icon.XXXXXX)"
+    ICON_TMP_DIR="$(mktemp -d /tmp/deskdrop-icon.XXXXXX)"
     ICONSET_DIR="${ICON_TMP_DIR}/AppIcon.iconset"
     mkdir -p "${ICONSET_DIR}"
     for size in 16 32 128 256 512; do
@@ -124,11 +124,11 @@ log "✅ Built: ${APP_BUNDLE}"
 if command -v create-dmg &>/dev/null; then
     log "Creating DMG..."
     create-dmg \
-        --volname "ClipRelay" \
+        --volname "Deskdrop" \
         --window-size 600 400 \
         --icon-size 128 \
         --app-drop-link 400 200 \
-        "${MACOS_DIR}/build/ClipRelay.dmg" \
+        "${MACOS_DIR}/build/Deskdrop.dmg" \
         "${APP_BUNDLE}"
-    log "✅ DMG: ${MACOS_DIR}/build/ClipRelay.dmg"
+    log "✅ DMG: ${MACOS_DIR}/build/Deskdrop.dmg"
 fi

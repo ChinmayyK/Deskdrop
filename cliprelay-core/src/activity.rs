@@ -1,4 +1,4 @@
-//! ClipRelay Activity Feed — unified cross-device event log.
+//! Deskdrop Activity Feed — unified cross-device event log.
 //!
 //! Every meaningful event across all connected devices is recorded here:
 //!   - Clipboard copies (from any device)

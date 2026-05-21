@@ -1,7 +1,7 @@
 //! Network simulation test harness.
 //!
 //! Provides a fully in-process, deterministic simulation of a two-device
-//! ClipRelay network. No actual sockets, mDNS, or OS resources required.
+//! Deskdrop network. No actual sockets, mDNS, or OS resources required.
 //! This makes tests fast, reproducible, and safe for CI without root.
 //!
 //! # Usage

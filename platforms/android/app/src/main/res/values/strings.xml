@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ClipRelay</string>
+    <string name="app_name">Deskdrop</string>
 
     <!-- Service notification channels -->
-    <string name="notif_channel_service_name">ClipRelay</string>
+    <string name="notif_channel_service_name">Deskdrop</string>
     <string name="notif_channel_service_desc">Background sync indicator — silent, no banner</string>
-    <string name="notif_channel_alerts_name">ClipRelay Alerts</string>
+    <string name="notif_channel_alerts_name">Deskdrop Alerts</string>
     <string name="notif_channel_alerts_desc">Trust requests, received files, and connection failures</string>
 
     <!-- Persistent notification -->
-    <string name="notif_service_title">ClipRelay</string>
+    <string name="notif_service_title">Deskdrop</string>
     <string name="notif_service_active">Syncing</string>
     <string name="notif_service_paused">Sync paused — tap to manage</string>
     <string name="notif_action_pause">Pause sync</string>
@@ -30,7 +30,7 @@
     <!-- File received -->
     <string name="file_received_title">File received</string>
     <string name="file_received_from">Received from %1$s</string>
-    <string name="file_saved_to">Saved to Downloads/ClipRelay</string>
+    <string name="file_saved_to">Saved to Downloads/Deskdrop</string>
 
     <!-- Dashboard -->
     <string name="status_stopped">Stopped</string>
@@ -49,16 +49,16 @@
     <string name="settings_title">Settings</string>
     <string name="settings_subtitle">Manage sync, notifications, and your device identity.</string>
     <string name="settings_renamed_toast">Renamed to \u201c%1$s\u201d</string>
-    <string name="settings_battery_manual">Open Settings \u2192 Battery \u2192 ClipRelay \u2192 disable optimisation</string>
+    <string name="settings_battery_manual">Open Settings \u2192 Battery \u2192 Deskdrop \u2192 disable optimisation</string>
 
     <!-- Quick Settings tile -->
-    <string name="tile_label">ClipRelay</string>
+    <string name="tile_label">Deskdrop</string>
     <string name="tile_subtitle_paused">Paused</string>
     <string name="tile_subtitle_no_devices">No devices</string>
-    <string name="tile_enabled_toast">ClipRelay sync enabled</string>
-    <string name="tile_paused_toast">ClipRelay sync paused</string>
+    <string name="tile_enabled_toast">Deskdrop sync enabled</string>
+    <string name="tile_paused_toast">Deskdrop sync paused</string>
 
     <!-- Share target -->
-    <string name="share_pushed">Pushed to ClipRelay peers</string>
+    <string name="share_pushed">Pushed to Deskdrop peers</string>
     <string name="share_nothing">Nothing to push</string>
 </resources>

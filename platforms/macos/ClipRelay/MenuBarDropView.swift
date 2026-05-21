@@ -1,5 +1,5 @@
 // MenuBarDropView.swift
-// Custom drag-and-drop view for the ClipRelay menu bar icon.
+// Custom drag-and-drop view for the Deskdrop menu bar icon.
 //
 // Replaces the default NSStatusBarButton so Finder files can be dragged
 // directly onto the menu bar icon and sent to all connected peers.

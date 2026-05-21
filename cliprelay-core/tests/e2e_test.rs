@@ -1,7 +1,7 @@
 //! End-to-end tests using the in-process SimNetwork harness.
 //! These tests verify the full protocol pipeline without OS resources.
 
-use cliprelay_core::{
+use deskdrop_core::{
     chunked::{maybe_chunk, Reassembler, CHUNK_THRESHOLD},
     dedup::{hash_content, Deduplicator},
     filter::{ExtensionFilter, FilterChain, SizeFilter, TypeFilter, Verdict},
@@ -18,9 +18,9 @@ use std::time::{Duration, Instant};
 #[tokio::test]
 async fn e2e_text_one_way() {
     let (mut alice, mut bob) = SimNetwork::pair("Alice", "Bob").await;
-    assert!(alice.send_text("clipboard test 🎉").await);
+    assert!(alice.send_text("clipboard test ").await);
     let got = bob.next_clipboard().await.expect("bob receives");
-    assert_eq!(got, ClipboardContent::Text("clipboard test 🎉".into()));
+    assert_eq!(got, ClipboardContent::Text("clipboard test ".into()));
 }
 
 #[tokio::test]
@@ -128,7 +128,7 @@ fn chunked_large_text_roundtrip() {
     let mut result = None;
 
     for msg in msgs {
-        if let Some(cliprelay_core::chunked::ReassemblerOutput::Complete(c)) = r.feed(msg).unwrap()
+        if let Some(deskdrop_core::chunked::ReassemblerOutput::Complete(c)) = r.feed(msg).unwrap()
         {
             result = Some(c);
         }
@@ -150,7 +150,7 @@ fn chunked_image_roundtrip() {
     let mut result = None;
 
     for msg in msgs {
-        if let Some(cliprelay_core::chunked::ReassemblerOutput::Complete(c)) = r.feed(msg).unwrap()
+        if let Some(deskdrop_core::chunked::ReassemblerOutput::Complete(c)) = r.feed(msg).unwrap()
         {
             result = Some(c);
         }
@@ -251,7 +251,7 @@ fn retry_sequence_is_bounded() {
     let delays: Vec<_> = (0..MAX_ATTEMPTS).filter_map(|_| b.next()).collect();
     assert_eq!(delays.len(), MAX_ATTEMPTS as usize);
     // All delays must be positive and within jitter range of MAX_DELAY.
-    let cap_ms = (cliprelay_core::retry::MAX_DELAY.as_millis() as f64 * 1.25) as u128;
+    let cap_ms = (deskdrop_core::retry::MAX_DELAY.as_millis() as f64 * 1.25) as u128;
     for d in &delays {
         assert!(d.as_millis() > 0);
         assert!(d.as_millis() <= cap_ms, "delay {:?} exceeds cap", d);
@@ -265,7 +265,7 @@ fn retry_sequence_is_bounded() {
 #[test]
 fn pin_commutative_ecdh() {
     // Simulate Alice and Bob both computing the same shared secret.
-    use cliprelay_core::crypto::EphemeralKeypair;
+    use deskdrop_core::crypto::EphemeralKeypair;
     let alice = EphemeralKeypair::generate();
     let bob = EphemeralKeypair::generate();
     let alice_pub = alice.public_bytes;

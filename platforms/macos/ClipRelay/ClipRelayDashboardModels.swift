@@ -1,4 +1,4 @@
-// ClipRelayDashboardModels.swift
+// DeskdropDashboardModels.swift
 // Models used exclusively by the macOS dashboard views.
 
 import Foundation
@@ -190,7 +190,7 @@ struct DeviceDetailSnapshot {
 
 // MARK: - Settings Snapshot
 
-struct ClipRelaySettingsSnapshot {
+struct DeskdropSettingsSnapshot {
     var port: UInt16
     var deviceName: String
     var syncEnabled: Bool

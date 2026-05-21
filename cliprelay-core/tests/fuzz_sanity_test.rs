@@ -1,4 +1,4 @@
-//! Fuzz targets for the ClipRelay protocol and crypto layers.
+//! Fuzz targets for the Deskdrop protocol and crypto layers.
 //!
 //! # v3 fix (Fix 4)
 //! The `#[cfg(fuzzing)]` block previously referenced `ExtensionFilter` which
@@ -43,7 +43,7 @@
 
 #[cfg(fuzzing)]
 pub mod targets {
-    use cliprelay_core::{
+    use deskdrop_core::{
         chunked::{ChunkMessage, Reassembler},
         filter::{ExtensionFilter, FilterChain, SizeFilter},
         protocol::AppMessage,
@@ -74,7 +74,7 @@ pub mod targets {
     // ── Fuzz 3: Filter chain ──────────────────────────────────────────────────
 
     fuzz_target!(|data: &[u8]| {
-        use cliprelay_core::protocol::ClipboardContent;
+        use deskdrop_core::protocol::ClipboardContent;
         let content = if data.len() > 0 {
             match data[0] % 3 {
                 0 => ClipboardContent::Text(String::from_utf8_lossy(&data[1..]).into_owned()),
@@ -105,7 +105,7 @@ pub mod targets {
 /// Sanity-check the fuzzing strategy with deterministic inputs.
 #[cfg(test)]
 mod fuzz_sanity {
-    use cliprelay_core::{
+    use deskdrop_core::{
         chunked::Reassembler,
         filter::{ExtensionFilter, FilterChain, SizeFilter},
         protocol::{AppMessage, ClipboardContent},
@@ -119,7 +119,7 @@ mod fuzz_sanity {
 
     #[test]
     fn reassembler_rejects_unknown_transfer_id() {
-        use cliprelay_core::chunked::ChunkMessage;
+        use deskdrop_core::chunked::ChunkMessage;
         let mut r = Reassembler::default();
         let unknown_id = [0xDE; 16];
         let result = r.feed(ChunkMessage::Chunk {

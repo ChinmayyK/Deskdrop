@@ -1,6 +1,6 @@
-# Contributing to ClipRelay
+# Contributing to Deskdrop
 
-Thank you for your interest in improving ClipRelay!
+Thank you for your interest in improving Deskdrop!
 This document covers how to set up the development environment, project conventions, and the PR process.
 
 ---
@@ -21,8 +21,8 @@ This document covers how to set up the development environment, project conventi
 ### Clone and build
 
 ```bash
-git clone https://github.com/cliprelay/cliprelay
-cd cliprelay
+git clone https://github.com/deskdrop/deskdrop
+cd deskdrop
 
 # Core library + daemon + CLI
 cargo build
@@ -37,14 +37,14 @@ cargo bench
 ### Run the daemon locally
 
 ```bash
-CLIPRELAY_LOG=debug cargo run --bin cliprelay-daemon -- --name "Dev Machine" --port 47823
+DESKDROP_LOG=debug cargo run --bin deskdrop-daemon -- --name "Dev Machine" --port 47823
 ```
 
 Then in another terminal:
 
 ```bash
-cargo run --bin cliprelay-cli -- status
-cargo run --bin cliprelay-cli -- ping
+cargo run --bin deskdrop-cli -- status
+cargo run --bin deskdrop-cli -- ping
 ```
 
 ---
@@ -52,8 +52,8 @@ cargo run --bin cliprelay-cli -- ping
 ## Project Layout
 
 ```
-cliprelay/
-├── cliprelay-core/        # Rust engine — all platform-independent logic
+deskdrop/
+├── deskdrop-core/        # Rust engine — all platform-independent logic
 │   └── src/
 │       ├── protocol.rs     # Wire types
 │       ├── crypto.rs       # X25519 + HKDF + ChaCha20-Poly1305
@@ -74,7 +74,7 @@ cliprelay/
 │       ├── sim.rs          # In-process test harness
 │       ├── ffi.rs          # C ABI exports (macOS / Windows)
 │       └── jni_android.rs  # JNI exports (Android)
-├── cliprelay-cli/         # Management CLI tool
+├── deskdrop-cli/         # Management CLI tool
 ├── platforms/
 │   ├── macos/              # Swift menu-bar app
 │   ├── windows/            # C# tray app
@@ -99,7 +99,7 @@ cliprelay/
 
 ### Platform code (Swift / Kotlin / C#)
 
-- Keep platform layers thin — they should only translate between the OS clipboard API and `cliprelay_*` FFI calls. Business logic belongs in the Rust core.
+- Keep platform layers thin — they should only translate between the OS clipboard API and `deskdrop_*` FFI calls. Business logic belongs in the Rust core.
 - Follow the platform's naming conventions (Swift: camelCase types; Kotlin: PascalCase classes; C#: PascalCase).
 - Handle all FFI call failures gracefully — null handles, error codes, etc.
 
@@ -116,13 +116,13 @@ cliprelay/
 ## Adding a New Platform
 
 1. Create `platforms/<name>/` directory.
-2. Load `libcliprelay_core` (`.dylib`, `.dll`, `.so`) appropriate for the OS.
-3. Call `cliprelay_start()` to get a handle.
+2. Load `libdeskdrop_core` (`.dylib`, `.dll`, `.so`) appropriate for the OS.
+3. Call `deskdrop_start()` to get a handle.
 4. Implement:
-   - Outgoing: watch the OS clipboard → call `cliprelay_push_text/image/file()`
-   - Incoming: poll `cliprelay_poll_event()` at 20–50 ms → apply to clipboard
+   - Outgoing: watch the OS clipboard → call `deskdrop_push_text/image/file()`
+   - Incoming: poll `deskdrop_poll_event()` at 20–50 ms → apply to clipboard
    - TOFU: on `PB_EVENT_TOFU_PROMPT`, show a dialog with the fingerprint
-5. Call `cliprelay_stop()` on clean shutdown.
+5. Call `deskdrop_stop()` on clean shutdown.
 6. Add the platform to `release.yml` so CI builds it.
 
 ---
@@ -152,7 +152,7 @@ cargo cyclonedx --format json
 ## Release Process
 
 1. Update `CHANGELOG.md` — move `[Unreleased]` items to a new version section.
-2. Bump version in `cliprelay-core/Cargo.toml` and `cliprelay-cli/Cargo.toml`.
+2. Bump version in `deskdrop-core/Cargo.toml` and `deskdrop-cli/Cargo.toml`.
 3. Commit: `chore: release v0.x.y`
 4. Tag: `git tag v0.x.y && git push --tags`
 5. The `release.yml` workflow builds all platform artifacts and creates a GitHub Release automatically.

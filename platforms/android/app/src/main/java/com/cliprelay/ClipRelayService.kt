@@ -1,4 +1,4 @@
-// ClipRelay — Android Foreground Service
+// Deskdrop — Android Foreground Service
 //
 // Background execution strategy:
 //   - Foreground service (mandatory, stays alive across screen-off + OEM killers)
@@ -63,6 +63,8 @@ object ClipRelayJni {
     const val CR_EVENT_FILE_TRANSFER_PROGRESS  = 13
     const val CR_EVENT_FILE_TRANSFER_COMPLETE  = 14
     const val CR_EVENT_FILE_TRANSFER_FAILED    = 15
+    const val CR_EVENT_FILE_TRANSFER_PAUSED    = 20
+    const val CR_EVENT_FILE_TRANSFER_RESUMED   = 21
     const val CR_EVENT_ACTIVITY_UPDATED        = 16
     const val CR_EVENT_CALL_STATE_CHANGED       = 17
     const val CR_EVENT_CALL_ACTION              = 18
@@ -116,6 +118,12 @@ object ClipRelayJni {
     @JvmStatic external fun acceptFileTransfer(engineHandle: Long, transferIdHex: String): Int
     /** Reject an incoming file transfer. */
     @JvmStatic external fun rejectFileTransfer(engineHandle: Long, transferIdHex: String): Int
+    /** Cancel an active file transfer. */
+    @JvmStatic external fun cancelFileTransfer(engineHandle: Long, transferIdHex: String): Int
+    /** Pause an active file transfer. */
+    @JvmStatic external fun pauseFileTransfer(engineHandle: Long, transferIdHex: String): Int
+    /** Resume a paused file transfer. */
+    @JvmStatic external fun resumeFileTransfer(engineHandle: Long, transferIdHex: String): Int
 
     /**
      * Connect to a peer discovered via Android NSD.
@@ -176,7 +184,8 @@ object ClipRelayJni {
 enum class ActivityKind {
     CLIPBOARD_TEXT, CLIPBOARD_IMAGE, FILE_SENT, FILE_RECEIVED,
     FILE_TRANSFER_INCOMING, FILE_TRANSFER_PROGRESS, FILE_TRANSFER_COMPLETE,
-    FILE_TRANSFER_FAILED, PEER_CONNECTED, PEER_DISCONNECTED, WARNING;
+    FILE_TRANSFER_FAILED, FILE_TRANSFER_PAUSED, FILE_TRANSFER_RESUMED,
+    PEER_CONNECTED, PEER_DISCONNECTED, WARNING;
 }
 
 data class ActivityEntry(
@@ -211,11 +220,13 @@ data class ActivityEntry(
         ActivityKind.FILE_RECEIVED   -> "[$deviceName] file ready: $preview"
         ActivityKind.FILE_TRANSFER_INCOMING -> "[$deviceName] sending: $preview"
         ActivityKind.FILE_TRANSFER_PROGRESS -> "[$deviceName] $progressPercent% — $preview"
+        ActivityKind.FILE_TRANSFER_PAUSED   -> "[$deviceName] paused — $preview"
+        ActivityKind.FILE_TRANSFER_RESUMED  -> "[$deviceName] resumed — $preview"
         ActivityKind.FILE_TRANSFER_COMPLETE -> "[$deviceName] ✓ $preview"
         ActivityKind.FILE_TRANSFER_FAILED   -> "[$deviceName] ✗ transfer failed: $preview"
         ActivityKind.PEER_CONNECTED  -> "[$deviceName] connected"
         ActivityKind.PEER_DISCONNECTED -> "[$deviceName] disconnected"
-        ActivityKind.WARNING         -> "⚠ $preview"
+        ActivityKind.WARNING         -> "$preview"
     }
     /** True if the user can tap "Apply" to write this to local clipboard. */
     val isApplicable: Boolean get() = kind == ActivityKind.CLIPBOARD_TEXT && !appliedLocally
@@ -230,11 +241,20 @@ enum class BackgroundSyncMode {
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
+data class TransferProgress(
+    val fileName: String,
+    val percent: Int,
+    val bytesReceived: Long,
+    val speedBps: Long,
+    val etaSecs: Long,
+    var isPaused: Boolean = false
+)
+
 class ClipRelayService : Service() {
 
     companion object {
-        private const val TAG = "ClipRelay"
-        const val PREFS_NAME = "cliprelay"
+        private const val TAG = "Deskdrop"
+        const val PREFS_NAME = "deskdrop"
 
         // Notification channels
         private const val CHAN_SERVICE = "cr_service"   // IMPORTANCE_MIN — silent persistent
@@ -266,6 +286,8 @@ class ClipRelayService : Service() {
         const val ACTION_ACCEPT_FILE_TRANSFER = "com.cliprelay.ACCEPT_FILE_TRANSFER"
         const val ACTION_REJECT_FILE_TRANSFER = "com.cliprelay.REJECT_FILE_TRANSFER"
         const val ACTION_CANCEL_FILE_TRANSFER = "com.cliprelay.CANCEL_FILE_TRANSFER"
+        const val ACTION_PAUSE_FILE_TRANSFER  = "com.cliprelay.PAUSE_FILE_TRANSFER"
+        const val ACTION_RESUME_FILE_TRANSFER = "com.cliprelay.RESUME_FILE_TRANSFER"
         const val ACTION_CONNECT_MANUAL     = "com.cliprelay.CONNECT_MANUAL"
         const val ACTION_TRUST_PEER         = "com.cliprelay.TRUST_PEER"
         const val ACTION_REJECT_PEER        = "com.cliprelay.REJECT_PEER"
@@ -288,8 +310,8 @@ class ClipRelayService : Service() {
         private const val ACTIVITY_FEED_MAX = 100
 
         // NSD (Network Service Discovery) — mirrors the mDNS service type used by the Rust engine
-        private const val NSD_SERVICE_TYPE       = "_cliprelay._tcp."
-        private const val DEFAULT_CLIPRELAY_PORT = 47823
+        private const val NSD_SERVICE_TYPE       = "_deskdrop._tcp."
+        private const val DEFAULT_DESKDROP_PORT = 47823
 
         // Global activity feed — readable by UI without binding to the service
         @JvmField val activityFeed = ArrayDeque<ActivityEntry>()
@@ -313,7 +335,7 @@ class ClipRelayService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var lastClipboardSignature: String? = null
     private var suppressNext = false
-    private val connectedPeerNames = linkedSetOf<String>()
+    private val connectedPeerIds = linkedMapOf<String, String>()  // deviceId → displayName
     private val engineStarted = AtomicBoolean(false)
     private val notificationManager by lazy { getSystemService(NotificationManager::class.java) }
 
@@ -369,6 +391,8 @@ class ClipRelayService : Service() {
     // Without it, NSD registration succeeds but packets are silently dropped,
     // so the Mac never sees the Android advertisement and vice versa.
     private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
+
+    private val activeTransfers = mutableMapOf<String, TransferProgress>()
 
     private val clipboardManager: ClipboardManager by lazy {
         getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
@@ -486,10 +510,10 @@ class ClipRelayService : Service() {
                         val result = ClipRelayJni.applyClipboardByHash(engineHandle, hash)
                         if (result != 1 && !text.isNullOrBlank()) {
                             // Hash not found (e.g. engine restarted) — fall back to text.
-                            cm.setPrimaryClip(ClipData.newPlainText("ClipRelay", text))
+                            cm.setPrimaryClip(ClipData.newPlainText("Deskdrop", text))
                         }
                     } else if (!text.isNullOrBlank()) {
-                        cm.setPrimaryClip(ClipData.newPlainText("ClipRelay", text))
+                        cm.setPrimaryClip(ClipData.newPlainText("Deskdrop", text))
                     } else {
                         return START_STICKY
                     }
@@ -518,6 +542,31 @@ class ClipRelayService : Service() {
                 }
                 return START_STICKY
             }
+
+            ACTION_CANCEL_FILE_TRANSFER -> {
+                val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
+                if (engineHandle != 0L) {
+                    ClipRelayJni.cancelFileTransfer(engineHandle, tid)
+                    notificationManager.cancel(transferNotifId(tid))
+                }
+                return START_STICKY
+            }
+
+            ACTION_PAUSE_FILE_TRANSFER -> {
+                val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
+                if (engineHandle != 0L) {
+                    ClipRelayJni.pauseFileTransfer(engineHandle, tid)
+                }
+                return START_STICKY
+            }
+
+            ACTION_RESUME_FILE_TRANSFER -> {
+                val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
+                if (engineHandle != 0L) {
+                    ClipRelayJni.resumeFileTransfer(engineHandle, tid)
+                }
+                return START_STICKY
+            }
         }
 
         // Start / re-attach foreground
@@ -527,11 +576,11 @@ class ClipRelayService : Service() {
 
             if (!engineStarted.getAndSet(true)) {
                 val deviceName = resolvedDeviceName()
-                val dataDir = File(filesDir, "cliprelay").also { it.mkdirs() }.absolutePath
+                val dataDir = File(filesDir, "deskdrop").also { it.mkdirs() }.absolutePath
                 val fileSaveDir = (
                     getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
                         ?: filesDir
-                    ).resolve("ClipRelay").apply { mkdirs() }
+                    ).resolve("Deskdrop").apply { mkdirs() }
                 engineHandle = ClipRelayJni.start(
                     deviceName,
                     0,
@@ -621,7 +670,7 @@ class ClipRelayService : Service() {
             engineHandle = 0L
         }
         engineStarted.set(false)
-        connectedPeerNames.clear()
+        connectedPeerIds.clear()
         releaseWakeLock()
         setServiceRunning(false)
         persistStatus()
@@ -651,7 +700,7 @@ class ClipRelayService : Service() {
             wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
                 .newWakeLock(
                     PowerManager.PARTIAL_WAKE_LOCK,
-                    "ClipRelay::ContinuousLock"
+                    "Deskdrop::ContinuousLock"
                 ).apply {
                     setReferenceCounted(false)
                     acquire()
@@ -664,7 +713,7 @@ class ClipRelayService : Service() {
             if (wm != null) {
                 wifiLock = wm.createWifiLock(
                     android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-                    "ClipRelay::WifiLock"
+                    "Deskdrop::WifiLock"
                 ).apply {
                     setReferenceCounted(false)
                     acquire()
@@ -693,7 +742,7 @@ class ClipRelayService : Service() {
         val wm = runCatching {
             applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager
         }.getOrNull() ?: return
-        multicastLock = wm.createMulticastLock("ClipRelay::NsdMulticast").apply {
+        multicastLock = wm.createMulticastLock("Deskdrop::NsdMulticast").apply {
             setReferenceCounted(false)
             acquire()
         }
@@ -721,7 +770,7 @@ class ClipRelayService : Service() {
                 .filter { it.isConnected }
                 .forEach { peer -> ClipRelayJni.disconnectPeer(h, peer.id) }
         }
-        connectedPeerNames.clear()
+        connectedPeerIds.clear()
         persistStatus()
         updateForegroundNotification()
         handler.postDelayed({
@@ -843,7 +892,7 @@ class ClipRelayService : Service() {
             // ── File received (legacy clipboard file) ─────────────────────────
             ClipRelayJni.CR_EVENT_CLIPBOARD_FILE -> {
                 val bytes = ClipRelayJni.eventBinaryData(ev) ?: return
-                val name  = ClipRelayJni.eventFileName(ev) ?: "ClipRelay_file"
+                val name  = ClipRelayJni.eventFileName(ev) ?: "Deskdrop_file"
                 val from  = resolvePeerDisplayName(
                     ClipRelayJni.eventDeviceId(ev),
                     ClipRelayJni.eventDeviceName(ev)
@@ -894,13 +943,18 @@ class ClipRelayService : Service() {
                     speedBps = speedBps,
                     etaSecs = etaSecs
                 )
+                
+                val isPaused = activeTransfers[tid]?.isPaused ?: false
+                activeTransfers[tid] = TransferProgress(name, percent, bytesReceived, speedBps, etaSecs, isPaused)
+                
                 updateFileTransferNotificationProgress(
                     tid = tid,
                     fileName = name,
                     percent = percent,
                     bytesReceived = bytesReceived,
                     speedBps = speedBps,
-                    etaSecs = etaSecs
+                    etaSecs = etaSecs,
+                    isPaused = isPaused
                 )
             }
 
@@ -923,6 +977,7 @@ class ClipRelayService : Service() {
                 updateActivityTransferComplete(tid, finalPath)
                 cancelFileTransferNotification(tid)
                 showFileTransferCompleteNotification(from, fileName, destPath)
+                activeTransfers.remove(tid)
             }
 
             // ── Dedicated file transfer: failed ───────────────────────────────
@@ -934,6 +989,41 @@ class ClipRelayService : Service() {
                 )
                 updateActivityTransferFailed(tid)
                 cancelFileTransferNotification(tid)
+                activeTransfers.remove(tid)
+            }
+
+            ClipRelayJni.CR_EVENT_FILE_TRANSFER_PAUSED -> {
+                val tid = ClipRelayJni.eventTransferId(ev) ?: return
+                val state = activeTransfers[tid]
+                if (state != null) {
+                    state.isPaused = true
+                    updateFileTransferNotificationProgress(
+                        tid = tid,
+                        fileName = state.fileName,
+                        percent = state.percent,
+                        bytesReceived = state.bytesReceived,
+                        speedBps = state.speedBps,
+                        etaSecs = state.etaSecs,
+                        isPaused = true
+                    )
+                }
+            }
+
+            ClipRelayJni.CR_EVENT_FILE_TRANSFER_RESUMED -> {
+                val tid = ClipRelayJni.eventTransferId(ev) ?: return
+                val state = activeTransfers[tid]
+                if (state != null) {
+                    state.isPaused = false
+                    updateFileTransferNotificationProgress(
+                        tid = tid,
+                        fileName = state.fileName,
+                        percent = state.percent,
+                        bytesReceived = state.bytesReceived,
+                        speedBps = state.speedBps,
+                        etaSecs = state.etaSecs,
+                        isPaused = false
+                    )
+                }
             }
 
             // ── Trust (TOFU) prompt ───────────────────────────────────────────
@@ -947,12 +1037,13 @@ class ClipRelayService : Service() {
 
             // ── Peer connected ────────────────────────────────────────────────
             ClipRelayJni.CR_EVENT_PEER_CONNECTED -> {
+                val deviceId = ClipRelayJni.eventDeviceId(ev) ?: return
                 val name = resolvePeerDisplayName(
-                    ClipRelayJni.eventDeviceId(ev),
+                    deviceId,
                     ClipRelayJni.eventDeviceName(ev)
                 )
-                Log.i(TAG, "Peer connected: $name")
-                connectedPeerNames.add(name)
+                Log.i(TAG, "Peer connected: $name (id=$deviceId)")
+                connectedPeerIds[deviceId] = name
                 addActivity(ActivityEntry(deviceName = name,
                     kind = ActivityKind.PEER_CONNECTED, preview = "connected"))
                 persistStatus()
@@ -965,19 +1056,20 @@ class ClipRelayService : Service() {
 
             // ── Peer disconnected ─────────────────────────────────────────────
             ClipRelayJni.CR_EVENT_PEER_DISCONNECTED -> {
+                val deviceId = ClipRelayJni.eventDeviceId(ev)
                 val name = resolvePeerDisplayName(
-                    ClipRelayJni.eventDeviceId(ev),
+                    deviceId,
                     ClipRelayJni.eventDeviceName(ev)
                 )
-                Log.i(TAG, "Peer disconnected: $name")
-                connectedPeerNames.remove(name)
+                Log.i(TAG, "Peer disconnected: $name (id=$deviceId)")
+                if (deviceId != null) connectedPeerIds.remove(deviceId)
                 addActivity(ActivityEntry(deviceName = name,
                     kind = ActivityKind.PEER_DISCONNECTED, preview = "disconnected"))
                 persistStatus()
                 updateForegroundNotification()
                 // If we're now peerless, schedule a retry scan so we reconnect
                 // automatically when the Mac wakes up or comes back on the network.
-                if (connectedPeerNames.isEmpty()) {
+                if (connectedPeerIds.isEmpty()) {
                     scheduleNsdRetry()
                 }
             }
@@ -1163,17 +1255,34 @@ class ClipRelayService : Service() {
         percent: Int,
         bytesReceived: Long,
         speedBps: Long,
-        etaSecs: Long
+        etaSecs: Long,
+        isPaused: Boolean = false
     ) {
-        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val cancelIntent = Intent(ACTION_CANCEL_FILE_TRANSFER).apply {
+            `package` = packageName
+            putExtra(EXTRA_TRANSFER_ID, tid)
+        }
+        val cancelPi = PendingIntent.getService(this, tid.hashCode() + 2,
+            cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val pauseResumeIntent = Intent(if (isPaused) ACTION_RESUME_FILE_TRANSFER else ACTION_PAUSE_FILE_TRANSFER).apply {
+            `package` = packageName
+            putExtra(EXTRA_TRANSFER_ID, tid)
+        }
+        val pauseResumePi = PendingIntent.getService(this, tid.hashCode() + 3,
+            pauseResumeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Receiving $fileName")
-            .setContentText(buildTransferStatusLine(percent, bytesReceived, speedBps, etaSecs))
+            .setContentText(buildTransferStatusLine(percent, bytesReceived, speedBps, etaSecs) + if (isPaused) " (Paused)" else "")
             .setProgress(100, percent, false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .build()
-        notificationManager.notify(transferNotifId(tid), notif)
+            .addAction(android.R.drawable.ic_media_pause, if (isPaused) "Resume" else "Pause", pauseResumePi)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPi)
+
+        notificationManager.notify(transferNotifId(tid), builder.build())
     }
 
     private fun showFileTransferCompleteNotification(from: String, fileName: String, destPath: String) {
@@ -1388,7 +1497,7 @@ class ClipRelayService : Service() {
         suppressNext = true
         lastClipboardSignature = "text:${text.hashCode()}"
         clipboardManager.setPrimaryClip(
-            android.content.ClipData.newPlainText("cliprelay", text)
+            android.content.ClipData.newPlainText("deskdrop", text)
         )
 
         // Silently add to activity feed — zero notification
@@ -1450,7 +1559,7 @@ class ClipRelayService : Service() {
 
     private fun getDownloadsDir(): File {
         val base = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-        return File(base, "ClipRelay").also { it.mkdirs() }
+        return File(base, "Deskdrop").also { it.mkdirs() }
     }
 
     private fun saveFileToPublicDownloads(sourceFile: File): File? {
@@ -1520,7 +1629,7 @@ class ClipRelayService : Service() {
     private fun sanitize(raw: String, fallbackExt: String?): String {
         val clean = raw.trim().replace(Regex("[/:\\\\*?\"<>|]"), "-")
         if (clean.isNotEmpty()) return clean
-        return if (fallbackExt.isNullOrBlank()) "cliprelay-file" else "cliprelay-file.$fallbackExt"
+        return if (fallbackExt.isNullOrBlank()) "deskdrop-file" else "deskdrop-file.$fallbackExt"
     }
 
     private fun readClipboardUri(uri: Uri): OutgoingPayload? = readOutgoingUri(uri, preferredName = null)
@@ -1539,7 +1648,7 @@ class ClipRelayService : Service() {
 
     private fun imageNameForMime(mime: String): String {
         val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime.substringBefore(';')) ?: "png"
-        return "ClipRelay-image.$ext"
+        return "Deskdrop-image.$ext"
     }
 
     private fun textContentHash(text: String): String {
@@ -1655,7 +1764,7 @@ class ClipRelayService : Service() {
         var candidate = File(dir, fileName)
         if (!candidate.exists()) return candidate
 
-        val stem = candidate.nameWithoutExtension.ifBlank { "cliprelay-share" }
+        val stem = candidate.nameWithoutExtension.ifBlank { "deskdrop-share" }
         val ext = candidate.extension.takeIf { it.isNotBlank() }?.let { ".$it" }.orEmpty()
         var index = 2
         while (candidate.exists()) {
@@ -1771,7 +1880,7 @@ class ClipRelayService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setContentTitle("📞 Incoming call")
             .setContentText(callerLabel)
-            .setSubText("ClipRelay — relaying to your Mac")
+            .setSubText("Deskdrop — relaying to your Mac")
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -1899,8 +2008,8 @@ class ClipRelayService : Service() {
     //
     // Android does not support Rust’s mdns-sd crate, so we use the
     // platform NSD API here to:
-    //   1. Advertise our service (“_cliprelay._tcp”) so the Mac discovers us.
-    //   2. Browse for the Mac’s _cliprelay._tcp advertisement.
+    //   1. Advertise our service (“_deskdrop._tcp”) so the Mac discovers us.
+    //   2. Browse for the Mac’s _deskdrop._tcp advertisement.
     //   3. When resolved, call connectToPeer() via JNI so the Rust engine
     //      initiates a TCP handshake.
 
@@ -1912,7 +2021,7 @@ class ClipRelayService : Service() {
         //
         // Include the UUID prefix in the service name so the Mac can identify us
         // even before resolving (and so our own self-filter is reliable).
-        // Format: "cliprelay-<uuid8>-<safename>"
+        // Format: "deskdrop-<uuid8>-<safename>"
         // Android may suffix " (2)" etc. on collision — we capture the actual name
         // in onServiceRegistered so our self-filter always matches correctly.
         val uuidPrefix = myDeviceUuidPrefix ?: engineHandle.toString().take(8)
@@ -1921,9 +2030,9 @@ class ClipRelayService : Service() {
             .replace(Regex("[^A-Za-z0-9\\-]"), "-")
             .trimEnd('-')
         val serviceInfo = NsdServiceInfo().apply {
-            serviceName = "cliprelay-$uuidPrefix-$safeName"
+            serviceName = "deskdrop-$uuidPrefix-$safeName"
             serviceType = NSD_SERVICE_TYPE
-            port        = DEFAULT_CLIPRELAY_PORT
+            port        = DEFAULT_DESKDROP_PORT
             setAttribute("id", myDeviceId ?: "")
             setAttribute("v", "3")
         }
@@ -1950,7 +2059,7 @@ class ClipRelayService : Service() {
         runCatching { nm.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, regListener) }
             .onFailure { Log.w(TAG, "NSD: registerService error", it) }
 
-        // ── 2. Browse for ClipRelay peers (the Mac, other desktops) ──────────────
+        // ── 2. Browse for Deskdrop peers (the Mac, other desktops) ──────────────
         val discListener = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(serviceType: String, code: Int) {
                 Log.w(TAG, "NSD: discovery start failed (code=$code)")
@@ -1982,7 +2091,7 @@ class ClipRelayService : Service() {
                 // If the lost service is not ours and we're now peerless, retry.
                 val actual = myActualNsdName
                 if (actual == null || info.serviceName != actual) {
-                    if (connectedPeerNames.isEmpty()) scheduleNsdRetry()
+                    if (connectedPeerIds.isEmpty()) scheduleNsdRetry()
                 }
             }
         }
@@ -2123,12 +2232,12 @@ class ClipRelayService : Service() {
         val delayMs = minOf(5_000L * (1L shl attempt.coerceAtMost(3).toInt()), 60_000L)
         Log.i(TAG, "NSD retry #$attempt scheduled in ${delayMs}ms")
         val r = Runnable {
-            if (engineHandle != 0L && connectedPeerNames.isEmpty()) {
+            if (engineHandle != 0L && connectedPeerIds.isEmpty()) {
                 Log.i(TAG, "NSD retry: restarting discovery")
                 stopNsdDiscovery()
                 startNsdDiscovery()
                 // Keep retrying until we connect or network is restored.
-                if (connectedPeerNames.isEmpty()) scheduleNsdRetry()
+                if (connectedPeerIds.isEmpty()) scheduleNsdRetry()
             }
         }
         nsdRetryRunnable = r
@@ -2215,10 +2324,10 @@ class ClipRelayService : Service() {
         // Channel A: persistent foreground indicator — must be as quiet as possible
         nm.createNotificationChannel(NotificationChannel(
             CHAN_SERVICE,
-            "ClipRelay",
+            "Deskdrop",
             NotificationManager.IMPORTANCE_MIN          // no sound, no vibration, no heads-up
         ).apply {
-            description = "ClipRelay background sync indicator"
+            description = "Deskdrop background sync indicator"
             setShowBadge(false)
             enableLights(false)
             enableVibration(false)
@@ -2228,7 +2337,7 @@ class ClipRelayService : Service() {
         // Channel B: trust requests, file receives, critical failures
         nm.createNotificationChannel(NotificationChannel(
             CHAN_ALERTS,
-            "ClipRelay Alerts",
+            "Deskdrop Alerts",
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
             description = "Trust requests, received files, connection failures"
@@ -2240,7 +2349,7 @@ class ClipRelayService : Service() {
         // Channel C: incoming call relay banner — full heads-up priority
         nm.createNotificationChannel(NotificationChannel(
             CHAN_CALLS,
-            "ClipRelay Calls",
+            "Deskdrop Calls",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Incoming call relay notifications from your phone"
@@ -2285,7 +2394,7 @@ class ClipRelayService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHAN_SERVICE)
-            .setContentTitle("ClipRelay")
+            .setContentTitle("Deskdrop")
             .setContentText(foregroundStatusText())
             .setSubText(if (syncEnabled) null else "Sync paused")
             .setSmallIcon(android.R.drawable.ic_menu_share)
@@ -2324,10 +2433,10 @@ class ClipRelayService : Service() {
 
     private fun foregroundStatusText(): String {
         if (!isSyncEnabled()) return "Sync paused · tap to manage"
-        return when (connectedPeerNames.size) {
+        return when (connectedPeerIds.size) {
             0    -> "Active · no devices nearby"
-            1    -> "Active · ${connectedPeerNames.first()}"
-            else -> "Active · ${connectedPeerNames.size} devices connected"
+            1    -> "Active · ${connectedPeerIds.values.first()}"
+            else -> "Active · ${connectedPeerIds.size} devices connected"
         }
     }
 
@@ -2413,7 +2522,7 @@ class ClipRelayService : Service() {
         )
 
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
-            .setContentTitle("ClipRelay connection issue")
+            .setContentTitle("Deskdrop connection issue")
             .setContentText(message.take(80))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -2440,7 +2549,7 @@ class ClipRelayService : Service() {
         return parsePeerSnapshots(raw)
     }
 
-    private fun hasConnectedPeers(): Boolean = connectedPeerNames.isNotEmpty()
+    private fun hasConnectedPeers(): Boolean = connectedPeerIds.isNotEmpty()
 
     private fun isPeerConnected(deviceId: String): Boolean =
         currentPeerSnapshots().any { peer ->
@@ -2463,8 +2572,8 @@ class ClipRelayService : Service() {
             prefs().getString(PREF_PEER_SNAPSHOTS_JSON, null)
         } ?: "[]"
         val peers = parsePeerSnapshots(rawPeerJson)
-        connectedPeerNames.clear()
-        connectedPeerNames.addAll(peers.filter { it.isConnected }.map { it.name })
+        connectedPeerIds.clear()
+        peers.filter { it.isConnected }.forEach { connectedPeerIds[it.id] = it.name }
         peers.forEach { peer ->
             peer.lastSyncSecs?.let { peerLastSync[peer.name] = it * 1000L }
         }
@@ -2472,9 +2581,9 @@ class ClipRelayService : Service() {
         val editor = prefs().edit()
             .putString("local_device_name", resolvedDeviceName())
             .putString("device_id", if (engineHandle != 0L) ClipRelayJni.getDeviceId(engineHandle) else null)
-            .putBoolean("peer_connected", connectedPeerNames.isNotEmpty())
-            .putInt("connected_count", connectedPeerNames.size)
-            .putStringSet("connected_names", connectedPeerNames.toSet())
+            .putBoolean("peer_connected", connectedPeerIds.isNotEmpty())
+            .putInt("connected_count", connectedPeerIds.size)
+            .putStringSet("connected_names", connectedPeerIds.values.toSet())
             .putString(PREF_PEER_SNAPSHOTS_JSON, rawPeerJson)
         // Store last-sync times so the dashboard can show "Last sync: 2m ago" per peer.
         peerLastSync.forEach { (name, ts) ->

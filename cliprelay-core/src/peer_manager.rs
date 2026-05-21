@@ -1,4 +1,4 @@
-//! ClipRelay peer manager — device lifecycle + session registry.
+//! Deskdrop peer manager — device lifecycle + session registry.
 //!
 //! Device state model (layered):
 //!

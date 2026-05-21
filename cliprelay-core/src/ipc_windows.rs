@@ -1,7 +1,7 @@
 //! Windows named-pipe IPC server — Rust implementation.
 //!
 //! This module is compiled only on Windows and provides the server side of
-//! the `\\.\pipe\cliprelay` named pipe.  The Unix-socket server lives in
+//! the `\\.\pipe\deskdrop` named pipe.  The Unix-socket server lives in
 //! `ipc.rs`; both expose the same JSON request / response protocol.
 //!
 //! Named-pipe semantics used:
@@ -22,7 +22,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{PipeMode, ServerOptions};
 use tracing::{debug, info, warn};
 
-const PIPE_NAME: &str = r"\\.\pipe\cliprelay";
+const PIPE_NAME: &str = r"\\.\pipe\deskdrop";
 const MAX_INSTANCES: usize = 8;
 
 /// Spawn the Windows named-pipe IPC server.

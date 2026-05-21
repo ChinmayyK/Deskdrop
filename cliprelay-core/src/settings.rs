@@ -1,8 +1,8 @@
-//! ClipRelay settings — persistent user configuration.
+//! Deskdrop settings — persistent user configuration.
 //!
 //! Settings are stored as JSON at:
-//!   Linux/macOS: $XDG_CONFIG_HOME/cliprelay/settings.json
-//!   Windows:     %APPDATA%\cliprelay\settings.json
+//!   Linux/macOS: $XDG_CONFIG_HOME/deskdrop/settings.json
+//!   Windows:     %APPDATA%\deskdrop\settings.json
 //!
 //! The file is written atomically (tmp → rename) on every change.
 //! Platform layers can watch the file for changes to hot-reload.
@@ -26,7 +26,7 @@ pub enum SyncMode {
 #[serde(default)]
 pub struct Settings {
     // ── Network ──────────────────────────────────────────────────────────────
-    /// TCP port for the ClipRelay service.
+    /// TCP port for the Deskdrop service.
     pub port: u16,
 
     /// Override the device name shown to peers. Empty = use hostname.
@@ -118,7 +118,7 @@ pub struct Settings {
     pub auto_accept_max_bytes: u64,
 
     // ── UI ───────────────────────────────────────────────────────────────────
-    /// Start ClipRelay automatically on login.
+    /// Start Deskdrop automatically on login.
     pub start_on_login: bool,
 
     // ── Advanced filtering ────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ pub struct Settings {
 
     // ── Clipboard templates ───────────────────────────────────────────────────
     /// Named preset text snippets the user can push on demand.
-    /// Push via `cliprelay-cli template push <name>`.
+    /// Push via `deskdrop-cli template push <name>`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub clipboard_templates: Vec<ClipboardTemplate>,
 
@@ -400,27 +400,27 @@ pub fn default_settings_path() -> PathBuf {
     let base = dirs::config_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")));
 
-    base.join("cliprelay").join("settings.json")
+    base.join("deskdrop").join("settings.json")
 }
 
 pub fn default_trust_store_path() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("cliprelay")
+        .join("deskdrop")
         .join("trust.json")
 }
 
 pub fn default_peer_store_path() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("cliprelay")
+        .join("deskdrop")
         .join("peers.json")
 }
 
 pub fn default_history_path() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("cliprelay")
+        .join("deskdrop")
         .join("history.json")
 }
 

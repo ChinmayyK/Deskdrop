@@ -1,4 +1,4 @@
-//! ClipRelay Protocol — wire format definitions
+//! Deskdrop Protocol — wire format definitions
 //!
 //! All messages are length-prefixed (u32 LE) + bincode-encoded.
 //! After the handshake, every frame is AEAD-encrypted with a
@@ -18,7 +18,7 @@ pub enum ClipboardContent {
         mime: String,
         data: Vec<u8>,
     },
-    /// File payload — delivered as clipboard and also saved to Downloads/ClipRelay.
+    /// File payload — delivered as clipboard and also saved to Downloads/Deskdrop.
     File {
         name: String,
         data: Vec<u8>,
@@ -175,7 +175,7 @@ impl HistoryMetadata {
 // ── Device metadata (exchanged during handshake / discovery) ─────────────────
 
 /// Sent in the HelloFrame `device_name` extension slot so peers know
-/// the platform and can format notifications like "📱 Copied from Chinmay's Pixel 8".
+/// the platform and can format notifications like "Copied from Chinmay's Pixel 8".
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DeviceMetadata {
     /// User-visible name: "Chinmay's Pixel 8", "MacBook Pro", "DESKTOP-ABC123"
@@ -184,7 +184,7 @@ pub struct DeviceMetadata {
     pub platform: String,
     /// OS version string (best-effort)
     pub platform_version: String,
-    /// ClipRelay app version
+    /// Deskdrop app version
     pub app_version: String,
 }
 
@@ -288,6 +288,14 @@ pub enum AppMessage {
         transfer_id: [u8; 16],
         reason: String,
     },
+    /// Either side pauses a transfer in progress.
+    FileTransferPause {
+        transfer_id: [u8; 16],
+    },
+    /// Either side resumes a paused transfer.
+    FileTransferResume {
+        transfer_id: [u8; 16],
+    },
     /// Phone call state propagated from an Android device to connected peers.
     /// Enables call continuity: ringing/offhook/idle states are relayed so
     /// macOS (or other peers) can show an incoming-call banner and trigger
@@ -331,7 +339,7 @@ pub enum AppMessage {
 
 // ── mDNS / defaults ──────────────────────────────────────────────────────────
 
-pub const MDNS_SERVICE_TYPE: &str = "_cliprelay._tcp.local.";
+pub const MDNS_SERVICE_TYPE: &str = "_deskdrop._tcp.local.";
 pub const PROTOCOL_VERSION: u16 = 3;
 pub const DEFAULT_PORT: u16 = 47823;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");

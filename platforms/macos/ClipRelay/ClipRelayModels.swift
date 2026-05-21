@@ -1,4 +1,4 @@
-// ClipRelay — macOS data models
+// Deskdrop — macOS data models
 // PeerViewModel uses human-readable names everywhere.
 // Internal device UUIDs are intentionally absent from this layer.
 
@@ -164,7 +164,7 @@ struct FileTransferState: Identifiable {
 }
 
 enum FileTransferStatus {
-    case incoming, transferring, verifying, complete(destPath: String), failed(reason: String), cancelled
+    case incoming, transferring, paused, verifying, complete(destPath: String), failed(reason: String), cancelled
 }
 
 // ── Clipboard apply policy preference ────────────────────────────────────────

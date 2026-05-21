@@ -10,7 +10,7 @@
 //!    - A passive eavesdropper learns nothing useful.
 //!
 //! # PIN derivation
-//! PIN = HKDF-SHA256(shared_secret, info="cliprelay-pin") → u64 mod 10^6
+//! PIN = HKDF-SHA256(shared_secret, info="deskdrop-pin") → u64 mod 10^6
 //! Displayed as zero-padded 6 digits split into two groups: "482 917".
 //!
 //! # Security properties
@@ -34,7 +34,7 @@ use std::time::{Duration, Instant};
 pub fn derive_pin(shared_secret_bytes: &[u8]) -> PairingPin {
     let hk = Hkdf::<Sha256>::new(None, shared_secret_bytes);
     let mut okm = [0u8; 8];
-    hk.expand(b"cliprelay-pin", &mut okm)
+    hk.expand(b"deskdrop-pin", &mut okm)
         .expect("HKDF expand never fails for 8 bytes");
 
     let n = u64::from_be_bytes(okm);

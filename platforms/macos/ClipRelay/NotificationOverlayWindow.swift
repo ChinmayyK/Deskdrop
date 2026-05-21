@@ -3,13 +3,13 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class ClipRelayToastWindowManager: NSObject {
-    private let store: ClipRelayStore
+final class DeskdropToastWindowManager: NSObject {
+    private let store: DeskdropStore
     private let panel: ToastOverlayPanel
     private let hostingView: NSHostingView<ToastOverlayPanelView>
     private var cancellables = Set<AnyCancellable>()
 
-    init(store: ClipRelayStore) {
+    init(store: DeskdropStore) {
         self.store = store
         self.panel = ToastOverlayPanel()
         self.hostingView = NSHostingView(rootView: ToastOverlayPanelView(store: store))
@@ -97,7 +97,7 @@ private final class ToastOverlayPanel: NSPanel {
 }
 
 private struct ToastOverlayPanelView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 12) {

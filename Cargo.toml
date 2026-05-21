@@ -9,5 +9,5 @@ resolver = "2"
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-authors = ["ClipRelay Contributors"]
+authors = ["Deskdrop Contributors"]
 license = "MIT"

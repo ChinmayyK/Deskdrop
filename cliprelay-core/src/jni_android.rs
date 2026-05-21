@@ -1,6 +1,6 @@
 //! JNI bridge for Android.
 //!
-//! Exposes the same ClipRelay engine to Kotlin/Java via JNI.
+//! Exposes the same Deskdrop engine to Kotlin/Java via JNI.
 //! This file lives alongside the other Rust sources and is compiled
 //! into libcliprelay_core.so for each Android ABI.
 //!
@@ -245,6 +245,8 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventType(
         FileTransferProgress { .. } => 13,
         FileTransferComplete { .. } => 14,
         FileTransferFailed { .. } => 15,
+        FileTransferPaused { .. } => 20,
+        FileTransferResumed { .. } => 21,
         ActivityFeedUpdated { .. } => 16,
         CallStateChanged { .. } => 17,
         CallActionRequest { .. } => 18,
@@ -515,6 +517,12 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventTransferId(
             Some(hex::encode(transfer_id))
         }
         crate::engine::EngineEvent::FileTransferFailed { transfer_id, .. } => {
+            Some(hex::encode(transfer_id))
+        }
+        crate::engine::EngineEvent::FileTransferPaused { transfer_id, .. } => {
+            Some(hex::encode(transfer_id))
+        }
+        crate::engine::EngineEvent::FileTransferResumed { transfer_id, .. } => {
             Some(hex::encode(transfer_id))
         }
         _ => None,
@@ -816,8 +824,98 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_rejectFileTransfer(
     }
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_cancelFileTransfer(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    transfer_id_hex: JString,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let hex_str: String = {
+        let s = match env.get_string(&transfer_id_hex) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
+        s.into()
+    };
+    let Ok(bytes) = hex::decode(&hex_str) else {
+        return 0;
+    };
+    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else {
+        return 0;
+    };
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    match rt().block_on(h.engine.cancel_file_transfer(tid)) {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_pauseFileTransfer(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    transfer_id_hex: JString,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let hex_str: String = {
+        let s = match env.get_string(&transfer_id_hex) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
+        s.into()
+    };
+    let Ok(bytes) = hex::decode(&hex_str) else {
+        return 0;
+    };
+    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else {
+        return 0;
+    };
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    match rt().block_on(h.engine.pause_file_transfer(tid)) {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_resumeFileTransfer(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    transfer_id_hex: JString,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let hex_str: String = {
+        let s = match env.get_string(&transfer_id_hex) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
+        s.into()
+    };
+    let Ok(bytes) = hex::decode(&hex_str) else {
+        return 0;
+    };
+    let Ok(tid): Result<[u8; 16], _> = bytes.try_into() else {
+        return 0;
+    };
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    match rt().block_on(h.engine.resume_file_transfer(tid)) {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
 // ── connectToPeer ───────────────────────────────────────────────────────────────
-/// Called from Kotlin when Android NSD resolves a ClipRelay peer on the LAN.
+/// Called from Kotlin when Android NSD resolves a Deskdrop peer on the LAN.
 /// Returns 0 on success, -1 on error.
 
 #[no_mangle]
@@ -962,7 +1060,7 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_applySyncSettings(
 /// e.g. "550e8400-e29b-41d4-a716-446655440000".
 ///
 /// Kotlin uses this to filter out self-connections during NSD resolution:
-/// the mDNS service name is "cliprelay-<first-8-chars-of-uuid>" so we can
+/// the mDNS service name is "deskdrop-<first-8-chars-of-uuid>" so we can
 /// skip resolved peers whose service name prefix matches our own UUID prefix.
 ///
 /// Returns null (0) if the handle is invalid.

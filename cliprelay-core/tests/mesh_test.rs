@@ -1,4 +1,4 @@
-//! ClipRelay multi-device mesh tests.
+//! Deskdrop multi-device mesh tests.
 //!
 //! Validates:
 //! - 3-device simultaneous sync
@@ -9,9 +9,9 @@
 //! - Friendly names propagate correctly
 //! - Internal IDs never appear in ClipboardReceived events
 
-use cliprelay_core::dedup::{hash_content, Deduplicator};
-use cliprelay_core::peer_manager::{DiscoverySource, PeerManager};
-use cliprelay_core::protocol::ClipboardContent;
+use deskdrop_core::dedup::{hash_content, Deduplicator};
+use deskdrop_core::peer_manager::{DiscoverySource, PeerManager};
+use deskdrop_core::protocol::ClipboardContent;
 use std::net::SocketAddr;
 use tempfile::NamedTempFile;
 use tokio::sync::mpsc;
@@ -243,7 +243,7 @@ fn mesh_dedup_echo_suppression() {
 
 #[test]
 fn history_metadata_uses_friendly_name() {
-    use cliprelay_core::protocol::HistoryMetadata;
+    use deskdrop_core::protocol::HistoryMetadata;
 
     let content = ClipboardContent::Text("npm run build".into());
     let meta = HistoryMetadata::from_content(&content, "Chinmay's Pixel 8".into(), false);

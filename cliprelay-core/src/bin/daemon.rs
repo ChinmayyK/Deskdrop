@@ -52,7 +52,7 @@ struct DaemonState {
 #[tokio::main]
 async fn main() {
     if let Err(error) = run().await {
-        eprintln!("ClipRelay daemon failed: {error:#}");
+        eprintln!("Deskdrop daemon failed: {error:#}");
         std::process::exit(1);
     }
 }
@@ -60,7 +60,7 @@ async fn main() {
 async fn run() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("CLIPRELAY_LOG")
+            tracing_subscriber::EnvFilter::try_from_env("DESKDROP_LOG")
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
@@ -138,11 +138,11 @@ async fn run() -> Result<()> {
         }))
         .await
         .context("starting Windows named-pipe IPC server")?;
-        tracing::info!("Windows IPC server started on \\\\.\\pipe\\cliprelay");
+        tracing::info!("Windows IPC server started on \\\\.\\pipe\\deskdrop");
     }
 
     tracing::info!(
-        "ClipRelay daemon started. IPC socket: {:?}",
+        "Deskdrop daemon started. IPC socket: {:?}",
         cliprelay_core::ipc::socket_path()
     );
 
@@ -825,6 +825,20 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state
                 .engine
                 .cancel_file_transfer(parse_transfer_id(&transfer_id)?)
+                .await?;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::PauseFileTransfer { transfer_id } => {
+            state
+                .engine
+                .pause_file_transfer(parse_transfer_id(&transfer_id)?)
+                .await?;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::ResumeFileTransfer { transfer_id } => {
+            state
+                .engine
+                .resume_file_transfer(parse_transfer_id(&transfer_id)?)
                 .await?;
             Ok(IpcResponse::ok_empty())
         }

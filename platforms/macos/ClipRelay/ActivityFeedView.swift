@@ -1,4 +1,4 @@
-// ActivityFeedView.swift — ClipRelay macOS v4
+// ActivityFeedView.swift — Deskdrop macOS v4
 // Live activity feed: day-grouped rows, inline transfer progress, clipboard policy.
 
 import SwiftUI
@@ -6,7 +6,7 @@ import SwiftUI
 // MARK: - Activity Feed Root
 
 struct ActivityFeedView: View {
-    @EnvironmentObject var store: ClipRelayStore
+    @EnvironmentObject var store: DeskdropStore
     @State private var searchText  = ""
     @State private var filterKind: KindFilter = .all
     @State private var expandedID: UUID?       = nil
@@ -208,7 +208,7 @@ private struct FeedEmptyState: View {
 
 private struct PendingClipboardBanner: View {
     let items: [IpcActivityEntry]
-    @EnvironmentObject var store: ClipRelayStore
+    @EnvironmentObject var store: DeskdropStore
     @State private var isHovered = false
 
     var body: some View {
@@ -258,7 +258,7 @@ struct ActivityEntryRow: View {
     var isExpanded:     Bool
     let onToggleExpand: () -> Void
 
-    @EnvironmentObject var store: ClipRelayStore
+    @EnvironmentObject var store: DeskdropStore
     @State private var applying  = false
     @State private var isHovered = false
 
@@ -485,7 +485,7 @@ private extension IpcActivityEntry {
 
 struct FileTransferBanner: View {
     let transfer: FileTransferState
-    @EnvironmentObject var store: ClipRelayStore
+    @EnvironmentObject var store: DeskdropStore
     @State private var isHovered = false
 
     var body: some View {
@@ -511,6 +511,16 @@ struct FileTransferBanner: View {
                         CRProgressBar(value: Double(transfer.percent) / 100.0, tint: CRTheme.accentIndigo)
                         HStack {
                             Text("From \(transfer.fromDeviceName)")
+                            Spacer()
+                            Text("\(transfer.percent)%")
+                        }
+                        .font(.system(size: 11)).foregroundStyle(CRTheme.inkSoft)
+                    }
+                } else if case .paused = transfer.status {
+                    VStack(alignment: .leading, spacing: 4) {
+                        CRProgressBar(value: Double(transfer.percent) / 100.0, tint: CRTheme.accentOrange)
+                        HStack {
+                            Text("Paused - From \(transfer.fromDeviceName)")
                             Spacer()
                             Text("\(transfer.percent)%")
                         }
@@ -549,8 +559,19 @@ struct FileTransferBanner: View {
                     .buttonStyle(CRDestructiveButtonStyle())
             }
         case .transferring:
-            Button("Cancel") { store.cancelFileTransfer(transfer) }
-                .buttonStyle(CRSecondaryButtonStyle())
+            HStack(spacing: 7) {
+                Button("Pause") { store.pauseFileTransfer(transfer) }
+                    .buttonStyle(CRSecondaryButtonStyle())
+                Button("Cancel") { store.cancelFileTransfer(transfer) }
+                    .buttonStyle(CRDestructiveButtonStyle())
+            }
+        case .paused:
+            HStack(spacing: 7) {
+                Button("Resume") { store.resumeFileTransfer(transfer) }
+                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentIndigo))
+                Button("Cancel") { store.cancelFileTransfer(transfer) }
+                    .buttonStyle(CRDestructiveButtonStyle())
+            }
         default:
             EmptyView()
         }
@@ -560,6 +581,7 @@ struct FileTransferBanner: View {
         switch transfer.status {
         case .incoming:     return "arrow.down.circle"
         case .transferring: return "arrow.down.circle.fill"
+        case .paused:       return "pause.circle.fill"
         case .verifying:    return "checkmark.seal"
         case .complete:     return "checkmark.circle.fill"
         case .failed:       return "xmark.circle.fill"
@@ -587,7 +609,7 @@ struct FileTransferBanner: View {
 // MARK: - Clipboard Policy View
 
 struct ClipboardPolicyView: View {
-    @EnvironmentObject var store: ClipRelayStore
+    @EnvironmentObject var store: DeskdropStore
     @State private var timelineFirst = false
     @State private var autoApply     = false
 

@@ -1,4 +1,4 @@
-// ClipRelay — macOS IPC client
+// Deskdrop — macOS IPC client
 // Communicates with the Rust daemon via Unix domain socket.
 // All requests use the IpcRequest JSON protocol defined in ipc.rs.
 
@@ -30,8 +30,18 @@ struct IpcStatusResponse: Codable {
     let local_fingerprint: String?
     /// Active phone call state from a connected Android device (nil if no active call).
     let active_call: IpcActiveCallState?
-    /// Battery levels for connected peer devices.
     let peer_batteries: [IpcPeerBatteryState]?
+    let active_transfers: [IpcFileTransferState]?
+}
+
+struct IpcFileTransferState: Codable {
+    let transfer_id: String
+    let from_device: String
+    let file_name: String
+    let bytes_total: Int64
+    let bytes_received: Int64
+    let percent: Int
+    let status: String
 }
 
 /// Active call state from the daemon's status response.
@@ -59,20 +69,20 @@ struct IpcResponse<T: Codable>: Codable {
 
 // ── IPC Client ────────────────────────────────────────────────────────────────
 
-final class ClipRelayIPCClient {
-    static let shared = ClipRelayIPCClient()
+final class DeskdropIPCClient {
+    static let shared = DeskdropIPCClient()
 
     private var socketPath: String {
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
-            return "\(runtime)/cliprelay.sock"
+            return "\(runtime)/deskdrop.sock"
         }
-        return "/tmp/cliprelay-\(getuid()).sock"
+        return "/tmp/deskdrop-\(getuid()).sock"
     }
 
     func status() async throws -> IpcStatusResponse {
         let raw = try await send(cmd: ["cmd": "status"])
         let resp = try JSONDecoder().decode(IpcResponse<IpcStatusResponse>.self, from: raw)
-        guard let data = resp.data else { throw ClipRelayIPCError.noData }
+        guard let data = resp.data else { throw DeskdropIPCError.noData }
         return data
     }
 
@@ -197,6 +207,14 @@ final class ClipRelayIPCClient {
         _ = try await send(cmd: ["cmd": "cancel_file_transfer", "transfer_id": transferId])
     }
 
+    func pauseFileTransfer(transferId: String) async throws {
+        _ = try await send(cmd: ["cmd": "pause_file_transfer", "transfer_id": transferId])
+    }
+
+    func resumeFileTransfer(transferId: String) async throws {
+        _ = try await send(cmd: ["cmd": "resume_file_transfer", "transfer_id": transferId])
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private func mimeType(for url: URL) -> String {
@@ -213,12 +231,12 @@ final class ClipRelayIPCClient {
     // ── Transport (internal so store can issue ad-hoc commands) ──────────────
 
     func send(cmd: [String: Any]) async throws -> Data {
-        var lastError: Error = ClipRelayIPCError.connectionFailed
+        var lastError: Error = DeskdropIPCError.connectionFailed
         for attempt in 0..<3 {
             do {
                 return try await sendOnce(cmd: cmd)
-            } catch ClipRelayIPCError.connectionFailed {
-                lastError = ClipRelayIPCError.connectionFailed
+            } catch DeskdropIPCError.connectionFailed {
+                lastError = DeskdropIPCError.connectionFailed
                 if attempt < 2 {
                     try? await Task.sleep(nanoseconds: 200_000_000) // 200 ms
                 }
@@ -235,7 +253,7 @@ final class ClipRelayIPCClient {
         return try await withCheckedThrowingContinuation { continuation in
             do {
                 let sock = socket(AF_UNIX, SOCK_STREAM, 0)
-                guard sock >= 0 else { throw ClipRelayIPCError.socketFailed }
+                guard sock >= 0 else { throw DeskdropIPCError.socketFailed }
 
                 var addr = sockaddr_un()
                 addr.sun_family = sa_family_t(AF_UNIX)
@@ -252,7 +270,7 @@ final class ClipRelayIPCClient {
                 }
                 guard connectResult == 0 else {
                     Darwin.close(sock)
-                    throw ClipRelayIPCError.connectionFailed
+                    throw DeskdropIPCError.connectionFailed
                 }
 
                 payload.withUnsafeBytes { _ = Darwin.send(sock, $0.baseAddress, payload.count, 0) }
@@ -274,7 +292,7 @@ final class ClipRelayIPCClient {
     }
 }
 
-enum ClipRelayIPCError: Error, Equatable {
+enum DeskdropIPCError: Error, Equatable {
     case socketFailed
     case connectionFailed
     case noData
@@ -282,7 +300,7 @@ enum ClipRelayIPCError: Error, Equatable {
 
 // MARK: - Dashboard extensions
 
-extension ClipRelayIPCClient {
+extension DeskdropIPCClient {
 
     /// Initiate an outbound TCP connection to a manually-entered address.
     /// Address format: "host:port" or bare "host" (uses daemon's configured port).
@@ -314,7 +332,7 @@ extension ClipRelayIPCClient {
     }
 
     /// Persist settings changes to the daemon — partial patch, only set fields are applied.
-    func saveSettings(_ snapshot: ClipRelaySettingsSnapshot) async throws {
+    func saveSettings(_ snapshot: DeskdropSettingsSnapshot) async throws {
         let cmd: [String: Any] = [
             "cmd":                              "save_settings",
             "port":                             snapshot.port,

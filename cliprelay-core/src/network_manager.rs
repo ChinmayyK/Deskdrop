@@ -101,7 +101,7 @@ pub fn resolve_snapshot(bind_ip: Option<IpAddr>, port: u16) -> Result<NetworkSna
     match get_active_interface() {
         Ok(interface) => Ok(NetworkSnapshot {
             active_interface: Some(interface.clone()),
-            bind_addr: SocketAddr::new(interface.ip, port),
+            bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
         }),
         Err(err) => {
             warn!(error = %err, "no active LAN interface found, falling back to wildcard bind");

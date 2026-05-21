@@ -8,10 +8,10 @@
 //! - RFC 7748 (X25519 test vectors)
 //! - RFC 5869 (HKDF-SHA256 test vectors)
 //! - RFC 8439 (ChaCha20-Poly1305 test vectors)
-//! - Custom ClipRelay PIN vectors derived from the reference implementation
+//! - Custom Deskdrop PIN vectors derived from the reference implementation
 
-use cliprelay_core::crypto::{fingerprint_of, EphemeralKeypair};
-use cliprelay_core::pairing::derive_pin;
+use deskdrop_core::crypto::{fingerprint_of, EphemeralKeypair};
+use deskdrop_core::pairing::derive_pin;
 
 // ── HKDF-SHA256 test vector (RFC 5869 Test Case 1) ───────────────────────────
 
@@ -116,7 +116,7 @@ fn chacha20poly1305_rfc8439_vector() {
     assert_eq!(decrypted, plaintext, "ChaCha20-Poly1305 decrypt mismatch");
 }
 
-// ── ClipRelay session key derivation vector ──────────────────────────────────
+// ── Deskdrop session key derivation vector ──────────────────────────────────
 
 #[test]
 fn session_key_derivation_vector() {
@@ -128,10 +128,10 @@ fn session_key_derivation_vector() {
 
     let hk = Hkdf::<Sha256>::new(None, &shared_secret);
     let mut okm = [0u8; 32];
-    hk.expand(b"cliprelay-v1-session", &mut okm).unwrap();
+    hk.expand(b"deskdrop-v1-session", &mut okm).unwrap();
 
     // Fix 11/20: This is the real, pre-computed reference vector.
-    // It was computed from HKDF-SHA256(IKM=0xAB*32, salt=none, info="cliprelay-v1-session").
+    // It was computed from HKDF-SHA256(IKM=0xAB*32, salt=none, info="deskdrop-v1-session").
     // If this test fails, the session key derivation has changed and ALL existing
     // trust stores / in-flight sessions will break — investigate before merging.
     let expected = hex_32(
@@ -146,7 +146,7 @@ fn session_key_derivation_vector() {
     );
 }
 
-// ── ClipRelay PIN derivation vectors ─────────────────────────────────────────
+// ── Deskdrop PIN derivation vectors ─────────────────────────────────────────
 
 #[test]
 fn pin_derivation_known_vectors() {

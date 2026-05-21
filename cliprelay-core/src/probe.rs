@@ -1,6 +1,6 @@
 //! Network quality probe.
 //!
-//! Before sending a large payload ClipRelay probes the link to the target
+//! Before sending a large payload Deskdrop probes the link to the target
 //! peer and selects the optimal chunk size. A slow / lossy link gets smaller
 //! chunks (less re-send on loss); a fast link gets larger chunks (fewer
 //! round-trips).

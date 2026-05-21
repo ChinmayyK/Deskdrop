@@ -1,4 +1,4 @@
-//! ClipRelay runtime metrics.
+//! Deskdrop runtime metrics.
 //!
 //! Provides a lightweight, lock-free-friendly snapshot of operational stats
 //! that the UI layer can poll to show "Synced 12 items · avg 23 ms" status.

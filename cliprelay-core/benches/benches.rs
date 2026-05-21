@@ -1,9 +1,9 @@
-// ClipRelay benchmarks
+// Deskdrop benchmarks
 //
 // Run:  cargo bench
 // HTML: target/criterion/report/index.html
 
-use cliprelay_core::{
+use deskdrop_core::{
     chunked::{maybe_chunk, Reassembler},
     crypto::EphemeralKeypair,
     dedup::{hash_content, Deduplicator},

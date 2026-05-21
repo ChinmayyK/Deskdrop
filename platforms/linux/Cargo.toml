@@ -1,11 +1,11 @@
 [package]
-name = "cliprelay-linux"
+name = "deskdrop-linux"
 version = "0.1.0"
 edition = "2021"
-description = "ClipRelay Linux GTK4 / Wayland / X11 client"
+description = "Deskdrop Linux GTK4 / Wayland / X11 client"
 
 [[bin]]
-name = "cliprelay-gtk"
+name = "deskdrop-gtk"
 path = "src/main.rs"
 
 [dependencies]

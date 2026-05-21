@@ -18,12 +18,13 @@ for arg in "$@"; do
     esac
 done
 
-echo -e "${BLUE}▶ Starting total clean and rebuild for ClipRelay (${BUILD_TYPE})...${NC}\n"
+echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE})...${NC}\n"
 
 # ==========================================
 # 1. macOS Reinstall
 # ==========================================
 echo -e "${BLUE}▶ [macOS] Stopping existing processes...${NC}"
+pkill -x Deskdrop || true
 pkill -x ClipRelay || true
 pkill -x cliprelay-daemon || true
 
@@ -35,13 +36,13 @@ else
 fi
 
 echo -e "${BLUE}▶ [macOS] Uninstalling old version...${NC}"
-rm -rf /Applications/ClipRelay.app
+rm -rf /Applications/Deskdrop.app
 
 echo -e "${BLUE}▶ [macOS] Installing new version to /Applications...${NC}"
-cp -a platforms/macos/build/ClipRelay.app /Applications/
+cp -a platforms/macos/build/Deskdrop.app /Applications/
 
 echo -e "${GREEN}▶ [macOS] ✅ Installed! Launching...${NC}"
-open -a /Applications/ClipRelay.app
+open -a /Applications/Deskdrop.app
 
 echo -e "\n----------------------------------------\n"
 

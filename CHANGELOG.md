@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to ClipRelay are documented here.
+All notable changes to Deskdrop are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
@@ -27,14 +27,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Security** — `Reassembler::feed(Start)` had no total-payload size cap; malicious peers could announce `u64::MAX` bytes and tie up in-flight state indefinitely; capped at 512 MB / 8 192 chunks (#8)
 - **Correctness** — `fingerprint_display()` doc comment showed wrong format (16 pairs of 2 chars) vs actual output (8 groups of 4 chars); corrected and test added (#10)
 - **Correctness** — `crypto_vectors_test.rs` session key vector was a non-asserting stub; real HKDF-SHA256 vector computed and asserted (#11)
-- **Correctness** — CLI unknown command printed bare `"Unknown command: foo"` with no quoting and wrong help hint; now prints `"Unknown command: 'foo'\n\nRun \`cliprelay-cli help\` to see all available commands."` (#15)
+- **Correctness** — CLI unknown command printed bare `"Unknown command: foo"` with no quoting and wrong help hint; now prints `"Unknown command: 'foo'\n\nRun \`deskdrop-cli help\` to see all available commands."` (#15)
 
-- Rust core engine (`cliprelay-core`) with:
+- Rust core engine (`deskdrop-core`) with:
   - X25519 ephemeral ECDH key exchange
   - HKDF-SHA256 session key derivation
   - ChaCha20-Poly1305 AEAD encryption with monotonic nonce counter
   - Replay attack protection
-  - mDNS-SD service discovery (`_cliprelay._tcp.local.`)
+  - mDNS-SD service discovery (`_deskdrop._tcp.local.`)
   - Framed TCP transport with sub-500 ms LAN propagation
   - TOFU (Trust On First Use) device trust model
   - PIN-based pairing as alternative to TOFU
@@ -75,7 +75,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Android** platform (`platforms/android/`):
   - Foreground service with `foregroundServiceType=dataSync`
-  - JNI calls into libcliprelay_core.so
+  - JNI calls into libdeskdrop_core.so
   - Clipboard monitoring via `ClipboardManager`
   - PIN-based pairing full-screen activity
   - Settings activity
@@ -88,7 +88,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   - `.desktop` file for XDG autostart
   - systemd user service unit with security hardening
 
-- **CLI** (`cliprelay-cli`):
+- **CLI** (`deskdrop-cli`):
   - `status`, `ping`, `push`, `peers`
   - `devices list`, `devices revoke`
   - `history`, `history --last N`, `history --search`, `history clear`
@@ -118,4 +118,4 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - [Security Policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
-- [GitHub](https://github.com/cliprelay/cliprelay)
+- [GitHub](https://github.com/deskdrop/deskdrop)

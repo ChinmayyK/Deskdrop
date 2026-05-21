@@ -2,7 +2,7 @@
 name = "cliprelay-cli"
 version = "0.1.0"
 edition = "2021"
-description = "ClipRelay command-line management tool"
+description = "Deskdrop command-line management tool"
 license = "MIT"
 
 [[bin]]

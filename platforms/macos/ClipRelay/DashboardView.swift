@@ -7,7 +7,7 @@ import CoreImage.CIFilterBuiltins
 // MARK: - Root
 
 struct DashboardRootView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @State private var renameTarget:   ManagedDevice?
     @State private var renameDraft     = ""
     @State private var density: CRDensityMode = .comfortable
@@ -49,7 +49,7 @@ struct DashboardRootView: View {
 // MARK: - Sidebar
 
 private struct Sidebar: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
 
     var body: some View {
         ZStack {
@@ -61,7 +61,7 @@ private struct Sidebar: View {
                     Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
                         .font(.system(size: 22))
                         .foregroundStyle(CRTheme.brandElectric)
-                    Text("ClipRelay")
+                    Text("Deskdrop")
                         .font(.system(size: 16, weight: .bold))
                     Spacer()
                 }
@@ -99,7 +99,7 @@ private struct Sidebar: View {
 // MARK: - Sidebar Footer
 
 private struct SidebarFooter: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     private var syncColor: Color { store.settings?.syncEnabled == false ? CRTheme.accentOrange : CRTheme.accentGreen }
     private var syncLabel: String { store.settings?.syncEnabled == false ? "PAUSED" : "SYNCING" }
     var body: some View {
@@ -123,7 +123,7 @@ private struct SidebarFooter: View {
 // MARK: - Detail Content
 
 private struct DetailContent: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @Binding var density: CRDensityMode
     let beginRename: (ManagedDevice) -> Void
 
@@ -209,7 +209,7 @@ private struct DetailContent: View {
 // MARK: - Command Bar
 
 private struct DashboardCommandBar: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
 
     var body: some View {
         HStack(spacing: 12) {
@@ -362,7 +362,7 @@ private struct CompanionDeviceCard: View {
 
 private struct ContinuityStagingDrawer: View {
     let entries: [IpcActivityEntry]
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
 
     private var leadEntry: IpcActivityEntry? { entries.first }
 
@@ -471,7 +471,7 @@ private struct ContinuityStagingDrawer: View {
 // MARK: - Timeline Section
 
 private struct TimelineSectionView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     let density: CRDensityMode
     @State private var search     = ""
     @State private var filterKind = "all"
@@ -593,7 +593,7 @@ private struct TimelineSectionView: View {
 // MARK: - Devices Section
 
 private struct DevicesSectionView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     let rename: (ManagedDevice) -> Void
     @State private var showingFileImporter = false
     @State private var pendingFileTarget:  ManagedDevice?
@@ -637,7 +637,7 @@ private struct DevicesSectionView: View {
 // MARK: - Trust Section
 
 private struct TrustSectionView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     let rename: (ManagedDevice) -> Void
     private var attention: [ManagedDevice] { store.devices.filter { $0.trustState != .trusted } }
 
@@ -690,7 +690,7 @@ private struct TrustSectionView: View {
 
 struct TimelineCard: View {
     let item:    TimelineItem
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     var density: CRDensityMode = .comfortable
     @State private var isHovered = false
 
@@ -833,7 +833,7 @@ struct TimelineCard: View {
 
 private struct DeviceCard: View {
     let device: ManagedDevice
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     let rename: (ManagedDevice) -> Void
     var emphasizeTrust: Bool = false
     @State private var isHovered = false
@@ -942,7 +942,7 @@ private struct DeviceCard: View {
 // MARK: - Manual Connect Card
 
 private struct ManualConnectCard: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @State private var hovered = false
     var body: some View {
         HStack(spacing: 12) {
@@ -965,7 +965,7 @@ private struct ManualConnectCard: View {
 // MARK: - File Share Card
 
 private struct FileShareCard: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     let chooseTarget: (ManagedDevice?) -> Void
     @State private var hovered = false
     var body: some View {
@@ -1026,7 +1026,7 @@ private struct RenameDeviceSheet: View {
 // MARK: - Unified Dashboard (Mockup Style)
 
 struct UnifiedDashboardView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     let density: CRDensityMode
     @State private var showingFilePicker = false
     @State private var isFileDragTargeted  = false
@@ -1175,7 +1175,7 @@ struct UnifiedDashboardView: View {
                 .foregroundStyle(CRTheme.brandElectric.opacity(0.6))
             Text("No Devices Connected")
                 .font(.system(size: 20, weight: .bold))
-            Text("Open ClipRelay on your iPhone or Android to start syncing clipboard, files and calls.")
+            Text("Open Deskdrop on your iPhone or Android to start syncing clipboard, files and calls.")
                 .font(.system(size: 14))
                 .foregroundStyle(CRTheme.inkSoft)
                 .multilineTextAlignment(.center)
@@ -1345,7 +1345,7 @@ struct UnifiedDashboardView: View {
     }
 
     @ViewBuilder
-    private func syncToggleCard(title: String, icon: String, keyPath: WritableKeyPath<ClipRelaySettingsSnapshot, Bool>, tint: Color) -> some View {
+    private func syncToggleCard(title: String, icon: String, keyPath: WritableKeyPath<DeskdropSettingsSnapshot, Bool>, tint: Color) -> some View {
         let isOn = binding(for: keyPath)
         Button {
             isOn.wrappedValue.toggle()
@@ -1382,7 +1382,7 @@ struct UnifiedDashboardView: View {
         .buttonStyle(.plain)
     }
 
-    private func binding(for keyPath: WritableKeyPath<ClipRelaySettingsSnapshot, Bool>) -> Binding<Bool> {
+    private func binding(for keyPath: WritableKeyPath<DeskdropSettingsSnapshot, Bool>) -> Binding<Bool> {
         Binding(
             get: { store.settings?[keyPath: keyPath] ?? false },
             set: { newValue in
@@ -1471,7 +1471,7 @@ struct UnifiedDashboardView: View {
 // MARK: - Hero Device Layouts
 
 private struct EmptyHeroCard: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
@@ -1499,7 +1499,7 @@ private struct EmptyHeroCard: View {
 
 private struct HeroDeviceCard: View {
     let device: ManagedDevice
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -1759,7 +1759,7 @@ struct BatteryIndicatorPill: View {
 
 // MARK: - Magic Link Pairing Card
 struct MagicLinkPairingCard: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @State private var hovered = false
     @State private var showingQR = false
     
@@ -1784,7 +1784,7 @@ struct MagicLinkPairingCard: View {
 
 // MARK: - QRCode Pairing Sheet View
 struct QRCodePairingSheet: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @Environment(\.dismiss) var dismiss
     @State private var localIP: String = "127.0.0.1"
 
@@ -1792,7 +1792,7 @@ struct QRCodePairingSheet: View {
         let name = store.settings?.deviceName ?? HostName()
         let port = store.settings?.port ?? 47823
         let fp = store.localFingerprint ?? ""
-        return "cliprelay://pair?name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&ip=\(localIP)&port=\(port)&fingerprint=\(fp)"
+        return "deskdrop://pair?name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&ip=\(localIP)&port=\(port)&fingerprint=\(fp)"
     }
 
     var pinCode: String {
@@ -1820,7 +1820,7 @@ struct QRCodePairingSheet: View {
                 .buttonStyle(PlainButtonStyle())
             }
 
-            Text("Scan the QR code below from the ClipRelay Android app to pair instantly, or use the 6-digit confirmation PIN.")
+            Text("Scan the QR code below from the Deskdrop Android app to pair instantly, or use the 6-digit confirmation PIN.")
                 .font(.system(size: 12))
                 .foregroundStyle(CRTheme.inkSoft)
                 .multilineTextAlignment(.center)

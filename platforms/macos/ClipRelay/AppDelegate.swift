@@ -7,7 +7,7 @@ import Darwin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let store = ClipRelayStore()
+    private let store = DeskdropStore()
     private var statusItem: NSStatusItem!
     private var menuBarDropView: MenuBarDropView?
     private var statusBarMenu: NSMenu!  // stored separately — NOT assigned to statusItem.menu
@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dashboardController:      NSWindowController?
     private var quickAccessController:    NSWindowController?
     private var commandPaletteController: NSWindowController?
-    private var toastWindowManager:       ClipRelayToastWindowManager?
+    private var toastWindowManager:       DeskdropToastWindowManager?
     private var callBannerManager:         CallBannerWindowManager?
     private var cancellables = Set<AnyCancellable>()
     private var daemonProcess: Process?
@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         setupWindows()
         bindStore()
-        toastWindowManager = ClipRelayToastWindowManager(store: store)
+        toastWindowManager = DeskdropToastWindowManager(store: store)
         callBannerManager = CallBannerWindowManager(store: store)
         registerHotKeys()
         registerSleepWakeObservers()
@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     }
 
-    /// Observe notifications posted by ClipRelayStore so it stays decoupled from AppKit.
+    /// Observe notifications posted by DeskdropStore so it stays decoupled from AppKit.
     private func registerStoreNotifications() {
         NotificationCenter.default.addObserver(
             self,
@@ -97,22 +97,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let daemonURL = candidates.first(where: {
             FileManager.default.isExecutableFile(atPath: $0.path)
         }) else {
-            NSLog("ClipRelay: cliprelay-daemon not found in bundle or PATH candidates")
+            NSLog("Deskdrop: cliprelay-daemon not found in bundle or PATH candidates")
             return
         }
 
         let process = Process()
         process.executableURL = daemonURL
         process.environment = ProcessInfo.processInfo.environment.merging([
-            "CLIPRELAY_LOG": "info"
+            "DESKDROP_LOG": "info"
         ]) { current, _ in current }
 
         do {
             try process.run()
             daemonProcess = process
-            NSLog("ClipRelay: started daemon at \(daemonURL.path)")
+            NSLog("Deskdrop: started daemon at \(daemonURL.path)")
         } catch {
-            NSLog("ClipRelay: failed to start daemon: \(error.localizedDescription)")
+            NSLog("Deskdrop: failed to start daemon: \(error.localizedDescription)")
         }
     }
 
@@ -123,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func ensureDaemonResponsive(forceRestartOnFailure: Bool) {
         Task { [weak self] in
             do {
-                try await ClipRelayIPCClient.shared.ping()
+                try await DeskdropIPCClient.shared.ping()
             } catch {
                 guard forceRestartOnFailure else { return }
                 self?.daemonProcess?.terminate()
@@ -137,9 +137,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func isDaemonSocketPresent() -> Bool {
         let path: String
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
-            path = "\(runtime)/cliprelay.sock"
+            path = "\(runtime)/deskdrop.sock"
         } else {
-            path = "/tmp/cliprelay-\(getuid()).sock"
+            path = "/tmp/deskdrop-\(getuid()).sock"
         }
         return FileManager.default.fileExists(atPath: path)
     }
@@ -147,9 +147,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func cleanupDaemonSocketIfNeeded() {
         let path: String
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
-            path = "\(runtime)/cliprelay.sock"
+            path = "\(runtime)/deskdrop.sock"
         } else {
-            path = "/tmp/cliprelay-\(getuid()).sock"
+            path = "/tmp/deskdrop-\(getuid()).sock"
         }
         if FileManager.default.fileExists(atPath: path) {
             try? FileManager.default.removeItem(atPath: path)
@@ -192,7 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Hide the default button's own image so only our view renders.
             button.image    = nil
             button.title    = ""
-            button.toolTip  = "ClipRelay — Drag files here to send to your device"
+            button.toolTip  = "Deskdrop — Drag files here to send to your device"
         }
 
         let menu = NSMenu()
@@ -236,7 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(scanItem)
 
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit ClipRelay", action: #selector(quitApp), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Deskdrop", action: #selector(quitApp), keyEquivalent: "q"))
         // IMPORTANT: Do NOT set statusItem.menu — that would cause macOS
         // to intercept all mouse events (including drags) to show the menu,
         // which prevents drag-and-drop from working on the menu bar icon.
@@ -247,7 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func statusBarImage() -> NSImage? {
         if #available(macOS 11.0, *) {
             let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-            return NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "ClipRelay")?.withSymbolConfiguration(config)
+            return NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Deskdrop")?.withSymbolConfiguration(config)
         }
         return nil
     }
@@ -256,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupWindows() {
         dashboardController = Self.makeWindow(
-            title: "ClipRelay",
+            title: "Deskdrop",
             size:  NSSize(width: 1020, height: 700),
             rootView: DashboardRootView(store: store)
         )
@@ -279,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] banner in
                 self?.statusMenuItem.title = banner
-                self?.statusItem.button?.toolTip = "ClipRelay • \(banner)"
+                self?.statusItem.button?.toolTip = "Deskdrop • \(banner)"
             }
             .store(in: &cancellables)
 
@@ -329,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     )
                     // Also send a macOS UserNotification for when the app is hidden
                     self.sendSystemNotification(
-                        title: "ClipRelay — Device Connected",
+                        title: "Deskdrop — Device Connected",
                         body: "\(device.name) is now syncing."
                     )
                     // Animate the menu bar icon briefly
@@ -474,7 +474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func handleSystemWake() {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            NSLog("ClipRelay: system woke — starting reconnect sequence")
+            NSLog("Deskdrop: system woke — starting reconnect sequence")
 
             // Stage 1: Immediate refresh + discovery rescan
             await store.refresh()
@@ -499,7 +499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ttl: 3.0
                 )
             } else {
-                NSLog("ClipRelay: wake reconnect — no peers found after retries")
+                NSLog("Deskdrop: wake reconnect — no peers found after retries")
             }
         }
     }
@@ -507,7 +507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func handleSystemSleep() {
         // Nothing to do — the Rust engine handles clean peer shutdown on sleep.
         // We just log for diagnosability.
-        NSLog("ClipRelay: system going to sleep")
+        NSLog("Deskdrop: system going to sleep")
     }
 
     // MARK: - Menu bar badge
@@ -528,7 +528,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard pendingCount > 0 else {
             button.image = baseImage
             button.imageScaling = .scaleProportionallyUpOrDown
-            button.toolTip = "ClipRelay"
+            button.toolTip = "Deskdrop"
             return
         }
 
@@ -562,7 +562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         badged.isTemplate = false
         button.image = badged
         button.imageScaling = .scaleProportionallyUpOrDown
-        button.toolTip = "ClipRelay • \(pendingCount) clipboard item\(pendingCount == 1 ? "" : "s") waiting — click to apply"
+        button.toolTip = "Deskdrop • \(pendingCount) clipboard item\(pendingCount == 1 ? "" : "s") waiting — click to apply"
         menuBarDropView?.badgeCount = pendingCount
     }
 
@@ -600,7 +600,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Task {
             do {
-                try await ClipRelayIPCClient.shared.sendClipboardCurrent(targetDeviceId: nil)
+                try await DeskdropIPCClient.shared.sendClipboardCurrent(targetDeviceId: nil)
                 store.showToast(
                     title: "Clipboard Synced",
                     body: "Pushed to all connected devices.",
@@ -783,7 +783,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task {
             do {
-                try await ClipRelayIPCClient.shared.sendClipboardCurrent(targetDeviceId: nil)
+                try await DeskdropIPCClient.shared.sendClipboardCurrent(targetDeviceId: nil)
                 store.showToast(
                     title: "URL Sent",
                     body: url,
@@ -806,7 +806,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func connectManually() {
         let alert = NSAlert()
         alert.messageText     = "Connect to Device by IP"
-        alert.informativeText = "Enter the IP address of the device running ClipRelay.\nMac IP: \(Self.localWiFiIP() ?? "unknown")"
+        alert.informativeText = "Enter the IP address of the device running Deskdrop.\nMac IP: \(Self.localWiFiIP() ?? "unknown")"
         alert.addButton(withTitle: "Connect")
         alert.addButton(withTitle: "Cancel")
 

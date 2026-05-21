@@ -13,8 +13,8 @@
 
 **Please do not file public GitHub issues for security vulnerabilities.**
 
-Email: **security@cliprelay.example** (replace with real address before shipping)
-PGP key: published at `https://cliprelay.example/security.asc`
+Email: **security@deskdrop.example** (replace with real address before shipping)
+PGP key: published at `https://deskdrop.example/security.asc`
 
 We aim to:
 - Acknowledge receipt within **48 hours**
@@ -26,11 +26,11 @@ We aim to:
 
 ## Threat Model
 
-ClipRelay syncs clipboard content across devices on the same LAN.
+Deskdrop syncs clipboard content across devices on the same LAN.
 Understanding what it protects against — and what it does not — is essential
 for evaluating its security posture.
 
-### In scope (ClipRelay defends against these)
+### In scope (Deskdrop defends against these)
 
 | Threat | Mitigation |
 |--------|-----------|
@@ -42,17 +42,17 @@ for evaluating its security posture.
 | **Oversized payload denial-of-service** | Frame size is hard-limited (70 MB). Content filter enforces `max_payload_bytes` (default 64 MB). Rate limiter caps pushes per second per peer. |
 | **Extension-based malware delivery** | The extension block-list rejects `.exe`, `.bat`, `.ps1`, `.sh`, and other executable types. |
 
-### Out of scope (ClipRelay does NOT protect against these)
+### Out of scope (Deskdrop does NOT protect against these)
 
 | Threat | Reasoning |
 |--------|-----------|
-| **Malicious device you have already trusted** | After trust is established, a compromised peer can push arbitrary clipboard content to your devices. Revoke compromised devices via `cliprelay-cli devices revoke`. |
+| **Malicious device you have already trusted** | After trust is established, a compromised peer can push arbitrary clipboard content to your devices. Revoke compromised devices via `deskdrop-cli devices revoke`. |
 | **Physical access to your device** | If an attacker can read the trust store (`trust.json`, mode 0600) or the running process memory, they can impersonate trusted devices. Full-disk encryption is assumed. |
 | **Network-level MITM after trust** | The current implementation does not re-verify the peer's long-term identity on every session beyond fingerprint pinning. A sophisticated MITM who can re-use the pinned fingerprint is not defended against. Future versions will add certificate-pinned long-term identity keys. |
-| **Local privilege escalation** | If an attacker gains OS-level access to your machine, they can read clipboard content directly. ClipRelay does not add any protection beyond what the OS provides. |
-| **Metadata leakage** | Device names and mDNS service records are unencrypted. Observers on the LAN can see which devices are running ClipRelay and their names. Only clipboard *content* is encrypted. |
+| **Local privilege escalation** | If an attacker gains OS-level access to your machine, they can read clipboard content directly. Deskdrop does not add any protection beyond what the OS provides. |
+| **Metadata leakage** | Device names and mDNS service records are unencrypted. Observers on the LAN can see which devices are running Deskdrop and their names. Only clipboard *content* is encrypted. |
 | **Clipboard content sensitivity analysis** | The optional `sensitive_text` filter is heuristic and will miss many patterns. Do not rely on it to prevent syncing of passwords or keys. |
-| **Wide-area network exposure** | ClipRelay is designed for LAN use only. If you expose port 47823 to the internet (e.g. via port forwarding), you are outside the threat model. Firewall rules should restrict the port to the local subnet. |
+| **Wide-area network exposure** | Deskdrop is designed for LAN use only. If you expose port 47823 to the internet (e.g. via port forwarding), you are outside the threat model. Firewall rules should restrict the port to the local subnet. |
 
 ---
 
@@ -61,9 +61,9 @@ for evaluating its security posture.
 | Primitive | Algorithm | Key size | Notes |
 |-----------|-----------|----------|-------|
 | Key exchange | X25519 ECDH | 256-bit | Ephemeral per session (forward secrecy) |
-| Key derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "cliprelay-v1-session" |
+| Key derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "deskdrop-v1-session" |
 | Symmetric encryption | ChaCha20-Poly1305 | 256-bit | IETF variant; nonce = 96-bit counter |
-| PIN derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "cliprelay-pin" |
+| PIN derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "deskdrop-pin" |
 | Key fingerprint | SHA-256 | 256-bit | Of the peer's ephemeral public key bytes |
 | Random number generation | OS CSPRNG | — | via `rand::rngs::OsRng` |
 
@@ -84,7 +84,7 @@ All cryptographic code uses audited Rust crates:
    disk; pin that instead of the ephemeral key.
 
 2. **No key rotation** — There is no mechanism to force rotation of identity
-   keys. **Planned**: `cliprelay-cli devices rotate-key` command.
+   keys. **Planned**: `deskdrop-cli devices rotate-key` command.
 
 3. **mDNS device name is unencrypted** — Device names in mDNS TXT records
    are visible to all LAN participants. **Planned**: use opaque UUIDs in

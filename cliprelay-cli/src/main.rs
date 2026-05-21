@@ -177,7 +177,7 @@ async fn ipc(req: &IpcRequest) -> Result<IpcResponse> {
 async fn cmd_status() -> Result<()> {
     if let Some(IpcResponse::Ok { data: Some(data) }) = try_ipc(&IpcRequest::Status).await {
         let uptime = data["uptime_secs"].as_u64().unwrap_or(0);
-        println!("ClipRelay — Live Status\n{}", "═".repeat(40));
+        println!("Deskdrop — Live Status\n{}", "═".repeat(40));
         println!(
             "  Device:   {}",
             data["device_name"].as_str().unwrap_or("?")
@@ -205,8 +205,8 @@ async fn cmd_status() -> Result<()> {
     let trust = TrustStore::load(default_trust_store_path())?;
     let settings = SettingsStore::load(default_settings_path())?;
     let history = History::load(default_history_path())?;
-    println!("ClipRelay — Offline State\n{}", "═".repeat(40));
-    println!("  Daemon:   ⚠️  not running");
+    println!("Deskdrop — Offline State\n{}", "═".repeat(40));
+    println!("  Daemon:    not running");
     println!("  Device:   {}", settings.get().resolved_device_name());
     println!("  Port:     {}", settings.get().port);
     println!("  Trusted:  {} device(s)", trust.device_count());
@@ -218,7 +218,7 @@ async fn cmd_ping() -> Result<()> {
     let started = std::time::Instant::now();
     match ipc(&IpcRequest::Ping).await? {
         IpcResponse::Pong { uptime_secs } => println!(
-            "✅  pong — {}ms RTT — uptime {}",
+            " pong — {}ms RTT — uptime {}",
             started.elapsed().as_millis(),
             fmt_dur(uptime_secs)
         ),
@@ -257,7 +257,7 @@ fn print_dispatch_response(response: IpcResponse) -> Result<()> {
                         && !peer["metadata_only"].as_bool().unwrap_or(false)
                 })
                 .count();
-            println!("✅  queued clipboard to {} peer(s)", delivered);
+            println!(" queued clipboard to {} peer(s)", delivered);
             for peer in peers {
                 let name = peer["device_name"].as_str().unwrap_or("?");
                 let delivered = peer["delivered"].as_bool().unwrap_or(false);
@@ -286,7 +286,7 @@ async fn cmd_connect(ip: &str, port: u16) -> Result<()> {
     })
     .await?
     {
-        IpcResponse::Ok { .. } => println!("✅  connect attempt to {}:{} started", ip, port),
+        IpcResponse::Ok { .. } => println!(" connect attempt to {}:{} started", ip, port),
         IpcResponse::Error { message } => bail!("{}", message),
         response => bail!("{:?}", response),
     }
@@ -459,7 +459,7 @@ async fn cmd_devices_trust(id_str: &str) -> Result<()> {
     })
     .await?
     {
-        IpcResponse::Ok { .. } => println!("✅  trusted {}", id),
+        IpcResponse::Ok { .. } => println!(" trusted {}", id),
         IpcResponse::Error { message } => bail!("{}", message),
         response => bail!("{:?}", response),
     }
@@ -473,7 +473,7 @@ async fn cmd_devices_reject(id_str: &str) -> Result<()> {
     })
     .await?
     {
-        IpcResponse::Ok { .. } => println!("✅  rejected {}", id),
+        IpcResponse::Ok { .. } => println!(" rejected {}", id),
         IpcResponse::Error { message } => bail!("{}", message),
         response => bail!("{:?}", response),
     }
@@ -484,9 +484,9 @@ fn cmd_devices_revoke(id_str: &str) -> Result<()> {
     let id = Uuid::parse_str(id_str).context("invalid UUID")?;
     let mut trust = TrustStore::load(default_trust_store_path())?;
     if trust.revoke(id)? {
-        println!("✅  revoked {}", id);
+        println!(" revoked {}", id);
     } else {
-        println!("⚠️  device {} not found", id);
+        println!(" device {} not found", id);
     }
     Ok(())
 }
@@ -499,7 +499,7 @@ async fn cmd_devices_rename(id_str: &str, name: &str) -> Result<()> {
     })
     .await?
     {
-        IpcResponse::Ok { .. } => println!("✅  {} renamed to '{}'", id, name),
+        IpcResponse::Ok { .. } => println!(" {} renamed to '{}'", id, name),
         IpcResponse::Error { message } => bail!("{}", message),
         response => bail!("{:?}", response),
     }
@@ -568,7 +568,7 @@ async fn cmd_history_pin(id_str: &str, pinned: bool) -> Result<()> {
     let id = id_str.parse::<u64>().context("invalid history id")?;
     match ipc(&IpcRequest::HistoryPin { id, pinned }).await? {
         IpcResponse::Ok { .. } => println!(
-            "✅  history item {} {}",
+            " history item {} {}",
             id,
             if pinned { "pinned" } else { "unpinned" }
         ),
@@ -591,13 +591,13 @@ async fn cmd_history_repush(id_str: &str, target: Option<&str>) -> Result<()> {
 
 async fn cmd_history_clear() -> Result<()> {
     if let Some(IpcResponse::Ok { .. }) = try_ipc(&IpcRequest::HistoryClear).await {
-        println!("✅  history cleared (live)");
+        println!(" history cleared (live)");
         return Ok(());
     }
     let mut history = History::load(default_history_path())?;
     let count = history.entries().len();
     history.clear()?;
-    println!("✅  cleared {} entries", count);
+    println!(" cleared {} entries", count);
     Ok(())
 }
 
@@ -605,12 +605,12 @@ async fn cmd_history_delete(id_str: &str) -> Result<()> {
     let id: u64 = id_str.parse().context("id must be a number")?;
     // Try live daemon first; fall back to direct file edit.
     if let Some(IpcResponse::Ok { .. }) = try_ipc(&IpcRequest::HistoryDelete { id }).await {
-        println!("✅  entry {} deleted (live)", id);
+        println!(" entry {} deleted (live)", id);
         return Ok(());
     }
     let mut history = History::load(default_history_path())?;
     if history.remove(id)? {
-        println!("✅  entry {} deleted", id);
+        println!(" entry {} deleted", id);
     } else {
         bail!("entry {} not found in history", id);
     }
@@ -726,9 +726,9 @@ async fn cmd_history_tag(id_str: &str, tag: &str, add: bool) -> Result<()> {
     match ipc(&req).await? {
         IpcResponse::Ok { .. } => {
             if add {
-                println!("✅  tagged item #{} with '{}'", id, tag);
+                println!(" tagged item #{} with '{}'", id, tag);
             } else {
-                println!("✅  removed tag '{}' from item #{}", tag, id);
+                println!(" removed tag '{}' from item #{}", tag, id);
             }
         }
         IpcResponse::Error { message } => bail!("{}", message),
@@ -856,7 +856,7 @@ async fn cmd_template_set(name: &str, text: &str, description: &str) -> Result<(
     })
     .await?
     {
-        IpcResponse::Ok { .. } => println!("✅  template '{}' saved.", name),
+        IpcResponse::Ok { .. } => println!(" template '{}' saved.", name),
         IpcResponse::Error { message } => bail!("{}", message),
         response => bail!("{:?}", response),
     }
@@ -875,9 +875,9 @@ async fn cmd_template_remove(name: &str) -> Result<()> {
                 .and_then(|d| d["removed"].as_bool())
                 .unwrap_or(false);
             if removed {
-                println!("✅  template '{}' removed.", name);
+                println!(" template '{}' removed.", name);
             } else {
-                println!("⚠️  template '{}' not found.", name);
+                println!(" template '{}' not found.", name);
             }
         }
         IpcResponse::Error { message } => bail!("{}", message),
@@ -928,7 +928,7 @@ async fn cmd_peer_settings_patch(device_id: &str, patch: &str) -> Result<()> {
     })
     .await?
     {
-        IpcResponse::Ok { .. } => println!("✅  peer settings updated for {}.", device_id),
+        IpcResponse::Ok { .. } => println!(" peer settings updated for {}.", device_id),
         IpcResponse::Error { message } => bail!("{}", message),
         response => bail!("{:?}", response),
     }
@@ -999,20 +999,20 @@ fn cmd_settings_set(key: &str, value: &str) -> Result<()> {
     let parsed: serde_json::Value =
         serde_json::from_str(value).unwrap_or(serde_json::Value::String(value.to_string()));
     store.patch(&serde_json::json!({ key: parsed }).to_string())?;
-    println!("✅  {} = {}", key, parsed);
+    println!(" {} = {}", key, parsed);
     Ok(())
 }
 
 fn cmd_settings_reset() -> Result<()> {
     SettingsStore::load(default_settings_path())?.reset()?;
-    println!("✅  settings reset to defaults");
+    println!(" settings reset to defaults");
     Ok(())
 }
 
 async fn cmd_sync(enabled: bool) -> Result<()> {
     match ipc(&IpcRequest::SetSyncEnabled { enabled }).await? {
         IpcResponse::Ok { .. } => {
-            println!("✅  sync {}", if enabled { "enabled" } else { "disabled" })
+            println!(" sync {}", if enabled { "enabled" } else { "disabled" })
         }
         IpcResponse::Error { message } => bail!("{}", message),
         response => bail!("{:?}", response),
@@ -1022,15 +1022,15 @@ async fn cmd_sync(enabled: bool) -> Result<()> {
 
 async fn cmd_stop() -> Result<()> {
     try_ipc(&IpcRequest::Shutdown).await;
-    println!("✅  daemon stopped");
+    println!(" daemon stopped");
     Ok(())
 }
 
 fn bool_icon(value: bool) -> &'static str {
     if value {
-        "✅ on"
+        "on"
     } else {
-        "❌ off"
+        "off"
     }
 }
 
@@ -1112,7 +1112,7 @@ fn payload_summary(payload: Option<&serde_json::Value>) -> String {
 
 fn print_help() {
     println!(
-        r#"cliprelay-cli {}  —  ClipRelay management tool
+        r#"cliprelay-cli {}  —  Deskdrop management tool
 
 USAGE:  cliprelay-cli <command> [args]
         cliprelay-cli /history            (leading slash prefix accepted)

@@ -1,4 +1,4 @@
-//! ClipRelay chunked file transfer — streaming, verified delivery.
+//! Deskdrop chunked file transfer — streaming, verified delivery.
 //!
 //! # Pipeline
 //! ```text

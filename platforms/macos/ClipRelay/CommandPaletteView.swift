@@ -1,4 +1,4 @@
-// CommandPaletteView.swift — ClipRelay macOS v4
+// CommandPaletteView.swift — Deskdrop macOS v4
 // ⌘K palette: grouped commands, recent history, live sync-state labels.
 
 import SwiftUI
@@ -17,7 +17,7 @@ private enum PaletteSurface {
 // MARK: - Root
 
 struct CommandPaletteView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @State private var query         = ""
     @State private var selectedIndex = 0
     @State private var recentIDs:    [UUID] = []   // tracks recently run commands
@@ -95,7 +95,7 @@ struct CommandPaletteView: View {
 
                 cmd(id: "net.scan", icon: "antenna.radiowaves.left.and.right",
                     label: "Scan for Devices",
-                    hint: "Search the local network for ClipRelay peers",
+                    hint: "Search the local network for Deskdrop peers",
                     tint: CRTheme.accentTeal)
                 { store.scanForDevices() },
             ]),

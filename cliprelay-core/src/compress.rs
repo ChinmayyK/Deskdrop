@@ -1,6 +1,6 @@
 //! Image compression pipeline.
 //!
-//! Before sending a clipboard image over the LAN, ClipRelay applies
+//! Before sending a clipboard image over the LAN, Deskdrop applies
 //! lossless or lossy compression depending on the payload size and
 //! the user's bandwidth preference:
 //!

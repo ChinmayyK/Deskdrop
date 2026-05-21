@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  ClipRelay macOS LaunchAgent
+  Deskdrop macOS LaunchAgent
   ============================
-  Installs ClipRelay as a login item via launchd (the preferred method
+  Installs Deskdrop as a login item via launchd (the preferred method
   for background agents on macOS 13+; SMAppService wraps this).
 
   Manual install:
@@ -23,7 +23,7 @@
     <!-- The .app bundle wraps the Swift AppDelegate which starts the engine. -->
     <key>ProgramArguments</key>
     <array>
-        <string>/Applications/ClipRelay.app/Contents/MacOS/ClipRelay</string>
+        <string>/Applications/Deskdrop.app/Contents/MacOS/Deskdrop</string>
     </array>
 
     <!-- Start immediately when loaded. -->
@@ -43,14 +43,14 @@
 
     <!-- Log to unified logging. -->
     <key>StandardOutPath</key>
-    <string>/tmp/cliprelay.out.log</string>
+    <string>/tmp/deskdrop.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/cliprelay.err.log</string>
+    <string>/tmp/deskdrop.err.log</string>
 
     <!-- Environment: set log level. -->
     <key>EnvironmentVariables</key>
     <dict>
-        <key>CLIPRELAY_LOG</key>
+        <key>DESKDROP_LOG</key>
         <string>info</string>
     </dict>
 

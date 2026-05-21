@@ -1,4 +1,4 @@
-// PreferencesView.swift — ClipRelay macOS v4
+// PreferencesView.swift — Deskdrop macOS v4
 // System Settings aesthetic: icon tabs, live dirty state, port validation, fingerprint display.
 
 import SwiftUI
@@ -7,10 +7,10 @@ import AppKit
 // MARK: - Root
 
 struct PreferencesView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
 
     @State private var tab              = SettingsTab.general
-    @State private var copy             = ClipRelaySettingsSnapshot.defaults
+    @State private var copy             = DeskdropSettingsSnapshot.defaults
     @State private var patternDraft     = ""
     @State private var isDirty          = false
     @State private var portString       = "47823"
@@ -211,18 +211,18 @@ private struct PrefsFooter: View {
 // MARK: - General Pane
 
 private struct GeneralPane: View {
-    @Binding var copy: ClipRelaySettingsSnapshot
+    @Binding var copy: DeskdropSettingsSnapshot
     @AppStorage("cr_app_theme") private var appTheme: String = "light"
 
     var body: some View {
         PrefsSection(title: "Identity", icon: "person.crop.circle.fill", tint: CRTheme.accentBlue) {
             PrefsRow(icon: "tag.fill", label: "Device name",
-                     description: "How this Mac appears to other ClipRelay peers.") {
+                     description: "How this Mac appears to other Deskdrop peers.") {
                 TextField("MacBook Pro", text: $copy.deviceName).crInput().frame(maxWidth: 220)
             }
             PrefsDivider()
             PrefsRow(icon: "power", label: "Start on login",
-                     description: "Launch ClipRelay automatically at login.") {
+                     description: "Launch Deskdrop automatically at login.") {
                 Toggle("", isOn: $copy.startOnLogin).labelsHidden()
             }
         }
@@ -296,7 +296,7 @@ private struct GeneralPane: View {
 // MARK: - Sync Pane
 
 private struct SyncPane: View {
-    @Binding var copy: ClipRelaySettingsSnapshot
+    @Binding var copy: DeskdropSettingsSnapshot
     @Binding var patternDraft: String
 
     var body: some View {
@@ -392,7 +392,7 @@ private struct SyncPane: View {
 // MARK: - Network Pane
 
 private struct NetworkPane: View {
-    @Binding var copy: ClipRelaySettingsSnapshot
+    @Binding var copy: DeskdropSettingsSnapshot
     @Binding var portString: String
     @Binding var portIsInvalid: Bool
 
@@ -458,8 +458,8 @@ private struct NetworkPane: View {
 // MARK: - Security Pane
 
 private struct SecurityPane: View {
-    @Binding var copy: ClipRelaySettingsSnapshot
-    @ObservedObject var store: ClipRelayStore
+    @Binding var copy: DeskdropSettingsSnapshot
+    @ObservedObject var store: DeskdropStore
 
     var body: some View {
         PrefsSection(title: "Trust", icon: "checkmark.shield", tint: CRTheme.accentGreen) {
@@ -619,9 +619,9 @@ private struct PrefsDivider: View {
 
 // MARK: - Settings Snapshot default
 
-extension ClipRelaySettingsSnapshot {
-    static var defaults: ClipRelaySettingsSnapshot {
-        ClipRelaySettingsSnapshot(
+extension DeskdropSettingsSnapshot {
+    static var defaults: DeskdropSettingsSnapshot {
+        DeskdropSettingsSnapshot(
             port: 47823, deviceName: "", syncEnabled: true,
             syncText: true, syncImages: true, syncFiles: true,
             syncMode: .auto, maxPayloadBytes: 64 * 1024 * 1024,

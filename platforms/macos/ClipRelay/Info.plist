@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
-    <string>ClipRelay</string>
+    <string>Deskdrop</string>
     <key>CFBundleExecutable</key>
-    <string>ClipRelay</string>
+    <string>Deskdrop</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.cliprelay.ClipRelay</string>
+    <string>com.cliprelay.Deskdrop</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>ClipRelay</string>
+    <string>Deskdrop</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -28,14 +28,14 @@
     <key>LSMultipleInstancesProhibited</key>
     <true/>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>ClipRelay uses your local network to sync clipboard content between your nearby devices.</string>
+    <string>Deskdrop uses your local network to sync clipboard content between your nearby devices.</string>
     <key>NSBonjourServices</key>
     <array>
-        <string>_cliprelay._tcp</string>
+        <string>_deskdrop._tcp</string>
     </array>
     <!-- Notification permission usage description -->
     <key>NSUserNotificationsUsageDescription</key>
-    <string>ClipRelay shows notifications when clipboard content is received from another device.</string>
+    <string>Deskdrop shows notifications when clipboard content is received from another device.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

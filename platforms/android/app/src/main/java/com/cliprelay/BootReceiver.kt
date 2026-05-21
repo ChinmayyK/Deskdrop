@@ -7,7 +7,7 @@ import android.os.Build
 import android.util.Log
 
 /**
- * Starts ClipRelay automatically after device boot.
+ * Starts Deskdrop automatically after device boot.
  *
  * Also handles:
  *   - MY_PACKAGE_REPLACED — restart after app update
@@ -19,7 +19,7 @@ import android.util.Log
 class BootReceiver : BroadcastReceiver() {
 
     companion object {
-        private const val TAG = "ClipRelayBoot"
+        private const val TAG = "DeskdropBoot"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -36,7 +36,7 @@ class BootReceiver : BroadcastReceiver() {
                     return
                 }
 
-                Log.i(TAG, "Boot received (${intent.action}) — starting ClipRelay")
+                Log.i(TAG, "Boot received (${intent.action}) — starting Deskdrop")
                 startService(context)
             }
         }
@@ -53,7 +53,7 @@ class BootReceiver : BroadcastReceiver() {
                 context.startService(serviceIntent)
             }
         }.onFailure { ex ->
-            Log.e(TAG, "Failed to start ClipRelay service at boot", ex)
+            Log.e(TAG, "Failed to start Deskdrop service at boot", ex)
         }
     }
 }

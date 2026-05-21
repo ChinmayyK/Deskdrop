@@ -1,7 +1,7 @@
-# ClipRelay
+# Deskdrop
 
 <div align="center">
-  <img src="platforms/macos/ClipRelay/Resources/cliprelay_hero_mockup.png" alt="ClipRelay Hero Banner" width="900" style="border-radius: 12px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);" />
+  <img src="platforms/macos/Deskdrop/Resources/deskdrop_hero_mockup.png" alt="Deskdrop Hero Banner" width="900" style="border-radius: 12px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);" />
 
   <br />
   <br />
@@ -18,23 +18,23 @@
   <br />
 </div>
 
-ClipRelay is a **production-grade, zero-server shared clipboard and peer-to-peer file transfer engine**. Designed to replace bloated cloud-dependent clipboard syncing tools, it keeps your data entirely within your local area network (LAN) or private VPN. Powered by a shared **Rust core**, ClipRelay is blazing fast, light on system resources, and offers premium native integrations for macOS, Android, Linux, and Windows.
+Deskdrop is a **production-grade, zero-server shared clipboard and peer-to-peer file transfer engine**. Designed to replace bloated cloud-dependent clipboard syncing tools, it keeps your data entirely within your local area network (LAN) or private VPN. Powered by a shared **Rust core**, Deskdrop is blazing fast, light on system resources, and offers premium native integrations for macOS, Android, Linux, and Windows.
 
 ---
 
 ## ⚡ Key Value Propositions
 
-Unlike generic clipboard managers or complex sync utilities, ClipRelay focuses on three core pillars:
+Unlike generic clipboard managers or complex sync utilities, Deskdrop focuses on three core pillars:
 
 1. **Absolute Local-First Privacy (Zero Cloud)**: Your data never contacts an external server. Discovery, handshake, and payload transfers are completely peer-to-peer over the local network using mDNS and secure sockets.
-2. **Timeline-First Clipboard UX**: Say goodbye to remote copies silently hijacking your local clipboard. ClipRelay lands incoming text, images, and files in a rich **Activity Feed** first. You preview, tag, pin, and explicitly apply items when you are ready.
+2. **Timeline-First Clipboard UX**: Say goodbye to remote copies silently hijacking your local clipboard. Deskdrop lands incoming text, images, and files in a rich **Activity Feed** first. You preview, tag, pin, and explicitly apply items when you are ready.
 3. **Premium Hardware Continuity**: Experience high-end ecosystem features (like Apple's Universal Clipboard and Handoff) on *all* your devices—including call continuity controls, battery status telemetry, and resumable file sharing.
 
 ---
 
 ## 🏗️ System Architecture
 
-ClipRelay employs a modular, decoupled architecture centered around a high-performance **Rust Engine Library** (`cliprelay-core`). Native platforms interface with the core via direct C FFI, JNI (Android), or Named Pipe IPC (CLI & Daemons).
+Deskdrop employs a modular, decoupled architecture centered around a high-performance **Rust Engine Library** (`deskdrop-core`). Native platforms interface with the core via direct C FFI, JNI (Android), or Named Pipe IPC (CLI & Daemons).
 
 ```text
  ┌───────────────────────────────────────────────────────────────────────────────────────────┐
@@ -45,7 +45,7 @@ ClipRelay employs a modular, decoupled architecture centered around a high-perfo
              │ Native C FFI          │ JNI Direct              │ Named Pipe IPC       │ Unix IPC
              ▼                       ▼                         ▼                      ▼
  ┌───────────────────────────────────────────────────────────────────────────────────────────┐
- │                                  CLIPRELAY-CORE (RUST)                                    │
+ │                                  DESKDROP-CORE (RUST)                                    │
  │                                                                                           │
  │   ┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────────┐   │
  │   │       COORDINATOR     │   │      NETWORKING       │   │       SECURITY SUITE      │   │
@@ -67,7 +67,7 @@ ClipRelay employs a modular, decoupled architecture centered around a high-perfo
 ```
 
 ### Protocol Frame Lifecycle
-1. **Discovery**: Nodes advertise on `_cliprelay._tcp.local.` using **mDNS**.
+1. **Discovery**: Nodes advertise on `_deskdrop._tcp.local.` using **mDNS**.
 2. **Handshake (`HelloFrame` / `HelloAckFrame`)**: Peers establish identity and platform metadata. Ephemeral **X25519 ECDH** keys are exchanged in plaintext.
 3. **Session Secret**: Diffie-Hellman secret is combined via **HKDF-SHA256** to derive a symmetric session key.
 4. **Encrypted Tunnel**: Subsequent frames (`ClipboardPush`, `FileChunk`, `CallStateUpdate`, `BatteryStatus`) are encrypted with **ChaCha20-Poly1305** using strictly monotonic counter nonces.
@@ -81,7 +81,7 @@ ClipRelay employs a modular, decoupled architecture centered around a high-perfo
 * **Zeroization (`CRIT-02`)**: Memory containing Diffie-Hellman shared secret bytes is explicitly zeroized in RAM immediately after HKDF expansion to eliminate cold-boot and dump vulnerabilities.
 * **Strict Replay Protection**: Each frame relies on a strictly monotonic, 64-bit big-endian message counter. Replaying captured packets is rejected immediately at the protocol level.
 * **PIN-Based Secure Pairing**: Combats active Man-in-the-Middle (MITM) attacks by displaying a commutative numeric PIN (`PairingPin`) derived dynamically:
-  $$\text{PIN} = \text{HKDF-SHA256}(\text{shared\_secret}, \text{"cliprelay-pin"}) \pmod{10^6}$$
+  $$\text{PIN} = \text{HKDF-SHA256}(\text{shared\_secret}, \text{"deskdrop-pin"}) \pmod{10^6}$$
   Displayed in two split 3-digit groups (e.g., `048 291`) with uniform distribution.
 * **mDNS Privacy Enforcer (`TRU-06`)**: Friendly device names are never broadcast in plain-text mDNS TXT records. Only opaque UUIDs are published. Canonical device names are exchanged only *after* a successful encrypted handshake.
 
@@ -89,7 +89,7 @@ ClipRelay employs a modular, decoupled architecture centered around a high-perfo
 * **High-Speed Chunking**: Files are broken down into standard $256\text{ KB}$ chunks (`FILE_CHUNK_SIZE`).
 * **Resumable Pipelines**: If a transfer drops mid-stream, the receiver stores a progressive chunk acknowledgment state. On reconnect, the transfer resumes starting at index `last_confirmed_chunk + 1`, skipping completed data.
 * **Adaptive Chunk Sizing (`HIGH-03`)**: Dynamic round-trip telemetry monitors connection quality (pings/pongs) using latency probes, scaling transfer buffer allocations to optimize throughput.
-* **Path Traversal Shielding (`MED-04`)**: Senders' file names are strictly stripped of traversal characters (e.g. `../`), separators, and leading dots (`.`). They are bound securely within a dedicated `ClipRelay/` downloads directory.
+* **Path Traversal Shielding (`MED-04`)**: Senders' file names are strictly stripped of traversal characters (e.g. `../`), separators, and leading dots (`.`). They are bound securely within a dedicated `Deskdrop/` downloads directory.
 * **Integrity Guarantee**: Finalization requires SHA-256 validation of the re-assembled file in temp storage. Corrupted hashes prompt immediate deletion.
 
 ### 📞 Ecosystem Continuity
@@ -101,46 +101,46 @@ ClipRelay employs a modular, decoupled architecture centered around a high-perfo
 
 ## 💻 Command-Line Interface (CLI)
 
-The `cliprelay-cli` binary communicates with the background Rust daemon over local IPC channels, offering a powerful admin utility.
+The `deskdrop-cli` binary communicates with the background Rust daemon over local IPC channels, offering a powerful admin utility.
 
 ```bash
 # Start the core background daemon
-cargo run -p cliprelay-core --bin cliprelay-daemon
+cargo run -p deskdrop-core --bin deskdrop-daemon
 
 # Inspect status, network interfaces, and peer health
-cargo run -p cliprelay-cli -- status
-cargo run -p cliprelay-cli -- ping
-cargo run -p cliprelay-cli -- metrics
+cargo run -p deskdrop-cli -- status
+cargo run -p deskdrop-cli -- ping
+cargo run -p deskdrop-cli -- metrics
 
 # Query, search, tag, and export activity history
-cargo run -p cliprelay-cli -- history --last 20
-cargo run -p cliprelay-cli -- history pin <id>
-cargo run -p cliprelay-cli -- history tag <id> "work"
-cargo run -p cliprelay-cli -- history export csv
-cargo run -p cliprelay-cli -- history export json
-cargo run -p cliprelay-cli -- history stats
+cargo run -p deskdrop-cli -- history --last 20
+cargo run -p deskdrop-cli -- history pin <id>
+cargo run -p deskdrop-cli -- history tag <id> "work"
+cargo run -p deskdrop-cli -- history export csv
+cargo run -p deskdrop-cli -- history export json
+cargo run -p deskdrop-cli -- history stats
 
 # Control peer trust settings and synchronization bounds
-cargo run -p cliprelay-cli -- devices list
-cargo run -p cliprelay-cli -- devices trust <device-id>
-cargo run -p cliprelay-cli -- devices peer-settings <device-id> pause
+cargo run -p deskdrop-cli -- devices list
+cargo run -p deskdrop-cli -- devices trust <device-id>
+cargo run -p deskdrop-cli -- devices peer-settings <device-id> pause
 
 # Manage reusable clipboard templates
-cargo run -p cliprelay-cli -- template list
-cargo run -p cliprelay-cli -- template push "billing_address"
+cargo run -p deskdrop-cli -- template list
+cargo run -p deskdrop-cli -- template push "billing_address"
 ```
 
 ---
 
 ## 📂 Configuration & Data Layout
 
-ClipRelay organizes its persistent stores according to platform-native user directory standards:
+Deskdrop organizes its persistent stores according to platform-native user directory standards:
 
 | Platform | Base Config & Data Directory |
 | :--- | :--- |
-| **macOS** | `~/Library/Application Support/cliprelay/` |
-| **Linux** | `~/.config/cliprelay/` |
-| **Windows** | `%APPDATA%\cliprelay\` |
+| **macOS** | `~/Library/Application Support/deskdrop/` |
+| **Linux** | `~/.config/deskdrop/` |
+| **Windows** | `%APPDATA%\deskdrop\` |
 
 ### Primary Files
 * `settings.json`: Global configuration, regular expression filters, payload thresholds, and clipboard behavior.
@@ -175,7 +175,7 @@ cargo build --release --workspace
 * **Android (`platforms/android`)**: Open the project folder in Android Studio. Leverages JNI to bridge `jni_android.rs` to Kotlin services, managing background sync tasks and call handlers.
 * **Linux (`platforms/linux`)**: Built on top of the GTK graphical framework. Run the Linux wrapper directly:
   ```bash
-  cargo run -p cliprelay-linux
+  cargo run -p deskdrop-linux
   ```
 * **Windows (`platforms/windows`)**: Open the C# project in Visual Studio, leveraging native WinUI/WPF integration.
 
@@ -187,4 +187,4 @@ Contributions are highly encouraged! Please read our [CONTRIBUTING.md](CONTRIBUT
 
 ## 📄 License
 
-ClipRelay is open-source software licensed under the **MIT License**. See [LICENSE](LICENSE) for full details.
+Deskdrop is open-source software licensed under the **MIT License**. See [LICENSE](LICENSE) for full details.

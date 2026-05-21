@@ -15,12 +15,12 @@ class NotificationUxTest {
 
     @Test
     fun `activity feed bounded to ACTIVITY_FEED_MAX entries`() {
-        synchronized(ClipRelayService.feedLock) {
-            ClipRelayService.activityFeed.clear()
+        synchronized(DeskdropService.feedLock) {
+            DeskdropService.activityFeed.clear()
         }
 
         repeat(120) { i ->
-            ClipRelayService.addToFeed(
+            DeskdropService.addToFeed(
                 ActivityEntry(
                     deviceName = "Phone",
                     kind = ActivityKind.CLIPBOARD_TEXT,
@@ -29,39 +29,39 @@ class NotificationUxTest {
             )
         }
 
-        val size = ClipRelayService.getFeedSnapshot().size
+        val size = DeskdropService.getFeedSnapshot().size
         assertTrue("Feed must be bounded (got $size)", size <= 100)
     }
 
     @Test
     fun `activity feed snapshot returns newest first`() {
-        synchronized(ClipRelayService.feedLock) {
-            ClipRelayService.activityFeed.clear()
+        synchronized(DeskdropService.feedLock) {
+            DeskdropService.activityFeed.clear()
         }
 
-        ClipRelayService.addToFeed(
+        DeskdropService.addToFeed(
             ActivityEntry(deviceName = "A", kind = ActivityKind.CLIPBOARD_TEXT, preview = "first")
         )
         Thread.sleep(2)
-        ClipRelayService.addToFeed(
+        DeskdropService.addToFeed(
             ActivityEntry(deviceName = "B", kind = ActivityKind.CLIPBOARD_TEXT, preview = "second")
         )
 
-        val snapshot = ClipRelayService.getFeedSnapshot()
+        val snapshot = DeskdropService.getFeedSnapshot()
         assertEquals("second", snapshot.first().preview)
         assertEquals("first",  snapshot.last().preview)
     }
 
     @Test
     fun `activity feed is thread-safe for concurrent writes`() {
-        synchronized(ClipRelayService.feedLock) {
-            ClipRelayService.activityFeed.clear()
+        synchronized(DeskdropService.feedLock) {
+            DeskdropService.activityFeed.clear()
         }
 
         val threads = (0..9).map { i ->
             Thread {
                 repeat(10) { j ->
-                    ClipRelayService.addToFeed(
+                    DeskdropService.addToFeed(
                         ActivityEntry(
                             deviceName = "Dev$i",
                             kind = ActivityKind.CLIPBOARD_TEXT,
@@ -74,7 +74,7 @@ class NotificationUxTest {
         threads.forEach { it.start() }
         threads.forEach { it.join() }
 
-        val size = ClipRelayService.getFeedSnapshot().size
+        val size = DeskdropService.getFeedSnapshot().size
         assertTrue("Feed size must be bounded after concurrent writes (got $size)", size <= 100)
     }
 
@@ -129,16 +129,16 @@ class NotificationUxTest {
     @Test
     fun `service channel and alerts channel are distinct`() {
         // Verify via reflection that the channel IDs differ
-        val serviceField = ClipRelayService::class.java.getDeclaredField("CHAN_SERVICE")
-        val alertsField  = ClipRelayService::class.java.getDeclaredField("CHAN_ALERTS")
+        val serviceField = DeskdropService::class.java.getDeclaredField("CHAN_SERVICE")
+        val alertsField  = DeskdropService::class.java.getDeclaredField("CHAN_ALERTS")
         serviceField.isAccessible = true
         alertsField.isAccessible  = true
-        val companion = ClipRelayService::class.java.getDeclaredField("Companion")
+        val companion = DeskdropService::class.java.getDeclaredField("Companion")
         // Just verify the constants exist and differ by checking them in companion
         // (actual values are private const — we test via the behaviour in service)
         assertNotEquals(
-            ClipRelayService.ACTION_PAUSE_SYNC,
-            ClipRelayService.ACTION_RESUME_SYNC
+            DeskdropService.ACTION_PAUSE_SYNC,
+            DeskdropService.ACTION_RESUME_SYNC
         )
     }
 
@@ -146,11 +146,11 @@ class NotificationUxTest {
 
     @Test
     fun `pause and resume actions are distinct strings`() {
-        assertNotEquals(ClipRelayService.ACTION_PAUSE_SYNC, ClipRelayService.ACTION_RESUME_SYNC)
+        assertNotEquals(DeskdropService.ACTION_PAUSE_SYNC, DeskdropService.ACTION_RESUME_SYNC)
     }
 
     @Test
     fun `disconnect action is distinct from pause`() {
-        assertNotEquals(ClipRelayService.ACTION_PAUSE_SYNC, ClipRelayService.ACTION_DISCONNECT_ALL)
+        assertNotEquals(DeskdropService.ACTION_PAUSE_SYNC, DeskdropService.ACTION_DISCONNECT_ALL)
     }
 }

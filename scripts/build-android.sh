@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-android.sh — Build the ClipRelay Android APK
+# build-android.sh — Build the Deskdrop Android APK
 #
 # Requirements:
 #   - Rust + cargo-ndk:  cargo install cargo-ndk
@@ -72,9 +72,9 @@ generate_android_brand_asset() {
 
     mkdir -p "${BRAND_DRAWABLE_DIR}"
     if command -v sips >/dev/null 2>&1; then
-        sips -s format png -z 512 512 "${ICON_SRC}" --out "${BRAND_DRAWABLE_DIR}/cliprelay_logo.png" >/dev/null
+        sips -s format png -z 512 512 "${ICON_SRC}" --out "${BRAND_DRAWABLE_DIR}/deskdrop_logo.png" >/dev/null
     else
-        cp "${ICON_SRC}" "${BRAND_DRAWABLE_DIR}/cliprelay_logo.png"
+        cp "${ICON_SRC}" "${BRAND_DRAWABLE_DIR}/deskdrop_logo.png"
     fi
 }
 

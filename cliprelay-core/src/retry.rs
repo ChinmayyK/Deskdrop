@@ -1,6 +1,6 @@
 //! Connection retry with exponential back-off and jitter.
 //!
-//! ClipRelay peers are expected to come and go (sleep/wake, Wi-Fi handoffs).
+//! Deskdrop peers are expected to come and go (sleep/wake, Wi-Fi handoffs).
 //! This module provides a reusable `Backoff` type that coordinates reconnect
 //! attempts without hammering the network.
 //!
@@ -28,7 +28,7 @@ const JITTER: f64 = 0.25;
 
 /// Configurable retry policy.
 ///
-/// Use `RetryConfig::default()` for the standard ClipRelay policy, or build
+/// Use `RetryConfig::default()` for the standard Deskdrop policy, or build
 /// a custom one for e.g. unit tests that need faster timeouts.
 #[derive(Debug, Clone)]
 pub struct RetryConfig {

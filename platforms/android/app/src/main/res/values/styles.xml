@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.ClipRelay" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Deskdrop" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/cr_accent</item>
         <item name="colorOnPrimary">@color/cr_on_accent</item>
         <item name="colorSecondary">@color/cr_accent_dim</item>
@@ -16,7 +16,7 @@
         <item name="android:forceDarkAllowed">false</item>
     </style>
 
-    <style name="Theme.ClipRelay.ShareTarget" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Deskdrop.ShareTarget" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
@@ -26,7 +26,7 @@
         <item name="colorSurface">@color/cr_bg_card</item>
     </style>
 
-    <style name="Theme.ClipRelay.Dialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
+    <style name="Theme.Deskdrop.Dialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
         <item name="colorPrimary">@color/cr_accent</item>
         <item name="colorSurface">@color/cr_bg_card</item>
         <item name="bottomSheetStyle">@style/Widget.Material3.BottomSheet.Modal</item>

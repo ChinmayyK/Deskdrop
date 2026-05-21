@@ -1,4 +1,4 @@
-// DesignSystem.swift — ClipRelay macOS v4
+// DesignSystem.swift — Deskdrop macOS v4
 // Canonical design tokens, components, and view modifiers.
 // Updated: full adaptive light/dark sidebar + refined component polish.
 

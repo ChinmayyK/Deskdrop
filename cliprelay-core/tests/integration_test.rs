@@ -11,11 +11,11 @@
 //!    These cover dedup, echo suppression, image payloads, multi-item ordering,
 //!    latency measurement, and degraded-network conditions (BLD-05).
 
-use cliprelay_core::engine::{Engine, EngineConfig, EngineEvent};
-use cliprelay_core::identity::IdentityStore;
-use cliprelay_core::protocol::ClipboardContent;
-use cliprelay_core::sim::{NetworkConditions, SimNetwork};
-use cliprelay_core::trust::TrustStore;
+use deskdrop_core::engine::{Engine, EngineConfig, EngineEvent};
+use deskdrop_core::identity::IdentityStore;
+use deskdrop_core::protocol::ClipboardContent;
+use deskdrop_core::sim::{NetworkConditions, SimNetwork};
+use deskdrop_core::trust::TrustStore;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;

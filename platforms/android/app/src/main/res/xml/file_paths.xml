@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <!-- Cache dir — for incoming images (not persisted long-term) -->
-    <cache-path name="cliprelay_cache" path="." />
+    <cache-path name="deskdrop_cache" path="." />
     <!-- Files dir — for anything we write to internal storage -->
-    <files-path name="cliprelay_files" path="." />
-    <!-- External Downloads/ClipRelay — for received files -->
-    <external-path name="cliprelay_downloads" path="ClipRelay/" />
+    <files-path name="deskdrop_files" path="." />
+    <!-- External Downloads/Deskdrop — for received files -->
+    <external-path name="deskdrop_downloads" path="Deskdrop/" />
     <!-- External files dir — fallback on devices without external storage -->
-    <external-files-path name="cliprelay_ext_files" path="." />
+    <external-files-path name="deskdrop_ext_files" path="." />
 </paths>

@@ -1,4 +1,4 @@
-// ClipRelay — macOS app state store
+// Deskdrop — macOS app state store
 // Bridges IPC responses to SwiftUI view models.
 // Enforces: no raw UUIDs in public-facing state.
 
@@ -11,14 +11,14 @@ import ServiceManagement
 // MARK: - Notification names
 
 extension Notification.Name {
-    /// Posted by ClipRelayStore.openHistoryPanel() — observed by AppDelegate.
+    /// Posted by DeskdropStore.openHistoryPanel() — observed by AppDelegate.
     static let clipRelayOpenHistoryPanel = Notification.Name("com.cliprelay.openHistoryPanel")
     static let clipRelayOpenCommandPalette = Notification.Name("com.cliprelay.openCommandPalette")
     static let clipRelayEnsureDaemon = Notification.Name("com.cliprelay.ensureDaemon")
 }
 
 @MainActor
-final class ClipRelayStore: ObservableObject {
+final class DeskdropStore: ObservableObject {
 
     // ── Core state ────────────────────────────────────────────────────────────
     @Published var peers: [PeerViewModel] = []
@@ -41,7 +41,7 @@ final class ClipRelayStore: ObservableObject {
     @Published var selectedSection: DashboardSection = .dashboard
     @Published var toasts: [ToastItem] = []
     @Published var manualConnectAddress: String = ""
-    @Published var settings: ClipRelaySettingsSnapshot? = nil
+    @Published var settings: DeskdropSettingsSnapshot? = nil
     @Published var quickSendContext: QuickSendContext? = nil
     @Published var pendingTrustRequest: DeviceDetailSnapshot? = nil
     @Published var dashboardStatus: StatusSnapshot? = nil
@@ -54,13 +54,13 @@ final class ClipRelayStore: ObservableObject {
 
     private var lastActivityId: Int64 = 0
     private var lastMirroredAutoAppliedEntryId: Int64 = 0
-    private let ipc: ClipRelayIPCClient
+    private let ipc: DeskdropIPCClient
     private var pollTimer: Timer?
     private var pendingRename: PeerViewModel? = nil
     private var toastWorkItems: [UUID: DispatchWorkItem] = [:]
     private var ipcFailureCount: Int = 0
 
-    init(ipc: ClipRelayIPCClient = .shared) {
+    init(ipc: DeskdropIPCClient = .shared) {
         self.ipc = ipc
         startPolling()
     }
@@ -216,6 +216,23 @@ final class ClipRelayStore: ObservableObject {
             peers = uniquePeers
             pendingClipboardCount = s.pending_clipboard_count ?? 0
             if let fp = s.local_fingerprint { localFingerprint = fp }
+            
+            if let ats = s.active_transfers {
+                activeTransfers = ats.map { t in
+                    let status: FileTransferStatus = t.status == "paused" ? .paused : .transferring
+                    return FileTransferState(
+                        id: t.transfer_id,
+                        fromDeviceName: t.from_device,
+                        fileName: t.file_name,
+                        totalBytes: t.bytes_total,
+                        bytesReceived: t.bytes_received,
+                        percent: t.percent,
+                        status: status
+                    )
+                }
+            } else {
+                activeTransfers = []
+            }
 
             // ── Call continuity: update active call state ─────────────────────
             // Only mutate when the value actually changes — prevents SwiftUI
@@ -275,7 +292,7 @@ final class ClipRelayStore: ObservableObject {
                 ? "Daemon not running"
                 : "Reconnecting to daemon…"
             dashboardStatus = nil
-            if case ClipRelayIPCError.connectionFailed = error {
+            if case DeskdropIPCError.connectionFailed = error {
                 NotificationCenter.default.post(name: .clipRelayEnsureDaemon, object: nil)
             }
         }
@@ -523,9 +540,9 @@ final class ClipRelayStore: ObservableObject {
             .string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
         let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cliprelay-clipboard-archives", isDirectory: true)
+            .appendingPathComponent("deskdrop-clipboard-archives", isDirectory: true)
         let stagingDir = tempRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let archiveURL = tempRoot.appendingPathComponent("ClipRelay Bundle \(stamp).zip")
+        let archiveURL = tempRoot.appendingPathComponent("Deskdrop Bundle \(stamp).zip")
 
         do {
             try FileManager.default.createDirectory(
@@ -556,7 +573,7 @@ final class ClipRelayStore: ObservableObject {
             guard process.terminationStatus == 0,
                   FileManager.default.fileExists(atPath: archiveURL.path) else {
                 throw NSError(
-                    domain: "ClipRelayArchive",
+                    domain: "DeskdropArchive",
                     code: Int(process.terminationStatus),
                     userInfo: nil
                 )
@@ -570,7 +587,7 @@ final class ClipRelayStore: ObservableObject {
         } catch {
             try? FileManager.default.removeItem(at: stagingDir)
             try? FileManager.default.removeItem(at: archiveURL)
-            NSLog("ClipRelay: failed to archive clipboard files: \(error.localizedDescription)")
+            NSLog("Deskdrop: failed to archive clipboard files: \(error.localizedDescription)")
             return nil
         }
     }
@@ -696,7 +713,7 @@ final class ClipRelayStore: ObservableObject {
 
     // MARK: - Settings
 
-    func saveSettings(_ snapshot: ClipRelaySettingsSnapshot) {
+    func saveSettings(_ snapshot: DeskdropSettingsSnapshot) {
         settings = snapshot
         // startOnLogin is OS-level (LaunchAgent) — handle separately from daemon settings.
         applyLoginItemState(enabled: snapshot.startOnLogin)
@@ -711,7 +728,7 @@ final class ClipRelayStore: ObservableObject {
         }
     }
 
-    /// Registers/unregisters ClipRelay as a login item via SMAppService (macOS 13+).
+    /// Registers/unregisters Deskdrop as a login item via SMAppService (macOS 13+).
     private func applyLoginItemState(enabled: Bool) {
         if #available(macOS 13.0, *) {
             let svc = SMAppService.mainApp
@@ -719,7 +736,7 @@ final class ClipRelayStore: ObservableObject {
                 if enabled  { if svc.status != .enabled  { try svc.register()   } }
                 else        { if svc.status == .enabled  { try svc.unregister() } }
             } catch {
-                NSLog("ClipRelay: login item \(enabled ? "register" : "unregister") error: \(error)")
+                NSLog("Deskdrop: login item \(enabled ? "register" : "unregister") error: \(error)")
             }
         }
     }
@@ -749,6 +766,16 @@ final class ClipRelayStore: ObservableObject {
     }
     @MainActor func cancelFileTransfer(_ t: FileTransferState) {
         Task { try? await ipc.cancelFileTransfer(transferId: t.id); activeTransfers.removeAll { $0.id == t.id } }
+    }
+
+    @MainActor
+    func pauseFileTransfer(_ t: FileTransferState) {
+        Task { try? await ipc.pauseFileTransfer(transferId: t.id); updateTransferStatus(id: t.id, status: .paused) }
+    }
+    
+    @MainActor
+    func resumeFileTransfer(_ t: FileTransferState) {
+        Task { try? await ipc.resumeFileTransfer(transferId: t.id); updateTransferStatus(id: t.id, status: .transferring) }
     }
 
     @MainActor
@@ -878,5 +905,5 @@ final class ClipRelayStore: ObservableObject {
 }
 
 extension Notification.Name {
-    static let beginRename = Notification.Name("ClipRelayBeginRename")
+    static let beginRename = Notification.Name("DeskdropBeginRename")
 }

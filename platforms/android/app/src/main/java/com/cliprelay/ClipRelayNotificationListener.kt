@@ -8,7 +8,7 @@ import android.util.Log
 
 class ClipRelayNotificationListener : NotificationListenerService() {
     companion object {
-        private const val TAG = "ClipRelayNotifListener"
+        private const val TAG = "DeskdropNotifListener"
         private var instance: ClipRelayNotificationListener? = null
 
         fun getActiveInstance(): ClipRelayNotificationListener? = instance

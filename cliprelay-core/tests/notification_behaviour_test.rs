@@ -7,9 +7,9 @@
 //!
 //! These tests verify the contracts the Android side depends on.
 
-use cliprelay_core::dedup::{hash_content, Deduplicator};
-use cliprelay_core::peer_manager::{DiscoverySource, PeerManager};
-use cliprelay_core::protocol::ClipboardContent;
+use deskdrop_core::dedup::{hash_content, Deduplicator};
+use deskdrop_core::peer_manager::{DiscoverySource, PeerManager};
+use deskdrop_core::protocol::ClipboardContent;
 use std::net::SocketAddr;
 use tempfile::NamedTempFile;
 use tokio::sync::{mpsc, oneshot};

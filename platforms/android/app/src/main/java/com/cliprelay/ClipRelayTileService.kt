@@ -33,10 +33,10 @@ import android.util.Log
  * Quick Settings tile — lets users toggle clipboard sync from the notification shade.
  *
  * Shows:
- *   - Active state: "ClipRelay · Syncing"
- *   - Inactive state: "ClipRelay · Paused"
+ *   - Active state: "Deskdrop · Syncing"
+ *   - Inactive state: "Deskdrop · Paused"
  *
- * Long-press opens ClipRelay settings.
+ * Long-press opens Deskdrop settings.
  * Does NOT show clipboard content or peer data in the tile.
  */
 class ClipRelayTileService : TileService() {
@@ -90,7 +90,7 @@ class ClipRelayTileService : TileService() {
         val count   = prefs.getInt("connected_count", 0)
 
         tile.state = if (enabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "ClipRelay"
+        tile.label = "Deskdrop"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             tile.subtitle = when {
@@ -101,7 +101,7 @@ class ClipRelayTileService : TileService() {
             }
         }
 
-        tile.contentDescription = if (enabled) "ClipRelay clipboard sync is active" else "ClipRelay clipboard sync is paused"
+        tile.contentDescription = if (enabled) "Deskdrop clipboard sync is active" else "Deskdrop clipboard sync is paused"
         tile.updateTile()
     }
 
@@ -111,7 +111,7 @@ class ClipRelayTileService : TileService() {
         refreshTile()
         Toast.makeText(
             applicationContext,
-            if (newState) "ClipRelay sync enabled" else "ClipRelay sync paused",
+            if (newState) "Deskdrop sync enabled" else "Deskdrop sync paused",
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -119,7 +119,7 @@ class ClipRelayTileService : TileService() {
 
 /**
  * Share target — appears in Android's share sheet, letting users push
- * any shared text directly to ClipRelay peers without opening the app.
+ * any shared text directly to Deskdrop peers without opening the app.
  */
 class ClipRelayShareTarget : androidx.appcompat.app.AppCompatActivity() {
 
@@ -167,10 +167,10 @@ class ClipRelayShareTarget : androidx.appcompat.app.AppCompatActivity() {
                     putExtra("text", sharedText)
                 })
             }
-            Toast.makeText(this, "Pushed to ClipRelay peers", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Pushed to Deskdrop peers", Toast.LENGTH_SHORT).show()
             finish()
         } else if (!sharedUris.isNullOrEmpty()) {
-            val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.Theme_ClipRelay_Dialog)
+            val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.Theme_Deskdrop_Dialog)
             val view = buildPicker(sharedUris, sharedName, dialog)
             dialog.setContentView(view)
             dialog.setOnDismissListener { finish() }
@@ -235,7 +235,7 @@ class ClipRelayShareTarget : androidx.appcompat.app.AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
 
-                // Animated glowing ClipRelay logo icon
+                // Animated glowing Deskdrop logo icon
                 addView(FrameLayout(this@ClipRelayShareTarget).apply {
                     layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).also {
                         it.marginEnd = dp(14)
@@ -246,7 +246,7 @@ class ClipRelayShareTarget : androidx.appcompat.app.AppCompatActivity() {
                         it.orientation = GradientDrawable.Orientation.TL_BR
                     }
                     addView(TextView(this@ClipRelayShareTarget).apply {
-                        text = "⚡"
+                        text = ""
                         textSize = 20f
                         gravity = Gravity.CENTER
                     })
@@ -255,7 +255,7 @@ class ClipRelayShareTarget : androidx.appcompat.app.AppCompatActivity() {
                 addView(LinearLayout(this@ClipRelayShareTarget).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(TextView(this@ClipRelayShareTarget).apply {
-                        text = "Send with ClipRelay"
+                        text = "Send with Deskdrop"
                         textSize = 20f
                         setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
                         setTextColor(textColor1)
@@ -458,7 +458,7 @@ class ClipRelayShareTarget : androidx.appcompat.app.AppCompatActivity() {
         } ?: return null
         
         Uri.fromFile(stagedFile)
-    }.onFailure { Log.w("ClipRelayShareTarget", "Failed to stage shared URI $uri", it) }.getOrNull()
+    }.onFailure { Log.w("DeskdropShareTarget", "Failed to stage shared URI $uri", it) }.getOrNull()
 
     private fun actionButton(
         label: String,
@@ -504,7 +504,7 @@ class ClipRelayShareTarget : androidx.appcompat.app.AppCompatActivity() {
         })
         addView(space(6))
         addView(TextView(this@ClipRelayShareTarget).apply {
-            text = "Open ClipRelay on your Mac, or launch the app to search again."
+            text = "Open Deskdrop on your Mac, or launch the app to search again."
             textSize = 13f
             gravity = Gravity.CENTER
             setTextColor(c(R.color.cr_text_3))

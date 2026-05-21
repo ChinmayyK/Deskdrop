@@ -1,4 +1,4 @@
-// ClipboardHistoryView.swift — ClipRelay macOS v4
+// ClipboardHistoryView.swift — Deskdrop macOS v4
 // Spotlight-style quick-access panel. Keyboard-first, day-grouped, live preview expand.
 
 import SwiftUI
@@ -17,7 +17,7 @@ private enum QuickAccessSurface {
 // MARK: - Root Panel
 
 struct QuickAccessHistoryView: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     @State private var search        = ""
     @State private var selectedIndex = 0
     @State private var expandedID:   Int64? = nil          // TimelineItem.id is Int64
@@ -239,7 +239,7 @@ private struct QAGroupLabel: View {
 // MARK: - Quick Send Strip
 
 private struct QuickSendStrip: View {
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     let context: QuickSendContext
     private var connectedDevices: [ManagedDevice] { store.connectedDevices }
 
@@ -312,7 +312,7 @@ private struct QuickSendStrip: View {
 
 private struct QuickRow: View {
     let item:       TimelineItem
-    @ObservedObject var store: ClipRelayStore
+    @ObservedObject var store: DeskdropStore
     var isSelected: Bool
     var isExpanded: Bool
     let onTap:      () -> Void

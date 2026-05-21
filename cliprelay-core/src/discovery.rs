@@ -1,8 +1,8 @@
-//! mDNS-SD (DNS Service Discovery) — advertise and browse for ClipRelay peers.
+//! mDNS-SD (DNS Service Discovery) — advertise and browse for Deskdrop peers.
 //!
-//! Each running ClipRelay daemon:
-//!   1. Registers a `_cliprelay._tcp.local.` service with its TCP port.
-//!   2. Continuously browses for other `_cliprelay._tcp.local.` services.
+//! Each running Deskdrop daemon:
+//!   1. Registers a `_deskdrop._tcp.local.` service with its TCP port.
+//!   2. Continuously browses for other `_deskdrop._tcp.local.` services.
 //!   3. When a new peer appears, the `PeerEvent::Found` event fires.
 //!   4. When a peer disappears, `PeerEvent::Lost` fires.
 //!
@@ -135,7 +135,7 @@ mod platform {
                                     None => {
                                         warn!(
                                             "mDNS: resolved service missing 'v' TXT record, \
-                                             skipping (not a ClipRelay v3+ peer)"
+                                             skipping (not a Deskdrop v3+ peer)"
                                         );
                                         continue;
                                     }
@@ -178,10 +178,25 @@ mod platform {
                                     "mDNS: found peer {} at {}:{} (name resolved after handshake)",
                                     peer_id, addr, port
                                 );
-                                resolved
-                                    .lock()
-                                    .unwrap()
-                                    .insert(info.get_fullname().to_string(), peer_id);
+                                // Dedup guard: skip re-emitting Found for a device UUID
+                                // that is already resolved at the same address+port.
+                                // This prevents redundant connect attempts when mDNS
+                                // re-announces the same peer after a network change.
+                                {
+                                    let mut map = resolved.lock().unwrap();
+                                    let fullname = info.get_fullname().to_string();
+                                    if let Some(&existing_id) = map.get(&fullname) {
+                                        if existing_id == peer_id {
+                                            debug!(
+                                                "mDNS: skipping duplicate Found for peer {} \
+                                                 (already resolved at same service name)",
+                                                peer_id
+                                            );
+                                            continue;
+                                        }
+                                    }
+                                    map.insert(fullname, peer_id);
+                                }
 
                                 let peer = PeerInfo {
                                     device_id: peer_id,
@@ -268,25 +283,25 @@ mod platform {
         hostname::get()
             .ok()
             .and_then(|h| h.into_string().ok())
-            .unwrap_or_else(|| "cliprelay-host".to_string())
+            .unwrap_or_else(|| "deskdrop-host".to_string())
     }
 
     fn service_instance_name(device_name: &str, device_id: Uuid) -> String {
         let prefix = &device_id.to_string()[..8];
         let safe = sanitize_service_label(device_name);
         if safe.is_empty() {
-            format!("cliprelay-{prefix}")
+            format!("deskdrop-{prefix}")
         } else {
-            format!("cliprelay-{prefix}-{safe}")
+            format!("deskdrop-{prefix}-{safe}")
         }
     }
 
     fn provisional_device_name(fullname: &str, peer_id: Uuid) -> String {
         let instance = fullname
-            .split("._cliprelay._tcp.local.")
+            .split("._deskdrop._tcp.local.")
             .next()
             .unwrap_or(fullname);
-        let prefix = format!("cliprelay-{}", &peer_id.to_string()[..8]);
+        let prefix = format!("deskdrop-{}", &peer_id.to_string()[..8]);
 
         let Some(raw_name) = instance.strip_prefix(&format!("{prefix}-")) else {
             return format!("device-{}", &peer_id.to_string()[..8]);
@@ -375,7 +390,7 @@ mod platform {
         fn provisional_name_uses_service_label_when_present() {
             let id = Uuid::parse_str("12345678-1234-5678-1234-567812345678").unwrap();
             let name = provisional_device_name(
-                "cliprelay-12345678-Pixel-8-Pro._cliprelay._tcp.local.",
+                "deskdrop-12345678-Pixel-8-Pro._deskdrop._tcp.local.",
                 id,
             );
             assert_eq!(name, "Pixel 8 Pro");

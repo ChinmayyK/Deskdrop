@@ -1,4 +1,4 @@
-//! ClipRelay IPC — daemon ↔ CLI communication layer.
+//! Deskdrop IPC — daemon ↔ CLI communication layer.
 //!
 //! The running daemon exposes a local socket so `cliprelay-cli` can:
 //!   - Query live status and connected peers
@@ -8,9 +8,9 @@
 //!   - Enable / disable syncing without restarting
 //!
 //! # Transport
-//! - Linux / macOS: Unix domain socket at `$XDG_RUNTIME_DIR/cliprelay.sock`
-//!   (or `/tmp/cliprelay-<uid>.sock` as fallback)
-//! - Windows: named pipe `\\.\pipe\cliprelay`
+//! - Linux / macOS: Unix domain socket at `$XDG_RUNTIME_DIR/deskdrop.sock`
+//!   (or `/tmp/deskdrop-<uid>.sock` as fallback)
+//! - Windows: named pipe `\\.\pipe\deskdrop`
 //!
 //! # Protocol
 //! Plain JSON request → JSON response (newline-delimited), both directions.
@@ -167,6 +167,10 @@ pub enum IpcRequest {
     RejectFileTransfer { transfer_id: String, reason: String },
     /// Cancel an active file transfer.
     CancelFileTransfer { transfer_id: String },
+    /// Pause an active file transfer.
+    PauseFileTransfer { transfer_id: String },
+    /// Resume a paused file transfer.
+    ResumeFileTransfer { transfer_id: String },
     /// Update timeline-first clipboard mode.
     SetTimelineFirstMode { enabled: bool },
     /// Update auto-apply remote clipboard setting.
@@ -371,15 +375,15 @@ impl IpcResponse {
 
 pub fn socket_path() -> PathBuf {
     #[cfg(windows)]
-    return PathBuf::from(r"\\.\pipe\cliprelay");
+    return PathBuf::from(r"\\.\pipe\deskdrop");
 
     #[cfg(not(windows))]
     {
         if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR") {
-            PathBuf::from(runtime).join("cliprelay.sock")
+            PathBuf::from(runtime).join("deskdrop.sock")
         } else {
             let uid = unsafe { libc::getuid() };
-            PathBuf::from(format!("/tmp/cliprelay-{}.sock", uid))
+            PathBuf::from(format!("/tmp/deskdrop-{}.sock", uid))
         }
     }
 }
@@ -537,6 +541,7 @@ pub mod client {
                         let pending = eng.pending_remote_clipboards().await.len();
                         let active_call = eng.active_call().await;
                         let peer_batteries = eng.peer_batteries().await;
+                        let active_transfers = eng.active_transfers().await;
                         IpcResponse::ok(serde_json::json!({
                             "peers": snap.peers,
                             "peer_count": snap.peers.iter().filter(|p| p.status == crate::peer_manager::PeerConnectionState::Connected).count(),
@@ -545,6 +550,7 @@ pub mod client {
                             "local_fingerprint": fp,
                             "active_call": active_call,
                             "peer_batteries": peer_batteries,
+                            "active_transfers": active_transfers,
                         }))
                     }
                     IpcRequest::RescanPeers => {
@@ -968,6 +974,24 @@ pub mod client {
                     IpcRequest::CancelFileTransfer { transfer_id } => {
                         match crate::ipc::parse_transfer_id(&transfer_id) {
                             Ok(id) => match eng.cancel_file_transfer(id).await {
+                                Ok(_) => IpcResponse::ok_empty(),
+                                Err(e) => IpcResponse::err(e.to_string()),
+                            },
+                            Err(_) => IpcResponse::err("invalid transfer id"),
+                        }
+                    }
+                    IpcRequest::PauseFileTransfer { transfer_id } => {
+                        match crate::ipc::parse_transfer_id(&transfer_id) {
+                            Ok(id) => match eng.pause_file_transfer(id).await {
+                                Ok(_) => IpcResponse::ok_empty(),
+                                Err(e) => IpcResponse::err(e.to_string()),
+                            },
+                            Err(_) => IpcResponse::err("invalid transfer id"),
+                        }
+                    }
+                    IpcRequest::ResumeFileTransfer { transfer_id } => {
+                        match crate::ipc::parse_transfer_id(&transfer_id) {
+                            Ok(id) => match eng.resume_file_transfer(id).await {
                                 Ok(_) => IpcResponse::ok_empty(),
                                 Err(e) => IpcResponse::err(e.to_string()),
                             },

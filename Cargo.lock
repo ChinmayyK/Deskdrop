@@ -308,20 +308,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cliprelay-linux"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arboard",
- "cliprelay-core",
- "dirs",
- "image 0.25.10",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -466,6 +452,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "deskdrop-linux"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "cliprelay-core",
+ "dirs",
+ "image 0.25.10",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -2,7 +2,7 @@
 name = "cliprelay-core"
 version = "0.1.0"
 edition = "2021"
-authors = ["ClipRelay Contributors"]
+authors = ["Deskdrop Contributors"]
 description = "Proximity-Based Shared Clipboard — core engine"
 license = "MIT"
 

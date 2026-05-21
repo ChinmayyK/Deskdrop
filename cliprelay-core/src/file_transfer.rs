@@ -1,4 +1,4 @@
-//! ClipRelay File Transfer Pipeline — production-grade chunked file relay.
+//! Deskdrop File Transfer Pipeline — production-grade chunked file relay.
 //!
 //! # Design
 //!
@@ -123,6 +123,7 @@ pub struct OutboundTransfer {
     pub status: TransferStatus,
     pub created_at: Instant,
     pub target_device: Option<Uuid>,
+    pub paused: bool,
 }
 
 impl OutboundTransfer {
@@ -143,6 +144,7 @@ impl OutboundTransfer {
             status: TransferStatus::Pending,
             created_at: Instant::now(),
             target_device,
+            paused: false,
         }
     }
 
@@ -162,11 +164,15 @@ impl OutboundTransfer {
             status: TransferStatus::Pending,
             created_at: Instant::now(),
             target_device,
+            paused: false,
         })
     }
 
     /// Get next chunk message to send. Returns None when all sent.
     pub fn next_chunk_message(&mut self) -> Result<Option<FileTransferMessage>> {
+        if self.paused {
+            return Ok(None);
+        }
         if self.next_chunk >= self.total_chunks {
             return Ok(None);
         }
@@ -230,6 +236,7 @@ pub struct InboundTransfer {
     pub dest_path: Option<PathBuf>,
     pub from_device: Uuid,
     pub from_device_name: String,
+    pub paused: bool,
     hasher: Sha256,
 }
 
@@ -252,6 +259,7 @@ impl InboundTransfer {
             dest_path: None,
             from_device,
             from_device_name,
+            paused: false,
             hasher: Sha256::new(),
         }
     }
@@ -268,7 +276,7 @@ impl InboundTransfer {
         );
 
         let uid = hex::encode(&self.transfer_id[..4]);
-        let tmp_name = format!(".cliprelay_tmp_{uid}_{safe_name}");
+        let tmp_name = format!(".deskdrop_tmp_{uid}_{safe_name}");
         self.tmp_path = Some(save_dir.join(&tmp_name));
         self.dest_path = Some(unique_dest_path(save_dir, &safe_name));
         std::fs::create_dir_all(save_dir).context("creating save dir")?;
@@ -602,6 +610,48 @@ impl FileTransferManager {
             .collect()
     }
 
+    pub fn active_transfers(&self) -> Vec<serde_json::Value> {
+        let mut transfers = Vec::new();
+        for t in self.inbound.values() {
+            if matches!(t.status, TransferStatus::Pending | TransferStatus::Transferring) {
+                let percent = if t.meta.size_bytes > 0 {
+                    (t.bytes_received as f64 / t.meta.size_bytes as f64 * 100.0) as u8
+                } else {
+                    0
+                };
+                transfers.push(serde_json::json!({
+                    "transfer_id": hex::encode(t.transfer_id),
+                    "from_device": t.from_device_name.clone(),
+                    "file_name": t.meta.file_name.clone(),
+                    "bytes_total": t.meta.size_bytes,
+                    "bytes_received": t.bytes_received,
+                    "percent": percent,
+                    "status": if t.paused { "paused" } else { "transferring" }
+                }));
+            }
+        }
+        for t in self.outbound.values() {
+            if matches!(t.status, TransferStatus::Pending | TransferStatus::Transferring) {
+                let bytes_sent = (t.last_acked_chunk as u64) * 65536; // roughly
+                let percent = if t.meta.size_bytes > 0 {
+                    (bytes_sent as f64 / t.meta.size_bytes as f64 * 100.0) as u8
+                } else {
+                    0
+                };
+                transfers.push(serde_json::json!({
+                    "transfer_id": hex::encode(t.transfer_id),
+                    "from_device": "Sending",
+                    "file_name": t.meta.file_name.clone(),
+                    "bytes_total": t.meta.size_bytes,
+                    "bytes_received": bytes_sent.min(t.meta.size_bytes),
+                    "percent": percent,
+                    "status": if t.paused { "paused" } else { "transferring" }
+                }));
+            }
+        }
+        transfers
+    }
+
     pub fn all_inbound(&self) -> Vec<&InboundTransfer> {
         self.inbound.values().collect()
     }
@@ -683,7 +733,7 @@ fn now_unix() -> u64 {
 pub fn default_save_dir() -> PathBuf {
     dirs::download_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
-        .join("ClipRelay")
+        .join("Deskdrop")
 }
 
 fn chunk_count(size_bytes: u64) -> Result<u32> {
@@ -775,7 +825,7 @@ mod tests {
     #[test]
     fn inbound_verify_integrity() {
         let tmp = TempDir::new().unwrap();
-        let data = b"ClipRelay file transfer test".repeat(500);
+        let data = b"Deskdrop file transfer test".repeat(500);
         let meta = make_meta(&data);
         let tid = meta.transfer_id;
         let mut mgr = FileTransferManager::new(tmp.path().to_path_buf());

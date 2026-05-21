@@ -6,5 +6,5 @@
     android:insetBottom="18dp">
     <bitmap
         android:gravity="center"
-        android:src="@drawable/cliprelay_logo" />
+        android:src="@drawable/deskdrop_logo" />
 </inset>
