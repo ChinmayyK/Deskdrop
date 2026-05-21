@@ -9,7 +9,16 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-echo -e "${BLUE}▶ Starting total clean and rebuild for ClipRelay...${NC}\n"
+BUILD_TYPE="debug"
+
+for arg in "$@"; do
+    case "$arg" in
+        --release) BUILD_TYPE="release" ;;
+        --debug)   BUILD_TYPE="debug" ;;
+    esac
+done
+
+echo -e "${BLUE}▶ Starting total clean and rebuild for ClipRelay (${BUILD_TYPE})...${NC}\n"
 
 # ==========================================
 # 1. macOS Reinstall
@@ -19,7 +28,11 @@ pkill -x ClipRelay || true
 pkill -x cliprelay-daemon || true
 
 echo -e "${BLUE}▶ [macOS] Building latest version...${NC}"
-bash scripts/build-macos.sh
+if [ "$BUILD_TYPE" = "release" ]; then
+    bash scripts/build-macos.sh --release
+else
+    bash scripts/build-macos.sh --debug
+fi
 
 echo -e "${BLUE}▶ [macOS] Uninstalling old version...${NC}"
 rm -rf /Applications/ClipRelay.app
@@ -36,17 +49,25 @@ echo -e "\n----------------------------------------\n"
 # 2. Android Reinstall
 # ==========================================
 echo -e "${BLUE}▶ [Android] Building latest APK...${NC}"
-bash scripts/build-android.sh --debug
+if [ "$BUILD_TYPE" = "release" ]; then
+    bash scripts/build-android.sh --release
+    APK_PATH="platforms/android/app/build/outputs/apk/release/app-release.apk"
+    APP_ID="com.cliprelay"
+else
+    bash scripts/build-android.sh --debug
+    APK_PATH="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
+    APP_ID="com.cliprelay.debug"
+fi
 
 echo -e "${BLUE}▶ [Android] Uninstalling old version from connected device...${NC}"
-adb uninstall com.cliprelay.debug || echo -e "${RED}Warning: com.cliprelay.debug not found on device or no device connected.${NC}"
+adb uninstall "$APP_ID" || echo -e "${RED}Warning: $APP_ID not found on device or no device connected.${NC}"
 
 echo -e "${BLUE}▶ [Android] Installing new version...${NC}"
-if adb install -r platforms/android/app/build/outputs/apk/debug/app-debug.apk; then
+if adb install -r "$APK_PATH"; then
     echo -e "${GREEN}▶ [Android] ✅ Installed! Launching...${NC}"
-    adb shell am start -n com.cliprelay.debug/com.cliprelay.MainActivity
+    adb shell am start -n "$APP_ID/com.cliprelay.MainActivity"
 else
     echo -e "${RED}▶ [Android] ❌ Failed to install APK. Is a device connected?${NC}"
 fi
 
-echo -e "\n${GREEN}🎉 All done! Both platforms have been reinstalled with the latest code.${NC}"
+echo -e "\n${GREEN}🎉 All done! Both platforms have been reinstalled with the latest code (${BUILD_TYPE}).${NC}"

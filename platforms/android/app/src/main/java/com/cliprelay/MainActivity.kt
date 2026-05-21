@@ -27,6 +27,9 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlin.math.roundToInt
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 
 // ─── Context helpers ──────────────────────────────────────────────────────────
 
@@ -865,13 +868,13 @@ class MainActivity : AppCompatActivity() {
                     // Show a quick bounce
                     it.animate().scaleX(0.97f).scaleY(0.97f).setDuration(70)
                         .withEndAction { it.animate().scaleX(1f).scaleY(1f).setDuration(70).start() }.start()
+                } else if (!peer.trusted) {
+                    showTrustDialog(peer)
                 } else if (serviceReady && peer.isReconnectable) {
                     sendAction(ClipRelayService.ACTION_SCAN_NOW)
                     showSnack("Scanning for ${peer.name}...")
                     it.animate().scaleX(0.95f).scaleY(0.95f).setDuration(100)
                         .withEndAction { it.animate().scaleX(1f).scaleY(1f).setDuration(100).start() }.start()
-                } else if (peer.needsTrust) {
-                    showSnack("Waiting for ${peer.name} to approve connection")
                 } else {
                     it.animate().scaleX(0.97f).scaleY(0.97f).setDuration(70)
                         .withEndAction { it.animate().scaleX(1f).scaleY(1f).setDuration(70).start() }.start()
@@ -1893,12 +1896,43 @@ class MainActivity : AppCompatActivity() {
         dialogView.addView(title)
 
         val desc = TextView(ctx).apply {
-            text = "Paste the pairing link from your Mac's screen, or enter its IP address directly to connect instantly."
+            text = "Scan the QR code on your Mac's screen, paste the pairing link, or enter its IP address directly."
             textSize = 13f
             setTextColor(cr(R.color.cr_text_3))
             setPadding(0, 0, 0, dp(16))
         }
         dialogView.addView(desc)
+
+        val scanBtn = AppCompatButton(ctx).apply {
+            text = "📷 Scan QR Code"
+            textSize = 15f
+            isAllCaps = false
+            setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+            setTextColor(cr(R.color.cr_on_accent))
+            background = GradientDrawable().also {
+                it.cornerRadius = dp(12).toFloat()
+                it.setColor(cr(R.color.cr_accent))
+            }
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, 0, dp(16))
+            }
+            installPressFeedback()
+        }
+        dialogView.addView(scanBtn)
+
+        val orDivider = TextView(ctx).apply {
+            text = "— OR ENTER MANUALLY —"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(cr(R.color.cr_text_3))
+            setPadding(0, 0, 0, dp(16))
+        }
+        dialogView.addView(orDivider)
 
         val inputField = EditText(ctx).apply {
             hint = "cliprelay://pair?name=... or 192.168.1.10"
@@ -1916,6 +1950,11 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Cancel") { d, _ -> d.dismiss() }
             .create()
 
+        scanBtn.setOnClickListener {
+            dialog.dismiss()
+            startQrScanner()
+        }
+
         dialog.setOnShowListener {
             val connectButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
             connectButton.setOnClickListener {
@@ -1925,44 +1964,172 @@ class MainActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
-                if (input.startsWith("cliprelay://pair")) {
-                    val uri = android.net.Uri.parse(input)
-                    val ip = uri.getQueryParameter("ip")
-                    val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 47823
-                    if (ip != null) {
-                        ContextCompat.startForegroundService(ctx,
-                            Intent(ctx, ClipRelayService::class.java).apply {
-                                action = ClipRelayService.ACTION_CONNECT_MANUAL
-                                putExtra("ip", ip)
-                                putExtra("port", port)
-                            }
-                        )
-                        showSnack("Connecting to $ip:$port...")
-                        dialog.dismiss()
-                    } else {
-                        inputField.error = "Invalid Pairing URL: Missing IP"
-                    }
+                if (handlePairingInput(input)) {
+                    dialog.dismiss()
                 } else {
-                    val parts = input.split(":")
-                    val ip = parts[0].trim()
-                    val port = if (parts.size > 1) parts[1].trim().toIntOrNull() ?: 47823 else 47823
-                    if (ip.matches(Regex("""\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"""))) {
-                        ContextCompat.startForegroundService(ctx,
-                            Intent(ctx, ClipRelayService::class.java).apply {
-                                action = ClipRelayService.ACTION_CONNECT_MANUAL
-                                putExtra("ip", ip)
-                                putExtra("port", port)
-                            }
-                        )
-                        showSnack("Connecting to $ip:$port...")
-                        dialog.dismiss()
-                    } else {
-                        inputField.error = "Invalid IP address or pairing link"
-                    }
+                    inputField.error = "Invalid IP address or pairing link"
                 }
             }
         }
 
         dialog.show()
+    }
+
+    private fun startQrScanner() {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .enableAutoZoom()
+            .build()
+        val scanner = GmsBarcodeScanning.getClient(this, options)
+        scanner.startScan()
+            .addOnSuccessListener { barcode: Barcode ->
+                val rawValue = barcode.rawValue
+                if (!rawValue.isNullOrBlank()) {
+                    if (handlePairingInput(rawValue)) {
+                        showSnack("QR scanned successfully! Connecting...")
+                    } else {
+                        showSnack("Invalid QR code format")
+                    }
+                } else {
+                    showSnack("No QR code found")
+                }
+            }
+            .addOnFailureListener { e: java.lang.Exception ->
+                showSnack("QR Scan failed: ${e.message}")
+            }
+    }
+
+    private fun handlePairingInput(input: String): Boolean {
+        val cleaned = input.trim()
+        val ctx = this
+        if (cleaned.startsWith("cliprelay://pair")) {
+            val uri = android.net.Uri.parse(cleaned)
+            val ip = uri.getQueryParameter("ip")
+            val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 47823
+            val peerName = uri.getQueryParameter("name")?.let {
+                java.net.URLDecoder.decode(it, "UTF-8")
+            } ?: ip ?: "Mac"
+            val fingerprint = uri.getQueryParameter("fingerprint") ?: ""
+            if (ip != null) {
+                // Step 1: Connect to the Mac
+                ContextCompat.startForegroundService(ctx,
+                    Intent(ctx, ClipRelayService::class.java).apply {
+                        action = ClipRelayService.ACTION_CONNECT_MANUAL
+                        putExtra("ip", ip)
+                        putExtra("port", port)
+                    }
+                )
+                // Step 2: Auto-trust after a brief delay to let the connection establish.
+                // The QR code was generated by the Mac and scanned physically, so trust is implicit.
+                if (fingerprint.isNotBlank()) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        // Find the newly connected peer and trust it
+                        autoTrustNewPeer(ip, peerName)
+                    }, 2000) // 2s delay for connection to establish
+                    // Also schedule a retry at 4s in case the first attempt was too early
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        autoTrustNewPeer(ip, peerName)
+                    }, 4000)
+                }
+                showSnack("Connecting to $peerName ($ip)...")
+                return true
+            }
+        } else {
+            val parts = cleaned.split(":")
+            val ip = parts[0].trim()
+            val port = if (parts.size > 1) parts[1].trim().toIntOrNull() ?: 47823 else 47823
+            if (ip.matches(Regex("""\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"""))) {
+                ContextCompat.startForegroundService(ctx,
+                    Intent(ctx, ClipRelayService::class.java).apply {
+                        action = ClipRelayService.ACTION_CONNECT_MANUAL
+                        putExtra("ip", ip)
+                        putExtra("port", port)
+                    }
+                )
+                showSnack("Connecting to $ip:$port...")
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * After QR-based pairing, find the newly discovered peer and auto-trust it.
+     * Uses the same SharedPreferences + Intent action pattern as the rest of the app.
+     */
+    private fun autoTrustNewPeer(ip: String, peerName: String) {
+        val peers = prefs().peerSnapshots()
+        // Find any connected but untrusted peer — this is the one we just QR-paired with
+        val untrustedConnected = peers.firstOrNull { it.isConnected && !it.trusted }
+        if (untrustedConnected != null) {
+            ContextCompat.startForegroundService(this,
+                Intent(this, ClipRelayService::class.java).apply {
+                    action = ClipRelayService.ACTION_TRUST_PEER
+                    putExtra(ClipRelayService.EXTRA_TARGET_DEVICE_ID, untrustedConnected.id)
+                }
+            )
+            android.util.Log.i("ClipRelay", "Auto-trust QR-paired peer ${untrustedConnected.id} ($peerName)")
+            showSnack("✅ Paired with $peerName — syncing!")
+            refreshDashboard()
+        }
+    }
+
+    private fun showTrustDialog(peer: PeerSnapshot) {
+        val cachedFp = prefs().getString("fingerprint_${peer.id}", "") ?: ""
+        val items = ArrayList<Pair<String, () -> Unit>>()
+
+        if (cachedFp.isNotBlank()) {
+            items.add(Pair("Verify & Trust (Open Pairing Screen)") {
+                val intent = Intent(this, PairingActivity::class.java).apply {
+                    putExtra(PairingActivity.EXTRA_DEVICE_ID, peer.id)
+                    putExtra(PairingActivity.EXTRA_DEVICE_NAME, peer.name)
+                    putExtra(PairingActivity.EXTRA_FINGERPRINT, cachedFp)
+                    putExtra(PairingActivity.EXTRA_PIN, pairingPin(cachedFp))
+                }
+                startActivity(intent)
+            })
+        }
+
+        items.add(Pair("Quick Trust (Direct)") {
+            ContextCompat.startForegroundService(this,
+                Intent(this, ClipRelayService::class.java).apply {
+                    action = ClipRelayService.ACTION_TRUST_PEER
+                    putExtra(ClipRelayService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                }
+            )
+            showSnack("Trusted ${peer.name}")
+        })
+
+        if (cachedFp.isBlank()) {
+            items.add(Pair("Scan & Re-authenticate") {
+                sendAction(ClipRelayService.ACTION_SCAN_NOW)
+                showSnack("Scanning to re-authenticate ${peer.name}...")
+            })
+        }
+
+        items.add(Pair("Reject / Remove Device") {
+            ContextCompat.startForegroundService(this,
+                Intent(this, ClipRelayService::class.java).apply {
+                    action = ClipRelayService.ACTION_REJECT_PEER
+                    putExtra(ClipRelayService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                }
+            )
+            showSnack("Rejected ${peer.name}")
+        })
+
+        val labels = items.map { it.first }.toTypedArray()
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Trust ${peer.name}")
+            .setItems(labels) { _, i -> items[i].second.invoke() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun pairingPin(fingerprint: String): String {
+        val digits = fingerprint
+            .filter { it.isDigit() }
+            .take(6)
+            .padEnd(6, '0')
+        return digits.ifBlank { "000000" }
     }
 }

@@ -615,9 +615,17 @@ final class ClipRelayStore: ObservableObject {
                 lastActivityId = newEntries.map(\.id).max() ?? lastActivityId
                 mirrorAutoAppliedClipboardIfNeeded(entries: newEntries)
                 
-                // Fire notifications for newly arrived items (e.g. files, clipboard)
+                // Only fire user-visible notifications for events the user cares about:
+                // remote clipboard items arriving and completed incoming file transfers.
+                // Local copies, peer connections, sync events, etc. are silently absorbed
+                // into the activity feed without triggering system notifications or toasts.
                 for entry in newEntries {
-                    NotificationCenter.default.post(name: NSNotification.Name("clipRelayActivityReceived"), object: entry)
+                    switch entry.kind {
+                    case "remote_clipboard_available", "file_transfer_complete":
+                        NotificationCenter.default.post(name: NSNotification.Name("clipRelayActivityReceived"), object: entry)
+                    default:
+                        break
+                    }
                 }
             }
             // Keep pendingClipboardCount in sync with local feed state.

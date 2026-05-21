@@ -35,8 +35,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const KEEPALIVE_IDLE: Duration = Duration::from_secs(30);
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
 const KEEPALIVE_RETRIES: u32 = 3;
-const SOCKET_BUFFER_MIN: usize = 512 * 1024;
-const SOCKET_BUFFER_PREFERRED: usize = 1024 * 1024;
+const SOCKET_BUFFER_MIN: usize = 4 * 1024 * 1024;      // 4 MB
+const SOCKET_BUFFER_PREFERRED: usize = 8 * 1024 * 1024; // 8 MB — room for ≥2 full chunks in flight
 
 // ── TCP helpers ───────────────────────────────────────────────────────────────
 
@@ -163,12 +163,30 @@ async fn send_encrypted(
     session: &mut SessionKey,
     msg: &AppMessage,
 ) -> Result<()> {
-    let plain = bincode::serialize(msg).context("serializing AppMessage")?;
-    let cipher = session.encrypt(&plain).context("encrypting")?;
-    let len = cipher.len() as u32;
+    let mut buffer = bincode::serialize(msg).context("serializing AppMessage")?;
+    let nonce = session.encrypt_in_place(&mut buffer).context("encrypting")?;
+    let len = (12 + buffer.len()) as u32;
     stream.write_all(&len.to_le_bytes()).await?;
-    stream.write_all(&cipher).await?;
+    stream.write_all(nonce.as_slice()).await?;
+    stream.write_all(&buffer).await?;
     stream.flush().await?;
+    Ok(())
+}
+
+/// Same as send_encrypted but without flush — for high-throughput file chunk
+/// transfers where we want to saturate the socket buffer without per-message
+/// syscall overhead.
+async fn send_encrypted_no_flush(
+    stream: &mut TcpStream,
+    session: &mut SessionKey,
+    msg: &AppMessage,
+) -> Result<()> {
+    let mut buffer = bincode::serialize(msg).context("serializing AppMessage")?;
+    let nonce = session.encrypt_in_place(&mut buffer).context("encrypting")?;
+    let len = (12 + buffer.len()) as u32;
+    stream.write_all(&len.to_le_bytes()).await?;
+    stream.write_all(nonce.as_slice()).await?;
+    stream.write_all(&buffer).await?;
     Ok(())
 }
 
@@ -178,10 +196,10 @@ async fn recv_encrypted(stream: &mut TcpStream, session: &mut SessionKey) -> Res
     let len = u32::from_le_bytes(len_buf);
     anyhow::ensure!(len <= MAX_FRAME_SIZE, "encrypted frame too large");
 
-    let mut cipher = vec![0u8; len as usize];
-    stream.read_exact(&mut cipher).await?;
-    let plain = session.decrypt(&cipher).context("decrypting")?;
-    bincode::deserialize(&plain).context("deserializing AppMessage")
+    let mut cipher_buffer = vec![0u8; len as usize];
+    stream.read_exact(&mut cipher_buffer).await?;
+    session.decrypt_in_place(&mut cipher_buffer).context("decrypting")?;
+    bincode::deserialize(&cipher_buffer).context("deserializing AppMessage")
 }
 
 // ── Handshake ─────────────────────────────────────────────────────────────────
@@ -338,6 +356,13 @@ pub struct PeerSession {
 impl PeerSession {
     pub async fn send(&mut self, msg: &AppMessage) -> Result<()> {
         send_encrypted(&mut self.stream, &mut self.session, msg).await
+    }
+
+    /// Send without flush — for high-throughput file chunks where back-to-back
+    /// writes benefit from OS-level batching. TCP_NODELAY is set, so data is
+    /// pushed to the wire immediately, but we skip the extra flush syscall.
+    pub async fn send_no_flush(&mut self, msg: &AppMessage) -> Result<()> {
+        send_encrypted_no_flush(&mut self.stream, &mut self.session, msg).await
     }
 
     pub async fn recv(&mut self) -> Result<AppMessage> {

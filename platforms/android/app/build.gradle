@@ -64,6 +64,9 @@ dependencies {
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
 
+    // Google Play Services Code Scanner (no camera permission required)
+    implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+
     // Lifecycle (needed for LifecycleService if used in future)
     implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'

@@ -267,6 +267,8 @@ class ClipRelayService : Service() {
         const val ACTION_REJECT_FILE_TRANSFER = "com.cliprelay.REJECT_FILE_TRANSFER"
         const val ACTION_CANCEL_FILE_TRANSFER = "com.cliprelay.CANCEL_FILE_TRANSFER"
         const val ACTION_CONNECT_MANUAL     = "com.cliprelay.CONNECT_MANUAL"
+        const val ACTION_TRUST_PEER         = "com.cliprelay.TRUST_PEER"
+        const val ACTION_REJECT_PEER        = "com.cliprelay.REJECT_PEER"
 
         // Intent extras
         const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
@@ -447,6 +449,26 @@ class ClipRelayService : Service() {
                 if (!ip.isNullOrBlank() && engineHandle != 0L) {
                     val result = ClipRelayJni.connectToPeer(engineHandle, ip, port)
                     Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
+                }
+                return START_STICKY
+            }
+            ACTION_TRUST_PEER -> {
+                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
+                val h = engineHandle
+                if (h != 0L) {
+                    val result = ClipRelayJni.trustPeer(h, deviceId)
+                    Log.i(TAG, "Manual trust request for $deviceId: result=$result")
+                    persistStatus()
+                }
+                return START_STICKY
+            }
+            ACTION_REJECT_PEER -> {
+                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
+                val h = engineHandle
+                if (h != 0L) {
+                    val result = ClipRelayJni.rejectPeer(h, deviceId)
+                    Log.i(TAG, "Manual reject request for $deviceId: result=$result")
+                    persistStatus()
                 }
                 return START_STICKY
             }
@@ -919,6 +941,7 @@ class ClipRelayService : Service() {
                 val deviceId = ClipRelayJni.eventDeviceId(ev) ?: return
                 val name = resolvePeerDisplayName(deviceId, ClipRelayJni.eventDeviceName(ev))
                 val fp   = ClipRelayJni.eventFingerprint(ev) ?: ""
+                prefs().edit().putString("fingerprint_$deviceId", fp).apply()
                 showPairingPrompt(deviceId, name, fp)
             }
 

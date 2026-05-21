@@ -172,6 +172,25 @@ impl SessionKey {
         Ok(out)
     }
 
+    /// Encrypt `buffer` in-place (avoids memory allocation).
+    /// The resulting ciphertext replaces the contents of `buffer` and the 16-byte
+    /// auth tag is appended to it.
+    /// Returns the 12-byte nonce used, which must be sent alongside the ciphertext.
+    pub fn encrypt_in_place(&mut self, buffer: &mut Vec<u8>) -> Result<Nonce> {
+        use chacha20poly1305::aead::AeadInPlace;
+        let nonce = counter_nonce(self.send_counter);
+        self.send_counter = self
+            .send_counter
+            .checked_add(1)
+            .context("send counter overflow")?;
+
+        self.cipher
+            .encrypt_in_place(&nonce, &[], buffer)
+            .map_err(|e| anyhow::anyhow!("encrypt: {:?}", e))?;
+        
+        Ok(nonce)
+    }
+
     /// Decrypt a frame produced by [`encrypt`]. Enforces monotonic counter.
     pub fn decrypt(&mut self, frame: &[u8]) -> Result<Vec<u8>> {
         anyhow::ensure!(frame.len() >= 12, "frame too short");
@@ -198,6 +217,38 @@ impl SessionKey {
         self.cipher
             .decrypt(nonce, ct)
             .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e))
+    }
+
+    /// Decrypt a frame in-place. The first 12 bytes of the buffer must be the nonce,
+    /// followed by the ciphertext. Upon success, the buffer is shrunk to just the plaintext.
+    pub fn decrypt_in_place(&mut self, buffer: &mut Vec<u8>) -> Result<()> {
+        use chacha20poly1305::aead::AeadInPlace;
+        anyhow::ensure!(buffer.len() >= 12 + 16, "frame too short (must have nonce and tag)");
+        
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes.copy_from_slice(&buffer[..12]);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        
+        let counter = u64::from_be_bytes(nonce_bytes[..8].try_into().unwrap());
+        anyhow::ensure!(
+            counter == self.recv_counter,
+            "replayed or out-of-order frame: got counter {}, expected {}",
+            counter,
+            self.recv_counter
+        );
+        self.recv_counter = self
+            .recv_counter
+            .checked_add(1)
+            .context("recv counter overflow")?;
+
+        // Remove the 12-byte nonce from the beginning of the buffer.
+        buffer.drain(..12);
+
+        self.cipher
+            .decrypt_in_place(nonce, &[], buffer)
+            .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e))?;
+            
+        Ok(())
     }
 }
 

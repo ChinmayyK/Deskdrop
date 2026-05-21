@@ -36,8 +36,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub const FILE_CHUNK_SIZE: usize = 256 * 1024; // 256 KB per chunk
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 4;
+pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks saturate
+                                                 // encrypt/serialize/frame/flush overhead.
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16;    // ACK every 16 MB — keeps the pipeline full
+                                                 // on LAN while still bounding in-flight data.
 
 pub type TransferId = [u8; 16];
 
@@ -108,7 +110,7 @@ pub enum TransferStatus {
 
 enum OutboundSource {
     Memory(Vec<Vec<u8>>),
-    FilePath(PathBuf),
+    FilePath(PathBuf, Option<std::fs::File>),
 }
 
 pub struct OutboundTransfer {
@@ -153,7 +155,7 @@ impl OutboundTransfer {
         Ok(Self {
             transfer_id: meta.transfer_id,
             meta,
-            source: OutboundSource::FilePath(path),
+            source: OutboundSource::FilePath(path, None),
             total_chunks,
             next_chunk: 0,
             last_acked_chunk: 0,
@@ -169,12 +171,18 @@ impl OutboundTransfer {
             return Ok(None);
         }
         let idx = self.next_chunk;
-        let data = match &self.source {
+        let data = match &mut self.source {
             OutboundSource::Memory(chunks) => chunks
                 .get(idx as usize)
                 .cloned()
                 .with_context(|| format!("missing outbound chunk {}", idx))?,
-            OutboundSource::FilePath(path) => read_file_chunk(path, idx, self.meta.size_bytes)?,
+            OutboundSource::FilePath(path, cached_file) => {
+                if cached_file.is_none() {
+                    *cached_file = Some(std::fs::File::open(&path)
+                        .with_context(|| format!("opening outbound file {}", path.display()))?);
+                }
+                read_file_chunk_from_file(cached_file.as_mut().unwrap(), idx, self.meta.size_bytes)?
+            }
         };
         self.next_chunk += 1;
         Ok(Some(FileTransferMessage::Chunk {
@@ -216,6 +224,8 @@ pub struct InboundTransfer {
     pub bytes_received: u64,
     /// Temp file path for streaming writes.
     pub tmp_path: Option<PathBuf>,
+    /// Persistent file handle to avoid re-opening on every chunk.
+    pub file_handle: Option<std::fs::File>,
     /// Final destination path.
     pub dest_path: Option<PathBuf>,
     pub from_device: Uuid,
@@ -238,6 +248,7 @@ impl InboundTransfer {
             started_at: None,
             bytes_received: 0,
             tmp_path: None,
+            file_handle: None,
             dest_path: None,
             from_device,
             from_device_name,
@@ -263,7 +274,12 @@ impl InboundTransfer {
         std::fs::create_dir_all(save_dir).context("creating save dir")?;
         if let Some(tmp) = &self.tmp_path {
             let _ = std::fs::remove_file(tmp);
-            File::create(tmp).with_context(|| format!("creating temp file {}", tmp.display()))?;
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(tmp)
+                .with_context(|| format!("creating temp file {}", tmp.display()))?;
+            self.file_handle = Some(file);
         }
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
@@ -318,6 +334,9 @@ impl InboundTransfer {
             actual
         );
 
+        // Drop the file handle so the OS releases the lock before renaming.
+        self.file_handle = None;
+
         let tmp = self.tmp_path.as_ref().context("no temp path")?;
         let dest = self.dest_path.as_ref().context("no dest path")?;
         if let Some(parent) = dest.parent() {
@@ -337,20 +356,16 @@ impl InboundTransfer {
 
     /// Should we send a chunk ack now?
     pub fn should_ack(&self) -> bool {
-        // `is_multiple_of` was stabilised in Rust 1.75 — using % avoids a
-        // silent build failure on older toolchains (HIGH-01).
         self.last_confirmed_chunk > 0 && self.last_confirmed_chunk % FILE_ACK_EVERY_N_CHUNKS == 0
     }
 
     fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
-        let tmp = self.tmp_path.as_ref().context("transfer has not been accepted")?;
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(tmp)
-            .with_context(|| format!("opening temp file {}", tmp.display()))?;
-        file.write_all(data)
-            .with_context(|| format!("writing temp file {}", tmp.display()))?;
+        if let Some(file) = &mut self.file_handle {
+            file.write_all(data)
+                .context("writing chunk to temp file")?;
+        } else {
+            anyhow::bail!("transfer has not been accepted or file handle is missing");
+        }
         self.hasher.update(data);
         Ok(())
     }
@@ -682,20 +697,18 @@ fn chunk_count(size_bytes: u64) -> Result<u32> {
     u32::try_from(chunks).context("file is too large to address with 32-bit chunk indices")
 }
 
-fn read_file_chunk(path: &Path, chunk_index: u32, total_bytes: u64) -> Result<Vec<u8>> {
+fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64) -> Result<Vec<u8>> {
     let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
     let remaining = total_bytes.saturating_sub(offset);
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
         .context("chunk size exceeds addressable memory")?;
 
-    let mut file =
-        File::open(path).with_context(|| format!("opening outbound file {}", path.display()))?;
     file.seek(SeekFrom::Start(offset))
-        .with_context(|| format!("seeking outbound file {}", path.display()))?;
+        .with_context(|| format!("seeking outbound file"))?;
 
     let mut buf = vec![0u8; to_read];
     file.read_exact(&mut buf)
-        .with_context(|| format!("reading outbound file {}", path.display()))?;
+        .with_context(|| format!("reading outbound file chunk"))?;
     Ok(buf)
 }
 

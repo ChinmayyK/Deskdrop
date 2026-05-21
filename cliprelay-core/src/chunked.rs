@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 pub const CHUNK_THRESHOLD: usize = 128 * 1024; // 128 KB
-pub const CHUNK_SIZE: usize = 64 * 1024; // 64 KB per chunk
+pub const CHUNK_SIZE: usize = 512 * 1024; // 512 KB per chunk — amortises per-chunk overhead
 
 pub type TransferId = [u8; 16];
 
@@ -158,7 +158,7 @@ impl Reassembler {
                 // and total_chunks=u32::MAX to tie up in-flight slots indefinitely.
                 // We cap at MAX_FILE_BYTES (512 MB) and MAX_CHUNKS_ALLOWED (8 192).
                 const MAX_ANNOUNCED_BYTES: u64 = crate::protocol::MAX_FILE_BYTES as u64;
-                const MAX_CHUNKS_ALLOWED: u32 = 8_192; // 8 192 × 64 KB = 512 MB
+                const MAX_CHUNKS_ALLOWED: u32 = 4_096; // 4 096 × 512 KB = 2 GB
                 anyhow::ensure!(
                     total_bytes <= MAX_ANNOUNCED_BYTES,
                     "transfer announces {} bytes which exceeds the {} byte cap",
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn large_payload_roundtrip_with_checksum() {
-        let original = make_content(CHUNK_THRESHOLD * 3 + 7777);
+        let original = make_content(CHUNK_SIZE * 3 + 7777);
         let msgs = maybe_chunk(&original).expect("should chunk");
         assert!(msgs.len() > 3);
 

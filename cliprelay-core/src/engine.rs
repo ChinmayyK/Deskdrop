@@ -236,8 +236,8 @@ impl Default for EngineConfig {
             peer_store_path: default_peer_store_path(),
             identity_path: IdentityStore::default_path(),
             connect_timeout: Duration::from_secs(2),
-            heartbeat_interval: Duration::from_secs(5),
-            heartbeat_timeout: Duration::from_secs(15),
+            heartbeat_interval: Duration::from_secs(10),
+            heartbeat_timeout: Duration::from_secs(30),
             bind_ip: None,
             enable_discovery: true,
             network_poll_interval: Duration::from_secs(2),
@@ -2123,6 +2123,18 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         );
     }
 
+    // Skip if this peer already has a live, connected session.
+    // Without this guard, mDNS re-announcements cause the remote peer to
+    // repeatedly connect, replacing the existing session each time, which
+    // creates a visible connect→disconnect→reconnect flicker in the UI.
+    if shared.peer_manager.is_connected(hs.peer_device_id) {
+        tracing::debug!(
+            peer_id = %hs.peer_device_id,
+            "dropping duplicate inbound connection — peer already has an active session"
+        );
+        return Ok(());
+    }
+
     let endpoint = stream.peer_addr().context("reading remote address")?;
     let trusted = observe_trust(
         &shared,
@@ -2230,6 +2242,16 @@ async fn connect_once(
         );
     }
 
+    // If the peer already has an active session (e.g. an incoming connection
+    // was accepted while we were handshaking), don't replace it.
+    if shared.peer_manager.is_connected(hs.peer_device_id) {
+        tracing::debug!(
+            peer_id = %hs.peer_device_id,
+            "aborting outbound connect — peer already has an active session"
+        );
+        return Ok(());
+    }
+
     let trusted = observe_trust(
         &shared,
         hs.peer_device_id,
@@ -2313,7 +2335,10 @@ fn register_session(
     trusted: bool,
     discovery: DiscoverySource,
 ) -> Result<()> {
-    let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(256);
+    // 16 capacity * 4 MB chunk size = ~64 MB max queued memory.
+    // If the network is slower than disk I/O, this applies backpressure to the
+    // file reading loop so we don't blow up Android's memory limits.
+    let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(16);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
     match shared.peer_manager.upsert_peer(peer_id, peer_name.clone(), endpoint, trusted, discovery) {
         Ok(_) => {}
@@ -2424,7 +2449,15 @@ fn register_session(
                     }
                 }
                 Some(msg) = outbox_rx.recv() => {
-                    if let Err(err) = sess.send(&msg).await {
+                    // Use no-flush send for file chunks to maximize throughput.
+                    // File chunks are the hot path during transfers — skipping
+                    // flush avoids a syscall per 1 MB chunk. All other messages
+                    // (heartbeats, clipboard, ACKs) use the regular flushing send.
+                    let result = match &msg {
+                        AppMessage::FileChunk { .. } => sess.send_no_flush(&msg).await,
+                        _ => sess.send(&msg).await,
+                    };
+                    if let Err(err) = result {
                         break format!("send failed: {err}");
                     }
                 }
@@ -2605,42 +2638,48 @@ fn register_session(
                                 let bg_shared = shared.clone();
                                 let bg_transfer_id = transfer_id;
                                 tokio::spawn(async move {
-                                    loop {
-                                        let next_chunk = {
+                                    // Batch multiple chunk reads per mutex lock to reduce contention.
+                                    // With 1 MB chunks, reading 8 at a time = 8 MB per lock cycle.
+                                    const BATCH_SIZE: usize = 8;
+                                    'outer: loop {
+                                        let batch: Vec<AppMessage> = {
                                             let mut mgr = bg_shared.file_transfers.lock().await;
-                                            match mgr.get_outbound_mut(&bg_transfer_id) {
-                                                Some(transfer) => transfer.next_chunk_message(),
-                                                None => Ok(None),
+                                            let mut msgs = Vec::with_capacity(BATCH_SIZE);
+                                            for _ in 0..BATCH_SIZE {
+                                                match mgr.get_outbound_mut(&bg_transfer_id) {
+                                                    Some(transfer) => match transfer.next_chunk_message() {
+                                                        Ok(Some(FileTransferMessage::Chunk {
+                                                            transfer_id,
+                                                            chunk_index,
+                                                            total_chunks,
+                                                            data,
+                                                        })) => msgs.push(AppMessage::FileChunk {
+                                                            transfer_id,
+                                                            chunk_index,
+                                                            total_chunks,
+                                                            data,
+                                                        }),
+                                                        Ok(None) => break,
+                                                        Ok(_) => continue,
+                                                        Err(err) => {
+                                                            warn!(error = %err, "failed to read outbound file chunk");
+                                                            mgr.cancel_outbound(&bg_transfer_id);
+                                                            break 'outer;
+                                                        }
+                                                    },
+                                                    None => break,
+                                                }
                                             }
+                                            msgs
                                         };
 
-                                        let Some(chunk_msg) = (match next_chunk {
-                                            Ok(value) => value,
-                                            Err(err) => {
-                                                warn!(error = %err, "failed to read outbound file chunk");
-                                                bg_shared.file_transfers.lock().await.cancel_outbound(&bg_transfer_id);
-                                                break;
+                                        if batch.is_empty() {
+                                            break;
+                                        }
+                                        for wire_msg in batch {
+                                            if bg_outbox.send(wire_msg).await.is_err() {
+                                                break 'outer;
                                             }
-                                        }) else {
-                                            break;
-                                        };
-
-                                        let wire_msg = match chunk_msg {
-                                            FileTransferMessage::Chunk {
-                                                transfer_id,
-                                                chunk_index,
-                                                total_chunks,
-                                                data,
-                                            } => AppMessage::FileChunk {
-                                                transfer_id,
-                                                chunk_index,
-                                                total_chunks,
-                                                data,
-                                            },
-                                            _ => continue,
-                                        };
-                                        if bg_outbox.send(wire_msg).await.is_err() {
-                                            break;
                                         }
                                     }
 

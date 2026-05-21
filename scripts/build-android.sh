@@ -54,7 +54,7 @@ generate_android_icons() {
     while IFS=: read -r density size; do
         out_dir="${ANDROID_DIR}/app/src/main/res/mipmap-${density}"
         mkdir -p "${out_dir}"
-        sips -z "${size}" "${size}" "${ICON_SRC}" --out "${out_dir}/ic_launcher.png" >/dev/null
+        sips -s format png -z "${size}" "${size}" "${ICON_SRC}" --out "${out_dir}/ic_launcher.png" >/dev/null
         cp "${out_dir}/ic_launcher.png" "${out_dir}/ic_launcher_round.png"
     done <<'EOF'
 mdpi:48
@@ -72,7 +72,7 @@ generate_android_brand_asset() {
 
     mkdir -p "${BRAND_DRAWABLE_DIR}"
     if command -v sips >/dev/null 2>&1; then
-        sips -z 512 512 "${ICON_SRC}" --out "${BRAND_DRAWABLE_DIR}/cliprelay_logo.png" >/dev/null
+        sips -s format png -z 512 512 "${ICON_SRC}" --out "${BRAND_DRAWABLE_DIR}/cliprelay_logo.png" >/dev/null
     else
         cp "${ICON_SRC}" "${BRAND_DRAWABLE_DIR}/cliprelay_logo.png"
     fi
@@ -135,21 +135,15 @@ write_local_properties
 log "Building native libraries for all ABIs..."
 cd "${CORE_DIR}"
 
-if [[ "${BUILD_TYPE}" == "release" ]]; then
-    cargo ndk \
-        -t aarch64-linux-android \
-        -t armv7-linux-androideabi \
-        -t x86_64-linux-android \
-        -o "${JNI_DIR}" \
-        build --features compress --lib --release
-else
-    cargo ndk \
-        -t aarch64-linux-android \
-        -t armv7-linux-androideabi \
-        -t x86_64-linux-android \
-        -o "${JNI_DIR}" \
-        build --features compress --lib
-fi
+# Always build Rust in release mode — debug Rust is 5-10x slower for crypto
+# (ChaCha20-Poly1305 encryption dominates transfer throughput).
+# The --debug/--release flag only affects the APK signing and Gradle build type.
+cargo ndk \
+    -t aarch64-linux-android \
+    -t armv7-linux-androideabi \
+    -t x86_64-linux-android \
+    -o "${JNI_DIR}" \
+    build --features compress --lib --release
 
 log "JNI libs:"
 find "${JNI_DIR}" -name "*.so" | while read -r f; do

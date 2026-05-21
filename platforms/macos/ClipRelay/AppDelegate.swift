@@ -405,26 +405,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func handleActivityReceived(_ notification: Notification) {
         guard let entry = notification.object as? IpcActivityEntry else { return }
         
-        let title: String
-        let body: String
-        let icon: String
-        let tint: Color
-        
-        if entry.kind == "file" {
-            title = "File Received"
-            body = entry.summary ?? "A new file was received from \(entry.device_name)."
-            icon = "doc"
-            tint = CRTheme.accentBlue
-        } else {
-            title = "Clipboard Received"
-            body = "Copied from \(entry.device_name)"
-            icon = "doc.on.clipboard"
-            tint = CRTheme.accentGreen
+        switch entry.kind {
+        case "remote_clipboard_available":
+            let title: String
+            let body: String
+            
+            if entry.applied_locally {
+                title = "Clipboard Received"
+                body = "Copied from \(entry.device_name)"
+            } else {
+                title = "Clipboard Available"
+                body = "From \(entry.device_name) — click to apply"
+            }
+            
+            sendSystemNotification(title: title, body: body)
+            
+            if !entry.applied_locally {
+                store.showToast(
+                    title: title,
+                    body: body,
+                    tint: CRTheme.accentGreen,
+                    systemImage: "doc.on.clipboard",
+                    ttl: 6.0,
+                    primaryAction: ToastAction(title: "Apply", role: .primary) { [weak self] in
+                        Task { @MainActor in
+                            await self?.store.applyClipboard(entry: entry)
+                        }
+                    }
+                )
+            } else {
+                store.showToast(
+                    title: title,
+                    body: body,
+                    tint: CRTheme.accentGreen,
+                    systemImage: "doc.on.clipboard",
+                    ttl: 4.0
+                )
+            }
+            
+        case "file_transfer_complete":
+            // Only notify for incoming files where dest_path is populated
+            guard let destPath = entry.dest_path else { return }
+            
+            let title = "File Received"
+            let body = entry.file_name ?? "A file was received from \(entry.device_name)."
+            
+            sendSystemNotification(title: title, body: body)
+            
+            store.showToast(
+                title: title,
+                body: body,
+                tint: CRTheme.accentBlue,
+                systemImage: "doc",
+                ttl: 6.0,
+                primaryAction: ToastAction(title: "Reveal in Finder", role: .primary) {
+                    let url = URL(fileURLWithPath: destPath)
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            )
+            
+        default:
+            // Ignore other events like local copies, device connections/disconnections, etc.
+            break
         }
-        
-        sendSystemNotification(title: title, body: body)
-        store.showToast(title: title, body: body, tint: tint, systemImage: icon, ttl: 4.0)
     }
+
 
     @objc private func handleSystemWake() {
         Task { @MainActor [weak self] in
