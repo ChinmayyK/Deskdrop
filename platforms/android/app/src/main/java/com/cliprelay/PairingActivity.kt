@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import com.cliprelay.ui.PairingScreen
 import com.cliprelay.ui.theme.AppTheme
 
@@ -19,6 +21,16 @@ class PairingActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
+        )
         super.onCreate(savedInstanceState)
         val deviceId    = intent.getStringExtra(EXTRA_DEVICE_ID)   ?: return finish()
         val deviceName  = intent.getStringExtra(EXTRA_DEVICE_NAME) ?: "Unknown device"
