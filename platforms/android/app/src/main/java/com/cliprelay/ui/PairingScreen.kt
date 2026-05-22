@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cliprelay.ui.theme.CRTheme
 import com.cliprelay.ui.theme.crCard
+import com.cliprelay.ui.theme.CRBackground
 import kotlinx.coroutines.delay
 
 @Composable
@@ -41,13 +42,10 @@ fun PairingScreen(
         }
     }
 
-    val progress by animateFloatAsState(targetValue = remainingMs.toFloat() / 30_000f, label = "progress")
+    val progress = (remainingMs / 30_000f).coerceIn(0f, 1f)
+    val timerColor = if (progress > 0.3f) CRTheme.accentAmber else CRTheme.accentRed
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(CRTheme.canvasGradient(isDark))
-    ) {
+    CRBackground(isDark = isDark) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

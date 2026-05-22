@@ -26,6 +26,7 @@ import com.cliprelay.ActivityKind
 import com.cliprelay.PeerSnapshot
 import com.cliprelay.ui.theme.CRTheme
 import com.cliprelay.ui.theme.crCard
+import com.cliprelay.ui.theme.CRBackground
 
 @Composable
 fun MainScreen(
@@ -50,11 +51,7 @@ fun MainScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val isDark = false // Force light mode as default
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(CRTheme.canvasGradient(isDark))
-    ) {
+    CRBackground(isDark = isDark) {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             Box(modifier = Modifier.weight(1f)) {
                 if (selectedTab == 0) {
