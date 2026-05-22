@@ -26,11 +26,11 @@ class SettingsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(
+            statusBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
                 android.graphics.Color.TRANSPARENT
             ),
-            navigationBarStyle = SystemBarStyle.light(
+            navigationBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
                 android.graphics.Color.TRANSPARENT
             )

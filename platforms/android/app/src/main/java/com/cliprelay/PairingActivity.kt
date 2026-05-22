@@ -22,11 +22,11 @@ class PairingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(
+            statusBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
                 android.graphics.Color.TRANSPARENT
             ),
-            navigationBarStyle = SystemBarStyle.light(
+            navigationBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
                 android.graphics.Color.TRANSPARENT
             )
@@ -38,7 +38,7 @@ class PairingActivity : ComponentActivity() {
         val pin         = intent.getStringExtra(EXTRA_PIN)         ?: "------"
 
         setContent {
-            AppTheme(useDarkTheme = false) {
+            AppTheme {
                 PairingScreen(
                     deviceName = deviceName,
                     pin = pin,

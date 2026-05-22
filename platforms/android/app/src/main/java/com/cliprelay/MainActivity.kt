@@ -48,11 +48,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(
+            statusBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
                 android.graphics.Color.TRANSPARENT
             ),
-            navigationBarStyle = SystemBarStyle.light(
+            navigationBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
                 android.graphics.Color.TRANSPARENT
             )
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
 
         setContent {
-            AppTheme(useDarkTheme = false) {
+            AppTheme {
                 MainScreen(
                     isServiceRunning = isServiceRunning.value,
                     isSyncEnabled = isSyncEnabled.value,

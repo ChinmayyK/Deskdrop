@@ -1,5 +1,7 @@
 package com.cliprelay.ui
 
+import androidx.compose.animation.core.*
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +19,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,7 +54,7 @@ fun MainScreen(
     onOpenSettings: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val isDark = false // Force light mode as default
+    val isDark = isSystemInDarkTheme()
 
     CRBackground(isDark = isDark) {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -91,19 +96,26 @@ fun MainScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val haptic = LocalHapticFeedback.current
                 CRNavButton(
                     icon = Icons.Default.Home,
                     label = "Dashboard",
                     isSelected = selectedTab == 0,
                     isDark = isDark,
-                    onClick = { selectedTab = 0 }
+                    onClick = { 
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selectedTab = 0 
+                    }
                 )
                 CRNavButton(
                     icon = Icons.AutoMirrored.Filled.List,
                     label = "Activity",
                     isSelected = selectedTab == 1,
                     isDark = isDark,
-                    onClick = { selectedTab = 1 }
+                    onClick = { 
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selectedTab = 1 
+                    }
                 )
             }
         }
@@ -205,16 +217,22 @@ fun DashboardTab(
                             .padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        val infiniteTransition = rememberInfiniteTransition()
+                        val pulseScale by infiniteTransition.animateFloat(
+                            initialValue = 0.95f, targetValue = 1.05f,
+                            animationSpec = infiniteRepeatable(animation = tween(1200, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse)
+                        )
                         Box(
                             modifier = Modifier
                                 .size(56.dp)
+                                .scale(pulseScale)
                                 .clip(CircleShape)
                                 .background(CRTheme.brandElectric.copy(alpha = 0.1f))
                                 .border(0.5.dp, CRTheme.brandElectric.copy(alpha = 0.15f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Home, // Replace with appropriate icon if needed, or use a custom mark
+                                imageVector = Icons.Default.Home,
                                 contentDescription = null,
                                 tint = CRTheme.brandElectric,
                                 modifier = Modifier.size(28.dp)
@@ -237,8 +255,10 @@ fun DashboardTab(
                             lineHeight = 20.sp
                         )
                         Spacer(modifier = Modifier.height(28.dp))
+                        val haptic = LocalHapticFeedback.current
                         Button(
                             onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 when {
                                     !isServiceRunning -> onStartSync()
                                     !isSyncEnabled -> onResumeSync()
@@ -280,22 +300,38 @@ fun DashboardTab(
                     .fillMaxWidth()
                     .crCard(isDark, cornerRadius = 16.dp)
             ) {
-                Column {
+                Column(modifier = Modifier.animateContentSize()) {
+                    val haptic = LocalHapticFeedback.current
                     if (peers.any { it.isConnected } && isSyncEnabled) {
-                        ActionRow(isDark, "Send clipboard to Mac", CRTheme.brandElectric, onActionPushClipboard)
+                        ActionRow(isDark, "Send clipboard to Mac", CRTheme.brandElectric) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onActionPushClipboard()
+                        }
                         HorizontalDivider(color = CRTheme.stroke(isDark), thickness = 0.5.dp)
                     }
-                    ActionRow(isDark, "Pair via Magic Link", CRTheme.brandElectric, onActionPairMagicLink)
+                    ActionRow(isDark, "Pair via Magic Link", CRTheme.brandElectric) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onActionPairMagicLink()
+                    }
                     HorizontalDivider(color = CRTheme.stroke(isDark), thickness = 0.5.dp)
-                    ActionRow(isDark, if (isSyncEnabled) "Pause sync" else "Resume sync", CRTheme.ink(isDark), onActionPauseSync)
+                    ActionRow(isDark, if (isSyncEnabled) "Pause sync" else "Resume sync", CRTheme.ink(isDark)) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onActionPauseSync()
+                    }
                     
                     if (peers.any { it.isConnected }) {
                         HorizontalDivider(color = CRTheme.stroke(isDark), thickness = 0.5.dp)
-                        ActionRow(isDark, "Disconnect all", CRTheme.accentRed, onActionDisconnectAll)
+                        ActionRow(isDark, "Disconnect all", CRTheme.accentRed) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onActionDisconnectAll()
+                        }
                     }
                     if (isServiceRunning) {
                         HorizontalDivider(color = CRTheme.stroke(isDark), thickness = 0.5.dp)
-                        ActionRow(isDark, "Stop service", CRTheme.accentRed, onActionStopService)
+                        ActionRow(isDark, "Stop service", CRTheme.accentRed) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onActionStopService()
+                        }
                     }
                 }
             }
@@ -324,11 +360,16 @@ fun VStack(spacing: androidx.compose.ui.unit.Dp = 0.dp, content: @Composable Col
 
 @Composable
 fun PeerRow(isDark: Boolean, peer: PeerSnapshot, onTrust: () -> Unit, onReject: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .crCard(isDark, cornerRadius = 16.dp)
-            .clickable { /* Handle peer click */ }
+            .crCard(
+                isDark = isDark, 
+                cornerRadius = 16.dp, 
+                highlighted = peer.isConnected,
+                onClick = { /* Peer Details in future */ }
+            )
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -432,8 +473,12 @@ fun ActivityFeedRow(isDark: Boolean, entry: ActivityEntry, onApplyClipboard: () 
             
             if (entry.kind == ActivityKind.CLIPBOARD_TEXT) {
                 Spacer(modifier = Modifier.height(12.dp))
+                val haptic = LocalHapticFeedback.current
                 Button(
-                    onClick = onApplyClipboard,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onApplyClipboard()
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = CRTheme.surfaceStrongDark.copy(alpha = 0.1f)),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),

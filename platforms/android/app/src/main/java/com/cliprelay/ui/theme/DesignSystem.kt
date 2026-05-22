@@ -3,23 +3,27 @@ package com.cliprelay.ui.theme
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.sin
+import kotlin.math.cos
 
 object CRTheme {
     // Brand
@@ -72,40 +76,49 @@ fun CRBackground(isDark: Boolean, content: @Composable () -> Unit) {
             .fillMaxSize()
             .background(CRTheme.canvasGradient(isDark))
     ) {
-        // Animated glowing orbs for rich aesthetics
+        // Fluid Mesh Gradient Simulation
         val infiniteTransition = rememberInfiniteTransition()
-        val orb1X by infiniteTransition.animateFloat(
-            initialValue = -100f, targetValue = 300f,
-            animationSpec = infiniteRepeatable(animation = tween(15000, easing = LinearEasing), repeatMode = RepeatMode.Reverse)
-        )
-        val orb1Y by infiniteTransition.animateFloat(
-            initialValue = -100f, targetValue = 500f,
-            animationSpec = infiniteRepeatable(animation = tween(12000, easing = LinearEasing), repeatMode = RepeatMode.Reverse)
-        )
-        val orb2X by infiniteTransition.animateFloat(
-            initialValue = 400f, targetValue = -200f,
-            animationSpec = infiniteRepeatable(animation = tween(18000, easing = LinearEasing), repeatMode = RepeatMode.Reverse)
-        )
-        val orb2Y by infiniteTransition.animateFloat(
-            initialValue = 600f, targetValue = 100f,
-            animationSpec = infiniteRepeatable(animation = tween(14000, easing = LinearEasing), repeatMode = RepeatMode.Reverse)
+        val time by infiniteTransition.animateFloat(
+            initialValue = 0f, targetValue = 2f * Math.PI.toFloat(),
+            animationSpec = infiniteRepeatable(animation = tween(20000, easing = LinearEasing), repeatMode = RepeatMode.Restart)
         )
 
-        val opacity = if (isDark) 0.15f else 0.25f
+        val opacity = if (isDark) 0.12f else 0.18f
 
+        // Orb 1: Cyan, drifting in figure-8
         Box(
             modifier = Modifier
-                .offset(x = orb1X.dp, y = orb1Y.dp)
-                .fillMaxSize(0.6f)
-                .blur(100.dp)
+                .offset(
+                    x = (sin(time) * 150).dp,
+                    y = (cos(time * 0.8f) * 100).dp
+                )
+                .fillMaxSize(0.65f)
+                .blur(140.dp)
                 .background(Brush.radialGradient(listOf(CRTheme.brandCyan.copy(alpha = opacity), Color.Transparent)), shape = CircleShape)
         )
+
+        // Orb 2: Violet, drifting in reverse figure-8
         Box(
             modifier = Modifier
-                .offset(x = orb2X.dp, y = orb2Y.dp)
+                .offset(
+                    x = (cos(time * 1.2f) * 200).dp,
+                    y = (sin(time * 0.9f) * 150 + 200).dp
+                )
                 .fillMaxSize(0.7f)
-                .blur(120.dp)
+                .blur(160.dp)
                 .background(Brush.radialGradient(listOf(CRTheme.brandViolet.copy(alpha = opacity), Color.Transparent)), shape = CircleShape)
+        )
+
+        // Orb 3: Pink, sweeping bottom
+        Box(
+            modifier = Modifier
+                .offset(
+                    x = (sin(time * 0.5f) * 300).dp,
+                    y = 500.dp + (cos(time * 1.1f) * 50).dp
+                )
+                .fillMaxSize(0.8f)
+                .blur(150.dp)
+                .background(Brush.radialGradient(listOf(CRTheme.brandPink.copy(alpha = opacity * 0.8f), Color.Transparent)), shape = CircleShape)
         )
 
         content()
@@ -114,22 +127,46 @@ fun CRBackground(isDark: Boolean, content: @Composable () -> Unit) {
 
 fun Modifier.crCard(
     isDark: Boolean,
-    cornerRadius: Dp = 24.dp, // Increased radius for premium feel
+    cornerRadius: Dp = 24.dp, // Premium rounded corners
     highlighted: Boolean = false,
-    accentColor: Color = CRTheme.brandElectric
+    accentColor: Color = CRTheme.brandElectric,
+    onClick: (() -> Unit)? = null
 ): Modifier = composed {
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "card_bounce"
+    )
+
     val shape = RoundedCornerShape(cornerRadius)
     val strokeColor = if (highlighted) accentColor.copy(alpha = 0.5f) else CRTheme.stroke(isDark)
-    val shadowColor = if (isDark) Color(0xFF000000).copy(alpha = 0.5f) else Color(0xFF0066FF).copy(alpha = 0.06f)
+    val shadowColor = if (isDark) Color(0xFF000000).copy(alpha = 0.6f) else Color(0xFF0066FF).copy(alpha = 0.08f)
 
-    this
+    var modifier = this
+        .scale(scale)
         .shadow(
-            elevation = if (highlighted) 16.dp else 12.dp,
+            elevation = if (highlighted) 24.dp else 16.dp,
             shape = shape,
             ambientColor = shadowColor,
             spotColor = shadowColor
         )
         .clip(shape)
         .background(CRTheme.cardGradient(isDark))
-        .border(if (highlighted) 1.dp else 0.5.dp, strokeColor, shape)
+        .border(if (highlighted) 1.5.dp else 0.5.dp, strokeColor, shape)
+        
+    if (onClick != null) {
+        modifier = modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onPress = {
+                    isPressed = true
+                    tryAwaitRelease()
+                    isPressed = false
+                },
+                onTap = { onClick() }
+            )
+        }
+    }
+    
+    modifier
 }

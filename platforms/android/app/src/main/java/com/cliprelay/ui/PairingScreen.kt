@@ -12,7 +12,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,7 +34,7 @@ fun PairingScreen(
     onDeny: () -> Unit
 ) {
     var remainingMs by remember { mutableLongStateOf(30_000L) }
-    val isDark = false // Force light mode as default
+    val isDark = isSystemInDarkTheme()
 
     LaunchedEffect(Unit) {
         while (remainingMs > 0) {
@@ -54,24 +58,37 @@ fun PairingScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Avatar
+            // Glowing Circular Timer with Avatar
             Box(
                 modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(CRTheme.brandElectric.copy(alpha = 0.12f))
-                    .border(0.5.dp, CRTheme.brandElectric.copy(alpha = 0.16f), CircleShape),
+                    .size(100.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = deviceName.take(1).uppercase(),
-                    color = CRTheme.brandElectric,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
+                CircularProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxSize().shadow(if (remainingMs < 10000) 24.dp else 12.dp, CircleShape, ambientColor = timerColor, spotColor = timerColor),
+                    color = timerColor,
+                    trackColor = CRTheme.stroke(isDark),
+                    strokeWidth = 6.dp
                 )
+                Box(
+                    modifier = Modifier
+                        .size(76.dp)
+                        .clip(CircleShape)
+                        .background(CRTheme.brandElectric.copy(alpha = 0.12f))
+                        .border(0.5.dp, CRTheme.brandElectric.copy(alpha = 0.16f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = deviceName.take(1).uppercase(),
+                        color = CRTheme.brandElectric,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "PAIRING REQUEST",
                 fontSize = 11.sp,
@@ -164,55 +181,44 @@ fun PairingScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Timer
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(CRTheme.stroke(isDark))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(fraction = progress)
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(if (remainingMs < 10000) CRTheme.accentRed else CRTheme.accentAmber)
-                    )
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(
-                    text = "${(remainingMs / 1000).coerceAtLeast(0)}s",
-                    fontSize = 13.sp,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (remainingMs < 10000) CRTheme.accentRed else CRTheme.inkSoft(isDark)
-                )
-            }
+            // Timer info
+            Text(
+                text = "Time remaining: ${(remainingMs / 1000).coerceAtLeast(0)}s",
+                fontSize = 13.sp,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                color = if (remainingMs < 10000) CRTheme.accentRed else CRTheme.inkSoft(isDark)
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
 
             // Actions
+            val haptic = LocalHapticFeedback.current
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Button(
-                    onClick = onDeny,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onDeny()
+                    },
+                    modifier = Modifier.weight(1f).height(54.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isDark) Color(0xFFFFFFFF).copy(alpha = 0.1f) else Color(0xFF000000).copy(alpha = 0.05f)
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp)
                 ) {
-                    Text("Deny", color = CRTheme.ink(isDark), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Deny", color = CRTheme.ink(isDark), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Button(
-                    onClick = onApprove,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onApprove()
+                    },
+                    modifier = Modifier.weight(1f).height(54.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = CRTheme.brandElectric),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp)
                 ) {
-                    Text("Trust Device", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Trust Device", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

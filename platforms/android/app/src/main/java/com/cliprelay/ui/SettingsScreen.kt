@@ -1,7 +1,10 @@
 package com.cliprelay.ui
 
+import androidx.compose.animation.core.*
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,7 +14,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,7 +43,7 @@ fun SettingsScreen(
     onBatterySettingsClicked: () -> Unit,
     onBack: () -> Unit
 ) {
-    val isDark = false // Force light mode as default
+    val isDark = isSystemInDarkTheme()
 
     CRBackground(isDark = isDark) {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -48,7 +56,11 @@ fun SettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
+                val haptic = LocalHapticFeedback.current
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onBack()
+                }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
@@ -123,8 +135,12 @@ fun SettingsScreen(
                                 lineHeight = 20.sp
                             )
                             Spacer(modifier = Modifier.height(16.dp))
+                            val haptic = LocalHapticFeedback.current
                             Button(
-                                onClick = onBatterySettingsClicked,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onBatterySettingsClicked()
+                                },
                                 modifier = Modifier.fillMaxWidth().height(44.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = CRTheme.brandElectric),
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
@@ -175,10 +191,17 @@ fun SettingsSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onCheckedChange(!checked)
+            }
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -193,13 +216,42 @@ fun SettingsSwitchRow(
                 )
             }
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = CRTheme.brandElectric
-            )
+        CRSwitch(checked = checked, isDark = isDark)
+    }
+}
+
+@Composable
+fun CRSwitch(checked: Boolean, isDark: Boolean) {
+    val thumbOffset by animateFloatAsState(
+        targetValue = if (checked) 24f else 4f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "switchOffset"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked) Color.White else CRTheme.inkSubtle(isDark),
+        animationSpec = tween(200),
+        label = "switchThumb"
+    )
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) CRTheme.brandElectric else CRTheme.stroke(isDark),
+        animationSpec = tween(200),
+        label = "switchTrack"
+    )
+
+    Box(
+        modifier = Modifier
+            .width(48.dp)
+            .height(26.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(trackColor)
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset.dp, y = 3.dp)
+                .size(20.dp)
+                .shadow(4.dp, androidx.compose.foundation.shape.CircleShape)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(thumbColor)
         )
     }
 }
