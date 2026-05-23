@@ -23,6 +23,7 @@ class SettingsActivity : ComponentActivity() {
     private val syncText = mutableStateOf(true)
     private val syncImages = mutableStateOf(true)
     private val syncFiles = mutableStateOf(true)
+    private val isDarkMode = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -40,7 +41,7 @@ class SettingsActivity : ComponentActivity() {
         loadPreferences()
 
         setContent {
-            AppTheme {
+            AppTheme(useDarkTheme = isDarkMode.value) {
                 SettingsScreen(
                     deviceName = deviceName.value,
                     deviceId = deviceId.value,
@@ -48,6 +49,7 @@ class SettingsActivity : ComponentActivity() {
                     syncText = syncText.value,
                     syncImages = syncImages.value,
                     syncFiles = syncFiles.value,
+                    isDarkMode = isDarkMode.value,
                     onSyncEnabledChange = {
                         syncEnabled.value = it
                         saveBooleanPref("sync_enabled", it)
@@ -63,6 +65,10 @@ class SettingsActivity : ComponentActivity() {
                     onSyncFilesChange = {
                         syncFiles.value = it
                         saveBooleanPref("sync_files", it)
+                    },
+                    onDarkModeChange = {
+                        isDarkMode.value = it
+                        saveBooleanPref("dark_mode", it)
                     },
                     onRenameClicked = { showRenameDialog() },
                     onBatterySettingsClicked = { openBatterySettings() },
@@ -82,6 +88,7 @@ class SettingsActivity : ComponentActivity() {
         syncText.value = prefs.getBoolean("sync_text", true)
         syncImages.value = prefs.getBoolean("sync_images", true)
         syncFiles.value = prefs.getBoolean("sync_files", true)
+        isDarkMode.value = prefs.getBoolean("dark_mode", false)
     }
 
     private fun saveBooleanPref(key: String, value: Boolean) {

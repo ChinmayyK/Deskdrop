@@ -21,16 +21,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var callBannerManager:         CallBannerWindowManager?
     private var cancellables = Set<AnyCancellable>()
     private var daemonProcess: Process?
+    private var dropCanvasWindow: NSPanel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ensureSingleRunningInstance() else { return }
         NSApp.setActivationPolicy(.accessory)
-        // Restore user's theme preference (defaults to light)
-        let savedTheme = UserDefaults.standard.string(forKey: "cr_app_theme") ?? "light"
+        // Restore user's theme preference (defaults to system)
+        let savedTheme = UserDefaults.standard.string(forKey: "cr_app_theme") ?? "system"
         switch savedTheme {
         case "dark":   NSApp.appearance = NSAppearance(named: .darkAqua)
-        case "system": NSApp.appearance = nil
-        default:       NSApp.appearance = NSAppearance(named: .aqua)
+        case "light":  NSApp.appearance = NSAppearance(named: .aqua)
+        default:       NSApp.appearance = nil
         }
         startDaemonIfNeeded()
         setupMenuBar()
@@ -59,6 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(openCommandPalette),
             name: .clipRelayOpenCommandPalette,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(closeDropCanvas),
+            name: .init("closeDropCanvas"),
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -171,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Menu bar
 
     private func setupMenuBar() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         // ── Replace the default button with a custom drag-and-drop view ──────────
         if let button = statusItem.button {
@@ -183,15 +190,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .init(rawValue: "com.apple.NSFilePromiseItemMetaData"),
             ])
 
+            button.image = statusBarImage()
+            button.imagePosition = .imageOnly
+            button.target = self
+            button.action = #selector(menuBarClicked)
+
             let dropView = MenuBarDropView(frame: button.bounds)
             dropView.autoresizingMask = [.width, .height]
-            dropView.iconImage = statusBarImage()
             dropView.delegate  = self
             button.addSubview(dropView)
             menuBarDropView = dropView
-            // Hide the default button's own image so only our view renders.
-            button.image    = nil
-            button.title    = ""
             button.toolTip  = "Deskdrop — Drag files here to send to your device"
         }
 
@@ -245,11 +253,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func statusBarImage() -> NSImage? {
-        if #available(macOS 11.0, *) {
-            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-            return NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Deskdrop")?.withSymbolConfiguration(config)
+        let size = NSSize(width: 28, height: 22)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        
+        let path = NSBezierPath()
+        let center = NSPoint(x: 14, y: 11)
+        let radius: CGFloat = 9.0
+        
+        for i in 0..<6 {
+            let angle = CGFloat(i) * CGFloat.pi / 3.0 + CGFloat.pi / 6.0
+            let point = NSPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
+            if i == 0 { path.move(to: point) } else { path.line(to: point) }
         }
-        return nil
+        path.close()
+        
+        NSColor.black.set()
+        path.fill()
+        
+        NSGraphicsContext.current?.compositingOperation = .destinationOut
+        
+        let arrowPath = NSBezierPath()
+        arrowPath.move(to: NSPoint(x: 14, y: 14))
+        arrowPath.line(to: NSPoint(x: 14, y: 7))
+        
+        arrowPath.move(to: NSPoint(x: 11, y: 10))
+        arrowPath.line(to: NSPoint(x: 14, y: 7))
+        arrowPath.line(to: NSPoint(x: 17, y: 10))
+        
+        arrowPath.lineWidth = 2.0
+        arrowPath.lineCapStyle = .round
+        arrowPath.lineJoinStyle = .round
+        arrowPath.stroke()
+        
+        image.unlockFocus()
+        image.isTemplate = true
+        return image
     }
 
     // MARK: - Windows
@@ -858,10 +897,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility            = .hidden
         window.isMovableByWindowBackground = true
-        window.appearance                 = NSAppearance(named: .aqua)
         window.level                      = .normal
         window.collectionBehavior         = [.moveToActiveSpace]
         window.isReleasedWhenClosed       = false
+        window.backgroundColor            = .clear
+        window.isOpaque                   = false
+        window.hasShadow                  = false
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.contentViewController = NSHostingController(rootView: rootView)
         return NSWindowController(window: window)
     }
@@ -885,7 +929,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isReleasedWhenClosed        = false
         panel.isOpaque                    = false
         panel.backgroundColor             = .clear
-        panel.appearance                  = NSAppearance(named: .aqua)
         panel.collectionBehavior          = [.moveToActiveSpace, .fullScreenAuxiliary]
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
@@ -926,10 +969,58 @@ extension AppDelegate: MenuBarDropViewDelegate {
         )
     }
 
-    func menuBarDropViewDidClick(_ view: MenuBarDropView) {
+    @objc private func menuBarClicked() {
         // Show the menu programmatically — we don't set statusItem.menu
         // so that drag-and-drop events aren't intercepted by the menu system.
         guard let button = statusItem.button else { return }
         statusBarMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
+    }
+
+    func menuBarDropViewDidEnterDrag(_ view: MenuBarDropView) {
+        if dropCanvasWindow == nil {
+            let panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = true
+            panel.level = .popUpMenu
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            panel.contentViewController = NSHostingController(rootView: DropCanvasView(store: store))
+            dropCanvasWindow = panel
+        }
+        
+        guard let button = statusItem.button, let window = button.window else { return }
+        
+        let buttonRect = button.convert(button.bounds, to: nil)
+        let buttonScreenRect = window.convertToScreen(buttonRect)
+        
+        let panelWidth: CGFloat = 320
+        let panelHeight: CGFloat = 180
+        let x = buttonScreenRect.midX - (panelWidth / 2)
+        let y = buttonScreenRect.minY - panelHeight - 8
+        
+        dropCanvasWindow?.setFrame(NSRect(x: x, y: y, width: panelWidth, height: panelHeight), display: true)
+        dropCanvasWindow?.orderFrontRegardless()
+    }
+
+    func menuBarDropViewDidExitDrag(_ view: MenuBarDropView) {
+        // Wait briefly. If the mouse entered the window, don't close.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self, let win = self.dropCanvasWindow else { return }
+            let mouseLoc = NSEvent.mouseLocation
+            if win.frame.contains(mouseLoc) {
+                // Drag moved into the window, leave it open!
+                return
+            }
+            self.closeDropCanvas()
+        }
+    }
+
+    @objc private func closeDropCanvas() {
+        dropCanvasWindow?.orderOut(nil)
     }
 }

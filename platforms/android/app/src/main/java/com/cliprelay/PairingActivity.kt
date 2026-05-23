@@ -37,9 +37,13 @@ class PairingActivity : ComponentActivity() {
         val fingerprint = intent.getStringExtra(EXTRA_FINGERPRINT) ?: ""
         val pin         = intent.getStringExtra(EXTRA_PIN)         ?: "------"
 
+        val prefs = getSharedPreferences(ClipRelayService.PREFS_NAME, MODE_PRIVATE)
+        val isDarkMode = prefs.getBoolean("dark_mode", false)
+
         setContent {
-            AppTheme {
+            AppTheme(useDarkTheme = isDarkMode) {
                 PairingScreen(
+                    isDark = isDarkMode,
                     deviceName = deviceName,
                     pin = pin,
                     fingerprint = fingerprint,

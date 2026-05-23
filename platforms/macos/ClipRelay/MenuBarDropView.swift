@@ -14,8 +14,11 @@ import UniformTypeIdentifiers
 protocol MenuBarDropViewDelegate: AnyObject {
     /// Called when the user drops one or more file URLs onto the menu bar icon.
     func menuBarDropView(_ view: MenuBarDropView, didReceiveFiles urls: [URL])
-    /// Called on a left-click (open menu) or right-click.
-    func menuBarDropViewDidClick(_ view: MenuBarDropView)
+
+    /// Called when the user begins dragging files over the menu bar icon.
+    func menuBarDropViewDidEnterDrag(_ view: MenuBarDropView)
+    /// Called when the user drag exits or ends without dropping.
+    func menuBarDropViewDidExitDrag(_ view: MenuBarDropView)
 }
 
 // MARK: - MenuBarDropView
@@ -24,10 +27,7 @@ final class MenuBarDropView: NSView {
 
     weak var delegate: MenuBarDropViewDelegate?
 
-    // Image shown in the button
-    var iconImage: NSImage? {
-        didSet { imageView.image = iconImage }
-    }
+
 
     // Whether to overlay a small red badge
     var badgeCount: Int = 0 {
@@ -39,9 +39,7 @@ final class MenuBarDropView: NSView {
         didSet { needsDisplay = true }
     }
 
-    // MARK: Sub-views
 
-    private let imageView = NSImageView()
 
     // MARK: Init
 
@@ -58,16 +56,6 @@ final class MenuBarDropView: NSView {
     private func commonInit() {
         wantsLayer = true
         layer?.cornerRadius = 5
-
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(imageView)
-        NSLayoutConstraint.activate([
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
-            imageView.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
-        ])
 
         // Accept file URLs + generic file-promise types
         registerForDraggedTypes([
@@ -109,11 +97,7 @@ final class MenuBarDropView: NSView {
         }
     }
 
-    // MARK: - Mouse handling
 
-    override func mouseDown(with event: NSEvent) {
-        delegate?.menuBarDropViewDidClick(self)
-    }
 
     // MARK: - Drag destination
 
@@ -122,7 +106,10 @@ final class MenuBarDropView: NSView {
             .urlReadingFileURLsOnly: true
         ])
         if hasFiles {
-            isDragHighlighted = true
+            if !isDragHighlighted {
+                isDragHighlighted = true
+                delegate?.menuBarDropViewDidEnterDrag(self)
+            }
             return .copy
         }
         return []
@@ -136,11 +123,17 @@ final class MenuBarDropView: NSView {
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
-        isDragHighlighted = false
+        if isDragHighlighted {
+            isDragHighlighted = false
+            delegate?.menuBarDropViewDidExitDrag(self)
+        }
     }
 
     override func draggingEnded(_ sender: NSDraggingInfo) {
-        isDragHighlighted = false
+        if isDragHighlighted {
+            isDragHighlighted = false
+            delegate?.menuBarDropViewDidExitDrag(self)
+        }
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { true }
@@ -152,6 +145,10 @@ final class MenuBarDropView: NSView {
         ]) as? [URL], !urls.isEmpty else { return false }
 
         delegate?.menuBarDropView(self, didReceiveFiles: urls)
+        if isDragHighlighted {
+            isDragHighlighted = false
+            delegate?.menuBarDropViewDidExitDrag(self)
+        }
         return true
     }
 }

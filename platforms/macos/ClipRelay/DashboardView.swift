@@ -11,19 +11,19 @@ struct DashboardRootView: View {
     @State private var renameTarget:   ManagedDevice?
     @State private var renameDraft     = ""
     @State private var density: CRDensityMode = .comfortable
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private var pendingContinuityItems: [IpcActivityEntry] {
         store.activityFeed.filter(\.isApplicable)
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            Sidebar(store: store)
-                .navigationSplitViewColumnWidth(min: 210, ideal: 226, max: 250)
-        } detail: {
+        VStack(spacing: 0) {
             DetailContent(store: store, density: $density, beginRename: beginRename)
+            BottomNavBar(store: store)
         }
+        .background(CRTheme.surface)
+        .ignoresSafeArea(edges: .top)
+        .frame(minWidth: 800, minHeight: 600)
         .overlay(alignment: .bottomTrailing) {
             if !pendingContinuityItems.isEmpty {
                 ContinuityStagingDrawer(entries: Array(pendingContinuityItems.prefix(3)), store: store)
@@ -46,77 +46,55 @@ struct DashboardRootView: View {
     }
 }
 
-// MARK: - Sidebar
+// MARK: - Floating Dock
 
-private struct Sidebar: View {
+private struct BottomNavBar: View {
     @ObservedObject var store: DeskdropStore
-
+    
     var body: some View {
-        ZStack {
-            CRHUDMaterial().ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 0) {
-                // Header Area
-                HStack(spacing: 12) {
-                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(CRTheme.brandElectric)
-                    Text("Deskdrop")
-                        .font(.system(size: 16, weight: .bold))
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 24)
-                .padding(.bottom, 28)
-
-                // Navigation List
-                VStack(spacing: 6) {
-                    SidebarNavButton(icon: "square.grid.2x2", label: "Dashboard", badge: 0, isSelected: store.selectedSection == .dashboard) {
-                        store.selectedSection = .dashboard
-                    }
-                    SidebarNavButton(icon: "clock.arrow.circlepath", label: "Clipboard History", badge: store.pendingClipboardCount, isSelected: store.selectedSection == .history) {
-                        store.selectedSection = .history
-                    }
-                    SidebarNavButton(icon: "macbook.and.iphone", label: "Synced Devices", badge: store.connectedDevices.count, isSelected: store.selectedSection == .devices) {
-                        store.selectedSection = .devices
-                    }
-                    SidebarNavButton(icon: "gearshape", label: "Settings", badge: 0, isSelected: store.selectedSection == .settings) {
-                        store.selectedSection = .settings
-                    }
-                }
-                .padding(.horizontal, 14)
-
-                Spacer()
-                
-                // Bottom Sync Status Footer
-                SidebarFooter(store: store)
-            }
+        HStack(spacing: 16) {
+            NavButton(icon: "square.grid.2x2", label: "Dashboard", isSelected: store.selectedSection == .dashboard) { store.selectedSection = .dashboard }
+            NavButton(icon: "clock.arrow.circlepath", label: "History", badge: store.pendingClipboardCount, isSelected: store.selectedSection == .history) { store.selectedSection = .history }
+            NavButton(icon: "macbook.and.iphone", label: "Devices", badge: store.connectedDevices.count, isSelected: store.selectedSection == .devices) { store.selectedSection = .devices }
+            Spacer()
+            NavButton(icon: "gearshape", label: "Settings", isSelected: store.selectedSection == .settings) { store.selectedSection = .settings }
         }
+        .padding(.horizontal, 20)
+        .frame(height: 40)
+        .background(Color(NSColor.windowBackgroundColor))
+        .overlay(alignment: .top) { Divider() }
     }
 }
 
-
-// MARK: - Sidebar Footer
-
-private struct SidebarFooter: View {
-    @ObservedObject var store: DeskdropStore
-    private var syncColor: Color { store.settings?.syncEnabled == false ? CRTheme.accentOrange : CRTheme.accentGreen }
-    private var syncLabel: String { store.settings?.syncEnabled == false ? "PAUSED" : "SYNCING" }
+private struct NavButton: View {
+    let icon: String
+    let label: String
+    var badge: Int = 0
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var hovered = false
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            CRDividerDark()
-            HStack(spacing: 7) {
-                SidebarStatPill(icon: "desktopcomputer",  value: "\(store.devices.count)", label: "peers")
-                SidebarStatPill(icon: "doc.on.clipboard", value: "\(store.timeline.count)", label: "items")
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                Text(label)
+                    .font(.system(size: 12, weight: isSelected ? .medium : .regular))
+                if badge > 0 {
+                    Text("\(badge)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color(NSColor.windowBackgroundColor))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill(CRTheme.accentBlue))
+                }
             }
-            HStack(spacing: 6) {
-                Circle().fill(syncColor).frame(width: 5.5, height: 5.5)
-                Text(syncLabel).font(.system(size: 10, weight: .bold)).tracking(0.6).foregroundStyle(syncColor)
-                Spacer()
-                Text("Local-first").font(.system(size: 10)).foregroundStyle(CRTheme.sidebarInkSubtle)
-            }
+            .foregroundStyle(isSelected ? CRTheme.accentBlue : CRTheme.inkSoft)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(hovered && !isSelected ? CRTheme.rowHover : Color.clear, in: RoundedRectangle(cornerRadius: 6))
         }
-        .padding(.horizontal, 16).padding(.bottom, 20)
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
     }
 }
 
@@ -129,38 +107,45 @@ private struct DetailContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DashboardCommandBar(store: store)
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 12)
-
-            // Sticky section toolbar
-            CRSectionToolbar(
-                title:    store.selectedSection.title,
-                subtitle: store.selectedSection.subtitle
-            ) {
-                toolbarActions
+            // TOP SHELL / APPLICATION CHROME
+            VStack(spacing: 0) {
+                ContinuityHeaderView(store: store)
             }
+            .background(CRTheme.surfaceStrong)
+            .overlay(alignment: .bottom) { CRDivider() }
+            .zIndex(10)
 
-            // Content — keyed so SwiftUI rebuilds on section change (enables transition)
-            Group {
-                switch store.selectedSection {
-                case .dashboard: UnifiedDashboardView(store: store, density: density)
-                case .history:   TimelineSectionView(store: store, density: density)
-                case .devices:  DevicesSectionView(store: store, rename: beginRename)
-                case .workflows: TrustSectionView(store: store, rename: beginRename)
-                case .settings: PreferencesView(store: store)
+            // CONTENT REGION
+            VStack(spacing: 0) {
+                // Sticky section toolbar
+                CRSectionToolbar(
+                    title:    store.selectedSection.title,
+                    subtitle: store.selectedSection.subtitle
+                ) {
+                    toolbarActions
                 }
+
+                // Content — keyed so SwiftUI rebuilds on section change (enables transition)
+                Group {
+                    switch store.selectedSection {
+                    case .dashboard: UnifiedDashboardView(store: store, density: density)
+                    case .history:   TimelineSectionView(store: store, density: density)
+                    case .devices:  DevicesSectionView(store: store, rename: beginRename)
+                    case .workflows: TrustSectionView(store: store, rename: beginRename)
+                    case .settings: PreferencesView(store: store)
+                    }
+                }
+                .id(store.selectedSection)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .bottom).combined(with: .scale(scale: 0.98))),
+                    removal:   .opacity
+                ))
+                .animation(.crSpring, value: store.selectedSection)
             }
-            .id(store.selectedSection)
-            .transition(.asymmetric(
-                insertion: .opacity.combined(with: .move(edge: .trailing)),
-                removal:   .opacity.combined(with: .move(edge: .leading))
-            ))
-            .animation(.crSpring, value: store.selectedSection)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(CRTheme.surface)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(CRTheme.canvasGradient)
     }
 
     @ViewBuilder private var toolbarActions: some View {
@@ -206,84 +191,101 @@ private struct DetailContent: View {
     }
 }
 
-// MARK: - Command Bar
+// MARK: - Continuity Header
 
-private struct DashboardCommandBar: View {
+private struct ContinuityHeaderView: View {
     @ObservedObject var store: DeskdropStore
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 16) {
+            // Left Zone: Identity & Status
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "circle.hexagongrid.fill")
+                        .foregroundStyle(CRTheme.brandElectric)
+                        .font(.system(size: 14))
+                    Text("ClipRelay")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CRTheme.ink)
+                }
+                
+                // Status Pill
+                HStack(spacing: 4) {
+                    StatusDot(isOnline: store.connectedCount > 0, size: 5)
+                    Text(store.connectedCount > 0 ? "Mesh Active" : "Mesh Offline")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(store.connectedCount > 0 ? CRTheme.accentGreen : Color.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(store.connectedCount > 0 ? CRTheme.accentGreen.opacity(0.12) : Color.secondary.opacity(0.12), in: Capsule())
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Center Zone: Command Surface
+            Spacer(minLength: 0)
             Button {
                 store.openCommandPalette()
             } label: {
-                HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(CRTheme.brandElectric.opacity(0.12))
-                            .frame(width: 36, height: 36)
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(CRTheme.brandElectric)
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Search commands, clipboard, and quick actions")
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(CRTheme.ink)
-                        Text("Open the continuity command bar to push text, reconnect nearby devices, or jump through history.")
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(CRTheme.inkSoft)
-                            .lineLimit(2)
-                    }
-
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                    Text("Search")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
                     Spacer(minLength: 0)
-
-                    HStack(spacing: 6) {
-                        KbdChip("⌘", dark: false)
-                        KbdChip("K", dark: false)
-                    }
+                    Text("⌘K")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.secondary.opacity(0.8))
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .frame(width: 280, height: 28)
+                .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.2), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
-            .background {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.white.opacity(0.62))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(CRTheme.stroke.opacity(0.42), lineWidth: 0.5)
-                    }
-            }
+            Spacer(minLength: 0)
 
-            if store.connectedCount > 0 {
+            // Right Zone: Quick Controls
+            HStack(spacing: 6) {
+                if store.connectedCount > 0 {
+                    Button {
+                        store.sendCurrentClipboard(to: nil)
+                    } label: {
+                        Image(systemName: "arrow.up.doc.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(CRTheme.ink)
+                            .frame(width: 26, height: 26)
+                            .background(CRTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(CRTheme.stroke.opacity(0.8), lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Quick Send Clipboard")
+                }
+                
                 Button {
-                    store.sendCurrentClipboard(to: nil)
+                    store.selectedSection = .settings
                 } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Push active text")
-                            .font(.system(size: 12.5, weight: .semibold))
-                        Text("All peers")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(CRTheme.inkSoft)
-                    }
-                    .foregroundStyle(CRTheme.ink)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 13)
-                    .background {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white.opacity(0.72))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .strokeBorder(CRTheme.stroke.opacity(0.42), lineWidth: 0.5)
-                            }
-                    }
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .frame(width: 26, height: 26)
+                        .background(CRTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(CRTheme.stroke.opacity(0.8), lineWidth: 0.5))
                 }
                 .buttonStyle(.plain)
+                .help("Settings")
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
     }
 }
+
 
 // MARK: - Companion Card
 
@@ -342,13 +344,22 @@ private struct CompanionDeviceCard: View {
         .padding(16)
         .frame(width: 312, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(CRTheme.cardGradient)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(CRTheme.brandElectric.opacity(0.50), lineWidth: 1.0)
-                }
-                .modifier(GlowModifier(color: CRTheme.brandElectric, radius: 18))
+            ZStack {
+                CRVisualEffect(material: .popover, blendingMode: .behindWindow)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(CRTheme.cardGradient)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(CRTheme.brandElectric.opacity(0.50), lineWidth: 0.5)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 19.5, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
+            }
+            .modifier(GlowModifier(color: CRTheme.brandElectric, radius: 24))
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
@@ -541,8 +552,11 @@ private struct TimelineSectionView: View {
                                 onAction: { search = "" }
                             )
                         } else {
-                            VStack(spacing: density.cardSpacing) {
-                                ForEach(filteredItems) { TimelineCard(item: $0, store: store, density: density) }
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
+                                ForEach(filteredItems) { item in
+                                    TimelineCard(item: item, store: store, density: density)
+                                        .modifier(MasonryGridModifier())
+                                }
                             }
                             .padding(.horizontal, 20)
                             .padding(.top, pinnedItems.isEmpty ? 16 : 0)
@@ -587,6 +601,30 @@ private struct TimelineSectionView: View {
             Image(systemName: icon).font(.system(size: 9, weight: .semibold)).foregroundStyle(tint)
             Text(text).font(.system(size: 10, weight: .bold)).tracking(1.0).foregroundStyle(tint)
         }
+    }
+}
+
+// MARK: - Spatial Modifiers
+
+private struct MasonryGridModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        GeometryReader { proxy in
+            let y = proxy.frame(in: .global).minY
+            // Approximating screen height for 3D tilt calculations
+            let screenH = NSScreen.main?.frame.height ?? 1000
+            let normalizedY = (y / screenH)
+            
+            content
+                .rotation3DEffect(
+                    .degrees(Double((normalizedY - 0.5) * 6)),
+                    axis: (x: 1, y: 0, z: 0),
+                    perspective: 0.8
+                )
+                .scaleEffect(1.0 - (abs(normalizedY - 0.5) * 0.03))
+                .opacity(normalizedY > 0.9 ? 0.4 : 1.0)
+        }
+        // Fixed minimum height to prevent the geometry reader from collapsing
+        .frame(minHeight: 100) 
     }
 }
 
@@ -813,19 +851,9 @@ struct TimelineCard: View {
             }
             .padding(.horizontal, 11).padding(.vertical, density.rowPadding)
         }
-        .background {
-            RoundedRectangle(cornerRadius: density.cardRadius, style: .continuous)
-                .fill(CRTheme.surfaceStrong)
-                .overlay {
-                    RoundedRectangle(cornerRadius: density.cardRadius, style: .continuous)
-                        .strokeBorder(isHovered ? accent.opacity(0.28) : CRTheme.stroke.opacity(0.38), lineWidth: 0.5)
-                }
-                .shadow(color: .black.opacity(isHovered ? 0.08 : 0.04),
-                        radius: isHovered ? 12 : 4, x: 0, y: isHovered ? 3 : 1)
-        }
+        .crCard(cornerRadius: density.cardRadius, highlighted: isHovered, accent: accent)
         .onHover { isHovered = $0 }
-        .scaleEffect(isHovered ? 1.015 : 1.0)
-        .animation(.crSpring, value: isHovered)
+        .animation(.crFast, value: isHovered)
     }
 }
 
@@ -923,19 +951,9 @@ private struct DeviceCard: View {
             }
             .padding(.horizontal, 14).padding(.vertical, 9)
         }
-        .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(CRTheme.surfaceStrong)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(isHovered ? accent.opacity(0.30) : CRTheme.stroke.opacity(0.38), lineWidth: 0.5)
-                }
-                .shadow(color: .black.opacity(isHovered ? 0.07 : 0.04),
-                        radius: isHovered ? 12 : 4, x: 0, y: isHovered ? 3 : 1)
-        }
+        .crCard(cornerRadius: 8, highlighted: isHovered, accent: accent)
         .onHover { isHovered = $0 }
-        .scaleEffect(isHovered ? 1.015 : 1.0)
-        .animation(.crSpring, value: isHovered)
+        .animation(.crFast, value: isHovered)
     }
 }
 
@@ -957,7 +975,7 @@ private struct ManualConnectCard: View {
             Button("Connect") { store.connectManual() }.buttonStyle(CRPrimaryButtonStyle())
         }
         .padding(14).frame(maxWidth: .infinity)
-        .crCard(cornerRadius: 11, highlighted: hovered)
+        .crCard(cornerRadius: 8, highlighted: hovered)
         .onHover { hovered = $0 }.animation(.crFast, value: hovered)
     }
 }
@@ -1102,106 +1120,50 @@ struct UnifiedDashboardView: View {
             CRDivider().padding(.horizontal, 28)
 
             // Device row
-            HStack(spacing: 24) {
-                // Device icon + name
-                HStack(spacing: 16) {
-                    ZStack {
-                        Circle()
-                            .fill(CRTheme.brandElectric.opacity(0.12))
-                            .frame(width: 52, height: 52)
-                        Image(systemName: "iphone.gen3")
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(CRTheme.brandElectric)
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(device.name)
-                            .font(.system(size: 17, weight: .bold))
-                        Text(device.lastSync?.relativeTimeString() ?? "Synced just now")
-                            .font(.system(size: 12))
-                            .foregroundStyle(CRTheme.inkSoft)
-                    }
-                }
-                Spacer()
-                // Clipboard push
-                Button {
-                    store.sendCurrentClipboard(to: device)
-                } label: {
-                    Label("Push clipboard", systemImage: "doc.on.clipboard")
-                        .font(.system(size: 12.5, weight: .semibold))
-                }
-                .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-
-                // Disconnect
-                Button { store.disconnect(device) } label: {
-                    Image(systemName: "xmark.circle")
-                        .font(.system(size: 16))
-                        .foregroundStyle(CRTheme.inkSoft)
-                }
-                .buttonStyle(.plain)
-                .help("Disconnect \(device.name)")
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 20)
+            DeviceListRow(device: device, store: store)
 
             // More connected devices
             if store.connectedDevices.count > 1 {
                 CRDivider().padding(.horizontal, 28)
                 ForEach(store.connectedDevices.dropFirst()) { d in
-                    HStack(spacing: 16) {
-                        Circle().fill(CRTheme.accentGreen).frame(width: 7, height: 7)
-                        Text(d.name).font(.system(size: 14, weight: .semibold))
-                        Spacer()
-                        Button("Push") { store.sendCurrentClipboard(to: d) }
-                            .buttonStyle(CRSecondaryButtonStyle())
-                    }
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 12)
+                    DeviceListRow(device: d, store: store)
                 }
             }
-        }
-        .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(colorScheme == .dark ? Color(white: 0.12) : .white)
-                .shadow(color: .black.opacity(0.05), radius: 16, y: 4)
         }
     }
 
     // ── No-device Hero ────────────────────────────────────────────────────────
 
     private var noDeviceHero: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 12) {
             Image(systemName: "iphone.gen3.slash")
-                .font(.system(size: 44))
-                .foregroundStyle(CRTheme.brandElectric.opacity(0.6))
+                .font(.system(size: 32))
+                .foregroundStyle(CRTheme.inkSubtle)
             Text("No Devices Connected")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
             Text("Open Deskdrop on your iPhone or Android to start syncing clipboard, files and calls.")
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundStyle(CRTheme.inkSoft)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 340)
             Button("Scan for Devices") { store.scanForDevices() }
-                .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentBlue))
+                .padding(.top, 8)
         }
         .frame(maxWidth: .infinity)
-        .padding(40)
-        .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(colorScheme == .dark ? Color(white: 0.12) : .white)
-                .shadow(color: .black.opacity(0.04), radius: 16, y: 4)
-        }
+        .padding(30)
+        .crCard(cornerRadius: 8)
     }
 
     // ── Quick Action Row ──────────────────────────────────────────────────────
 
     private var quickActionRow: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
             // Send File
-            dashActionCard(
+            QuickActionCard(
                 icon: "arrow.up.doc.fill",
                 title: "Send File",
                 subtitle: "Drag & drop or pick",
-                tint: CRTheme.brandElectric,
                 isDragTarget: isFileDragTargeted
             ) {
                 showingFilePicker = true
@@ -1212,88 +1174,40 @@ struct UnifiedDashboardView: View {
             } isTargeted: { isFileDragTargeted = $0 }
 
             // Push Clipboard
-            dashActionCard(
+            QuickActionCard(
                 icon: "doc.on.clipboard.fill",
                 title: "Push Clipboard",
-                subtitle: "All connected devices",
-                tint: CRTheme.accentIndigo
+                subtitle: "All connected devices"
             ) {
                 store.sendCurrentClipboard(to: nil)
             }
 
             // View History
-            dashActionCard(
+            QuickActionCard(
                 icon: "clock.arrow.circlepath",
                 title: "History",
-                subtitle: "\(store.timeline.count) items",
-                tint: CRTheme.accentGold
+                subtitle: "\(store.timeline.count) items"
             ) {
                 store.selectedSection = .history
             }
 
             // Manage Devices
-            dashActionCard(
+            QuickActionCard(
                 icon: "iphone.gen3",
                 title: "Devices",
-                subtitle: "\(store.devices.count) paired",
-                tint: CRTheme.accentGreen
+                subtitle: "\(store.devices.count) paired"
             ) {
                 store.selectedSection = .devices
             }
         }
     }
 
-    @ViewBuilder
-    private func dashActionCard(
-        icon: String, title: String, subtitle: String,
-        tint: Color, isDragTarget: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(tint.opacity(isDragTarget ? 0.25 : 0.12))
-                        .frame(width: 42, height: 42)
-                    Image(systemName: icon)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(tint)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color.primary)
-                    Text(subtitle)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(CRTheme.inkSoft)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isDragTarget
-                          ? tint.opacity(0.10)
-                          : (colorScheme == .dark ? Color(white: 0.14) : .white))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(isDragTarget ? tint.opacity(0.5) : CRTheme.stroke.opacity(0.4), lineWidth: isDragTarget ? 2 : 0.5)
-                    }
-                    .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
-            }
-        }
-        .buttonStyle(.plain)
-        .animation(.crFast, value: isDragTarget)
-    }
-
     // ── Stats Row ─────────────────────────────────────────────────────────────
 
     private var statsRow: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             statCard(value: "\(store.connectedDevices.count)", label: "Connected", icon: "wifi", tint: CRTheme.accentGreen)
-            statCard(value: "\(store.devices.count)", label: "Paired", icon: "checkmark.shield.fill", tint: CRTheme.brandElectric)
+            statCard(value: "\(store.devices.count)", label: "Paired", icon: "checkmark.shield.fill", tint: CRTheme.accentBlue)
             statCard(value: "\(store.timeline.count)", label: "Synced", icon: "doc.on.clipboard.fill", tint: CRTheme.accentIndigo)
             statCard(value: store.pendingClipboardCount > 0 ? "\(store.pendingClipboardCount)" : "—",
                      label: "Pending", icon: "tray.fill",
@@ -1303,15 +1217,15 @@ struct UnifiedDashboardView: View {
 
     @ViewBuilder
     private func statCard(value: String, label: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 32, height: 32)
-                .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
                 Text(value)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.primary)
                 Text(label)
                     .font(.system(size: 11, weight: .medium))
@@ -1319,13 +1233,9 @@ struct UnifiedDashboardView: View {
             }
             Spacer()
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity)
-        .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(colorScheme == .dark ? Color(white: 0.12) : .white)
-                .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
-        }
+        .crCard(cornerRadius: 8)
     }
 
     // ── Sync Controls ─────────────────────────────────────────────────────────
@@ -1333,12 +1243,13 @@ struct UnifiedDashboardView: View {
     private var syncControlsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Continuity Settings")
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(CRTheme.ink)
 
-            HStack(spacing: 14) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 syncToggleCard(title: "Text", icon: "text.alignleft", keyPath: \.syncText, tint: CRTheme.accentIndigo)
                 syncToggleCard(title: "Images", icon: "photo", keyPath: \.syncImages, tint: CRTheme.accentGold)
-                syncToggleCard(title: "Files", icon: "doc", keyPath: \.syncFiles, tint: CRTheme.brandElectric)
+                syncToggleCard(title: "Files", icon: "doc", keyPath: \.syncFiles, tint: CRTheme.accentBlue)
                 syncToggleCard(title: "Block Sensitive", icon: "eye.slash.fill", keyPath: \.blockSensitiveText, tint: CRTheme.accentRed)
             }
         }
@@ -1350,18 +1261,18 @@ struct UnifiedDashboardView: View {
         Button {
             isOn.wrappedValue.toggle()
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 ZStack {
-                    Circle()
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(isOn.wrappedValue ? tint.opacity(0.15) : CRTheme.inkSubtle.opacity(0.1))
-                        .frame(width: 32, height: 32)
+                        .frame(width: 28, height: 28)
                     Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(isOn.wrappedValue ? tint : CRTheme.inkSubtle)
                 }
 
                 Text(title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(isOn.wrappedValue ? Color.primary : CRTheme.inkSoft)
 
                 Spacer()
@@ -1372,12 +1283,8 @@ struct UnifiedDashboardView: View {
                     .controlSize(.mini)
                     .tint(tint)
             }
-            .padding(14)
-            .background {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(colorScheme == .dark ? Color(white: isOn.wrappedValue ? 0.15 : 0.12) : (isOn.wrappedValue ? .white : Color(white: 0.96)))
-                    .shadow(color: .black.opacity(isOn.wrappedValue ? 0.04 : 0.0), radius: 8, y: 3)
-            }
+            .padding(10)
+            .crCard(cornerRadius: 8)
         }
         .buttonStyle(.plain)
     }
@@ -1399,27 +1306,30 @@ struct UnifiedDashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Recent Activity")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(CRTheme.ink)
                 Spacer()
                 Button("See all") { store.selectedSection = .history }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(CRTheme.brandElectric)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(CRTheme.accentBlue)
             }
 
-            VStack(spacing: 6) {
-                ForEach(store.timeline.prefix(5)) { item in
-                    HStack(spacing: 14) {
+            VStack(spacing: 0) {
+                let recentItems = Array(store.timeline.prefix(5))
+                ForEach(Array(recentItems.enumerated()), id: \.element.id) { index, item in
+                    HStack(spacing: 12) {
                         Image(systemName: activityIcon(for: item))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(activityTint(for: item))
-                            .frame(width: 30, height: 30)
+                            .frame(width: 28, height: 28)
                             .background(activityTint(for: item).opacity(0.10),
-                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(item.title)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(CRTheme.ink)
                                 .lineLimit(1)
                             Text(item.sourceDevice)
                                 .font(.system(size: 11))
@@ -1433,23 +1343,22 @@ struct UnifiedDashboardView: View {
                             .foregroundStyle(CRTheme.inkSubtle)
 
                         if let text = item.fullText, !text.isEmpty {
-                            Button {
+                            Button("Copy") {
                                 store.applyClipboardLocally(text: text)
-                            } label: {
-                                Text("Copy")
-                                    .font(.system(size: 11, weight: .semibold))
                             }
                             .buttonStyle(CRSecondaryButtonStyle())
                         }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 10)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(colorScheme == .dark ? Color(white: 0.13) : .white)
+                    .background(CRTheme.surfaceElevated)
+                    
+                    if index < recentItems.count - 1 {
+                        CRDivider()
                     }
                 }
             }
+            .crCard(cornerRadius: 8)
         }
     }
 
@@ -1491,7 +1400,7 @@ private struct EmptyHeroCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(colorScheme == .dark ? Color(white: 0.1) : .white)
+                .fill(Color(NSColor.controlBackgroundColor))
                 .shadow(color: .black.opacity(0.04), radius: 10, y: 4)
         }
     }
@@ -1600,11 +1509,11 @@ private struct HeroDeviceCard: View {
             }
             .padding(40)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(colorScheme == .dark ? Color(white: 0.12) : .white)
+            .background(Color(NSColor.controlBackgroundColor))
         }
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(colorScheme == .dark ? Color(white: 0.12) : .white)
+                .fill(Color(NSColor.controlBackgroundColor))
                 .shadow(color: .black.opacity(0.06), radius: 15, y: 5)
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -1697,7 +1606,7 @@ private struct UnifiedDeviceCard: View {
         .frame(width: 240)
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(colorScheme == .dark ? Color(white: 0.1) : .white)
+                .fill(Color(NSColor.controlBackgroundColor))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1937,4 +1846,99 @@ func getLocalIPAddress() -> String? {
     }
     freeifaddrs(ifaddr)
     return address
+}
+
+// MARK: - Extracted Subviews
+
+struct QuickActionCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    var isDragTarget: Bool = false
+    let action: () -> Void
+    
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(CRTheme.brandElectric.opacity(isDragTarget ? 0.25 : 0.12))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(CRTheme.brandElectric)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.primary)
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+            .overlay {
+                if isDragTarget || hovered {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(CRTheme.brandElectric.opacity(0.4), lineWidth: 1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .animation(.crFast, value: isDragTarget)
+        .animation(.crFast, value: hovered)
+    }
+}
+
+struct DeviceListRow: View {
+    let device: ManagedDevice
+    @ObservedObject var store: DeskdropStore
+    @State private var hovered = false
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Leading: Device type icon
+            Image(systemName: device.name.lowercased().contains("mac") ? "laptopcomputer" : "iphone")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(CRTheme.brandElectric)
+                .frame(width: 24, alignment: .center)
+            
+            // Center: Device Name and status
+            VStack(alignment: .leading, spacing: 2) {
+                Text(device.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.primary)
+                Text(device.lastSync?.relativeTimeString() ?? "Synced just now")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color.secondary)
+            }
+            Spacer()
+            
+            // Trailing: Icon-only push button
+            Button {
+                store.sendCurrentClipboard(to: device)
+            } label: {
+                Image(systemName: "arrow.up.doc.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(hovered ? CRTheme.brandElectric : Color.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(Color(NSColor.controlBackgroundColor), in: Circle())
+                    .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
+            }
+            .buttonStyle(.plain)
+            .onHover { hovered = $0 }
+            .help("Push clipboard to \(device.name)")
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 14)
+    }
 }

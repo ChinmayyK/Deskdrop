@@ -1,25 +1,26 @@
 package com.cliprelay.ui
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -29,12 +30,15 @@ import androidx.compose.ui.unit.sp
 import com.cliprelay.ActivityEntry
 import com.cliprelay.ActivityKind
 import com.cliprelay.PeerSnapshot
+import com.cliprelay.ui.theme.CRBackground
 import com.cliprelay.ui.theme.CRTheme
 import com.cliprelay.ui.theme.crCard
-import com.cliprelay.ui.theme.CRBackground
+import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun MainScreen(
+    isDark: Boolean,
     isServiceRunning: Boolean,
     isSyncEnabled: Boolean,
     peers: List<PeerSnapshot>,
@@ -54,13 +58,24 @@ fun MainScreen(
     onOpenSettings: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val isDark = isSystemInDarkTheme()
 
     CRBackground(isDark = isDark) {
-        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            Box(modifier = Modifier.weight(1f)) {
-                if (selectedTab == 0) {
-                    DashboardTab(
+        Box(modifier = Modifier.fillMaxSize()) {
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInHorizontally(animationSpec = spring(stiffness = Spring.StiffnessLow), initialOffsetX = { fullWidth -> fullWidth }) + fadeIn() togetherWith
+                                slideOutHorizontally(animationSpec = spring(stiffness = Spring.StiffnessLow), targetOffsetX = { fullWidth -> -fullWidth }) + fadeOut()
+                    } else {
+                        slideInHorizontally(animationSpec = spring(stiffness = Spring.StiffnessLow), initialOffsetX = { fullWidth -> -fullWidth }) + fadeIn() togetherWith
+                                slideOutHorizontally(animationSpec = spring(stiffness = Spring.StiffnessLow), targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
+                    }
+                }, label = "tab_transition",
+                modifier = Modifier.fillMaxSize()
+            ) { targetTab ->
+                when (targetTab) {
+                    0 -> DashboardTab(
                         isDark = isDark,
                         isServiceRunning = isServiceRunning,
                         isSyncEnabled = isSyncEnabled,
@@ -78,8 +93,7 @@ fun MainScreen(
                         onResumeSync = onResumeSync,
                         onScanNow = onScanNow
                     )
-                } else {
-                    ActivityFeedTab(
+                    1 -> ActivityFeedTab(
                         isDark = isDark,
                         feed = feed,
                         onApplyClipboard = onApplyClipboard
@@ -87,38 +101,65 @@ fun MainScreen(
                 }
             }
 
-            // Custom Navigation Bar
-            Row(
+            // Floating Bottom Navigation Bar
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(CRTheme.canvasTop(isDark).copy(alpha = 0.8f))
-                    .padding(vertical = 12.dp, horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp, start = 32.dp, end = 32.dp)
             ) {
-                val haptic = LocalHapticFeedback.current
-                CRNavButton(
-                    icon = Icons.Default.Home,
-                    label = "Dashboard",
-                    isSelected = selectedTab == 0,
+                FloatingNavBar(
+                    selectedTab = selectedTab,
                     isDark = isDark,
-                    onClick = { 
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        selectedTab = 0 
-                    }
-                )
-                CRNavButton(
-                    icon = Icons.AutoMirrored.Filled.List,
-                    label = "Activity",
-                    isSelected = selectedTab == 1,
-                    isDark = isDark,
-                    onClick = { 
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        selectedTab = 1 
-                    }
+                    onTabSelected = { selectedTab = it }
                 )
             }
         }
+    }
+}
+
+@Composable
+fun FloatingNavBar(selectedTab: Int, isDark: Boolean, onTabSelected: (Int) -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    val navBg = if (isDark) Color(0xFF1E1E1E).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.95f)
+    val navBorder = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.05f)
+    val shadowColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.15f)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 24.dp,
+                shape = RoundedCornerShape(32.dp),
+                spotColor = shadowColor,
+                ambientColor = shadowColor
+            )
+            .clip(RoundedCornerShape(32.dp))
+            .background(navBg)
+            .border(1.dp, navBorder, RoundedCornerShape(32.dp))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CRNavButton(
+            icon = Icons.Default.Home,
+            label = "Dashboard",
+            isSelected = selectedTab == 0,
+            isDark = isDark,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onTabSelected(0)
+            }
+        )
+        CRNavButton(
+            icon = Icons.AutoMirrored.Filled.List,
+            label = "Activity",
+            isSelected = selectedTab == 1,
+            isDark = isDark,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onTabSelected(1)
+            }
+        )
     }
 }
 
@@ -130,17 +171,31 @@ fun CRNavButton(
     isDark: Boolean,
     onClick: () -> Unit
 ) {
-    val tint = if (isSelected) CRTheme.brandElectric else CRTheme.inkSoft(isDark)
-    val bg = if (isSelected) (if (isDark) Color(0xFFFFFFFF).copy(alpha = 0.12f) else Color(0xFFFFFFFF).copy(alpha = 0.95f)) else Color.Transparent
-    val stroke = if (isSelected) (if (isDark) Color(0xFFFFFFFF).copy(alpha = 0.15f) else Color(0xFFE2E8F0).copy(alpha = 0.9f)) else Color.Transparent
-
+    val tint by animateColorAsState(
+        targetValue = if (isSelected) Color.White else CRTheme.inkSubtle(isDark), 
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        label = "icon_color"
+    )
+    val bgAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0f, 
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        label = "bg_alpha"
+    )
+    
+    // Smooth width animation for the pill effect
+    val pillBg = CRTheme.brandElectric.copy(alpha = bgAlpha)
+    
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(bg)
-            .border(0.5.dp, stroke, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .height(52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(pillBg)
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = if (isSelected) 24.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
@@ -148,15 +203,19 @@ fun CRNavButton(
             imageVector = icon,
             contentDescription = label,
             tint = tint,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(20.dp)
         )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-            color = if (isSelected) CRTheme.ink(isDark) else CRTheme.inkSoft(isDark)
-        )
+        AnimatedVisibility(visible = isSelected) {
+            Row {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = label,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+            }
+        }
     }
 }
 
@@ -179,10 +238,11 @@ fun DashboardTab(
     onResumeSync: () -> Unit,
     onScanNow: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 48.dp, start = 20.dp, end = 20.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize().systemBarsPadding(),
+        contentPadding = PaddingValues(top = 24.dp, start = 24.dp, end = 24.dp, bottom = 140.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         item {
             Row(
@@ -190,15 +250,35 @@ fun DashboardTab(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = ambientStatus,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = CRTheme.inkSubtle(isDark),
-                    letterSpacing = 0.5.sp
-                )
-                TextButton(onClick = onOpenSettings) {
-                    Text("Settings", color = CRTheme.inkSoft(isDark), fontSize = 14.sp)
+                Column {
+                    Text(
+                        text = "ClipRelay",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CRTheme.ink(isDark),
+                        letterSpacing = (-0.5).sp
+                    )
+                    Text(
+                        text = ambientStatus,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = CRTheme.inkSubtle(isDark)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(if (isDark) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.03f))
+                        .clickable { onOpenSettings() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = CRTheme.ink(isDark),
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -209,53 +289,71 @@ fun DashboardTab(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .crCard(isDark, cornerRadius = 16.dp)
+                        .crCard(isDark, cornerRadius = 28.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(32.dp),
+                            .padding(36.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         val infiniteTransition = rememberInfiniteTransition()
                         val pulseScale by infiniteTransition.animateFloat(
-                            initialValue = 0.95f, targetValue = 1.05f,
-                            animationSpec = infiniteRepeatable(animation = tween(1200, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse)
+                            initialValue = 0.95f, targetValue = 1.1f,
+                            animationSpec = infiniteRepeatable(animation = tween(1500, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+                            label = "pulse_scale"
                         )
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .scale(pulseScale)
-                                .clip(CircleShape)
-                                .background(CRTheme.brandElectric.copy(alpha = 0.1f))
-                                .border(0.5.dp, CRTheme.brandElectric.copy(alpha = 0.15f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Home,
-                                contentDescription = null,
-                                tint = CRTheme.brandElectric,
-                                modifier = Modifier.size(28.dp)
+                        val glowAlpha by infiniteTransition.animateFloat(
+                            initialValue = 0.1f, targetValue = 0.3f,
+                            animationSpec = infiniteRepeatable(animation = tween(1500, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+                            label = "glow_alpha"
+                        )
+
+                        Box(contentAlignment = Alignment.Center) {
+                            // Outer Glow
+                            Box(
+                                modifier = Modifier
+                                    .size(90.dp)
+                                    .scale(pulseScale)
+                                    .clip(CircleShape)
+                                    .background(CRTheme.brandElectric.copy(alpha = glowAlpha))
                             )
+                            // Inner Icon
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(CRTheme.brandElectric.copy(alpha = 0.2f))
+                                    .border(1.dp, CRTheme.brandElectric.copy(alpha = 0.4f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Home,
+                                    contentDescription = null,
+                                    tint = CRTheme.brandElectric,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = if (!isServiceRunning) "Sync is stopped" else "Looking for devices...",
-                            fontSize = 20.sp,
+                            text = if (!isServiceRunning) "Sync is stopped" else "Looking for devices",
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = CRTheme.ink(isDark),
                             letterSpacing = (-0.5).sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = if (!isServiceRunning) "Start the service to discover devices." else "Stay on the same Wi-Fi network.",
-                            fontSize = 14.5f.sp,
+                            text = if (!isServiceRunning) "Start the service to discover devices seamlessly." else "Ensure you are on the same Wi-Fi network.",
+                            fontSize = 15.sp,
                             color = CRTheme.inkSoft(isDark),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            lineHeight = 20.sp
+                            lineHeight = 22.sp
                         )
-                        Spacer(modifier = Modifier.height(28.dp))
-                        val haptic = LocalHapticFeedback.current
+                        Spacer(modifier = Modifier.height(32.dp))
+                        
                         Button(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -266,18 +364,18 @@ fun DashboardTab(
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = CRTheme.brandElectric),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp)
                         ) {
                             Text(
                                 text = when {
-                                    !isServiceRunning -> "Start Sync"
+                                    !isServiceRunning -> "Start Syncing"
                                     !isSyncEnabled -> "Resume Sync"
                                     else -> "Scan Nearby"
                                 },
                                 color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -290,26 +388,25 @@ fun DashboardTab(
         }
 
         item {
-            Spacer(modifier = Modifier.height(32.dp))
-            CRSectionHeader(isDark, "ACTIONS", "Quick Shortcuts")
+            Spacer(modifier = Modifier.height(24.dp))
+            CRSectionHeader(isDark, "QUICK ACTIONS")
         }
 
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .crCard(isDark, cornerRadius = 16.dp)
+                    .crCard(isDark, cornerRadius = 24.dp)
             ) {
-                Column(modifier = Modifier.animateContentSize()) {
-                    val haptic = LocalHapticFeedback.current
+                Column(modifier = Modifier.animateContentSize(spring(stiffness = Spring.StiffnessLow))) {
                     if (peers.any { it.isConnected } && isSyncEnabled) {
-                        ActionRow(isDark, "Send clipboard to Mac", CRTheme.brandElectric) {
+                        ActionRow(isDark, "Send clipboard to Mac", CRTheme.brandElectric, isTop = true) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onActionPushClipboard()
                         }
                         HorizontalDivider(color = CRTheme.stroke(isDark), thickness = 0.5.dp)
                     }
-                    ActionRow(isDark, "Pair via Magic Link", CRTheme.brandElectric) {
+                    ActionRow(isDark, "Pair via Magic Link", CRTheme.brandElectric, isTop = !peers.any { it.isConnected } || !isSyncEnabled) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onActionPairMagicLink()
                     }
@@ -328,7 +425,7 @@ fun DashboardTab(
                     }
                     if (isServiceRunning) {
                         HorizontalDivider(color = CRTheme.stroke(isDark), thickness = 0.5.dp)
-                        ActionRow(isDark, "Stop service", CRTheme.accentRed) {
+                        ActionRow(isDark, "Stop service", CRTheme.accentRed, isBottom = true) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onActionStopService()
                         }
@@ -340,21 +437,11 @@ fun DashboardTab(
 }
 
 @Composable
-fun CRSectionHeader(isDark: Boolean, eyebrow: String, title: String) {
-    VStack(spacing = 4.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.width(3.dp).height(12.dp).clip(CircleShape).background(CRTheme.brandElectric))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(text = eyebrow, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = CRTheme.brandElectric, letterSpacing = 1.sp)
-        }
-        Text(text = title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = CRTheme.ink(isDark), letterSpacing = (-0.4).sp)
-    }
-}
-
-@Composable
-fun VStack(spacing: androidx.compose.ui.unit.Dp = 0.dp, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
-        content()
+fun CRSectionHeader(isDark: Boolean, title: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
+        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(CRTheme.brandElectric))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = CRTheme.inkSubtle(isDark), letterSpacing = 1.sp)
     }
 }
 
@@ -366,48 +453,51 @@ fun PeerRow(isDark: Boolean, peer: PeerSnapshot, onTrust: () -> Unit, onReject: 
             .fillMaxWidth()
             .crCard(
                 isDark = isDark, 
-                cornerRadius = 16.dp, 
+                cornerRadius = 24.dp, 
                 highlighted = peer.isConnected,
-                onClick = { /* Peer Details in future */ }
+                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
             )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(CRTheme.brandElectric.copy(alpha = 0.12f))
-                    .border(0.5.dp, CRTheme.brandElectric.copy(alpha = 0.16f), CircleShape),
+                    .background(Brush.linearGradient(listOf(CRTheme.brandElectric.copy(alpha = 0.15f), CRTheme.brandViolet.copy(alpha = 0.15f))))
+                    .border(1.dp, CRTheme.brandElectric.copy(alpha = 0.2f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = peer.name.take(1).uppercase(),
                     color = CRTheme.brandElectric,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 18.sp
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = peer.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = CRTheme.ink(isDark))
+                Text(text = peer.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = CRTheme.ink(isDark))
                 Text(
                     text = peer.status,
-                    fontSize = 13.sp,
-                    color = CRTheme.inkSoft(isDark)
+                    fontSize = 14.sp,
+                    color = if (peer.isConnected) CRTheme.brandElectric else CRTheme.inkSoft(isDark),
+                    fontWeight = if (peer.isConnected) FontWeight.Medium else FontWeight.Normal
                 )
             }
             if (peer.status == "needs_trust" || peer.status == "rejected" || !peer.trusted) {
                 Button(
-                    onClick = onTrust,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onTrust()
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = CRTheme.brandElectric),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    modifier = Modifier.height(32.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Text("Trust", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Trust", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -415,37 +505,60 @@ fun PeerRow(isDark: Boolean, peer: PeerSnapshot, onTrust: () -> Unit, onReject: 
 }
 
 @Composable
-fun ActionRow(isDark: Boolean, label: String, color: Color, onClick: () -> Unit) {
+fun ActionRow(isDark: Boolean, label: String, color: Color, isTop: Boolean = false, isBottom: Boolean = false, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(
+        topStart = if (isTop) 24.dp else 0.dp, topEnd = if (isTop) 24.dp else 0.dp,
+        bottomStart = if (isBottom) 24.dp else 0.dp, bottomEnd = if (isBottom) 24.dp else 0.dp
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 24.dp, vertical = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, color = color, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Text(text = label, color = color, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 fun ActivityFeedTab(isDark: Boolean, feed: List<ActivityEntry>, onApplyClipboard: (ActivityEntry) -> Unit) {
-    if (feed.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No activity yet", fontSize = 15.sp, color = CRTheme.inkSoft(isDark))
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 48.dp, start = 20.dp, end = 20.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                CRSectionHeader(isDark, "FEED", "Recent Activity")
-                Spacer(modifier = Modifier.height(8.dp))
+    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+        Text(
+            text = "Activity",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = CRTheme.ink(isDark),
+            letterSpacing = (-0.5).sp,
+            modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 8.dp)
+        )
+
+        if (feed.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No recent activity", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = CRTheme.inkSoft(isDark))
             }
-            items(feed) { entry ->
-                ActivityFeedRow(isDark = isDark, entry = entry, onApplyClipboard = { onApplyClipboard(entry) })
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 16.dp, start = 24.dp, end = 24.dp, bottom = 140.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                itemsIndexed(feed) { index, entry ->
+                    // Staggered entrance animation
+                    var isVisible by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) {
+                        delay(index * 50L)
+                        isVisible = true
+                    }
+                    AnimatedVisibility(
+                        visible = isVisible,
+                        enter = slideInVertically(initialOffsetY = { 50 }, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn()
+                    ) {
+                        ActivityFeedRow(isDark = isDark, entry = entry, onApplyClipboard = { onApplyClipboard(entry) })
+                    }
+                }
             }
         }
     }
@@ -453,38 +566,41 @@ fun ActivityFeedTab(isDark: Boolean, feed: List<ActivityEntry>, onApplyClipboard
 
 @Composable
 fun ActivityFeedRow(isDark: Boolean, entry: ActivityEntry, onApplyClipboard: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .crCard(isDark, cornerRadius = 16.dp)
+            .crCard(isDark, cornerRadius = 20.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = entry.deviceName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = CRTheme.ink(isDark))
+                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(if (entry.kind == ActivityKind.CLIPBOARD_TEXT) CRTheme.brandViolet else CRTheme.brandCyan))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = entry.deviceName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = CRTheme.ink(isDark))
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = "Just now", 
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                     color = CRTheme.inkSubtle(isDark)
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(text = entry.preview, fontSize = 14.sp, color = CRTheme.inkSoft(isDark), lineHeight = 20.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = entry.preview, fontSize = 15.sp, color = CRTheme.inkSoft(isDark), lineHeight = 22.sp)
             
             if (entry.kind == ActivityKind.CLIPBOARD_TEXT) {
-                Spacer(modifier = Modifier.height(12.dp))
-                val haptic = LocalHapticFeedback.current
+                Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onApplyClipboard()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = CRTheme.surfaceStrongDark.copy(alpha = 0.1f)),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                    modifier = Modifier.height(34.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.05f)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.height(36.dp)
                 ) {
-                    Text("Apply to Clipboard", fontSize = 13.sp, color = CRTheme.brandElectric, fontWeight = FontWeight.SemiBold)
+                    Text("Copy", fontSize = 14.sp, color = CRTheme.brandElectric, fontWeight = FontWeight.Bold)
                 }
             }
         }

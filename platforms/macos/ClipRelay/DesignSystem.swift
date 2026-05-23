@@ -33,114 +33,71 @@ extension Color {
 enum CRTheme {
 
     // ── Brand ─────────────────────────────────────────────────────────────────
-    static let brandElectric = Color(hex: 0x0066FF) // Vibrant, bright blue
-    static let brandViolet   = Color(hex: 0x8B5CF6) // Soft violet
-    static let brandCyan     = Color(hex: 0x06B6D4) // Bright cyan
-    static let brandPink     = Color(hex: 0xEC4899) // Soft pink
-
-    // ── Sidebar — Light, airy glassmorphism ────────────────────────────────────
-    static var sidebarBase: Color { Color(light: Color(hex: 0xF8FAFC, opacity: 0.85), dark: Color(hex: 0x000000, opacity: 0.85)) }
-    static var sidebarMid: Color  { Color(light: Color(hex: 0xF1F5F9, opacity: 0.80), dark: Color(hex: 0x000000, opacity: 0.80)) }
-    static var sidebarTop: Color  { Color(light: Color(hex: 0xFFFFFF, opacity: 0.75), dark: Color(hex: 0x000000, opacity: 0.75)) }
-
-    /// Primary foreground for text/icons drawn on the sidebar surface
-    static var sidebarInk: Color { Color(light: Color(hex: 0x0F172A), dark: Color(hex: 0xFFFFFF)) }
-    
-    /// Secondary / de-emphasised sidebar text
-    static var sidebarInkSoft: Color { Color(light: Color(hex: 0x475569), dark: Color(hex: 0xA1A1AA)) }
-    
-    /// Very muted sidebar text (timestamps, hints)
-    static var sidebarInkSubtle: Color { Color(light: Color(hex: 0x94A3B8), dark: Color(hex: 0x71717A)) }
-    
-    /// Subtle separator for use inside the sidebar
-    static var sidebarDivider: Color { Color(light: Color(hex: 0xE2E8F0, opacity: 0.8), dark: Color(hex: 0xFFFFFF, opacity: 0.1)) }
-    
-    /// Selected nav-button pill fill
-    static var sidebarSelectedFill: Color { Color(light: Color(hex: 0xFFFFFF, opacity: 0.95), dark: Color(hex: 0xFFFFFF, opacity: 0.12)) }
-    
-    /// Hovered nav-button pill fill
-    static var sidebarHoverFill: Color { Color(light: Color(hex: 0x000000, opacity: 0.03), dark: Color(hex: 0xFFFFFF, opacity: 0.05)) }
-    
-    /// Selected nav-button border
-    static var sidebarSelectedStroke: Color { Color(light: Color(hex: 0xE2E8F0, opacity: 0.9), dark: Color(hex: 0xFFFFFF, opacity: 0.15)) }
-    
-    static var sidebarSelectedInk: Color { Color(light: Color(hex: 0x0F172A), dark: Color(hex: 0xFFFFFF)) }
-    static var sidebarSelectedAccent: Color { brandElectric }
-    /// Stat-pill fill inside footer
-    static var sidebarPillFill: Color { Color(light: Color(hex: 0xF1F5F9), dark: Color(hex: 0xFFFFFF, opacity: 0.08)) }
-    static var sidebarPillStroke: Color { Color(light: Color(hex: 0xE2E8F0), dark: Color(hex: 0xFFFFFF, opacity: 0.15)) }
-
-    // ── Canvas ────────────────────────────────────────────────────────────────
-    static var canvasTop:    Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x000000)) }
-    static var canvasBottom: Color { Color(light: Color(hex: 0xF8FAFC), dark: Color(hex: 0x000000)) }
+    static let brandElectric = Color(hex: 0x0055CC) // Native blue
+    static let brandViolet   = Color(hex: 0x5E5CE6) // Native purple
+    static let brandCyan     = Color(hex: 0x32ADE6)
+    static let brandPink     = Color(hex: 0xFF2D55)
 
     // ── Semantic surfaces ─────────────────────────────────────────────────────
-    static var surface:         Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x000000)) }
-    static var surfaceStrong:   Color { Color(light: Color(hex: 0xF8FAFC), dark: Color(hex: 0x09090B)) }
-    static var surfaceElevated: Color { Color(light: Color(hex: 0xFFFFFF, opacity: 0.95), dark: Color(hex: 0x000000, opacity: 0.95)) }
+    static var surface:         Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x1E1E1E)) }
+    static var surfaceStrong:   Color { Color(light: Color(hex: 0xF5F5F5), dark: Color(hex: 0x282828)) }
+    static var surfaceElevated: Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x2A2A2A)) }
 
     // ── Row states ────────────────────────────────────────────────────────────
-    static var rowHover:    Color { Color(light: Color(hex: 0xF1F5F9), dark: Color(hex: 0xFFFFFF, opacity: 0.05)) }
-    static var rowSelected: Color { Color(light: Color(hex: 0xE2E8F0), dark: Color(hex: 0xFFFFFF, opacity: 0.10)) }
+    static var rowHover:    Color { Color(light: Color(hex: 0x000000, opacity: 0.04), dark: Color(hex: 0xFFFFFF, opacity: 0.05)) }
+    static var rowSelected: Color { Color(light: Color(hex: 0x000000, opacity: 0.08), dark: Color(hex: 0xFFFFFF, opacity: 0.10)) }
 
     // ── System accent palette ─────────────────────────────────────────────────
-    static let accentBlue   = Color(hex: 0x3B82F6)
-    static let accentGreen  = Color(hex: 0x10B981)
-    static let accentYellow = Color(hex: 0xF59E0B)
-    static let accentOrange = Color(hex: 0xF97316)
-    static let accentRed    = Color(hex: 0xEF4444)
-    static let accentPurple = Color(hex: 0x8B5CF6)
-    static let accentIndigo = Color(hex: 0x6366F1)
-    static let accentTeal   = Color(hex: 0x14B8A6)
-    static let accentMint   = Color(hex: 0x34D399)
-    static let accentPink   = Color(hex: 0xEC4899)
-    static let accentGold   = Color(hex: 0xEAB308)
+    static let accentBlue   = Color(hex: 0x0055CC)
+    static let accentGreen  = Color(hex: 0x34C759)
+    static let accentYellow = Color(hex: 0xFFCC00)
+    static let accentOrange = Color(hex: 0xFF9500)
+    static let accentRed    = Color(hex: 0xFF3B30)
+    static let accentPurple = Color(hex: 0x5E5CE6)
+    static let accentIndigo = Color(hex: 0x5856D6)
+    static let accentTeal   = Color(hex: 0x30B0C7)
+    static let accentMint   = Color(hex: 0x00C7BE)
+    static let accentPink   = Color(hex: 0xFF2D55)
+    static let accentGold   = Color(hex: 0xAF52DE)
 
     // ── Text ──────────────────────────────────────────────────────────────────
-    static var ink:       Color { Color(light: Color(hex: 0x0F172A), dark: Color(hex: 0xFFFFFF)) }
-    static var inkSoft:   Color { Color(light: Color(hex: 0x475569), dark: Color(hex: 0xA1A1AA)) }
-    static var inkSubtle: Color { Color(light: Color(hex: 0x64748B), dark: Color(hex: 0x71717A)) }
-    static var inkFaint:  Color { Color(light: Color(hex: 0x94A3B8), dark: Color(hex: 0x52525B)) }
+    static var ink:       Color { Color(light: Color(hex: 0x000000, opacity: 0.85), dark: Color(hex: 0xFFFFFF, opacity: 0.85)) }
+    static var inkSoft:   Color { Color(light: Color(hex: 0x000000, opacity: 0.55), dark: Color(hex: 0xFFFFFF, opacity: 0.55)) }
+    static var inkSubtle: Color { Color(light: Color(hex: 0x000000, opacity: 0.40), dark: Color(hex: 0xFFFFFF, opacity: 0.40)) }
+    static var inkFaint:  Color { Color(light: Color(hex: 0x000000, opacity: 0.25), dark: Color(hex: 0xFFFFFF, opacity: 0.25)) }
 
     // ── Borders ───────────────────────────────────────────────────────────────
-    static var stroke:     Color { Color(light: Color(hex: 0xE2E8F0), dark: Color(hex: 0xFFFFFF, opacity: 0.15)) }
-    static var strokeSoft: Color { Color(light: Color(hex: 0xF1F5F9), dark: Color(hex: 0xFFFFFF, opacity: 0.08)) }
+    static var stroke:     Color { Color(light: Color(hex: 0x000000, opacity: 0.10), dark: Color(hex: 0xFFFFFF, opacity: 0.10)) }
+    static var strokeSoft: Color { Color(light: Color(hex: 0x000000, opacity: 0.05), dark: Color(hex: 0xFFFFFF, opacity: 0.05)) }
 
-    // ── Gradients ─────────────────────────────────────────────────────────────
-    static var brandGradient: LinearGradient {
-        LinearGradient(colors: [brandElectric, brandViolet],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
+    // ── Legacy Mappings (Redirect to strict surfaces) ─────────────────────────
+    static var sidebarBase: Color { surfaceStrong }
+    static var sidebarMid:  Color { surfaceStrong }
+    static var sidebarTop:  Color { surfaceStrong }
+    static var sidebarInk: Color { ink }
+    static var sidebarInkSoft: Color { inkSoft }
+    static var sidebarInkSubtle: Color { inkSubtle }
+    static var sidebarDivider: Color { stroke }
+    static var sidebarSelectedFill: Color { rowSelected }
+    static var sidebarHoverFill: Color { rowHover }
+    static var sidebarSelectedStroke: Color { stroke }
+    static var sidebarSelectedInk: Color { ink }
+    static var sidebarSelectedAccent: Color { accentBlue }
+    static var sidebarPillFill: Color { rowHover }
+    static var sidebarPillStroke: Color { strokeSoft }
+    static var canvasTop: Color { surface }
+    static var canvasBottom: Color { surface }
     
-    static var cardGradient: LinearGradient {
-        LinearGradient(colors: [
-            Color(light: Color(hex: 0xFFFFFF, opacity: 0.88), dark: Color(hex: 0x18181B, opacity: 0.6)),
-            Color(light: Color(hex: 0xF8FAFC, opacity: 0.50), dark: Color(hex: 0x09090B, opacity: 0.4))
-        ], startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-    
-    static var canvasGradient: LinearGradient {
-        LinearGradient(colors: [canvasTop, canvasBottom],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-    /// Adaptive sidebar overlay — subtle in light mode, deep in dark mode
-    static var sidebarOverlay: LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: sidebarTop.opacity(0.85),  location: 0.0),
-                .init(color: sidebarMid.opacity(0.80),  location: 0.5),
-                .init(color: sidebarBase.opacity(0.70), location: 1.0)
-            ],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-    }
+    static var brandGradient: LinearGradient { LinearGradient(colors: [brandElectric, brandElectric], startPoint: .top, endPoint: .bottom) }
+    static var cardGradient: LinearGradient { LinearGradient(colors: [surfaceElevated, surfaceElevated], startPoint: .top, endPoint: .bottom) }
+    static var canvasGradient: LinearGradient { LinearGradient(colors: [surface, surface], startPoint: .top, endPoint: .bottom) }
+    static var sidebarOverlay: LinearGradient { LinearGradient(colors: [surfaceStrong, surfaceStrong], startPoint: .top, endPoint: .bottom) }
 
-    // Legacy aliases
     static var backgroundGradient: LinearGradient { canvasGradient }
-    static var backgroundTop:      Color           { canvasTop }
-    static var backgroundBottom:   Color           { canvasBottom }
-    static var sidebarTop_light:   Color           { sidebarTop }
-    static var sidebarBottom:      Color           { sidebarBase }
+    static var backgroundTop:      Color           { surface }
+    static var backgroundBottom:   Color           { surface }
+    static var sidebarTop_light:   Color           { surfaceStrong }
+    static var sidebarBottom:      Color           { surfaceStrong }
     static var sidebarGradient:    LinearGradient  { sidebarOverlay }
 }
 
@@ -150,18 +107,18 @@ typealias PBTheme = CRTheme
 
 enum CRDensityMode {
     case compact, comfortable
-    var rowPadding:  CGFloat { self == .compact ? 10 : 16 }
-    var cardSpacing: CGFloat { self == .compact ? 6  : 10 }
-    var cardRadius:  CGFloat { self == .compact ? 14 : 24 }
+    var rowPadding:  CGFloat { self == .compact ? 8 : 12 }
+    var cardSpacing: CGFloat { self == .compact ? 6  : 8 }
+    var cardRadius:  CGFloat { 8 }
 }
 
 // MARK: - Animation
 
 extension Animation {
-    static let crSpring = Animation.spring(response: 0.24, dampingFraction: 0.86)
-    static let crFast   = Animation.spring(response: 0.15, dampingFraction: 0.90)
-    static let crSlow   = Animation.spring(response: 0.38, dampingFraction: 0.82)
-    static let crBounce = Animation.spring(response: 0.30, dampingFraction: 0.62)
+    static let crSpring = Animation.interactiveSpring(response: 0.28, dampingFraction: 0.65, blendDuration: 0.25)
+    static let crFast   = Animation.interactiveSpring(response: 0.20, dampingFraction: 0.70, blendDuration: 0.25)
+    static let crSlow   = Animation.spring(response: 0.45, dampingFraction: 0.85)
+    static let crBounce = Animation.interactiveSpring(response: 0.35, dampingFraction: 0.55, blendDuration: 0.25)
 }
 
 // MARK: - NSVisualEffectView Wrappers
@@ -199,22 +156,22 @@ struct CRVisualEffect: NSViewRepresentable {
 // MARK: - Card Modifier
 
 private struct CRCardModifier: ViewModifier {
-    var cornerRadius: CGFloat = 12
+    var cornerRadius: CGFloat = 8
     var highlighted:  Bool    = false
     var accentColor:  Color   = CRTheme.accentBlue
     func body(content: Content) -> some View {
         content
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(CRTheme.cardGradient)
+                    .fill(CRTheme.surfaceElevated)
                     .overlay {
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .strokeBorder(
-                                highlighted ? accentColor.opacity(0.50) : CRTheme.stroke,
-                                lineWidth: highlighted ? 1.0 : 0.5)
+                                highlighted ? accentColor.opacity(0.80) : CRTheme.stroke.opacity(0.70),
+                                lineWidth: highlighted ? 1.5 : 0.5)
                     }
-                    .shadow(color: highlighted ? accentColor.opacity(0.15) : Color(hex: 0x0F172A).opacity(0.04),
-                            radius: highlighted ? 18 : 12, x: 0, y: highlighted ? 6 : 4)
+                .shadow(color: highlighted ? accentColor.opacity(0.2) : Color.black.opacity(0.06),
+                        radius: highlighted ? 12 : 4, x: 0, y: highlighted ? 4 : 2)
             }
     }
 }
@@ -313,8 +270,7 @@ struct GlowModifier: ViewModifier {
     var color: Color; var radius: CGFloat
     func body(content: Content) -> some View {
         content
-            .shadow(color: color.opacity(0.35), radius: radius / 1.5, y: radius / 3)
-            .shadow(color: color.opacity(0.15), radius: radius * 1.5, y: radius / 2)
+            .shadow(color: color.opacity(0.15), radius: radius / 3, y: radius / 6)
     }
 }
 extension View {
@@ -327,57 +283,73 @@ extension View {
 
 struct CRPrimaryButtonStyle: ButtonStyle {
     var tint: Color = CRTheme.accentBlue
+    @State private var isHovered = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .semibold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(.white)
-            .padding(.horizontal, 13).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.vertical, 5)
             .background {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(tint).brightness(configuration.isPressed ? -0.06 : 0)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(tint).brightness(configuration.isPressed ? -0.05 : (isHovered ? 0.03 : 0))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
+                    }
+                    .shadow(color: Color.black.opacity(0.08), radius: 2, y: 1)
             }
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.crFast, value: configuration.isPressed)
+            .animation(.crFast, value: isHovered)
+            .onHover { isHovered = $0 }
     }
 }
 
 struct CRSecondaryButtonStyle: ButtonStyle {
+    @State private var isHovered = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .medium))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(CRTheme.ink)
-            .padding(.horizontal, 13).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.vertical, 5)
             .background {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(CRTheme.surface)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovered ? CRTheme.rowHover : CRTheme.surface)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(CRTheme.stroke.opacity(0.65), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(CRTheme.stroke.opacity(isHovered ? 0.8 : 0.5), lineWidth: 0.5)
                     }
-                    .opacity(configuration.isPressed ? 0.75 : 1.0)
+                .shadow(color: Color.black.opacity(isHovered ? 0.05 : 0.02), radius: 2, y: 1)
+                .opacity(configuration.isPressed ? 0.7 : 1.0)
             }
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.crFast, value: configuration.isPressed)
+            .animation(.crFast, value: isHovered)
+            .onHover { isHovered = $0 }
     }
 }
 
 struct CRDestructiveButtonStyle: ButtonStyle {
+    @State private var isHovered = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .semibold))
-            .foregroundStyle(CRTheme.accentRed)
-            .padding(.horizontal, 13).padding(.vertical, 6)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(isHovered ? .white : CRTheme.accentRed)
+            .padding(.horizontal, 14).padding(.vertical, 7)
             .background {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(CRTheme.accentRed.opacity(0.08))
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isHovered ? CRTheme.accentRed : CRTheme.accentRed.opacity(0.08))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(CRTheme.accentRed.opacity(0.18), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(CRTheme.accentRed.opacity(isHovered ? 0.8 : 0.2), lineWidth: isHovered ? 1.0 : 0.5)
                     }
-                    .opacity(configuration.isPressed ? 0.75 : 1.0)
+                    .shadow(color: CRTheme.accentRed.opacity(isHovered ? 0.3 : 0), radius: 6, y: 2)
+                    .opacity(configuration.isPressed ? 0.6 : 1.0)
             }
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .animation(.crFast, value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.95 : (isHovered ? 1.02 : 1.0))
+            .animation(.crBounce, value: configuration.isPressed)
+            .animation(.crSpring, value: isHovered)
+            .onHover { isHovered = $0 }
     }
 }
 
@@ -645,23 +617,24 @@ struct SidebarNavButton: View {
             .padding(.horizontal, 10).padding(.vertical, 7)
             .frame(maxWidth: .infinity, minHeight: 30)
             .background {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(isSelected ? CRTheme.sidebarSelectedFill
                                      : (hovered ? CRTheme.sidebarHoverFill : .clear))
                     .overlay {
                         if isSelected {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(CRTheme.sidebarSelectedStroke, lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(CRTheme.sidebarSelectedStroke, lineWidth: 1.0)
                         }
                     }
-                    .shadow(color: .black.opacity(isSelected ? 0.05 : 0),
-                            radius: isSelected ? 3 : 0, x: 0, y: isSelected ? 1 : 0)
+                    .shadow(color: isSelected ? CRTheme.brandElectric.opacity(0.15) : .clear,
+                            radius: isSelected ? 4 : 0, x: 0, y: isSelected ? 2 : 0)
             }
         }
         .buttonStyle(.plain)
+        .scaleEffect(hovered && !isSelected ? 1.02 : 1.0)
         .onHover { hovered = $0 }
-        .animation(.crFast, value: isSelected)
-        .animation(.crFast, value: hovered)
+        .animation(.crBounce, value: isSelected)
+        .animation(.crSpring, value: hovered)
     }
 }
 
@@ -794,5 +767,27 @@ struct CRSectionToolbar<TrailingContent: View>: View {
             CRDivider()
         }
         .background(CRTheme.surfaceElevated)
+    }
+}
+
+// MARK: - Fluid Background
+
+struct CRFluidBackgroundView: View {
+    var body: some View {
+        CRTheme.surface.ignoresSafeArea()
+    }
+}
+
+// MARK: - Spotlight Hover Effect
+
+struct SpotlightHoverModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+    }
+}
+
+extension View {
+    func spotlightHover() -> some View {
+        self.modifier(SpotlightHoverModifier())
     }
 }

@@ -155,12 +155,18 @@ private struct PrefsTabChip: View {
             .background {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(isSelected ? CRTheme.surface : (hovered ? CRTheme.surfaceElevated : .clear))
-                    .shadow(color: .black.opacity(isSelected ? 0.04 : 0), radius: 4, y: 2)
+                    .overlay {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1.0)
+                        }
+                    }
+                    .shadow(color: .black.opacity(isSelected ? 0.08 : 0), radius: 6, y: 2)
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain).onHover { hovered = $0 }
-        .animation(.crFast, value: isSelected).animation(.crFast, value: hovered)
+        .buttonStyle(.plain).scaleEffect(hovered && !isSelected ? 1.02 : 1.0).onHover { hovered = $0 }
+        .animation(.crBounce, value: isSelected).animation(.crSpring, value: hovered)
     }
 }
 
@@ -212,7 +218,7 @@ private struct PrefsFooter: View {
 
 private struct GeneralPane: View {
     @Binding var copy: DeskdropSettingsSnapshot
-    @AppStorage("cr_app_theme") private var appTheme: String = "light"
+    @AppStorage("cr_app_theme") private var appTheme: String = "system"
 
     var body: some View {
         PrefsSection(title: "Identity", icon: "person.crop.circle.fill", tint: CRTheme.accentBlue) {
@@ -572,15 +578,15 @@ private struct PrefsSection<Content: View>: View {
             .padding(.leading, 4)
 
             VStack(spacing: 0) { content() }
-                .background(CRTheme.surfaceElevated)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: .black.opacity(0.04), radius: 10, y: 4)
+                .background(.regularMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(CRTheme.stroke, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1.0)
                 }
         }
-        .padding(.bottom, 28)
+        .padding(.bottom, 32)
     }
 }
 

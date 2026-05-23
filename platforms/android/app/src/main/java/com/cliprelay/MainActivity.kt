@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
     private val peers = mutableStateOf<List<PeerSnapshot>>(emptyList())
     private val feed = mutableStateOf<List<ActivityEntry>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
+    private val isDarkMode = mutableStateOf(false)
 
     private val feedRefreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val feedRefreshRunnable = object : Runnable {
@@ -61,8 +62,9 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
 
         setContent {
-            AppTheme {
+            AppTheme(useDarkTheme = isDarkMode.value) {
                 MainScreen(
+                    isDark = isDarkMode.value,
                     isServiceRunning = isServiceRunning.value,
                     isSyncEnabled = isSyncEnabled.value,
                     peers = peers.value,
@@ -170,6 +172,7 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences(ClipRelayService.PREFS_NAME, MODE_PRIVATE)
         isServiceRunning.value = prefs.getBoolean(ClipRelayService.PREF_SERVICE_RUNNING, false)
         isSyncEnabled.value = prefs.getBoolean("sync_enabled", true)
+        isDarkMode.value = prefs.getBoolean("dark_mode", false)
         
         val allPeers = prefs.peerSnapshots()
         peers.value = allPeers
