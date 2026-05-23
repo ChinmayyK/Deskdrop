@@ -39,9 +39,9 @@ enum CRTheme {
     static let brandPink     = Color(hex: 0xFF2D55)
 
     // ── Semantic surfaces ─────────────────────────────────────────────────────
-    static var surface:         Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x1E1E1E)) }
-    static var surfaceStrong:   Color { Color(light: Color(hex: 0xF5F5F5), dark: Color(hex: 0x282828)) }
-    static var surfaceElevated: Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x2A2A2A)) }
+    static var surface:         Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x000000)) }
+    static var surfaceStrong:   Color { Color(light: Color(hex: 0xF5F5F5), dark: Color(hex: 0x0A0A0A)) }
+    static var surfaceElevated: Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x141414)) }
 
     // ── Row states ────────────────────────────────────────────────────────────
     static var rowHover:    Color { Color(light: Color(hex: 0x000000, opacity: 0.04), dark: Color(hex: 0xFFFFFF, opacity: 0.05)) }

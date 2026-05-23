@@ -249,6 +249,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CallStateChanged { .. } => PB_EVENT_CALL_STATE_CHANGED,
         EngineEvent::CallActionRequest { .. } => PB_EVENT_CALL_ACTION,
         EngineEvent::BatteryStateChanged { .. } => PB_EVENT_BATTERY_STATE_CHANGED,
+        EngineEvent::NotificationReceived { .. } => PB_EVENT_ACTIVITY_UPDATED,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
     }
 }

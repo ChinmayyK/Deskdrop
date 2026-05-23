@@ -69,6 +69,8 @@ pub enum ActivityKind {
     RemoteClipboardAvailable,
     /// User explicitly applied a remote clipboard item.
     ClipboardApplied,
+    /// A remote push notification was relayed.
+    RemoteNotification,
 }
 
 /// A single entry in the activity feed.
@@ -497,6 +499,30 @@ impl ActivityFeed {
             ActivityKind::SyncResumed,
             summary,
         );
+        self.push(entry);
+        id
+    }
+
+    /// Record a remote push notification.
+    pub fn record_remote_notification(
+        &mut self,
+        device_id: Uuid,
+        device_name: String,
+        package: String,
+        title: String,
+        text: String,
+    ) -> u64 {
+        let summary = format!("[{}] {}: {}", device_name, title, text);
+        let id = self.alloc_id();
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::RemoteNotification,
+            summary,
+        );
+        entry.text_preview = Some(text);
+        entry.file_name = Some(title); // We'll abuse file_name for title, or maybe we can just put it all in summary, but text_preview and file_name are handy. Let's use file_name for title.
         self.push(entry);
         id
     }

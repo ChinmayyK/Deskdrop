@@ -47,6 +47,34 @@ class ClipRelayNotificationListener : NotificationListenerService() {
         Log.i(TAG, "Notification listener disconnected")
     }
 
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        super.onNotificationPosted(sbn)
+        sbn ?: return
+        val notif = sbn.notification ?: return
+        val pkg = sbn.packageName ?: ""
+        
+        // Skip our own notifications or ongoing/system ones that might be noisy
+        if (pkg == packageName || pkg == "android" || pkg == "com.android.systemui") return
+        if ((notif.flags and Notification.FLAG_ONGOING_EVENT) != 0) return
+        
+        val title = notif.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+        val text = notif.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val id = sbn.key ?: "${sbn.id}"
+        
+        if (title.isBlank() && text.isBlank()) return
+        
+        Log.d(TAG, "Notification posted: pkg=$pkg, title=$title, text=$text")
+        
+        val intent = Intent(this, ClipRelayService::class.java).apply {
+            action = ClipRelayService.ACTION_PUSH_NOTIFICATION
+            putExtra(ClipRelayService.EXTRA_NOTIFICATION_ID, id)
+            putExtra(ClipRelayService.EXTRA_NOTIFICATION_PKG, pkg)
+            putExtra(ClipRelayService.EXTRA_NOTIFICATION_TITLE, title)
+            putExtra(ClipRelayService.EXTRA_NOTIFICATION_TEXT, text)
+        }
+        startService(intent)
+    }
+
     fun handleCallAction(actionWanted: String): Boolean {
         val activeNotifs = activeNotifications ?: return false
         Log.i(TAG, "Searching active notifications for call actions... count=${activeNotifs.size}")

@@ -206,7 +206,38 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_pollEvent(
     }
 }
 
-// ── eventType ─────────────────────────────────────────────────────────────────
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_cliprelay_ClipRelayJni_pushNotification(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    id: JString,
+    package_name: JString,
+    title: JString,
+    text: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let ctx = unsafe { &*(handle as *const AndroidHandle) };
+
+    let id = env.get_string(&id).map(|s| s.into()).unwrap_or_default();
+    let package = env
+        .get_string(&package_name)
+        .map(|s| s.into())
+        .unwrap_or_default();
+    let title = env.get_string(&title).map(|s| s.into()).unwrap_or_default();
+    let text = env.get_string(&text).map(|s| s.into()).unwrap_or_default();
+
+    rt().block_on(async {
+        ctx.engine.push_notification(id, package, title, text).await;
+    });
+    0
+}
+
+// ── Event polling ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
 pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventType(
@@ -251,6 +282,7 @@ pub extern "system" fn Java_com_cliprelay_ClipRelayJni_eventType(
         CallStateChanged { .. } => 17,
         CallActionRequest { .. } => 18,
         BatteryStateChanged { .. } => 19,
+        NotificationReceived { .. } => 16,
         Warning(_) => 7,
     }
 }

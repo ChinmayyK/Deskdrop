@@ -328,6 +328,20 @@ pub enum AppMessage {
         origin_device: Uuid,
         origin_device_name: String,
     },
+    /// Relay a push notification from an Android device to connected peers.
+    NotificationRelay {
+        /// Unique ID or tag for this notification
+        id: String,
+        /// Package name of the app that posted the notification
+        package: String,
+        /// Notification title (e.g. sender name)
+        title: String,
+        /// Notification text/body
+        text: String,
+        /// Device that originated this event
+        origin_device: Uuid,
+        origin_device_name: String,
+    },
     Ping {
         timestamp_ms: u64,
     },

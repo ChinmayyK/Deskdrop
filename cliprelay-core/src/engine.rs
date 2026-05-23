@@ -177,6 +177,15 @@ pub enum EngineEvent {
         level: u8,
         charging: bool,
     },
+    /// A connected Android device relayed a push notification.
+    NotificationReceived {
+        id: String,
+        package: String,
+        title: String,
+        text: String,
+        from_device: Uuid,
+        from_name: String,
+    },
     Warning(String),
 }
 
@@ -520,6 +529,25 @@ impl Engine {
         };
 
         let peers = self.shared.peer_manager.all_trusted_senders();
+        for (peer_id, tx) in peers {
+            let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
+            if !peer.trusted { continue; }
+            let _ = tx.send(msg.clone()).await;
+        }
+    }
+
+    /// Relay a push notification to all connected, trusted peers.
+    pub async fn push_notification(&self, id: String, package: String, title: String, text: String) {
+        let msg = AppMessage::NotificationRelay {
+            id,
+            package,
+            title,
+            text,
+            origin_device: self.shared.config.device_id,
+            origin_device_name: self.shared.config.device_name.clone(),
+        };
+
+        let peers = self.shared.peer_manager.all_connected_senders();
         for (peer_id, tx) in peers {
             let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
             if !peer.trusted { continue; }
@@ -3078,6 +3106,28 @@ fn register_session(
                         Ok(AppMessage::Bye) => {
                             let _ = shared.peer_manager.set_explicit_disconnect(peer_id, true);
                             break "peer closed session".to_string();
+                        }
+                        Ok(AppMessage::NotificationRelay {
+                            id,
+                            package,
+                            title,
+                            text,
+                            origin_device,
+                            origin_device_name,
+                        }) => {
+                            last_seen = Instant::now();
+                            let _activity_id = {
+                                let mut feed = shared.activity.lock().await;
+                                feed.record_remote_notification(origin_device, origin_device_name.clone(), package.clone(), title.clone(), text.clone())
+                            };
+                            let _ = shared.event_tx.send(EngineEvent::NotificationReceived {
+                                id,
+                                package,
+                                title,
+                                text,
+                                from_device: origin_device,
+                                from_name: origin_device_name,
+                            }).await;
                         }
                         Err(err) => {
                             break err.to_string();

@@ -78,6 +78,7 @@ object ClipRelayJni {
     @JvmStatic external fun pushText(handle: Long, text: String): Int
     @JvmStatic external fun pushImage(handle: Long, mimeType: String, data: ByteArray): Int
     @JvmStatic external fun pushFile(handle: Long, name: String, data: ByteArray): Int
+    @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
 
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
@@ -282,6 +283,7 @@ class ClipRelayService : Service() {
         const val ACTION_STATUS_CHANGED     = "com.cliprelay.STATUS_CHANGED"
         const val ACTION_SETTINGS_CHANGED   = "com.cliprelay.SETTINGS_CHANGED"  // re-read prefs live
         const val ACTION_PUSH_CLIPBOARD     = "com.cliprelay.PUSH_CLIPBOARD"    // send Android clipboard to peers
+        const val ACTION_PUSH_NOTIFICATION  = "com.cliprelay.PUSH_NOTIFICATION"
         const val ACTION_APPLY_CLIPBOARD    = "com.cliprelay.APPLY_CLIPBOARD"
         const val ACTION_ACCEPT_FILE_TRANSFER = "com.cliprelay.ACCEPT_FILE_TRANSFER"
         const val ACTION_REJECT_FILE_TRANSFER = "com.cliprelay.REJECT_FILE_TRANSFER"
@@ -300,6 +302,10 @@ class ClipRelayService : Service() {
         const val EXTRA_SHARED_URIS         = "shared_uris"
         const val EXTRA_SHARED_NAME         = "shared_name"
         const val EXTRA_TARGET_DEVICE_ID    = "target_device_id"
+        const val EXTRA_NOTIFICATION_ID     = "notification_id"
+        const val EXTRA_NOTIFICATION_PKG    = "notification_pkg"
+        const val EXTRA_NOTIFICATION_TITLE  = "notification_title"
+        const val EXTRA_NOTIFICATION_TEXT   = "notification_text"
         const val PREF_SERVICE_RUNNING      = "service_running"
 
         // Poll intervals
@@ -645,6 +651,16 @@ class ClipRelayService : Service() {
                     } else {
                         sendSharedUris(uriStrings, preferredName, targetDeviceId)
                     }
+                }
+            }
+
+            if (intent?.action == ACTION_PUSH_NOTIFICATION) {
+                if (engineHandle != 0L && hasConnectedPeers()) {
+                    val id = intent.getStringExtra(EXTRA_NOTIFICATION_ID) ?: ""
+                    val pkg = intent.getStringExtra(EXTRA_NOTIFICATION_PKG) ?: ""
+                    val title = intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: ""
+                    val text = intent.getStringExtra(EXTRA_NOTIFICATION_TEXT) ?: ""
+                    ClipRelayJni.pushNotification(engineHandle, id, pkg, title, text)
                 }
             }
 

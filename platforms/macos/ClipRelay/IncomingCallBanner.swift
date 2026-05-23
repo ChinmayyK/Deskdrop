@@ -72,11 +72,11 @@ final class CallBannerWindowManager: NSObject {
     @objc private func layoutPanel() {
         guard let screen = activeScreen else { return }
         let visible = screen.visibleFrame
-        let width: CGFloat = 380
-        let height: CGFloat = 160
+        let width: CGFloat = 350
+        let height: CGFloat = 80
         let frame = NSRect(
             x: visible.midX - width / 2,
-            y: visible.maxY - height - 12,
+            y: visible.maxY - height - 16,
             width: width,
             height: height
         )
@@ -145,14 +145,14 @@ private final class CallBannerHostingView<Content: View>: NSHostingView<Content>
 private final class CallBannerPanel: NSPanel {
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 160),
+            contentRect: NSRect(x: 0, y: 0, width: 350, height: 80),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         
         level = .statusBar
-        hasShadow = true
+        hasShadow = false
         isOpaque = false
         backgroundColor = .clear
         hidesOnDeactivate = false
@@ -189,8 +189,7 @@ private struct CallBannerContainerView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(8)
+        .frame(width: 350, height: 80, alignment: .center)
         .animation(.crSpring, value: store.activeCall)
     }
 }
@@ -231,106 +230,85 @@ private struct CallBannerView: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
-            // ── Caller avatar / phone icon ────────────────────────────────
+        HStack(spacing: 14) {
+            // ── Caller avatar ───────────────────────────────────────────────
             ZStack {
                 if call.isRinging {
                     Circle()
                         .fill(acceptGreen.opacity(0.2))
-                        .frame(width: 64, height: 64)
-                        .scaleEffect(ringPulse ? 1.3 : 1.0)
-                        .opacity(ringPulse ? 0.0 : 0.6)
+                        .frame(width: 56, height: 56)
+                        .scaleEffect(ringPulse ? 1.25 : 1.0)
+                        .opacity(ringPulse ? 0.0 : 0.8)
                 }
 
                 Circle()
-                    .fill(LinearGradient(colors: [Color.blue.opacity(0.7), Color.purple.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 52, height: 52)
-                    .shadow(color: Color.purple.opacity(0.3), radius: 8, y: 4)
+                    .fill(LinearGradient(colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 44, height: 44)
+                    .shadow(color: Color.purple.opacity(0.3), radius: 6, y: 3)
                     
                 Text(String(call.displayName.prefix(1)).uppercased())
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
             }
             .onAppear {
                 if call.isRinging {
-                    withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                         ringPulse = true
                     }
                 }
             }
 
-            // ── Caller info ──────────────────────────────────────────────
-            VStack(alignment: .leading, spacing: 4) {
+            // ── Caller info ─────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: 2) {
                 if call.isOffhook {
-                    Text("Ongoing Call • \(formatDuration)")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    Text("ONGOING CALL • \(formatDuration)")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundStyle(activeBlue)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
+                        .tracking(0.5)
                         .onReceive(timer) { _ in callDuration += 1 }
                 } else {
-                    Text("Incoming Call")
-                        .font(.system(size: 11, weight: .semibold))
+                    Text("INCOMING CALL")
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(acceptGreen)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
+                        .tracking(0.5)
                 }
 
                 Text(call.displayName)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color.primary)
                     .lineLimit(1)
-
-                HStack(spacing: 4) {
-                    Image(systemName: "iphone")
-                        .font(.system(size: 10))
-                    Text(call.deviceName)
-                        .font(.system(size: 11))
-                }
-                .foregroundStyle(Color.secondary)
             }
 
             Spacer(minLength: 0)
 
-            // ── Action buttons ────────────────────────────────────────────
-            if call.isRinging {
-                VStack(spacing: 8) {
-                    Button(action: {
-                        NSLog("Deskdrop DEBUG: Accept button clicked inside CallBannerView!")
-                        onAccept()
-                    }) {
-                        ZStack {
-                            Circle().fill(acceptGreen)
-                            Image(systemName: "phone.fill")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .shadow(color: acceptGreen.opacity(0.4), radius: 8, y: 2)
-
-                    Button(action: {
-                        NSLog("Deskdrop DEBUG: Decline button clicked inside CallBannerView!")
-                        onDecline()
-                    }) {
+            // ── Action buttons ──────────────────────────────────────────────
+            HStack(spacing: 10) {
+                if call.isRinging {
+                    Button(action: onDecline) {
                         ZStack {
                             Circle().fill(declineRed)
                             Image(systemName: "phone.down.fill")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(.white)
                         }
-                        .frame(width: 44, height: 44)
+                        .frame(width: 38, height: 38)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(.plain)
-                    .shadow(color: declineRed.opacity(0.4), radius: 8, y: 2)
-                }
-            } else {
-                // Ongoing call actions
-                HStack(spacing: 12) {
-                    // Audio Routing Menu
+                    .buttonStyle(CallButtonStyle())
+
+                    Button(action: onAccept) {
+                        ZStack {
+                            Circle().fill(acceptGreen)
+                            Image(systemName: "phone.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .frame(width: 38, height: 38)
+                        .contentShape(Circle())
+                    }
+                    .buttonStyle(CallButtonStyle())
+                } else {
+                    // Ongoing call actions
                     Menu {
                         Button(action: { onRouteAudio("earpiece") }) {
                             Label("Phone Earpiece", systemImage: "iphone")
@@ -345,40 +323,38 @@ private struct CallBannerView: View {
                         Image(systemName: "speaker.wave.2.fill")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Color.primary)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 38, height: 38)
                             .background(Circle().fill(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.1)))
                     }
                     .menuStyle(.borderlessButton)
-                    .frame(width: 44, height: 44)
-                    .buttonStyle(.plain)
+                    .frame(width: 38, height: 38)
+                    .buttonStyle(CallButtonStyle())
 
-                    Button(action: {
-                        NSLog("Deskdrop DEBUG: Ongoing decline button clicked inside CallBannerView!")
-                        onDecline()
-                    }) {
+                    Button(action: onDecline) {
                         ZStack {
                             Circle().fill(declineRed)
                             Image(systemName: "phone.down.fill")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(.white)
                         }
-                        .frame(width: 44, height: 44)
+                        .frame(width: 38, height: 38)
                         .contentShape(Circle())
                     }
-                    .buttonStyle(.plain)
-                    .shadow(color: declineRed.opacity(0.4), radius: 8, y: 2)
+                    .buttonStyle(CallButtonStyle())
                 }
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(width: 350, height: 80)
         .background(
             CRHUDMaterial()
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .shadow(color: .black.opacity(0.2), radius: 24, y: 12)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.15), radius: 24, y: 12)
         )
-        .onTapGesture {
-            NSLog("Deskdrop DEBUG: Entire CallBannerView card tapped!")
-        }
     }
 }

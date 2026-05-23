@@ -17,13 +17,18 @@ struct DashboardRootView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        HStack(spacing: 0) {
+            CRSidebarView(store: store)
+                .frame(width: 220)
+                .background(CRTheme.surfaceStrong)
+
+            Divider().opacity(0.5)
+
             DetailContent(store: store, density: $density, beginRename: beginRename)
-            BottomNavBar(store: store)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(CRTheme.surface)
         .ignoresSafeArea(edges: .top)
-        .frame(minWidth: 800, minHeight: 600)
         .overlay(alignment: .bottomTrailing) {
             if !pendingContinuityItems.isEmpty {
                 ContinuityStagingDrawer(entries: Array(pendingContinuityItems.prefix(3)), store: store)
@@ -48,53 +53,105 @@ struct DashboardRootView: View {
 
 // MARK: - Floating Dock
 
-private struct BottomNavBar: View {
-    @ObservedObject var store: DeskdropStore
-    
-    var body: some View {
-        HStack(spacing: 16) {
-            NavButton(icon: "square.grid.2x2", label: "Dashboard", isSelected: store.selectedSection == .dashboard) { store.selectedSection = .dashboard }
-            NavButton(icon: "clock.arrow.circlepath", label: "History", badge: store.pendingClipboardCount, isSelected: store.selectedSection == .history) { store.selectedSection = .history }
-            NavButton(icon: "macbook.and.iphone", label: "Devices", badge: store.connectedDevices.count, isSelected: store.selectedSection == .devices) { store.selectedSection = .devices }
-            Spacer()
-            NavButton(icon: "gearshape", label: "Settings", isSelected: store.selectedSection == .settings) { store.selectedSection = .settings }
-        }
-        .padding(.horizontal, 20)
-        .frame(height: 40)
-        .background(Color(NSColor.windowBackgroundColor))
-        .overlay(alignment: .top) { Divider() }
-    }
-}
+// MARK: - Application Sidebar
 
-private struct NavButton: View {
-    let icon: String
-    let label: String
-    var badge: Int = 0
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var hovered = false
-    
+private struct CRSidebarView: View {
+    @ObservedObject var store: DeskdropStore
+    @State private var hoveredItem: DashboardSection?
+
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                Text(label)
-                    .font(.system(size: 12, weight: isSelected ? .medium : .regular))
-                if badge > 0 {
-                    Text("\(badge)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color(NSColor.windowBackgroundColor))
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(Capsule().fill(CRTheme.accentBlue))
+        VStack(alignment: .leading, spacing: 0) {
+            // Sidebar Header (App Identity)
+            HStack(spacing: 8) {
+                Image(systemName: "circle.hexagongrid.fill")
+                    .foregroundStyle(CRTheme.brandElectric)
+                    .font(.system(size: 16))
+                Text("ClipRelay")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(CRTheme.ink)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+
+            // Status Pill
+            HStack(spacing: 6) {
+                StatusDot(isOnline: store.connectedCount > 0, size: 6)
+                Text(store.connectedCount > 0 ? "Mesh Active" : "Mesh Offline")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(store.connectedCount > 0 ? CRTheme.accentGreen : Color.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(store.connectedCount > 0 ? CRTheme.accentGreen.opacity(0.12) : Color.secondary.opacity(0.12), in: Capsule())
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
+
+            // Navigation Items
+            VStack(spacing: 4) {
+                ForEach([DashboardSection.dashboard, .history, .devices, .workflows], id: \.self) { section in
+                    sidebarItem(for: section)
                 }
             }
-            .foregroundStyle(isSelected ? CRTheme.accentBlue : CRTheme.inkSoft)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(hovered && !isSelected ? CRTheme.rowHover : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 10)
+
+            Spacer()
+
+            // Bottom Settings
+            VStack(spacing: 4) {
+                sidebarItem(for: .settings)
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 16)
+        }
+    }
+
+    @ViewBuilder
+    private func sidebarItem(for section: DashboardSection) -> some View {
+        let isSelected = store.selectedSection == section
+        let isHovered = hoveredItem == section
+
+        Button {
+            store.selectedSection = section
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: section.icon)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .frame(width: 16, alignment: .center)
+                Text(section.title)
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                Spacer()
+                
+                // Badges
+                if section == .history && store.pendingClipboardCount > 0 {
+                    badgeView(count: store.pendingClipboardCount)
+                } else if section == .devices && store.connectedDevices.count > 0 {
+                    badgeView(count: store.connectedDevices.count)
+                }
+            }
+            .foregroundStyle(isSelected ? Color.white : CRTheme.inkSoft)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? CRTheme.brandElectric : (isHovered ? CRTheme.rowHover : Color.clear))
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovered = $0 }
+        .onHover { hovering in
+            if hovering { hoveredItem = section }
+            else if hoveredItem == section { hoveredItem = nil }
+        }
+    }
+
+    private func badgeView(count: Int) -> some View {
+        Text("\(count)")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(CRTheme.brandElectric.opacity(0.8)))
     }
 }
 
@@ -198,29 +255,9 @@ private struct ContinuityHeaderView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // Left Zone: Identity & Status
-            HStack(spacing: 12) {
-                HStack(spacing: 6) {
-                    Image(systemName: "circle.hexagongrid.fill")
-                        .foregroundStyle(CRTheme.brandElectric)
-                        .font(.system(size: 14))
-                    Text("ClipRelay")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(CRTheme.ink)
-                }
-                
-                // Status Pill
-                HStack(spacing: 4) {
-                    StatusDot(isOnline: store.connectedCount > 0, size: 5)
-                    Text(store.connectedCount > 0 ? "Mesh Active" : "Mesh Offline")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(store.connectedCount > 0 ? CRTheme.accentGreen : Color.secondary)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(store.connectedCount > 0 ? CRTheme.accentGreen.opacity(0.12) : Color.secondary.opacity(0.12), in: Capsule())
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Left Zone: Empty (Sidebar took over identity)
+            Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             // Center Zone: Command Surface
             Spacer(minLength: 0)

@@ -638,7 +638,7 @@ final class DeskdropStore: ObservableObject {
                 // into the activity feed without triggering system notifications or toasts.
                 for entry in newEntries {
                     switch entry.kind {
-                    case "remote_clipboard_available", "file_transfer_complete":
+                    case "remote_clipboard_available", "file_transfer_complete", "remote_notification":
                         NotificationCenter.default.post(name: NSNotification.Name("clipRelayActivityReceived"), object: entry)
                     default:
                         break
