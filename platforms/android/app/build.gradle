@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.cliprelay'
+    namespace 'com.deskdrop'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.cliprelay"
+        applicationId "com.deskdrop"
         minSdk 26           // Android 8.0 — foreground service type requires 26+
         targetSdk 34
         versionCode 2
@@ -60,7 +60,7 @@ android {
     packaging {
         jniLibs {
             // Preserve debug symbols in release so crash reports are actionable
-            keepDebugSymbols += '**/libcliprelay_core.so'
+            keepDebugSymbols += '**/libdeskdrop_core.so'
         }
     }
 }

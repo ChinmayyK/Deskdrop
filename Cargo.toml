@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "cliprelay-core",
-    "cliprelay-cli",
+    "deskdrop-core",
+    "deskdrop-cli",
     "platforms/linux",
 ]
 resolver = "2"

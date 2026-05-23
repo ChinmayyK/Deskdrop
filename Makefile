@@ -1,4 +1,4 @@
-# ClipRelay top-level Makefile
+# Deskdrop top-level Makefile
 #
 # Usage:
 #   make               # build core + CLI for host platform
@@ -33,11 +33,11 @@ RESET  := \033[0m
 # ── Default: build core + CLI ─────────────────────────────────────────────────
 
 build:
-	@echo -e "$(CYAN)Building cliprelay-core + cliprelay-cli...$(RESET)"
+	@echo -e "$(CYAN)Building deskdrop-core + deskdrop-cli...$(RESET)"
 	$(CARGO) build --release
 	@echo -e "$(GREEN)✓ Build complete.$(RESET)"
-	@echo "  Daemon: target/release/cliprelay-daemon"
-	@echo "  CLI:    target/release/cliprelay-cli"
+	@echo "  Daemon: target/release/deskdrop-daemon"
+	@echo "  CLI:    target/release/deskdrop-cli"
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
@@ -108,18 +108,18 @@ macos:
 	$(CARGO) build --release --target aarch64-apple-darwin
 	$(CARGO) build --release --target x86_64-apple-darwin
 	lipo -create \
-		cliprelay-core/target/aarch64-apple-darwin/release/libcliprelay_core.dylib \
-		cliprelay-core/target/x86_64-apple-darwin/release/libcliprelay_core.dylib \
-		-output libcliprelay_core.dylib
-	@echo -e "$(GREEN)✓ Universal dylib: libcliprelay_core.dylib$(RESET)"
+		deskdrop-core/target/aarch64-apple-darwin/release/libdeskdrop_core.dylib \
+		deskdrop-core/target/x86_64-apple-darwin/release/libdeskdrop_core.dylib \
+		-output libdeskdrop_core.dylib
+	@echo -e "$(GREEN)✓ Universal dylib: libdeskdrop_core.dylib$(RESET)"
 	@echo "  Next: bash scripts/build-macos.sh"
 
 windows:
 	@echo -e "$(CYAN)Building Windows DLL + C# app...$(RESET)"
 	$(CARGO) build --release
-	cp cliprelay-core/target/release/cliprelay_core.dll \
-	   platforms/windows/ClipRelay.Windows/
-	dotnet build platforms/windows/ClipRelay.Windows/ClipRelay.Windows.csproj \
+	cp deskdrop-core/target/release/deskdrop_core.dll \
+	   platforms/windows/Deskdrop.Windows/
+	dotnet build platforms/windows/Deskdrop.Windows/Deskdrop.Windows.csproj \
 		-c Release
 	@echo -e "$(GREEN)✓ Windows build complete.$(RESET)"
 
@@ -136,22 +136,22 @@ _android-native:
 		-t armv7-linux-androideabi \
 		-t x86_64-linux-android \
 		-o platforms/android/app/src/main/jniLibs \
-		build --lib --release -p cliprelay-core
+		build --lib --release -p deskdrop-core
 
 linux:
 	@echo -e "$(CYAN)Building Linux binaries...$(RESET)"
 	$(CARGO) build --release \
-		--bin cliprelay-daemon \
-		--bin cliprelay-cli
+		--bin deskdrop-daemon \
+		--bin deskdrop-cli
 	@echo -e "$(GREEN)✓ Linux build complete.$(RESET)"
-	@echo "  Daemon: target/release/cliprelay-daemon"
-	@echo "  CLI:    target/release/cliprelay-cli"
+	@echo "  Daemon: target/release/deskdrop-daemon"
+	@echo "  CLI:    target/release/deskdrop-cli"
 	@echo ""
 	@echo "  Install:"
-	@echo "    sudo cp target/release/cliprelay-daemon /usr/local/bin/"
-	@echo "    sudo cp target/release/cliprelay-cli    /usr/local/bin/"
-	@echo "    cp platforms/linux/cliprelay.service ~/.config/systemd/user/"
-	@echo "    systemctl --user enable --now cliprelay"
+	@echo "    sudo cp target/release/deskdrop-daemon /usr/local/bin/"
+	@echo "    sudo cp target/release/deskdrop-cli    /usr/local/bin/"
+	@echo "    cp platforms/linux/deskdrop.service ~/.config/systemd/user/"
+	@echo "    systemctl --user enable --now deskdrop"
 
 all: build macos linux android windows
 	@echo -e "$(GREEN)✓ All platforms built.$(RESET)"
@@ -182,10 +182,10 @@ endif
 # ── Install locally (Linux/macOS) ─────────────────────────────────────────────
 
 install: build
-	install -Dm755 cliprelay-core/target/release/cliprelay-daemon \
-		$(DESTDIR)$(PREFIX)/bin/cliprelay-daemon
-	install -Dm755 cliprelay-core/target/release/cliprelay-cli \
-		$(DESTDIR)$(PREFIX)/bin/cliprelay-cli
+	install -Dm755 deskdrop-core/target/release/deskdrop-daemon \
+		$(DESTDIR)$(PREFIX)/bin/deskdrop-daemon
+	install -Dm755 deskdrop-core/target/release/deskdrop-cli \
+		$(DESTDIR)$(PREFIX)/bin/deskdrop-cli
 	@echo -e "$(GREEN)✓ Installed to $(DESTDIR)$(PREFIX)/bin/$(RESET)"
 
 PREFIX ?= /usr/local
@@ -194,18 +194,18 @@ PREFIX ?= /usr/local
 
 clean:
 	$(CARGO) clean
-	rm -f libcliprelay_core.dylib cliprelay_core.dll
+	rm -f libdeskdrop_core.dylib deskdrop_core.dll
 	rm -f bom.json
 	rm -rf platforms/android/app/build
-	rm -rf platforms/windows/ClipRelay.Windows/bin
-	rm -rf platforms/windows/ClipRelay.Windows/obj
+	rm -rf platforms/windows/Deskdrop.Windows/bin
+	rm -rf platforms/windows/Deskdrop.Windows/obj
 	@echo -e "$(GREEN)✓ Clean.$(RESET)"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 help:
 	@echo ""
-	@echo -e "$(CYAN)ClipRelay Build System$(RESET)"
+	@echo -e "$(CYAN)Deskdrop Build System$(RESET)"
 	@echo ""
 	@echo "  make              Build core + CLI for host"
 	@echo "  make test         Run all tests"

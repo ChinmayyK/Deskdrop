@@ -43,7 +43,7 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <application
-        android:name=".ClipRelayApp"
+        android:name=".DeskdropApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -78,7 +78,7 @@
 
         <!-- ── Share target ──────────────────────────────────────────── -->
         <activity
-            android:name=".ClipRelayShareTarget"
+            android:name=".DeskdropShareTarget"
             android:exported="true"
             android:theme="@style/Theme.Deskdrop.ShareTarget">
             <intent-filter>
@@ -103,7 +103,7 @@
             The service uses a PARTIAL_WAKE_LOCK only during event drain.
         -->
         <service
-            android:name=".ClipRelayService"
+            android:name=".DeskdropService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync"
@@ -111,7 +111,7 @@
 
         <!-- ── Notification listener service ─────────────────────────── -->
         <service
-            android:name=".ClipRelayNotificationListener"
+            android:name=".DeskdropNotificationListener"
             android:label="Deskdrop Notification Listener"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
@@ -122,7 +122,7 @@
 
         <!-- ── Quick Settings tile ───────────────────────────────────── -->
         <service
-            android:name=".ClipRelayTileService"
+            android:name=".DeskdropTileService"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">

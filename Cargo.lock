@@ -258,56 +258,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cliprelay-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cliprelay-core",
- "dirs",
- "serde_json",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "cliprelay-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "bincode",
- "bytes",
- "chacha20poly1305",
- "criterion",
- "dirs",
- "hex",
- "hkdf",
- "hmac",
- "hostname",
- "if-addrs 0.13.4",
- "image 0.24.9",
- "jni",
- "libc",
- "mdns-sd",
- "rand",
- "serde",
- "serde_json",
- "sha2",
- "socket2 0.5.10",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-test",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "whoami",
- "x25519-dalek",
- "zeroize",
-]
-
-[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -455,12 +405,62 @@ dependencies = [
 ]
 
 [[package]]
+name = "deskdrop-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "deskdrop-core",
+ "dirs",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "deskdrop-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bincode",
+ "bytes",
+ "chacha20poly1305",
+ "criterion",
+ "dirs",
+ "hex",
+ "hkdf",
+ "hmac",
+ "hostname",
+ "if-addrs 0.13.4",
+ "image 0.24.9",
+ "jni",
+ "libc",
+ "mdns-sd",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "socket2 0.5.10",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-test",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "whoami",
+ "x25519-dalek",
+ "zeroize",
+]
+
+[[package]]
 name = "deskdrop-linux"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "arboard",
- "cliprelay-core",
+ "deskdrop-core",
  "dirs",
  "image 0.25.10",
  "tokio",

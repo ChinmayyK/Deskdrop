@@ -33,8 +33,8 @@ jobs:
         with:
           workspaces: |
             .
-            cliprelay-core
-            cliprelay-cli
+            deskdrop-core
+            deskdrop-cli
             platforms/linux
 
       - name: Install Linux system deps
@@ -126,7 +126,7 @@ jobs:
 
       - name: Build for ${{ matrix.target }}
         run: |
-          cargo ndk -p 26 -t ${{ matrix.target }} build --lib --release -p cliprelay-core
+          cargo ndk -p 26 -t ${{ matrix.target }} build --lib --release -p deskdrop-core
         env:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
 
@@ -139,7 +139,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build macOS dylib
-        run: cargo build --release -p cliprelay-core
+        run: cargo build --release -p deskdrop-core
 
       - name: Check Swift files compile
         run: |
@@ -161,14 +161,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build Windows DLL
-        run: cargo build --release -p cliprelay-core
+        run: cargo build --release -p deskdrop-core
 
       - name: Build C# project
         run: |
           # Create a stub DLL so the csproj can resolve the native ref.
           New-Item -ItemType Directory -Force -Path platforms\windows\ProxiBoard.Windows\
-          Copy-Item target\release\cliprelay_core.dll `
-                    platforms\windows\ProxiBoard.Windows\cliprelay_core.dll `
+          Copy-Item target\release\deskdrop_core.dll `
+                    platforms\windows\ProxiBoard.Windows\deskdrop_core.dll `
                     -ErrorAction SilentlyContinue
           dotnet build platforms\windows\ProxiBoard.Windows\ProxiBoard.Windows.csproj `
             -c Release --no-restore

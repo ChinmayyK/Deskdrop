@@ -1,0 +1,87 @@
+[package]
+name = "deskdrop-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Deskdrop Contributors"]
+description = "Proximity-Based Shared Clipboard — core engine"
+license = "MIT"
+
+[lib]
+name = "deskdrop_core"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "deskdrop-daemon"
+path = "src/bin/daemon.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+
+# Encryption
+chacha20poly1305 = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+rand = "0.8"
+sha2 = "0.10"
+hmac = "0.12"
+hkdf = "0.12"
+hex = "0.4"
+zeroize = "1"
+
+# Networking
+tokio-util = { version = "0.7", features = ["codec"] }
+bytes = "1"
+libc = "0.2"
+socket2 = { version = "0.5", features = ["all"] }
+image = { version = "0.24", optional = true }
+if-addrs = "0.13"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# UUID
+uuid = { version = "1", features = ["serde", "v4"] }
+base64 = "0.21"
+
+# Hostname / user info
+whoami = "1"
+hostname = "0.3"
+dirs = "5"
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+mdns-sd = "0.10"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+[dev-dependencies]
+bincode = "1"
+tokio-test = "0.4"
+tempfile = "3"
+
+[dev-dependencies.criterion]
+version = "0.5"
+features = ["html_reports"]
+
+[[bench]]
+name = "benches"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[features]
+compress = ["image"]

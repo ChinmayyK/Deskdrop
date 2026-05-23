@@ -13,9 +13,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CORE_DIR="${REPO_ROOT}/cliprelay-core"
+CORE_DIR="${REPO_ROOT}/deskdrop-core"
 MACOS_DIR="${REPO_ROOT}/platforms/macos"
-SOURCE_DIR_NAME="ClipRelay"
+SOURCE_DIR_NAME="Deskdrop"
 PRODUCT_NAME="Deskdrop"
 BUILD_TYPE="${1:---release}"
 APP_BUNDLE="${MACOS_DIR}/build/${PRODUCT_NAME}.app"
@@ -29,10 +29,10 @@ log() { echo "▶ $*"; }
 
 log "Building Rust core (${BUILD_TYPE})..."
 cd "${REPO_ROOT}"
-cargo build --release -p cliprelay-core --features compress --lib --bin cliprelay-daemon
+cargo build --release -p deskdrop-core --features compress --lib --bin deskdrop-daemon
 
-DYLIB_SRC="${TARGET_DIR}/libcliprelay_core.dylib"
-DAEMON_SRC="${TARGET_DIR}/cliprelay-daemon"
+DYLIB_SRC="${TARGET_DIR}/libdeskdrop_core.dylib"
+DAEMON_SRC="${TARGET_DIR}/deskdrop-daemon"
 
 # ── 2. Create .app bundle skeleton ───────────────────────────────────────────
 
@@ -41,14 +41,14 @@ rm -rf "${APP_BUNDLE}"
 mkdir -p "${APP_BUNDLE}/Contents/"{MacOS,Frameworks,Resources}
 
 # Copy dylib.
-cp "${DYLIB_SRC}" "${APP_BUNDLE}/Contents/Frameworks/libcliprelay_core.dylib"
-cp "${DAEMON_SRC}" "${APP_BUNDLE}/Contents/MacOS/cliprelay-daemon"
-chmod +x "${APP_BUNDLE}/Contents/MacOS/cliprelay-daemon"
+cp "${DYLIB_SRC}" "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
+cp "${DAEMON_SRC}" "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
+chmod +x "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
 
 # Fix dylib install name.
 install_name_tool \
-    -id "@rpath/libcliprelay_core.dylib" \
-    "${APP_BUNDLE}/Contents/Frameworks/libcliprelay_core.dylib"
+    -id "@rpath/libdeskdrop_core.dylib" \
+    "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
 
 # ── 3. Compile Swift app ─────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ MACOS_TARGET="arm64-apple-macos13.0"
 
 swiftc \
     "${SWIFT_FILES[@]}" \
-    -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/ClipRelayBridge.h" \
+    -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/DeskdropBridge.h" \
     -sdk "${SDK_PATH}" \
     -target "${MACOS_TARGET}" \
     -framework AppKit \
@@ -73,7 +73,7 @@ swiftc \
     -framework UserNotifications \
     -F "${APP_BUNDLE}/Contents/Frameworks" \
     -L "${APP_BUNDLE}/Contents/Frameworks" \
-    -lcliprelay_core \
+    -ldeskdrop_core \
     -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
     -o "${APP_BUNDLE}/Contents/MacOS/${PRODUCT_NAME}"
 
@@ -106,7 +106,7 @@ codesign \
     --force \
     --deep \
     --sign "${IDENTITY}" \
-    --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/ClipRelay.entitlements" \
+    --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/Deskdrop.entitlements" \
     --options runtime \
     "${APP_BUNDLE}"
 

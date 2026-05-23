@@ -10,7 +10,7 @@
 //!  • Hash-based dedup — no full-text clone in memory for every tick.
 //!  • Image clipboard applied via arboard (PNG).
 
-use cliprelay_core::{
+use deskdrop_core::{
     engine::{Engine, EngineConfig, EngineEvent},
     protocol::ClipboardContent,
 };
@@ -68,7 +68,7 @@ fn main() {
 
     tracing::info!(
         "Deskdrop Linux started. IPC socket: {:?}",
-        cliprelay_core::ipc::socket_path()
+        deskdrop_core::ipc::socket_path()
     );
 
     // ── IPC server ────────────────────────────────────────────────────────────
@@ -79,11 +79,11 @@ fn main() {
         rt.block_on(async move {
             // The IPC server takes a callback that maps IpcRequest → IpcResponse.
             // We reuse the same handler used by the standalone daemon binary.
-            let result = cliprelay_core::ipc::server::spawn_with_engine(engine_ipc).await;
+            let result = deskdrop_core::ipc::server::spawn_with_engine(engine_ipc).await;
             match result {
                 Ok(()) => tracing::info!(
                     "IPC server listening at {:?}",
-                    cliprelay_core::ipc::socket_path()
+                    deskdrop_core::ipc::socket_path()
                 ),
                 Err(err) => tracing::warn!("IPC server failed to start: {err:#}"),
             }

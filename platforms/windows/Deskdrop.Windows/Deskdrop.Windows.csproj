@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Deskdrop</AssemblyName>
+    <ApplicationIcon>Assets\deskdrop.ico</ApplicationIcon>
+    <Company>Deskdrop</Company>
+    <Product>Deskdrop</Product>
+    <Version>0.1.0</Version>
+    <Description>Proximity-Based Shared Clipboard</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Native Rust DLL built by cargo build (release) -->
+    <None Include="..\..\..\deskdrop-core\target\release\deskdrop_core.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

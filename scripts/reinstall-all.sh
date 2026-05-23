@@ -25,8 +25,8 @@ echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE}
 # ==========================================
 echo -e "${BLUE}▶ [macOS] Stopping existing processes...${NC}"
 pkill -x Deskdrop || true
-pkill -x ClipRelay || true
-pkill -x cliprelay-daemon || true
+pkill -x Deskdrop || true
+pkill -x deskdrop-daemon || true
 
 echo -e "${BLUE}▶ [macOS] Building latest version...${NC}"
 if [ "$BUILD_TYPE" = "release" ]; then
@@ -53,11 +53,11 @@ echo -e "${BLUE}▶ [Android] Building latest APK...${NC}"
 if [ "$BUILD_TYPE" = "release" ]; then
     bash scripts/build-android.sh --release
     APK_PATH="platforms/android/app/build/outputs/apk/release/app-release.apk"
-    APP_ID="com.cliprelay"
+    APP_ID="com.deskdrop"
 else
     bash scripts/build-android.sh --debug
     APK_PATH="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
-    APP_ID="com.cliprelay.debug"
+    APP_ID="com.deskdrop.debug"
 fi
 
 echo -e "${BLUE}▶ [Android] Uninstalling old version from connected device...${NC}"
@@ -66,7 +66,7 @@ adb uninstall "$APP_ID" || echo -e "${RED}Warning: $APP_ID not found on device o
 echo -e "${BLUE}▶ [Android] Installing new version...${NC}"
 if adb install -r "$APK_PATH"; then
     echo -e "${GREEN}▶ [Android] ✅ Installed! Launching...${NC}"
-    adb shell am start -n "$APP_ID/com.cliprelay.MainActivity"
+    adb shell am start -n "$APP_ID/com.deskdrop.MainActivity"
 else
     echo -e "${RED}▶ [Android] ❌ Failed to install APK. Is a device connected?${NC}"
 fi
