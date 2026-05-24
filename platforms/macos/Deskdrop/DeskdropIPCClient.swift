@@ -61,6 +61,10 @@ struct IpcPeerBatteryState: Codable {
     let charging: Bool
 }
 
+struct IpcCameraFrameResponse: Codable {
+    let frame_base64: String?
+}
+
 struct IpcResponse<T: Codable>: Codable {
     let status: String
     let data: T?
@@ -215,7 +219,14 @@ final class DeskdropIPCClient {
         _ = try await send(cmd: ["cmd": "resume_file_transfer", "transfer_id": transferId])
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    func latestCameraFrame() async throws -> Data? {
+        let raw = try await send(cmd: ["cmd": "latest_camera_frame"])
+        let resp = try JSONDecoder().decode(IpcResponse<IpcCameraFrameResponse>.self, from: raw)
+        guard let b64 = resp.data?.frame_base64 else { return nil }
+        return Data(base64Encoded: b64)
+    }
+
+    // ── Internal Sender ───────────────────────────────────────────────────────────────
 
     private func mimeType(for url: URL) -> String {
         let ext = url.pathExtension.lowercased()

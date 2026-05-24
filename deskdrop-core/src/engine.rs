@@ -311,9 +311,6 @@ enum DiscoveryCommand {
         bind_ip: IpAddr,
         port: u16,
     },
-    /// Force an immediate re-browse without changing bind address/port.
-    /// Used by the Mac "Scan" button and Android NSD retry.
-    Rescan,
 }
 
 /// Active phone call state tracked by the engine.
@@ -1447,12 +1444,16 @@ impl Engine {
         Ok(())
     }
 
-    /// Trigger a fresh mDNS browse query without restarting the advertisement.
+    /// Trigger a fresh mDNS browse query and restart the advertisement.
     /// Called by the Mac "Scan" button — surfaces peers that came online
-    /// since the last browse without a full discovery restart.
+    /// since the last browse.
     pub async fn rescan_peers(&self) {
         if let Some(tx) = &self.shared.discovery_tx {
-            let _ = tx.send(DiscoveryCommand::Rescan).await;
+            let state = self.shared.network_state.lock().await;
+            let _ = tx.send(DiscoveryCommand::Restart {
+                bind_ip: state.bind_addr.ip(),
+                port: self.shared.config.port,
+            }).await;
         }
     }
 
@@ -1895,19 +1896,6 @@ fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Disco
                             );
                             let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
                         }
-                    }
-                }
-
-                // Rescan: trigger a fresh mDNS browse query without tearing down
-                // the advertisement.  On the Mac this is the "Scan" button; on
-                // Android the NSD retry scheduler fires this after a reconnect.
-                DiscoveryCommand::Rescan => {
-                    if let Some(ref discovery) = current {
-                        // Re-issue the browse query — causes peers to re-announce.
-                        let _ = discovery.browse(peer_tx.clone());
-                        tracing::info!("mDNS rescan triggered");
-                    } else {
-                        tracing::debug!("rescan requested but discovery not running");
                     }
                 }
             }

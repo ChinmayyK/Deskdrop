@@ -45,6 +45,7 @@ struct DaemonState {
     feedback: Arc<Mutex<VecDeque<FeedbackEvent>>>,
     incoming_clipboards: Arc<Mutex<HashMap<u64, serde_json::Value>>>,
     incoming_order: Arc<Mutex<VecDeque<u64>>>,
+    latest_camera_frame: Arc<Mutex<Option<Vec<u8>>>>,
     started_at: Instant,
     shutdown: Arc<Notify>,
 }
@@ -90,6 +91,7 @@ async fn run() -> Result<()> {
         feedback: Arc::new(Mutex::new(VecDeque::new())),
         incoming_clipboards: Arc::new(Mutex::new(HashMap::new())),
         incoming_order: Arc::new(Mutex::new(VecDeque::new())),
+        latest_camera_frame: Arc::new(Mutex::new(None)),
         started_at: Instant::now(),
         shutdown: Arc::new(Notify::new()),
     };
@@ -376,6 +378,12 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             )
             .await;
         }
+        EngineEvent::CameraFrameReceived { data, .. } => {
+            *state.latest_camera_frame.lock().await = Some(data);
+        }
+        EngineEvent::CameraStreamStop { .. } => {
+            *state.latest_camera_frame.lock().await = None;
+        }
         _ => {}
     }
 
@@ -638,6 +646,15 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .cloned()
                 .context("clipboard payload not found")?;
             Ok(IpcResponse::ok(payload))
+        }
+        IpcRequest::LatestCameraFrame => {
+            let frame = state.latest_camera_frame.lock().await.clone();
+            if let Some(bytes) = frame {
+                let base64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                Ok(IpcResponse::ok(json!({ "frame_base64": base64 })))
+            } else {
+                Ok(IpcResponse::ok(json!({})))
+            }
         }
         IpcRequest::GetSettings => Ok(IpcResponse::ok(state.settings.lock().await.get().clone())),
         IpcRequest::PatchSettings { patch } => {

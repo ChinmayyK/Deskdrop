@@ -24,10 +24,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -35,13 +32,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.deskdrop.ui.theme.CRBackground
-import com.deskdrop.ui.theme.CRMotion
 import com.deskdrop.ui.theme.CRTheme
-import com.deskdrop.ui.theme.SectionHeader
 import com.deskdrop.ui.theme.crCard
 import com.deskdrop.ui.theme.CRSwitch
 
@@ -85,7 +79,6 @@ fun SettingsScreen(
     val haptic = LocalHapticFeedback.current
     val listState = rememberLazyListState()
 
-    // Parallax title scale effect
     val titleScale by remember {
         derivedStateOf {
             val offset = listState.firstVisibleItemScrollOffset
@@ -110,8 +103,7 @@ fun SettingsScreen(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(CircleShape)
-                        .background(CRTheme.surface(isDarkMode))
+                        .border(0.5.dp, CRTheme.stroke(isDarkMode))
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onBack()
@@ -121,7 +113,7 @@ fun SettingsScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = CRTheme.ink(isDarkMode),
+                        tint = CRTheme.textHigh(isDarkMode),
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -129,8 +121,8 @@ fun SettingsScreen(
                 Text(
                     text = "Settings",
                     fontSize = 32.sp,
-                    fontWeight = FontWeight.Black,
-                    color = CRTheme.ink(isDarkMode),
+                    fontWeight = FontWeight.Light,
+                    color = CRTheme.textHigh(isDarkMode),
                     letterSpacing = (-1).sp,
                     modifier = Modifier.scale(titleScale)
                 )
@@ -142,12 +134,11 @@ fun SettingsScreen(
                 contentPadding = PaddingValues(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 64.dp),
                 verticalArrangement = Arrangement.spacedBy(28.dp)
             ) {
-                // Profile & Local Network Metadata Hero Card
                 item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .crCard(isDarkMode, cornerRadius = 32.dp, highlighted = true, accentColor = CRTheme.brandViolet)
+                            .crCard(isDarkMode, cornerRadius = 0.dp, highlighted = false)
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onRenameClicked()
@@ -159,74 +150,66 @@ fun SettingsScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(92.dp)
-                                    .clip(CircleShape)
-                                    .background(CRTheme.brandGradient)
-                                    .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
-                                    .shadow(24.dp, CircleShape, spotColor = CRTheme.brandElectric),
+                                    .size(80.dp)
+                                    .border(1.dp, CRTheme.textHigh(isDarkMode)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = deviceName.take(1).uppercase(),
                                     fontSize = 42.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color.White
+                                    fontWeight = FontWeight.Light,
+                                    color = CRTheme.textHigh(isDarkMode)
                                 )
                             }
                             Spacer(modifier = Modifier.height(20.dp))
-                            Text(text = deviceName, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = CRTheme.ink(isDarkMode))
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = deviceName, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = CRTheme.textHigh(isDarkMode))
+                            Spacer(modifier = Modifier.height(12.dp))
                             
-                            // Dynamic Local Network IP and metadata
                             Row(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.White.copy(alpha = if (isDarkMode) 0.05f else 0.4f))
-                                    .border(0.5.dp, CRTheme.stroke(isDarkMode), RoundedCornerShape(12.dp))
+                                    .border(0.5.dp, CRTheme.stroke(isDarkMode))
                                     .padding(horizontal = 14.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = "IP: ${getLocalIpAddress()}",
-                                    fontSize = 13.sp,
+                                    fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = CRTheme.brandElectric,
-                                    fontWeight = FontWeight.Bold
+                                    color = CRTheme.textMedium(isDarkMode),
+                                    fontWeight = FontWeight.Medium
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Box(modifier = Modifier.size(4.dp).clip(CircleShape).background(CRTheme.inkSubtle(isDarkMode)))
+                                Box(modifier = Modifier.size(4.dp).background(CRTheme.stroke(isDarkMode)))
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                    text = "CORE: ACTIVE",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = CRTheme.accentGreen
+                                    text = "CORE ACTIVE",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = CRTheme.textHigh(isDarkMode),
+                                    letterSpacing = 1.sp
                                 )
                             }
                             
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Edit, contentDescription = null, tint = CRTheme.brandElectric, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Edit, contentDescription = null, tint = CRTheme.textMedium(isDarkMode), modifier = Modifier.size(12.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Tap to edit name", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = CRTheme.brandElectric)
+                                Text("TAP TO EDIT NAME", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = CRTheme.textMedium(isDarkMode), letterSpacing = 1.sp)
                             }
                         }
                     }
                 }
 
-                // Appearance Collapsible Section
                 item {
                     SettingsCategory(
                         isDark = isDarkMode,
                         title = "Appearance",
-                        icon = Icons.Default.Info,
-                        accentColor = CRTheme.brandViolet
+                        icon = Icons.Default.Info
                     ) {
                         SettingsSwitchRow(
                             isDark = isDarkMode,
                             icon = Icons.Default.Info,
-                            iconColor = CRTheme.brandViolet,
                             title = "Dark mode",
                             subtitle = "Deep black high-contrast theme",
                             checked = isDarkMode,
@@ -235,19 +218,16 @@ fun SettingsScreen(
                     }
                 }
 
-                // Clipboard Sync Collapsible Section
                 item {
                     SettingsCategory(
                         isDark = isDarkMode,
                         title = "Clipboard Sync",
-                        icon = Icons.Default.Refresh,
-                        accentColor = CRTheme.brandElectric
+                        icon = Icons.Default.Refresh
                     ) {
                         Column {
                             SettingsSwitchRow(
                                 isDark = isDarkMode,
                                 icon = Icons.Default.Refresh,
-                                iconColor = CRTheme.brandElectric,
                                 title = "Enable sync",
                                 subtitle = "Master switch for all features",
                                 checked = syncEnabled,
@@ -255,31 +235,28 @@ fun SettingsScreen(
                             )
                             
                             if (syncEnabled) {
-                                HorizontalDivider(color = CRTheme.divider(isDarkMode), thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp))
+                                HorizontalDivider(color = CRTheme.stroke(isDarkMode), thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp))
                                 SettingsSwitchRow(
                                     isDark = isDarkMode,
                                     icon = Icons.Default.Edit,
-                                    iconColor = CRTheme.inkSubtle(isDarkMode),
                                     title = "Sync text",
                                     subtitle = null,
                                     checked = syncText,
                                     onCheckedChange = onSyncTextChange
                                 )
-                                HorizontalDivider(color = CRTheme.divider(isDarkMode), thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp))
+                                HorizontalDivider(color = CRTheme.stroke(isDarkMode), thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp))
                                 SettingsSwitchRow(
                                     isDark = isDarkMode,
                                     icon = Icons.Default.Face,
-                                    iconColor = CRTheme.inkSubtle(isDarkMode),
                                     title = "Sync images",
                                     subtitle = null,
                                     checked = syncImages,
                                     onCheckedChange = onSyncImagesChange
                                 )
-                                HorizontalDivider(color = CRTheme.divider(isDarkMode), thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp))
+                                HorizontalDivider(color = CRTheme.stroke(isDarkMode), thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp))
                                 SettingsSwitchRow(
                                     isDark = isDarkMode,
                                     icon = Icons.Default.List,
-                                    iconColor = CRTheme.inkSubtle(isDarkMode),
                                     title = "Sync files",
                                     subtitle = "Saved directly to Downloads",
                                     checked = syncFiles,
@@ -290,28 +267,26 @@ fun SettingsScreen(
                     }
                 }
 
-                // Background Execution Category Section
                 item {
                     SettingsCategory(
                         isDark = isDarkMode,
                         title = "Background Execution",
-                        icon = Icons.Default.Warning,
-                        accentColor = CRTheme.accentAmber
+                        icon = Icons.Default.Warning
                     ) {
                         Column(modifier = Modifier.padding(24.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
-                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.accentAmber.copy(alpha = 0.15f)),
+                                    modifier = Modifier.size(40.dp).border(0.5.dp, CRTheme.stroke(isDarkMode)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Default.Warning, contentDescription = null, tint = CRTheme.accentAmber)
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = CRTheme.textHigh(isDarkMode), modifier = Modifier.size(18.dp))
                                 }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Text(
                                     text = "To ensure Deskdrop stays alive in the background, disable battery optimization.",
-                                    fontSize = 14.sp,
-                                    color = CRTheme.inkSoft(isDarkMode),
-                                    lineHeight = 20.sp
+                                    fontSize = 12.sp,
+                                    color = CRTheme.textMedium(isDarkMode),
+                                    lineHeight = 18.sp
                                 )
                             }
                             Spacer(modifier = Modifier.height(24.dp))
@@ -320,47 +295,43 @@ fun SettingsScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onBatterySettingsClicked()
                                 },
-                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                                contentPadding = PaddingValues(0.dp),
-                                shape = RoundedCornerShape(16.dp)
+                                contentPadding = PaddingValues(0.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(CRTheme.surfaceElevated(isDarkMode))
-                                        .border(1.dp, CRTheme.divider(isDarkMode), RoundedCornerShape(16.dp)),
+                                        .border(1.dp, CRTheme.textHigh(isDarkMode)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("Open battery settings", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CRTheme.ink(isDarkMode))
+                                    Text("OPEN BATTERY SETTINGS", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = CRTheme.textHigh(isDarkMode), letterSpacing = 1.sp)
                                 }
                             }
                         }
                     }
                 }
 
-                // About section
                 item {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                         Box(
                             modifier = Modifier
-                                .size(64.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(CRTheme.brandGradient)
-                                .shadow(8.dp, RoundedCornerShape(16.dp), spotColor = CRTheme.brandElectric),
+                                .size(56.dp)
+                                .border(1.dp, CRTheme.textHigh(isDarkMode)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Home, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.Home, contentDescription = null, tint = CRTheme.textHigh(isDarkMode), modifier = Modifier.size(24.dp))
                         }
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(text = "Deskdrop", fontSize = 20.sp, fontWeight = FontWeight.Black, color = CRTheme.ink(isDarkMode))
-                        Text(text = "Version 1.0.0", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = CRTheme.inkSubtle(isDarkMode))
+                        Text(text = "Deskdrop", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = CRTheme.textHigh(isDarkMode))
+                        Text(text = "VERSION 1.0.0", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = CRTheme.textMedium(isDarkMode), letterSpacing = 1.sp)
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = "No cloud. No account. No telemetry.",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = CRTheme.brandElectric,
+                            text = "NO CLOUD. NO ACCOUNT. NO TELEMETRY.",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = CRTheme.textHigh(isDarkMode),
+                            letterSpacing = 1.sp,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -375,7 +346,6 @@ fun SettingsCategory(
     isDark: Boolean,
     title: String,
     icon: ImageVector,
-    accentColor: Color,
     content: @Composable ColumnScope.() -> Unit
 ) {
     var expanded by remember { mutableStateOf(true) }
@@ -388,36 +358,36 @@ fun SettingsCategory(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.size(32.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.12f)),
+                modifier = Modifier.size(28.dp).border(0.5.dp, CRTheme.stroke(isDark)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(16.dp))
+                Icon(imageVector = icon, contentDescription = null, tint = CRTheme.textMedium(isDark), modifier = Modifier.size(14.dp))
             }
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = title.uppercase(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = CRTheme.inkSubtle(isDark),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = CRTheme.textMedium(isDark),
                 letterSpacing = 1.sp,
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = if (expanded) "▲" else "▼",
-                fontSize = 11.sp,
-                color = CRTheme.inkSubtle(isDark)
+                fontSize = 10.sp,
+                color = CRTheme.textMedium(isDark)
             )
         }
         
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMedium)) + fadeIn(),
-            exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMedium)) + fadeOut()
+            enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) + fadeIn(),
+            exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) + fadeOut()
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .crCard(isDark, cornerRadius = 24.dp)
+                    .crCard(isDark, cornerRadius = 0.dp)
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     content()
@@ -431,7 +401,6 @@ fun SettingsCategory(
 fun SettingsSwitchRow(
     isDark: Boolean,
     icon: ImageVector,
-    iconColor: Color,
     title: String,
     subtitle: String?,
     checked: Boolean,
@@ -452,22 +421,22 @@ fun SettingsSwitchRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier.size(36.dp).clip(CircleShape).background(iconColor.copy(alpha = 0.15f)),
+            modifier = Modifier.size(32.dp).border(0.5.dp, CRTheme.stroke(isDark)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = CRTheme.textMedium(isDark), modifier = Modifier.size(16.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = CRTheme.ink(isDark))
+            Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = CRTheme.textHigh(isDark))
             if (subtitle != null) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 13.sp,
-                    color = CRTheme.inkSoft(isDark),
-                    fontWeight = FontWeight.Medium
+                    fontSize = 12.sp,
+                    color = CRTheme.textLow(isDark),
+                    fontWeight = FontWeight.Normal
                 )
             }
         }

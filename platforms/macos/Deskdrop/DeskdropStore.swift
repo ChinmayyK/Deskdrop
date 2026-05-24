@@ -59,6 +59,7 @@ final class DeskdropStore: ObservableObject {
     private var pendingRename: PeerViewModel? = nil
     private var toastWorkItems: [UUID: DispatchWorkItem] = [:]
     private var ipcFailureCount: Int = 0
+    private var isCameraPolling = false
 
     init(ipc: DeskdropIPCClient = .shared) {
         self.ipc = ipc
@@ -272,6 +273,13 @@ final class DeskdropStore: ObservableObject {
                 peerBatteries = incomingBatteries
             }
 
+            // ── Camera Streaming ──────────────────────────────────────────────
+            if !isCameraPolling {
+                if let frameData = try? await ipc.latestCameraFrame() {
+                    startFastCameraPolling(initialFrame: frameData)
+                }
+            }
+
             dashboardStatus = StatusSnapshot(
                 peerCount:    connectedCount,
                 trustedCount: s.peers.filter { $0.trusted }.count,
@@ -294,6 +302,40 @@ final class DeskdropStore: ObservableObject {
             dashboardStatus = nil
             if case DeskdropIPCError.connectionFailed = error {
                 NotificationCenter.default.post(name: .deskdropEnsureDaemon, object: nil)
+            }
+        }
+    }
+
+    // MARK: - Camera Streaming
+
+    private func startFastCameraPolling(initialFrame: Data) {
+        guard !isCameraPolling else { return }
+        isCameraPolling = true
+        DispatchQueue.main.async {
+            CameraPreviewWindowController.shared.showWindow(nil)
+            CameraPreviewWindowController.shared.updateFrame(data: initialFrame)
+        }
+        
+        Task { [weak self] in
+            while self?.isCameraPolling == true {
+                try? await Task.sleep(nanoseconds: 33_000_000) // ~30 fps
+                guard let self = self else { break }
+                do {
+                    if let frameData = try await self.ipc.latestCameraFrame() {
+                        DispatchQueue.main.async {
+                            CameraPreviewWindowController.shared.updateFrame(data: frameData)
+                        }
+                    } else {
+                        self.isCameraPolling = false
+                        DispatchQueue.main.async {
+                            CameraPreviewWindowController.shared.close()
+                        }
+                        break
+                    }
+                } catch {
+                    self.isCameraPolling = false
+                    break
+                }
             }
         }
     }

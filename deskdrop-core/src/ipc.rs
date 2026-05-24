@@ -187,6 +187,8 @@ pub enum IpcRequest {
     Ping,
     /// Get a serializable snapshot of global runtime metrics.
     GetMetrics,
+    /// Poll the latest camera frame received from any peer.
+    LatestCameraFrame,
 
     // ── History tag management ────────────────────────────────────────────────
     /// Add a tag to a history entry.
@@ -635,6 +637,10 @@ pub mod client {
                             "sync_eligible": snap.peers.iter().filter(|p| p.is_sync_eligible()).count(),
                             "device_id": eng.device_id().await,
                         }))
+                    }
+                    IpcRequest::LatestCameraFrame => {
+                        // The FFI / local engine doesn't track this yet, so return empty
+                        IpcResponse::ok_empty()
                     }
                     // ── History ────────────────────────────────────────────────────────
                     IpcRequest::History { last } => IpcResponse::ok(eng.history_recent(last).await),

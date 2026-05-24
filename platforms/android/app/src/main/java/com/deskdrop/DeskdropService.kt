@@ -79,6 +79,7 @@ object DeskdropJni {
     @JvmStatic external fun pushImage(handle: Long, mimeType: String, data: ByteArray): Int
     @JvmStatic external fun pushFile(handle: Long, name: String, data: ByteArray): Int
     @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
+    @JvmStatic external fun pushVideoFrame(handle: Long, data: ByteArray): Int
 
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
@@ -257,6 +258,9 @@ class DeskdropService : Service() {
         private const val TAG = "Deskdrop"
         const val PREFS_NAME = "deskdrop"
 
+        // Expose engine handle for high-throughput zero-copy JNI calls (e.g. video frames)
+        @Volatile var activeEngineHandle: Long = 0L
+
         // Notification channels
         private const val CHAN_SERVICE = "cr_service"   // IMPORTANCE_MIN — silent persistent
         private const val CHAN_ALERTS  = "cr_alerts"    // IMPORTANCE_DEFAULT — trust/file/failure
@@ -357,6 +361,10 @@ class DeskdropService : Service() {
     // Actual NSD service name as reported by onServiceRegistered (may differ from requested
     // if Android resolved a collision by appending " (2)" etc.).
     private var myActualNsdName: String? = null
+
+    // NSD resolution queue to prevent FAILURE_ALREADY_ACTIVE
+    private val pendingNsdResolves = java.util.concurrent.ConcurrentLinkedQueue<android.net.nsd.NsdServiceInfo>()
+    private val isResolvingNsd = java.util.concurrent.atomic.AtomicBoolean(false)
 
     // Network change callback — restarts NSD when the device switches WiFi networks
     // or reconnects after being offline (e.g. waking from sleep, roaming).
@@ -684,6 +692,7 @@ class DeskdropService : Service() {
         if (engineHandle != 0L) {
             DeskdropJni.stop(engineHandle)
             engineHandle = 0L
+            activeEngineHandle = 0L
         }
         engineStarted.set(false)
         connectedPeerIds.clear()
@@ -2098,9 +2107,8 @@ class DeskdropService : Service() {
                     return
                 }
                 Log.i(TAG, "NSD: found '${info.serviceName}'")
-                // Each resolve call requires a fresh listener instance.
-                runCatching { nm.resolveService(info, makeResolveListener()) }
-                    .onFailure { Log.w(TAG, "NSD: resolveService error", it) }
+                pendingNsdResolves.offer(info)
+                processNextNsdResolve()
             }
             override fun onServiceLost(info: NsdServiceInfo) {
                 Log.i(TAG, "NSD: lost '${info.serviceName}'")
@@ -2121,8 +2129,11 @@ class DeskdropService : Service() {
         return object : NsdManager.ResolveListener {
             override fun onResolveFailed(info: NsdServiceInfo, code: Int) {
                 Log.w(TAG, "NSD: resolve failed for '${info.serviceName}' (code=$code)")
+                isResolvingNsd.set(false)
+                handler.post { processNextNsdResolve() }
             }
             override fun onServiceResolved(info: NsdServiceInfo) {
+                try {
                 val ip   = info.host?.hostAddress ?: return
                 val port = info.port
                 Log.i(TAG, "NSD: resolved peer at $ip:$port (service='${info.serviceName}')")
@@ -2178,8 +2189,32 @@ class DeskdropService : Service() {
                         Log.w(TAG, "NSD: connectToPeer($ip:$port) failed (result=$result)")
                     }
                 }
+                } finally {
+                    isResolvingNsd.set(false)
+                    handler.post { processNextNsdResolve() }
+                }
             }
         }
+    }
+
+    private fun processNextNsdResolve() {
+        if (!isResolvingNsd.compareAndSet(false, true)) return
+        val info = pendingNsdResolves.poll()
+        if (info == null) {
+            isResolvingNsd.set(false)
+            return
+        }
+        val nm = runCatching { getSystemService(NSD_SERVICE) as NsdManager }.getOrNull()
+        if (nm == null) {
+            isResolvingNsd.set(false)
+            return
+        }
+        runCatching { nm.resolveService(info, makeResolveListener()) }
+            .onFailure {
+                Log.w(TAG, "NSD: resolveService error", it)
+                isResolvingNsd.set(false)
+                handler.post { processNextNsdResolve() }
+            }
     }
 
     private fun stopNsdDiscovery() {
@@ -2188,6 +2223,8 @@ class DeskdropService : Service() {
         nsdRegistrationListener?.let { runCatching { nm.unregisterService(it) } }
         nsdDiscoveryListener    = null
         nsdRegistrationListener = null
+        pendingNsdResolves.clear()
+        isResolvingNsd.set(false)
     }
 
     // ── Network change callback ───────────────────────────────────────────────

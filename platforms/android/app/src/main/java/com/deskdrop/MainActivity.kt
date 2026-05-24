@@ -129,6 +129,10 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         showSnack("Rejected ${peer.name}")
+                        window.decorView.postDelayed({ refreshDashboardState() }, 200)
+                    },
+                    onActionStreamCamera = {
+                        startActivity(Intent(this, CameraStreamActivity::class.java))
                     },
                     onOpenSettings = {
                         startActivity(Intent(this, SettingsActivity::class.java))
