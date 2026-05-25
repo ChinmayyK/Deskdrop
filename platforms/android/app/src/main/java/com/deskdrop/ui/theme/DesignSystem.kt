@@ -145,27 +145,7 @@ object CRMotion {
 
 @Composable
 fun SubtleNoiseOverlay(isDark: Boolean) {
-    val color = if (isDark) Color.White.copy(alpha = 0.02f) else Color.Black.copy(alpha = 0.025f)
-    val colorSecondary = if (isDark) Color.White.copy(alpha = 0.01f) else Color.Black.copy(alpha = 0.015f)
-    
-    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-        val spacing = 3.dp.toPx()
-        var y = 0f
-        while (y < size.height) {
-            var x = 0f
-            while (x < size.width) {
-                if (Random.nextBoolean()) {
-                    drawRect(
-                        color = if (Random.nextBoolean()) color else colorSecondary,
-                        topLeft = Offset(x, y),
-                        size = androidx.compose.ui.geometry.Size(2f, 2f)
-                    )
-                }
-                x += spacing
-            }
-            y += spacing
-        }
-    }
+    // Removed to fix ANR and extreme memory/CPU usage caused by 30k+ drawRect calls.
 }
 
 @Composable
