@@ -35,13 +35,13 @@ Deskdrop employs a modular, decoupled architecture centered around a high-perfor
 ```text
  ┌───────────────────────────────────────────────────────────────────────────────────────────┐
  │                                       PLATFORM LAYER                                      │
- │   macOS (Swift UI)       Android (Kotlin/JNI)       Windows (C#/WinUI)       Linux (GTK)      │
+ │   macOS (Swift UI)       Android (Kotlin/JNI)       Windows (C#/WinUI)       Linux (GTK)  │
  └───────────┬───────────────────────┬─────────────────────────┬──────────────────────┬──────┘
              │                       │                         │                      │
              │ Native C FFI          │ JNI Direct              │ Named Pipe IPC       │ Unix IPC
              ▼                       ▼                         ▼                      ▼
  ┌───────────────────────────────────────────────────────────────────────────────────────────┐
- │                                  DESKDROP-CORE (RUST)                                    │
+ │                                  DESKDROP-CORE (RUST)                                     │
  │                                                                                           │
  │   ┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────────┐   │
  │   │       COORDINATOR     │   │      NETWORKING       │   │       SECURITY SUITE      │   │
@@ -76,13 +76,11 @@ Deskdrop employs a modular, decoupled architecture centered around a high-perfor
 * **End-to-End Encryption**: Every session is locked down with standard Curve25519 ECDH key exchange and ChaCha20-Poly1305 AEAD. 
 * **Zeroization (`CRIT-02`)**: Memory containing Diffie-Hellman shared secret bytes is explicitly zeroized in RAM immediately after HKDF expansion to eliminate cold-boot and dump vulnerabilities.
 * **Strict Replay Protection**: Each frame relies on a strictly monotonic, 64-bit big-endian message counter. Replaying captured packets is rejected immediately at the protocol level.
-* **PIN-Based Secure Pairing**: Combats active Man-in-the-Middle (MITM) attacks by displaying a commutative numeric PIN (`PairingPin`) derived dynamically:
-  $$\text{PIN} = \text{HKDF-SHA256}(\text{shared\_secret}, \text{"deskdrop-pin"}) \pmod{10^6}$$
-  Displayed in two split 3-digit groups (e.g., `048 291`) with uniform distribution.
+* **PIN-Based Secure Pairing**: Combats active Man-in-the-Middle (MITM) attacks by displaying a commutative numeric PIN (`PairingPin`) derived dynamically: `PIN = HKDF-SHA256(shared_secret, "deskdrop-pin") mod 10^6`. Displayed in two split 3-digit groups (e.g., `048 291`) with uniform distribution.
 * **mDNS Privacy Enforcer (`TRU-06`)**: Friendly device names are never broadcast in plain-text mDNS TXT records. Only opaque UUIDs are published. Canonical device names are exchanged only *after* a successful encrypted handshake.
 
 ### 📦 Resumable Chunked File Transfers
-* **High-Speed Chunking**: Files are broken down into standard $256\text{ KB}$ chunks (`FILE_CHUNK_SIZE`).
+* **High-Speed Chunking**: Files are broken down into standard 256 KB chunks (`FILE_CHUNK_SIZE`).
 * **Resumable Pipelines**: If a transfer drops mid-stream, the receiver stores a progressive chunk acknowledgment state. On reconnect, the transfer resumes starting at index `last_confirmed_chunk + 1`, skipping completed data.
 * **Adaptive Chunk Sizing (`HIGH-03`)**: Dynamic round-trip telemetry monitors connection quality (pings/pongs) using latency probes, scaling transfer buffer allocations to optimize throughput.
 * **Path Traversal Shielding (`MED-04`)**: Senders' file names are strictly stripped of traversal characters (e.g. `../`), separators, and leading dots (`.`). They are bound securely within a dedicated `Deskdrop/` downloads directory.
@@ -90,7 +88,7 @@ Deskdrop employs a modular, decoupled architecture centered around a high-perfor
 
 ### 📞 Ecosystem Continuity
 * **Cross-Platform Call Continuity**: Android mobile devices track incoming calls via `TelecomManager` APIs and relay call states (`ringing`, `offhook`, `idle`) alongside contact details to peers. The macOS client triggers a premium glassmorphic notification banner letting users accept or decline the call remotely.
-* **Telemetry & Battery Sync**: Passive battery monitoring synchronizes device charge levels ($0\text{--}100\%$) and charging states across peers periodically or on $\ge 5\%$ shifts.
+* **Telemetry & Battery Sync**: Passive battery monitoring synchronizes device charge levels (0-100%) and charging states across peers periodically or on >5% shifts.
 * **Sensitive Text Filtering**: Configurable regular expression ignore patterns, payload limit debouncers, and secret filtering block OTPs, API keys, or passwords from propagating.
 
 ---
@@ -142,7 +140,7 @@ Deskdrop organizes its persistent stores according to platform-native user direc
 * `settings.json`: Global configuration, regular expression filters, payload thresholds, and clipboard behavior.
 * `trust.json`: Device trust registries, pairing dates, and long-term cryptographical identity public keys.
 * `peers.json`: Discovery tables, connection details, and friendly name mappings.
-* `history.json`: Bounded activity logs (defaults to a $500\text{--}\text{entry}$ ring-buffer history).
+* `history.json`: Bounded activity logs (defaults to a 500-entry ring-buffer history).
 * `identity.json`: Stores the stable 32-byte X25519 identity key pair. 
 
 > [!CAUTION]
