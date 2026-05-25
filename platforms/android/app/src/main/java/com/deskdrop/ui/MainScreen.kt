@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -104,7 +105,18 @@ fun MainScreen(
                     AnimatedContent(
                         targetState = currentTab,
                         transitionSpec = {
-                            fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
+                            val targetIndex = AppTab.values().indexOf(targetState)
+                            val initialIndex = AppTab.values().indexOf(initialState)
+                            val direction = if (targetIndex > initialIndex) 1 else -1
+                            
+                            androidx.compose.animation.slideInHorizontally(
+                                animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                                initialOffsetX = { fullWidth -> direction * fullWidth / 4 }
+                            ) + fadeIn(animationSpec = tween(400)) togetherWith 
+                            androidx.compose.animation.slideOutHorizontally(
+                                animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                                targetOffsetX = { fullWidth -> -direction * fullWidth / 4 }
+                            ) + fadeOut(animationSpec = tween(400))
                         },
                         label = "tab_content"
                     ) { tab ->
@@ -730,7 +742,13 @@ fun ActivityTimelineSection(
                 filteredFeed.take(4).forEach { entry ->
                     androidx.compose.animation.AnimatedVisibility(
                         visible = true,
-                        enter = androidx.compose.animation.slideInVertically() + androidx.compose.animation.fadeIn()
+                        enter = androidx.compose.animation.slideInVertically(
+                            animationSpec = androidx.compose.animation.core.spring(
+                                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                            ),
+                            initialOffsetY = { fullHeight -> fullHeight / 2 }
+                        ) + androidx.compose.animation.fadeIn()
                     ) {
                         TimelineActivityRow(
                             isDark = isDark,
@@ -861,10 +879,25 @@ fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifie
     val haptic = LocalHapticFeedback.current
     val isPhone = peer.name.contains("phone", ignoreCase = true) || peer.name.contains("pixel", ignoreCase = true)
     
+    val infiniteTransition = rememberInfiniteTransition(label = "glow")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.1f,
+        targetValue = 0.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_alpha"
+    )
+    
     Column(
         modifier = modifier
             .height(100.dp)
             .crPressScale(targetScale = 0.95f)
+            .then(
+                if (peer.isConnected) Modifier.border(1.dp, CRTheme.statusGreen.copy(alpha = glowAlpha), RoundedCornerShape(24.dp))
+                else Modifier
+            )
             .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             })
@@ -1330,50 +1363,68 @@ fun BottomDock(
     isDark: Boolean
 ) {
     val haptic = LocalHapticFeedback.current
+    val tabs = AppTab.values()
+    val selectedIndex = tabs.indexOf(currentTab)
+    
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 64.dp) // Thinner navbar
+            .padding(horizontal = 64.dp)
     ) {
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .crGlassCard(isDark = isDark, cornerRadius = 36.dp, elevated = true)
-                .padding(horizontal = 8.dp, vertical = 6.dp), // Thinner padding for smaller navbar
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            contentAlignment = Alignment.CenterStart
         ) {
-            AppTab.values().forEach { tab ->
-                val isSelected = currentTab == tab
-                
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onTabSelected(tab)
-                            }
+            val tabWidth = maxWidth / tabs.size
+            val indicatorOffset by androidx.compose.animation.core.animateDpAsState(
+                targetValue = tabWidth * selectedIndex,
+                animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 300f),
+                label = "indicator"
+            )
+            
+            Box(
+                modifier = Modifier
+                    .offset(x = indicatorOffset)
+                    .width(tabWidth)
+                    .matchParentSize()
+                    .padding(horizontal = 4.dp)
+                    .background(CRTheme.indigoSoft.copy(alpha = 0.15f), CircleShape)
+            )
+            
+            Row(modifier = Modifier.fillMaxWidth()) {
+                tabs.forEach { tab ->
+                    Box(
+                        modifier = Modifier
+                            .width(tabWidth)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onTabSelected(tab)
+                                }
+                            )
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val isSelected = currentTab == tab
+                        val iconColor = if (isSelected) CRTheme.indigoSoft else CRTheme.textHigh(isDark).copy(alpha = 0.4f)
+                        Icon(
+                            imageVector = when (tab) {
+                                AppTab.Home -> Icons.Default.Home
+                                AppTab.Activity -> Icons.Default.List
+                                AppTab.Devices -> Icons.Default.Devices
+                                AppTab.Settings -> Icons.Default.Settings
+                            },
+                            contentDescription = tab.name,
+                            tint = iconColor,
+                            modifier = Modifier.size(22.dp)
                         )
-                        .background(if (isSelected) CRTheme.indigoSoft.copy(alpha = 0.15f) else Color.Transparent)
-                        .padding(horizontal = if (isSelected) 16.dp else 12.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val iconColor = if (isSelected) CRTheme.indigoSoft else CRTheme.textHigh(isDark).copy(alpha = 0.4f)
-                    
-                    Icon(
-                        imageVector = when (tab) {
-                            AppTab.Home -> Icons.Default.Home
-                            AppTab.Activity -> Icons.Default.List
-                            AppTab.Devices -> Icons.Default.Devices
-                            AppTab.Settings -> Icons.Default.Settings
-                        },
-                        contentDescription = tab.name,
-                        tint = iconColor,
-                        modifier = Modifier.size(22.dp) // Slightly smaller icon to make the bar thinner
-                    )
+                    }
                 }
             }
         }
