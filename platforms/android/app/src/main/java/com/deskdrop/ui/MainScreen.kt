@@ -159,7 +159,7 @@ fun MainScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp)
+                    .padding(bottom = 24.dp)
             ) {
                 BottomDock(
                     currentTab = currentTab,
@@ -338,7 +338,7 @@ fun HomeTab(
         
         Spacer(modifier = Modifier.height(32.dp)) // Contextual gap
         
-        QuickTransfersSection(
+        ActivityTimelineSection(
             isDark = isDark,
             feed = feed,
             onApply = onApplyClipboard,
@@ -347,7 +347,7 @@ fun HomeTab(
             onViewAll = { onTabSelected(AppTab.Activity) }
         )
         
-        Spacer(modifier = Modifier.height(120.dp)) // Space for dock
+        Spacer(modifier = Modifier.height(100.dp)) // Space for dock
     }
 }
 
@@ -584,18 +584,18 @@ fun QuickActionCardPrimary(
                     }
                 } else null
             )
-            .padding(16.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(contentAlignment = Alignment.Center) {
             // Removed pulsing background box
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(32.dp)
                     .background(displayColor.copy(alpha = if (enabled) 0.15f else 0.05f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = title, tint = displayColor, modifier = Modifier.size(22.dp))
+                Icon(imageVector = icon, contentDescription = title, tint = displayColor, modifier = Modifier.size(16.dp))
             }
         }
         Spacer(modifier = Modifier.width(16.dp))
@@ -649,7 +649,7 @@ fun QuickActionCard(
 }
 
 @Composable
-fun QuickTransfersSection(
+fun ActivityTimelineSection(
     isDark: Boolean,
     feed: List<ActivityEntry>,
     onApply: (ActivityEntry) -> Unit,
@@ -664,11 +664,11 @@ fun QuickTransfersSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Quick Transfers",
+                text = "Activity",
                 style = CRTypography.h2,
                 color = CRTheme.textHigh(isDark)
             )
-            if (feed.size > 2) {
+            if (feed.size > 4) {
                 Row(
                     modifier = Modifier
                         .crPressScale(0.95f)
@@ -681,35 +681,30 @@ fun QuickTransfersSection(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         
         if (feed.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .crGlassCard(isDark = isDark, cornerRadius = 16.dp, dashed = true)
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("No recent transfers", style = CRTypography.label, color = CRTheme.textHigh(isDark))
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Your clipboard, files, and links\nwill appear here.",
-                    style = CRTypography.caption,
-                    color = CRTheme.textMedium(isDark),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
+            Text(
+                "Your clipboard, files, and links will appear here.",
+                style = CRTypography.caption,
+                color = CRTheme.textMedium(isDark)
+            )
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                feed.take(2).forEach { entry ->
-                    QuickTransferCard(
-                        isDark = isDark,
-                        entry = entry,
-                        onApply = onApply,
-                        onDelete = onDelete,
-                        onResend = onResend
-                    )
+            Column {
+                feed.take(4).forEachIndexed { index, entry ->
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = true,
+                        enter = androidx.compose.animation.slideInVertically() + androidx.compose.animation.fadeIn()
+                    ) {
+                        TimelineActivityRow(
+                            isDark = isDark,
+                            entry = entry,
+                            isLast = index == minOf(3, feed.size - 1),
+                            onApply = onApply,
+                            onDelete = onDelete,
+                            onResend = onResend
+                        )
+                    }
                 }
             }
         }
@@ -717,9 +712,10 @@ fun QuickTransfersSection(
 }
 
 @Composable
-fun QuickTransferCard(
+fun TimelineActivityRow(
     isDark: Boolean,
     entry: ActivityEntry,
+    isLast: Boolean,
     onApply: (ActivityEntry) -> Unit,
     onDelete: (ActivityEntry) -> Unit,
     onResend: (ActivityEntry) -> Unit
@@ -727,61 +723,77 @@ fun QuickTransferCard(
     val haptic = LocalHapticFeedback.current
     var showMenu by remember { mutableStateOf(false) }
     
-    val icon = when (entry.kind) {
-        ActivityKind.CLIPBOARD_IMAGE -> Icons.Default.Image
-        ActivityKind.CLIPBOARD_TEXT -> {
-            if (entry.preview.startsWith("http")) Icons.Default.Link else Icons.Default.Notes
-        }
-        ActivityKind.FILE_RECEIVED, ActivityKind.FILE_SENT, ActivityKind.FILE_TRANSFER_COMPLETE -> Icons.Default.Description
-        else -> Icons.Default.Sync
-    }
-    
     val title = when (entry.kind) {
         ActivityKind.FILE_SENT -> "Sent to ${entry.deviceName}"
         ActivityKind.FILE_RECEIVED, ActivityKind.FILE_TRANSFER_COMPLETE -> "Received from ${entry.deviceName}"
-        ActivityKind.CLIPBOARD_TEXT, ActivityKind.CLIPBOARD_IMAGE -> "Clipboard synced"
+        ActivityKind.CLIPBOARD_TEXT, ActivityKind.CLIPBOARD_IMAGE -> "Clipboard synced to ${entry.deviceName}"
+        ActivityKind.PEER_CONNECTED -> "Device connected: ${entry.deviceName}"
+        ActivityKind.PEER_DISCONNECTED -> "Device disconnected: ${entry.deviceName}"
         else -> entry.preview.take(20)
     }
     
-    val subtitle = if (entry.preview.isNotEmpty() && entry.kind != ActivityKind.WARNING) {
+    val subtitle = if (entry.preview.isNotEmpty() && entry.kind != ActivityKind.WARNING && entry.kind != ActivityKind.PEER_CONNECTED && entry.kind != ActivityKind.PEER_DISCONNECTED) {
         entry.preview
     } else {
         "Just now"
     }
+    
+    val dotColor = when(entry.kind) {
+        ActivityKind.PEER_CONNECTED -> CRTheme.accentGreen
+        ActivityKind.PEER_DISCONNECTED -> CRTheme.textMedium(isDark)
+        ActivityKind.FILE_RECEIVED, ActivityKind.FILE_SENT, ActivityKind.FILE_TRANSFER_COMPLETE -> CRTheme.brandCyan
+        else -> CRTheme.brandElectric
+    }
 
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(76.dp)
-                .crPressScale(targetScale = 0.98f)
-                .background(
-                    if (isDark) Color.Black.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.6f),
-                    RoundedCornerShape(16.dp)
-                )
-                .crGlassCard(isDark = isDark, cornerRadius = 16.dp, onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onApply(entry)
-                })
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(CRTheme.brandElectric.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = CRTheme.brandElectric, modifier = Modifier.size(20.dp))
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onApply(entry)
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Timeline graphics column
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(20.dp)
+            ) {
+                Spacer(modifier = Modifier.height(6.dp))
+                // Dot
+                Box(modifier = Modifier.size(8.dp).background(dotColor, CircleShape))
+                
+                // Line
+                if (!isLast) {
+                    Box(modifier = Modifier
+                        .width(1.dp)
+                        .height(36.dp)
+                        .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f))
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(36.dp))
+                }
+            }
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            // Content
+            Column(modifier = Modifier.weight(1f).padding(bottom = 12.dp)) {
                 Text(text = title, style = CRTypography.label, color = CRTheme.textHigh(isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(text = subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             
-            IconButton(onClick = { showMenu = true }) {
-                Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More", tint = CRTheme.textMedium(isDark))
+            IconButton(
+                onClick = { showMenu = true },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More", tint = CRTheme.textMedium(isDark), modifier = Modifier.size(16.dp))
             }
         }
         
