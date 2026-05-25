@@ -78,6 +78,8 @@ pub struct PeerRecord {
     /// User manually disconnected this peer and auto-reconnect must stay off
     /// until a fresh, explicit reconnect action is initiated.
     pub explicit_disconnect: bool,
+    /// Indicates that this untrusted peer has requested pairing.
+    pub pairing_requested: bool,
 }
 
 impl Default for PeerRecord {
@@ -98,6 +100,7 @@ impl Default for PeerRecord {
             discovery: DiscoverySource::Unknown,
             last_error: None,
             explicit_disconnect: false,
+            pairing_requested: false,
         }
     }
 }
@@ -158,7 +161,7 @@ pub struct PeerManager {
 impl PeerManager {
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        let store = if path.exists() {
+        let mut store: PeerStoreData = if path.exists() {
             let bytes = std::fs::read(&path).context("reading peer store")?;
             if bytes.is_empty() {
                 PeerStoreData::default()
@@ -168,6 +171,11 @@ impl PeerManager {
         } else {
             PeerStoreData::default()
         };
+        
+        // Connections do not persist across restarts.
+        for peer in store.peers.values_mut() {
+            peer.status = PeerConnectionState::Disconnected;
+        }
 
         Ok(Self {
             path,
@@ -236,6 +244,7 @@ impl PeerManager {
                 discovery,
                 last_error: None,
                 explicit_disconnect: false,
+                pairing_requested: false,
             });
 
             record.friendly_name = friendly_name;
@@ -440,6 +449,23 @@ impl PeerManager {
             let mut store = self.store.write().unwrap();
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.auto_connect = auto_connect;
+                true
+            } else {
+                false
+            }
+        };
+        if found {
+            self.save()?;
+        }
+        Ok(found)
+    }
+
+    /// Sets whether this peer has an active pairing request pending.
+    pub fn set_pairing_requested(&self, device_id: Uuid, requested: bool) -> Result<bool> {
+        let found = {
+            let mut store = self.store.write().unwrap();
+            if let Some(entry) = store.peers.get_mut(&device_id) {
+                entry.pairing_requested = requested;
                 true
             } else {
                 false

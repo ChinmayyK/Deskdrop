@@ -613,41 +613,53 @@ impl FileTransferManager {
     pub fn active_transfers(&self) -> Vec<serde_json::Value> {
         let mut transfers = Vec::new();
         for t in self.inbound.values() {
-            if matches!(t.status, TransferStatus::Pending | TransferStatus::Transferring) {
-                let percent = if t.meta.size_bytes > 0 {
-                    (t.bytes_received as f64 / t.meta.size_bytes as f64 * 100.0) as u8
-                } else {
-                    0
-                };
-                transfers.push(serde_json::json!({
-                    "transfer_id": hex::encode(t.transfer_id),
-                    "from_device": t.from_device_name.clone(),
-                    "file_name": t.meta.file_name.clone(),
-                    "bytes_total": t.meta.size_bytes,
-                    "bytes_received": t.bytes_received,
-                    "percent": percent,
-                    "status": if t.paused { "paused" } else { "transferring" }
-                }));
-            }
+            let percent = if t.meta.size_bytes > 0 {
+                (t.bytes_received as f64 / t.meta.size_bytes as f64 * 100.0) as u8
+            } else {
+                0
+            };
+            let status_str = match t.status {
+                TransferStatus::Pending => "incoming",
+                TransferStatus::Verifying => "verifying",
+                TransferStatus::Complete => "complete",
+                TransferStatus::Failed => "failed",
+                TransferStatus::Cancelled => "cancelled",
+                TransferStatus::Transferring => if t.paused { "paused" } else { "transferring" },
+            };
+            transfers.push(serde_json::json!({
+                "transfer_id": hex::encode(t.transfer_id),
+                "from_device": t.from_device_name.clone(),
+                "file_name": t.meta.file_name.clone(),
+                "bytes_total": t.meta.size_bytes,
+                "bytes_received": t.bytes_received,
+                "percent": percent,
+                "status": status_str
+            }));
         }
         for t in self.outbound.values() {
-            if matches!(t.status, TransferStatus::Pending | TransferStatus::Transferring) {
-                let bytes_sent = (t.last_acked_chunk as u64) * 65536; // roughly
-                let percent = if t.meta.size_bytes > 0 {
-                    (bytes_sent as f64 / t.meta.size_bytes as f64 * 100.0) as u8
-                } else {
-                    0
-                };
-                transfers.push(serde_json::json!({
-                    "transfer_id": hex::encode(t.transfer_id),
-                    "from_device": "Sending",
-                    "file_name": t.meta.file_name.clone(),
-                    "bytes_total": t.meta.size_bytes,
-                    "bytes_received": bytes_sent.min(t.meta.size_bytes),
-                    "percent": percent,
-                    "status": if t.paused { "paused" } else { "transferring" }
-                }));
-            }
+            let bytes_sent = (t.last_acked_chunk as u64) * 65536; // roughly
+            let percent = if t.meta.size_bytes > 0 {
+                (bytes_sent as f64 / t.meta.size_bytes as f64 * 100.0) as u8
+            } else {
+                0
+            };
+            let status_str = match t.status {
+                TransferStatus::Pending => "transferring", // Remote hasn't accepted yet, but from our end it's outgoing
+                TransferStatus::Verifying => "verifying",
+                TransferStatus::Complete => "complete",
+                TransferStatus::Failed => "failed",
+                TransferStatus::Cancelled => "cancelled",
+                TransferStatus::Transferring => if t.paused { "paused" } else { "transferring" },
+            };
+            transfers.push(serde_json::json!({
+                "transfer_id": hex::encode(t.transfer_id),
+                "from_device": "Sending",
+                "file_name": t.meta.file_name.clone(),
+                "bytes_total": t.meta.size_bytes,
+                "bytes_received": bytes_sent.min(t.meta.size_bytes),
+                "percent": percent,
+                "status": status_str
+            }));
         }
         transfers
     }

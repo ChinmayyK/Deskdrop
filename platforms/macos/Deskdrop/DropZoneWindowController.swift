@@ -7,8 +7,8 @@ class DropZoneWindowController: NSWindowController {
     
     init(store: DeskdropStore) {
         let screenRect = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
-        let width: CGFloat = 280
-        let height: CGFloat = 200
+        let width: CGFloat = 340
+        let height: CGFloat = 240
         
         // Position at the bottom center of the screen, just above the dock
         let rect = NSRect(

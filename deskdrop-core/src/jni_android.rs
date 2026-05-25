@@ -309,6 +309,8 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         CameraStreamAccept { .. } => 23,
         CameraStreamStop { .. } => 24,
         CameraFrameReceived { .. } => 25,
+        PairingRequest { .. } => 7,
+        PairingResponse { .. } => 7,
         Warning(_) => 7,
     }
 }
@@ -815,6 +817,78 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_rejectPeer(
     match rt().block_on(h.engine.reject_peer(device_id)) {
         Ok(()) => 1,
         Err(_) => 0,
+}
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_forgetPeer(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    device_id_jstr: JString,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let device_id: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id) else {
+        return 0;
+    };
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    match rt().block_on(h.engine.forget_device(device_id)) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendPairingRequest(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    device_id_jstr: JString,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let device_id: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id) else {
+        return 0;
+    };
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    rt().block_on(h.engine.send_pairing_request(device_id));
+    1
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_respondToPairing(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    device_id_jstr: JString,
+    accepted: jboolean,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let device_id: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id) else {
+        return 0;
+    };
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    let is_accepted = accepted != 0;
+    match rt().block_on(h.engine.respond_to_pairing(device_id, is_accepted)) {
+        Ok(_) => 1,
+        Err(_) => 0,
     }
 }
 
@@ -1206,7 +1280,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventCallState(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventCallNumber(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -1225,7 +1299,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventCallNumber(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventCallContactName(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -1246,7 +1320,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventCallContactName(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventCallAction(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -1276,5 +1350,25 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushBatteryStatus(
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
     rt().block_on(h.engine.push_battery_status(level as u8, charging != 0));
+    0
+}
+
+// ── notifyNetworkRestored ────────────────────────────────────────────────────
+/// Called from Kotlin when Android's ConnectivityManager reports that the
+/// default network has become available again (e.g., after Doze, Wi-Fi
+/// reconnect, or airplane mode toggle). Triggers an immediate reconnection
+/// attempt to all known trusted peers.
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifyNetworkRestored(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.reconnect_all_peers());
     0
 }

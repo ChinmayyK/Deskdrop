@@ -1,10 +1,6 @@
 # Deskdrop
 
 <div align="center">
-  <img src="platforms/macos/Deskdrop/Resources/deskdrop_hero_mockup.png" alt="Deskdrop Hero Banner" width="900" style="border-radius: 12px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);" />
-
-  <br />
-  <br />
 
   <p><strong>Proximity-based, local-first shared clipboard and secure file relay</strong></p>
 

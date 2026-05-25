@@ -224,6 +224,8 @@ extension View {
 struct CRSearchField: View {
     var placeholder: String
     @Binding var text: String
+    @FocusState private var isFocused: Bool
+    @State private var hovered: Bool = false
     var onClear: (() -> Void)? = nil
 
     var body: some View {
@@ -251,15 +253,18 @@ struct CRSearchField: View {
                 .transition(.scale(scale: 0.75).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 9).padding(.vertical, 6.5)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(CRTheme.surface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(CRTheme.stroke.opacity(0.55), lineWidth: 0.5)
-                }
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.black.opacity(0.12)) // Darker translucent fill
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(isFocused ? CRTheme.brandElectric.opacity(0.8) : Color.white.opacity(0.1), lineWidth: 1.0)
+                )
         }
+        .onHover { hovered = $0 }
+        .animation(.crFast, value: isFocused)
         .animation(.crFast, value: text.isEmpty)
     }
 }
@@ -564,13 +569,13 @@ struct CRToastStack: View {
                 }
                 .padding(.leading, 4).padding(.trailing, 14).padding(.vertical, 8)
                 .background {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(.regularMaterial)
+                    CRHUDMaterial()
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .strokeBorder(CRTheme.stroke.opacity(0.30), lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
                         }
-                        .shadow(color: .black.opacity(0.07), radius: 12, y: 3)
+                        .shadow(color: .black.opacity(0.15), radius: 16, y: 8)
                 }
                 .frame(maxWidth: 270)
                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -789,5 +794,25 @@ struct SpotlightHoverModifier: ViewModifier {
 extension View {
     func spotlightHover() -> some View {
         self.modifier(SpotlightHoverModifier())
+    }
+}
+
+// MARK: - Hover Scale
+
+struct CRHoverScaleModifier: ViewModifier {
+    let scale: CGFloat
+    @State private var isHovered = false
+    
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isHovered ? scale : 1.0)
+            .animation(.crSpring, value: isHovered)
+            .onHover { isHovered = $0 }
+    }
+}
+
+extension View {
+    func crHoverScale(scale: CGFloat = 1.02) -> some View {
+        modifier(CRHoverScaleModifier(scale: scale))
     }
 }

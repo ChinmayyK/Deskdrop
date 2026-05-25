@@ -6,7 +6,7 @@ import UserNotifications
 import Darwin
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
     private let store = DeskdropStore()
     private var statusItem: NSStatusItem!
     private var menuBarDropView: MenuBarDropView?
@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerSleepWakeObservers()
         registerStoreNotifications()
         // Request permission for system notifications (device-connected alerts)
+        UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         store.start()
 
@@ -393,12 +394,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         content.title = title
         content.body  = body
         content.sound = .default
+        
         let req = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
             trigger: nil
         )
         UNUserNotificationCenter.current().add(req)
+    }
+
+    // Allow notifications to show as banners even when app is in foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+    
+    // Handle notification click
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        // Just bring app to front or open history panel if appropriate
+        NSApp.activate(ignoringOtherApps: true)
+        openQuickAccess()
+        completionHandler()
     }
 
     private func pulseMenuBarIcon() {
@@ -455,8 +470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 title = "Clipboard Available"
                 body = "From \(entry.device_name) — click to apply"
             }
-            
-            sendSystemNotification(title: title, body: body)
+
             
             if !entry.applied_locally {
                 store.showToast(
@@ -487,8 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             
             let title = "File Received"
             let body = entry.file_name ?? "A file was received from \(entry.device_name)."
-            
-            sendSystemNotification(title: title, body: body)
+
             
             store.showToast(
                 title: title,
@@ -698,7 +711,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             platform: nil, trusted: false, remembered: false, connected: false,
             connectionStatus: "disconnected",
             syncEnabled: true, autoConnect: false, lastError: nil,
-            lastSeen: detail.lastSeen, lastSync: nil
+            pairingRequested: false,
+            lastSeen: detail.lastSeen, lastSync: nil, ip: nil
         ))
 
         let respond: (Bool) -> Void = { [weak self] approved in
@@ -903,7 +917,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered, defer: false
         )
         window.title                     = title
-        window.minSize                   = NSSize(width: 760, height: 520)
+        window.minSize                   = NSSize(width: 900, height: 600)
         window.titlebarAppearsTransparent = true
         window.titleVisibility            = .hidden
         window.isMovableByWindowBackground = true
@@ -913,9 +927,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor            = .clear
         window.isOpaque                   = false
         window.hasShadow                  = false
-        window.standardWindowButton(.closeButton)?.isHidden = true
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.contentViewController = NSHostingController(rootView: rootView)
         return NSWindowController(window: window)
     }

@@ -24,6 +24,7 @@ class SettingsActivity : ComponentActivity() {
     private val syncImages = mutableStateOf(true)
     private val syncFiles = mutableStateOf(true)
     private val isDarkMode = mutableStateOf(false)
+    private val peers = mutableStateOf(emptyList<PeerSnapshot>())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -50,6 +51,7 @@ class SettingsActivity : ComponentActivity() {
                     syncImages = syncImages.value,
                     syncFiles = syncFiles.value,
                     isDarkMode = isDarkMode.value,
+                    peers = peers.value,
                     onSyncEnabledChange = {
                         syncEnabled.value = it
                         saveBooleanPref("sync_enabled", it)
@@ -72,6 +74,17 @@ class SettingsActivity : ComponentActivity() {
                     },
                     onRenameClicked = { showRenameDialog() },
                     onBatterySettingsClicked = { openBatterySettings() },
+                    onForgetDevice = { deviceId -> 
+                        ContextCompat.startForegroundService(this,
+                            Intent(this, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_FORGET_PEER
+                                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, deviceId)
+                            }
+                        )
+                        // optimistic UI update
+                        peers.value = peers.value.filter { it.id != deviceId }
+                        Toast.makeText(this, "Device forgotten", Toast.LENGTH_SHORT).show()
+                    },
                     onBack = { finish() }
                 )
             }
@@ -89,6 +102,7 @@ class SettingsActivity : ComponentActivity() {
         syncImages.value = prefs.getBoolean("sync_images", true)
         syncFiles.value = prefs.getBoolean("sync_files", true)
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
+        peers.value = prefs.peerSnapshots()
     }
 
     private fun saveBooleanPref(key: String, value: Boolean) {

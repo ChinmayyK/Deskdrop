@@ -14,8 +14,27 @@ import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.deskdrop.ui.MainScreen
 import com.deskdrop.ui.theme.AppTheme
+import com.deskdrop.ui.theme.CRTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -29,6 +48,18 @@ class MainActivity : ComponentActivity() {
     private val feed = mutableStateOf<List<ActivityEntry>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
     private val isDarkMode = mutableStateOf(false)
+    private val toastMessage = mutableStateOf("")
+
+    private val filePickerLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNotEmpty()) {
+            val intent = Intent(this, DeskdropService::class.java).apply {
+                action = DeskdropService.ACTION_PUSH_SHARED_URI
+                putStringArrayListExtra(DeskdropService.EXTRA_SHARED_URIS, java.util.ArrayList(uris.map { it.toString() }))
+            }
+            ContextCompat.startForegroundService(this, intent)
+            showSnack("Sending ${uris.size} file(s)...")
+        }
+    }
 
     private val feedRefreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val feedRefreshRunnable = object : Runnable {
@@ -58,19 +89,41 @@ class MainActivity : ComponentActivity() {
                 android.graphics.Color.TRANSPARENT
             )
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // API 30+: use the modern `display` property (defaultDisplay is deprecated)
+            val displayModes = display?.supportedModes ?: emptyArray()
+            val bestMode = displayModes.maxByOrNull { it.refreshRate }
+            if (bestMode != null) {
+                window.attributes = window.attributes.apply {
+                    preferredDisplayModeId = bestMode.modeId
+                }
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            @Suppress("DEPRECATION")
+            val displayModes = window.windowManager.defaultDisplay.supportedModes
+            val bestRate = displayModes.maxByOrNull { it.refreshRate }?.refreshRate ?: 60f
+            window.attributes = window.attributes.apply {
+                preferredRefreshRate = bestRate
+            }
+        }
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
+        requestBatteryOptimizationExemption()
 
         setContent {
+            val activeTransfers by DeskdropService.activeTransfersFlow.collectAsState()
+
             AppTheme(useDarkTheme = isDarkMode.value) {
-                MainScreen(
-                    isDark = isDarkMode.value,
-                    isServiceRunning = isServiceRunning.value,
-                    isSyncEnabled = isSyncEnabled.value,
-                    peers = peers.value,
-                    feed = feed.value,
-                    ambientStatus = ambientStatus.value,
-                    onStartSync = { launchService() },
+                Box(modifier = Modifier.fillMaxSize()) {
+                    MainScreen(
+                        isDark = isDarkMode.value,
+                        isServiceRunning = isServiceRunning.value,
+                        isSyncEnabled = isSyncEnabled.value,
+                        peers = peers.value,
+                        feed = feed.value,
+                        ambientStatus = ambientStatus.value,
+                        activeTransfers = activeTransfers,
+                        onStartSync = { launchService() },
                     onResumeSync = { sendAction(DeskdropService.ACTION_RESUME_SYNC) },
                     onScanNow = {
                         sendAction(DeskdropService.ACTION_SCAN_NOW)
@@ -78,7 +131,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onActionPushClipboard = {
                         val cm = getSystemService(ClipboardManager::class.java)
-                        val clip = cm.primaryClip?.getItemAt(0)?.coerceToText(this)
+                        val clip = cm.primaryClip?.getItemAt(0)?.coerceToText(this@MainActivity)
                         if (clip.isNullOrBlank()) {
                             showSnack("Clipboard is empty")
                         } else {
@@ -96,24 +149,24 @@ class MainActivity : ComponentActivity() {
                         refreshDashboardState()
                     },
                     onActionStopService = {
-                        stopService(Intent(this, DeskdropService::class.java))
+                        stopService(Intent(this@MainActivity, DeskdropService::class.java))
                         refreshDashboardState()
                     },
                     onApplyClipboard = { entry ->
-                        val svc = Intent(this, DeskdropService::class.java).apply {
+                        val svc = Intent(this@MainActivity, DeskdropService::class.java).apply {
                             action = DeskdropService.ACTION_APPLY_CLIPBOARD
                             if (entry.contentHash.isNotBlank()) {
                                 putExtra(DeskdropService.EXTRA_CONTENT_HASH, entry.contentHash)
                             }
                             putExtra(DeskdropService.EXTRA_CLIPBOARD_TEXT, entry.preview)
                         }
-                        ContextCompat.startForegroundService(this, svc)
+                        ContextCompat.startForegroundService(this@MainActivity, svc)
                         showSnack("Applied to clipboard")
                         rebuildFeed()
                     },
                     onTrustPeer = { peer ->
-                        ContextCompat.startForegroundService(this,
-                            Intent(this, DeskdropService::class.java).apply {
+                        ContextCompat.startForegroundService(this@MainActivity,
+                            Intent(this@MainActivity, DeskdropService::class.java).apply {
                                 action = DeskdropService.ACTION_TRUST_PEER
                                 putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
                             }
@@ -122,8 +175,8 @@ class MainActivity : ComponentActivity() {
                         window.decorView.postDelayed({ refreshDashboardState() }, 200)
                     },
                     onRejectPeer = { peer ->
-                        ContextCompat.startForegroundService(this,
-                            Intent(this, DeskdropService::class.java).apply {
+                        ContextCompat.startForegroundService(this@MainActivity,
+                            Intent(this@MainActivity, DeskdropService::class.java).apply {
                                 action = DeskdropService.ACTION_REJECT_PEER
                                 putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
                             }
@@ -131,13 +184,69 @@ class MainActivity : ComponentActivity() {
                         showSnack("Rejected ${peer.name}")
                         window.decorView.postDelayed({ refreshDashboardState() }, 200)
                     },
+                    onSendPairingRequest = { peer ->
+                        ContextCompat.startForegroundService(this@MainActivity,
+                            Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_SEND_PAIRING_REQUEST
+                                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                            }
+                        )
+                        showSnack("Pairing request sent to ${peer.name}")
+                    },
+                    onRespondPairing = { peer, accepted ->
+                        ContextCompat.startForegroundService(this@MainActivity,
+                            Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_RESPOND_TO_PAIRING
+                                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                                putExtra(PairingActivity.EXTRA_APPROVED, accepted)
+                            }
+                        )
+                        if (accepted) {
+                            showSnack("Accepted pairing from ${peer.name}")
+                        } else {
+                            showSnack("Declined pairing from ${peer.name}")
+                        }
+                        window.decorView.postDelayed({ refreshDashboardState() }, 200)
+                    },
                     onActionStreamCamera = {
-                        startActivity(Intent(this, CameraStreamActivity::class.java))
+                        startActivity(Intent(this@MainActivity, CameraStreamActivity::class.java))
+                    },
+                    onActionPauseTransfer = { tid ->
+                        ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, DeskdropService::class.java).apply {
+                            action = DeskdropService.ACTION_PAUSE_FILE_TRANSFER
+                            putExtra(DeskdropService.EXTRA_TRANSFER_ID, tid)
+                        })
+                    },
+                    onActionResumeTransfer = { tid ->
+                        ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, DeskdropService::class.java).apply {
+                            action = DeskdropService.ACTION_RESUME_FILE_TRANSFER
+                            putExtra(DeskdropService.EXTRA_TRANSFER_ID, tid)
+                        })
+                    },
+                    onActionCancelTransfer = { tid ->
+                        ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, DeskdropService::class.java).apply {
+                            action = DeskdropService.ACTION_CANCEL_FILE_TRANSFER
+                            putExtra(DeskdropService.EXTRA_TRANSFER_ID, tid)
+                        })
+                    },
+                    onActionSendFiles = {
+                        filePickerLauncher.launch("*/*")
                     },
                     onOpenSettings = {
-                        startActivity(Intent(this, SettingsActivity::class.java))
+                        startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
                     }
                 )
+                
+                // Custom Toast Overlay
+                AnimatedVisibility(
+                    visible = toastMessage.value.isNotEmpty(),
+                    enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp)
+                ) {
+                    CRToast(message = toastMessage.value, isDark = isDarkMode.value)
+                }
+                }
             }
         }
         
@@ -190,7 +299,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showSnack(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        toastMessage.value = message
+        // Auto-dismiss after 3 seconds
+        feedRefreshHandler.postDelayed({
+            if (toastMessage.value == message) {
+                toastMessage.value = ""
+            }
+        }, 3000)
     }
 
     private fun launchService() = runCatching {
@@ -238,6 +353,20 @@ class MainActivity : ComponentActivity() {
 
         if (needed.isNotEmpty()) {
             requestPermissions(needed.toTypedArray(), 1001)
+        }
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                runCatching {
+                    startActivity(Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        android.net.Uri.parse("package:$packageName")
+                    ))
+                }
+            }
         }
     }
 
@@ -348,5 +477,32 @@ class MainActivity : ComponentActivity() {
             showSnack("Paired with $peerName — syncing!")
             refreshDashboardState()
         }
+    }
+}
+
+@Composable
+fun CRToast(message: String, isDark: Boolean) {
+    Box(
+        modifier = Modifier
+            .padding(horizontal = 24.dp)
+            .background(
+                color = if (isDark) Color(0xFF1E1E1E).copy(alpha = 0.95f) else Color.White.copy(alpha = 0.95f),
+                shape = RoundedCornerShape(100.dp)
+            )
+            .border(
+                width = 0.5.dp,
+                color = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(100.dp)
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = message,
+            color = CRTheme.textHigh(isDark),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.5.sp
+        )
     }
 }

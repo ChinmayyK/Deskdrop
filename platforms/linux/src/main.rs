@@ -168,7 +168,7 @@ fn main() {
 
 // ── Event handler ─────────────────────────────────────────────────────────────
 
-async fn handle_event(event: EngineEvent, engine: &Arc<Engine>, last_notify: &mut Instant) {
+async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &mut Instant) {
     match event {
         EngineEvent::ClipboardReceived {
             from_name,

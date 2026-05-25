@@ -7,7 +7,7 @@ use deskdrop_core::{
     peer_manager::PeerConnectionState,
     protocol::ClipboardContent,
     settings::{
-        default_history_path, default_settings_path, ClipboardTemplate, PeerSettings, SettingsStore,
+        default_history_path, default_settings_path, ClipboardTemplate, SettingsStore,
     },
     trust::format_fingerprint,
 };
@@ -492,6 +492,14 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
         }
         IpcRequest::RejectPeer { device_id } => {
             state.engine.reject_peer(parse_uuid(&device_id)?).await?;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::SendPairingRequest { device_id } => {
+            state.engine.send_pairing_request(parse_uuid(&device_id)?).await;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::RespondToPairing { device_id, accepted } => {
+            let _ = state.engine.respond_to_pairing(parse_uuid(&device_id)?, accepted).await;
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::RevokeTrustedDevice { device_id } => {

@@ -15,6 +15,8 @@ data class PeerSnapshot(
     val lastSeenSecs: Long?,
     val lastSyncSecs: Long?,
     val lastError: String?,
+    val ip: String?,
+    val pairingRequested: Boolean,
 ) {
     val isConnected: Boolean get() = status == "connected"
     val isConnecting: Boolean get() = status == "connecting"
@@ -47,6 +49,8 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             lastSeenSecs = obj.takeIf { !it.isNull("last_seen") }?.optLong("last_seen"),
             lastSyncSecs = obj.takeIf { !it.isNull("last_sync") }?.optLong("last_sync"),
             lastError = obj.takeIf { !it.isNull("last_error") }?.optString("last_error"),
+            ip = obj.takeIf { !it.isNull("ip") }?.optString("ip"),
+            pairingRequested = obj.optBoolean("pairing_requested", false),
         )
         
         val existing = uniquePeers[name]

@@ -19,15 +19,20 @@ struct DashboardRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             CRSidebarView(store: store)
-                .frame(width: 220)
-                .background(CRTheme.surfaceStrong)
-
-            Divider().opacity(0.5)
+                .frame(width: 80)
+                .background(.ultraThinMaterial)
+                .background(CRTheme.surface.opacity(0.4))
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(CRTheme.stroke.opacity(0.4))
+                        .frame(width: 1)
+                        .shadow(color: CRTheme.brandElectric.opacity(0.15), radius: 6, x: 2, y: 0)
+                }
 
             DetailContent(store: store, density: $density, beginRename: beginRename)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(CRTheme.surface)
+        .background(CRFluidBackgroundView())
         .ignoresSafeArea(edges: .top)
         .overlay(alignment: .bottomTrailing) {
             if !pendingContinuityItems.isEmpty {
@@ -58,100 +63,74 @@ struct DashboardRootView: View {
 private struct CRSidebarView: View {
     @ObservedObject var store: DeskdropStore
     @State private var hoveredItem: DashboardSection?
+    @Environment(\.colorScheme) var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Sidebar Header (App Identity)
-            HStack(spacing: 8) {
-                Image(systemName: "circle.hexagongrid.fill")
-                    .foregroundStyle(CRTheme.brandElectric)
-                    .font(.system(size: 16))
-                Text("Deskdrop")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(CRTheme.ink)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
-
-            // Status Pill
-            HStack(spacing: 6) {
-                StatusDot(isOnline: store.connectedCount > 0, size: 6)
-                Text(store.connectedCount > 0 ? "Mesh Active" : "Mesh Offline")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(store.connectedCount > 0 ? CRTheme.accentGreen : Color.secondary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(store.connectedCount > 0 ? CRTheme.accentGreen.opacity(0.12) : Color.secondary.opacity(0.12), in: Capsule())
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
+        VStack(alignment: .center, spacing: 0) {
+            // Push content down to clear traffic lights
+            Spacer().frame(height: 38)
+            
+            // App Icon
+            CRAppIconMark(size: 36)
+                .padding(.bottom, 24)
 
             // Navigation Items
-            VStack(spacing: 4) {
-                ForEach([DashboardSection.dashboard, .history, .devices, .workflows], id: \.self) { section in
+            VStack(spacing: 12) {
+                ForEach([DashboardSection.devices, .clipboard, .transfers, .remoteControl], id: \.self) { section in
                     sidebarItem(for: section)
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
 
             Spacer()
 
             // Bottom Settings
-            VStack(spacing: 4) {
+            VStack(spacing: 12) {
                 sidebarItem(for: .settings)
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 20)
         }
     }
 
     @ViewBuilder
     private func sidebarItem(for section: DashboardSection) -> some View {
         let isSelected = store.selectedSection == section
-        let isHovered = hoveredItem == section
+        let hovered = hoveredItem == section
 
-        Button {
-            store.selectedSection = section
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: section.icon)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .frame(width: 16, alignment: .center)
-                Text(section.title)
-                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                Spacer()
-                
-                // Badges
-                if section == .history && store.pendingClipboardCount > 0 {
-                    badgeView(count: store.pendingClipboardCount)
-                } else if section == .devices && store.connectedDevices.count > 0 {
-                    badgeView(count: store.connectedDevices.count)
+        Button(action: { store.selectedSection = section }) {
+            VStack(spacing: 4) {
+                ZStack {
+                    if isSelected {
+                        Capsule()
+                            .fill(CRTheme.brandElectric.opacity(0.15))
+                            .frame(width: 56, height: 32)
+                    } else if hovered {
+                        Capsule()
+                            .fill(CRTheme.ink.opacity(0.08))
+                            .frame(width: 56, height: 32)
+                    }
+                    
+                    Image(systemName: isSelected ? section.icon + ".fill" : section.icon)
+                        .font(.system(size: 20))
+                        .foregroundStyle(isSelected ? CRTheme.brandElectric : CRTheme.inkSoft.opacity(0.4))
                 }
+                .frame(width: 56, height: 32)
+                
+                Text(section.title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(isSelected ? CRTheme.ink : CRTheme.inkSoft.opacity(0.4))
             }
-            .foregroundStyle(isSelected ? Color.white : CRTheme.inkSoft)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? CRTheme.brandElectric : (isHovered ? CRTheme.rowHover : Color.clear))
-            )
+            .frame(width: 64, height: 56)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering { hoveredItem = section }
-            else if hoveredItem == section { hoveredItem = nil }
+        .onHover { isHovering in
+            withAnimation(.crFast) {
+                if isHovering { hoveredItem = section }
+                else if hoveredItem == section { hoveredItem = nil }
+            }
         }
-    }
-
-    private func badgeView(count: Int) -> some View {
-        Text("\(count)")
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(CRTheme.brandElectric.opacity(0.8)))
     }
 }
 
@@ -165,30 +144,18 @@ private struct DetailContent: View {
     var body: some View {
         VStack(spacing: 0) {
             // TOP SHELL / APPLICATION CHROME
-            VStack(spacing: 0) {
-                ContinuityHeaderView(store: store)
-            }
-            .background(CRTheme.surfaceStrong)
-            .overlay(alignment: .bottom) { CRDivider() }
-            .zIndex(10)
+            ContinuityHeaderView(store: store)
+                .zIndex(10)
 
             // CONTENT REGION
             VStack(spacing: 0) {
-                // Sticky section toolbar
-                CRSectionToolbar(
-                    title:    store.selectedSection.title,
-                    subtitle: store.selectedSection.subtitle
-                ) {
-                    toolbarActions
-                }
-
                 // Content — keyed so SwiftUI rebuilds on section change (enables transition)
                 Group {
                     switch store.selectedSection {
-                    case .dashboard: UnifiedDashboardView(store: store, density: density)
-                    case .history:   TimelineSectionView(store: store, density: density)
-                    case .devices:  DevicesSectionView(store: store, rename: beginRename)
-                    case .workflows: TrustSectionView(store: store, rename: beginRename)
+                    case .devices: DeviceCentricDashboardView(store: store)
+                    case .clipboard: TimelineSectionView(store: store, density: density)
+                    case .transfers: TransfersDashboardView(store: store)
+                    case .remoteControl: Text("Remote Control Area (Coming Soon)").frame(maxWidth: .infinity, maxHeight: .infinity).foregroundStyle(Color.secondary)
                     case .settings: PreferencesView(store: store)
                     }
                 }
@@ -200,14 +167,14 @@ private struct DetailContent: View {
                 .animation(.crSpring, value: store.selectedSection)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(CRTheme.surface)
+            .background(Color.clear) // Rely on CRFluidBackgroundView underneath
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder private var toolbarActions: some View {
         switch store.selectedSection {
-        case .dashboard, .history:
+        case .devices, .clipboard, .transfers, .remoteControl, .settings:
             // Density toggle
             HStack(spacing: 4) {
                 Button {
@@ -228,98 +195,103 @@ private struct DetailContent: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(density == .compact ? CRTheme.brandElectric : CRTheme.inkSoft)
             }
-
-        case .devices:
-            Button { store.scanForDevices() } label: {
-                Label("Scan", systemImage: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 12.5, weight: .medium))
-            }
-            .buttonStyle(CRSecondaryButtonStyle())
-
-        case .workflows:
-            if store.devices.filter({ $0.trustState == .untrusted }).count > 1 {
-                Button("Reject All") { store.rejectAll() }
-                    .buttonStyle(CRDestructiveButtonStyle())
-            }
-
-        case .settings:
-            EmptyView()
         }
     }
 }
 
-// MARK: - Continuity Header
+// MARK: - App Chrome (Top Bar)
 
 private struct ContinuityHeaderView: View {
     @ObservedObject var store: DeskdropStore
+    @State private var searchText = ""
+    @Environment(\.colorScheme) var scheme
 
     var body: some View {
-        HStack(spacing: 16) {
-            // Left Zone: Empty (Sidebar took over identity)
-            Spacer(minLength: 0)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Center Zone: Command Surface
-            Spacer(minLength: 0)
-            Button {
-                store.openCommandPalette()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.secondary)
-                    Text("Search")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Text("⌘K")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.secondary.opacity(0.8))
-                }
-                .padding(.horizontal, 8)
-                .frame(width: 280, height: 28)
-                .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.2), lineWidth: 0.5))
+        HStack(spacing: 24) {
+            // Left Context
+            HStack(spacing: 8) {
+                StatusDot(isOnline: store.connectedCount > 0, size: 8)
+                Text(store.connectedCount > 0 ? "Local Network Active" : "Mesh Offline")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(CRTheme.inkSoft)
             }
-            .buttonStyle(.plain)
-            Spacer(minLength: 0)
+            .frame(width: 160, alignment: .leading) // Match sidebar width approx or let it breathe
 
-            // Right Zone: Quick Controls
-            HStack(spacing: 6) {
-                if store.connectedCount > 0 {
-                    Button {
-                        store.sendCurrentClipboard(to: nil)
-                    } label: {
-                        Image(systemName: "arrow.up.doc.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(CRTheme.ink)
-                            .frame(width: 26, height: 26)
-                            .background(CRTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 6))
-                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(CRTheme.stroke.opacity(0.8), lineWidth: 0.5))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Quick Send Clipboard")
+            Spacer()
+            
+            // Command Layer Search
+            CRSearchField(placeholder: "Search devices, clipboard, files...", text: $searchText)
+                .frame(maxWidth: 480)
+            
+            Spacer()
+            
+            // Quick Actions Group
+            HStack(spacing: 4) {
+                HeaderActionButton(icon: "antenna.radiowaves.left.and.right", tooltip: "Scan Network") {
+                    store.scanForDevices()
+                }
+                HeaderActionButton(icon: "paperplane.fill", tooltip: "Send File") {
+                    // Triggers file picker
                 }
                 
-                Button {
+                Divider()
+                    .frame(height: 16)
+                    .padding(.horizontal, 4)
+                
+                HeaderActionButton(icon: "gearshape.fill", tooltip: "Settings") {
                     store.selectedSection = .settings
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(CRTheme.inkSoft)
-                        .frame(width: 26, height: 26)
-                        .background(CRTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(CRTheme.stroke.opacity(0.8), lineWidth: 0.5))
                 }
-                .buttonStyle(.plain)
-                .help("Settings")
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(4)
+            .background(Color.black.opacity(0.04), in: Capsule())
+            .overlay(Capsule().stroke(CRTheme.stroke.opacity(0.3), lineWidth: 1))
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 18)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .background {
+            ZStack {
+                CRVisualEffect(material: .headerView, blendingMode: .withinWindow)
+                
+                // Subtle bottom border
+                VStack {
+                    Spacer()
+                    Rectangle()
+                        .fill(CRTheme.stroke.opacity(0.5))
+                        .frame(height: 1)
+                }
+                
+                // Ambient top glow
+                VStack {
+                    Rectangle()
+                        .fill(LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.05 : 0.4), .clear], startPoint: .top, endPoint: .bottom))
+                        .frame(height: 12)
+                    Spacer()
+                }
+            }
+        }
+    }
+}
+
+private struct HeaderActionButton: View {
+    let icon: String
+    let tooltip: String
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(isHovered ? CRTheme.brandElectric : CRTheme.inkSoft)
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle().fill(isHovered ? CRTheme.brandElectric.opacity(0.1) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
+        .crHoverScale(scale: 1.1)
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -365,7 +337,7 @@ private struct CompanionDeviceCard: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     StatusDot(isOnline: device.isConnected, size: 6)
-                    Text(device.connectionState == .connected ? "Clipboard ready" : device.connectionState.label)
+                    Text(device.connectionState == .connected ? "Clipboard Ready" : device.connectionState.label.capitalized)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(CRTheme.inkSoft)
                     if connectedPeers > 1 {
@@ -381,22 +353,13 @@ private struct CompanionDeviceCard: View {
         .padding(16)
         .frame(width: 312, alignment: .leading)
         .background {
-            ZStack {
-                CRVisualEffect(material: .popover, blendingMode: .behindWindow)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(CRTheme.cardGradient)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(CRTheme.brandElectric.opacity(0.50), lineWidth: 0.5)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 19.5, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
-            }
-            .modifier(GlowModifier(color: CRTheme.brandElectric, radius: 24))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(CRTheme.surfaceStrong)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(CRTheme.brandElectric.opacity(0.50), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
@@ -491,13 +454,13 @@ private struct ContinuityStagingDrawer: View {
             .padding(16)
             .frame(width: 336, alignment: .leading)
             .background {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color(hex: 0xF7F1E8, opacity: 0.96))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(CRTheme.surfaceStrong)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(Color(hex: 0xDED3C7, opacity: 0.98), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(CRTheme.stroke, lineWidth: 1)
                     }
-                    .shadow(color: .black.opacity(0.07), radius: 24, x: 0, y: 10)
+                    .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
             }
         }
     }
@@ -675,7 +638,7 @@ private struct DevicesSectionView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 14) {
                 // Quick-action row — full width stacked vertically so content isn't cramped
                 VStack(spacing: 8) {
                     MagicLinkPairingCard(store: store)
@@ -693,7 +656,7 @@ private struct DevicesSectionView: View {
                         onAction: { store.scanForDevices() }
                     )
                 } else {
-                    VStack(spacing: 7) {
+                    LazyVStack(spacing: 7) {
                         ForEach(store.devices) { DeviceCard(device: $0, store: store, rename: rename) }
                     }
                 }
@@ -718,7 +681,7 @@ private struct TrustSectionView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
+            LazyVStack(alignment: .leading, spacing: 8) {
                 // Attention banner
                 if !attention.isEmpty {
                     HStack(spacing: 10) {
@@ -751,7 +714,7 @@ private struct TrustSectionView: View {
                         accent: CRTheme.accentGreen
                     )
                 } else {
-                    VStack(spacing: 7) {
+                    LazyVStack(spacing: 7) {
                         ForEach(attention) { DeviceCard(device: $0, store: store, rename: rename, emphasizeTrust: true) }
                     }
                 }
@@ -978,11 +941,18 @@ private struct DeviceCard: View {
                         .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                 }
                 if device.trustState != .trusted {
-                    Button("Trust")  { store.trust(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
-                    Button("Reject") { store.reject(device) }.buttonStyle(CRDestructiveButtonStyle())
+                    if device.pairingRequested {
+                        Button("Accept") { store.respondToPairing(device, accepted: true) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
+                        Button("Decline") { store.respondToPairing(device, accepted: false) }.buttonStyle(CRDestructiveButtonStyle())
+                    } else {
+                        Button("Pair") { store.sendPairingRequest(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                        Button("Trust (Legacy)")  { store.trust(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
+                        Button("Reject (Legacy)") { store.reject(device) }.buttonStyle(CRDestructiveButtonStyle())
+                    }
                 } else {
                     Button("Rename")       { rename(device) }.buttonStyle(CRSecondaryButtonStyle())
                     Button("Revoke Trust") { store.revoke(device) }.buttonStyle(CRDestructiveButtonStyle())
+                    Button("Forget")       { Task { try? await DeskdropIPCClient.shared.forgetDevice(deviceId: device.id); store.scanForDevices() } }.buttonStyle(CRDestructiveButtonStyle())
                 }
                 Spacer()
             }
@@ -1069,7 +1039,7 @@ private struct RenameDeviceSheet: View {
                 Spacer()
                 Button("Cancel", action: onCancel).buttonStyle(CRSecondaryButtonStyle())
                 Button("Save") { onSave(draft) }.buttonStyle(CRPrimaryButtonStyle())
-                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
         .padding(24).frame(width: 330)
@@ -1078,588 +1048,156 @@ private struct RenameDeviceSheet: View {
     }
 }
 
-// MARK: - Unified Dashboard (Mockup Style)
+// MARK: - Device-Centric Dashboard (O+ Connect Style)
 
-struct UnifiedDashboardView: View {
+struct DeviceCentricDashboardView: View {
     @ObservedObject var store: DeskdropStore
-    let density: CRDensityMode
     @State private var showingFilePicker = false
-    @State private var isFileDragTargeted  = false
-    @Environment(\.colorScheme) var colorScheme
+    @State private var pendingFileTarget: ManagedDevice?
+    @Environment(\.colorScheme) var scheme
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                // ── Section 1: Active Device Hero ─────────────────────────
-                if let device = store.connectedDevices.first {
-                    connectedHeroSection(device: device)
-                } else {
-                    noDeviceHero
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Text("Welcome back, \(NSUserName().capitalized)!")
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CRTheme.ink)
+                    Spacer()
                 }
+                .padding(.horizontal, 40)
+                .padding(.top, 40)
+                .padding(.bottom, 20)
 
-                // ── Section 2: Quick Action Row ───────────────────────────
                 if !store.connectedDevices.isEmpty {
-                    quickActionRow
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
+                        ForEach(store.connectedDevices, id: \.id) { device in
+                            CompactDeviceCard(device: device, store: store) {
+                                pendingFileTarget = device
+                                showingFilePicker = true
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 40)
+                } else {
+                    CompactEmptyState(store: store)
+                        .padding(.horizontal, 40)
                 }
-
-                // ── Section 3: Live Stats Row ─────────────────────────────
-                statsRow
-                // ── Section 4: Sync Controls ──────────────────────────────
-                if store.settings != nil {
-                    syncControlsSection
+                
+                // Quick Actions
+                VStack(spacing: 14) {
+                    MagicLinkPairingCard(store: store)
+                    ManualConnectCard(store: store)
+                    FileShareCard(store: store) { pendingFileTarget = $0; showingFilePicker = true }
                 }
-
-                // ── Section 5: Recent Activity ────────────────────────────
-                if !store.timeline.isEmpty {
-                    recentActivitySection
-                }
+                .padding(.horizontal, 40)
+                .padding(.top, 32)
+                .padding(.bottom, 40)
             }
-            .padding(.horizontal, 40)
-            .padding(.vertical, 32)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.clear)
         .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
-                store.sendFiles(urls: urls, toPeer: nil)
+                store.sendFiles(urls: urls, to: pendingFileTarget)
+                pendingFileTarget = nil
             }
         }
-    }
-
-    // ── Connected Hero ────────────────────────────────────────────────────────
-
-    @ViewBuilder
-    private func connectedHeroSection(device: ManagedDevice) -> some View {
-        VStack(spacing: 0) {
-            // Top bar
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Welcome back, \(NSUserName())")
-                        .font(.system(size: 22, weight: .bold))
-                    HStack(spacing: 6) {
-                        Circle().fill(CRTheme.accentGreen).frame(width: 7, height: 7)
-                            .shadow(color: CRTheme.accentGreen.opacity(0.6), radius: 4)
-                        Text("\(store.connectedDevices.count) device\(store.connectedDevices.count == 1 ? "" : "s") online")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(CRTheme.inkSoft)
-                    }
-                }
-                Spacer()
-                Button { store.scanForDevices() } label: {
-                    Label("Scan", systemImage: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 12.5, weight: .medium))
-                }
-                .buttonStyle(CRSecondaryButtonStyle())
-            }
-            .padding(.horizontal, 28)
-            .padding(.top, 24)
-            .padding(.bottom, 20)
-
-            CRDivider().padding(.horizontal, 28)
-
-            // Device row
-            DeviceListRow(device: device, store: store)
-
-            // More connected devices
-            if store.connectedDevices.count > 1 {
-                CRDivider().padding(.horizontal, 28)
-                ForEach(store.connectedDevices.dropFirst()) { d in
-                    DeviceListRow(device: d, store: store)
-                }
-            }
-        }
-    }
-
-    // ── No-device Hero ────────────────────────────────────────────────────────
-
-    private var noDeviceHero: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "iphone.gen3.slash")
-                .font(.system(size: 32))
-                .foregroundStyle(CRTheme.inkSubtle)
-            Text("No Devices Connected")
-                .font(.system(size: 15, weight: .bold))
-            Text("Open Deskdrop on your iPhone or Android to start syncing clipboard, files and calls.")
-                .font(.system(size: 13))
-                .foregroundStyle(CRTheme.inkSoft)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 340)
-            Button("Scan for Devices") { store.scanForDevices() }
-                .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentBlue))
-                .padding(.top, 8)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(30)
-        .crCard(cornerRadius: 8)
-    }
-
-    // ── Quick Action Row ──────────────────────────────────────────────────────
-
-    private var quickActionRow: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            // Send File
-            QuickActionCard(
-                icon: "arrow.up.doc.fill",
-                title: "Send File",
-                subtitle: "Drag & drop or pick",
-                isDragTarget: isFileDragTargeted
-            ) {
-                showingFilePicker = true
-            }
-            .dropDestination(for: URL.self) { urls, _ in
-                store.sendFiles(urls: urls, toPeer: nil)
-                return !urls.isEmpty
-            } isTargeted: { isFileDragTargeted = $0 }
-
-            // Push Clipboard
-            QuickActionCard(
-                icon: "doc.on.clipboard.fill",
-                title: "Push Clipboard",
-                subtitle: "All connected devices"
-            ) {
-                store.sendCurrentClipboard(to: nil)
-            }
-
-            // View History
-            QuickActionCard(
-                icon: "clock.arrow.circlepath",
-                title: "History",
-                subtitle: "\(store.timeline.count) items"
-            ) {
-                store.selectedSection = .history
-            }
-
-            // Manage Devices
-            QuickActionCard(
-                icon: "iphone.gen3",
-                title: "Devices",
-                subtitle: "\(store.devices.count) paired"
-            ) {
-                store.selectedSection = .devices
-            }
-        }
-    }
-
-    // ── Stats Row ─────────────────────────────────────────────────────────────
-
-    private var statsRow: some View {
-        HStack(spacing: 12) {
-            statCard(value: "\(store.connectedDevices.count)", label: "Connected", icon: "wifi", tint: CRTheme.accentGreen)
-            statCard(value: "\(store.devices.count)", label: "Paired", icon: "checkmark.shield.fill", tint: CRTheme.accentBlue)
-            statCard(value: "\(store.timeline.count)", label: "Synced", icon: "doc.on.clipboard.fill", tint: CRTheme.accentIndigo)
-            statCard(value: store.pendingClipboardCount > 0 ? "\(store.pendingClipboardCount)" : "—",
-                     label: "Pending", icon: "tray.fill",
-                     tint: store.pendingClipboardCount > 0 ? CRTheme.accentOrange : CRTheme.inkSubtle)
-        }
-    }
-
-    @ViewBuilder
-    private func statCard(value: String, label: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 28, height: 28)
-                .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.primary)
-                Text(label)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(CRTheme.inkSoft)
-            }
-            Spacer()
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity)
-        .crCard(cornerRadius: 8)
-    }
-
-    // ── Sync Controls ─────────────────────────────────────────────────────────
-
-    private var syncControlsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Continuity Settings")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(CRTheme.ink)
-
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                syncToggleCard(title: "Text", icon: "text.alignleft", keyPath: \.syncText, tint: CRTheme.accentIndigo)
-                syncToggleCard(title: "Images", icon: "photo", keyPath: \.syncImages, tint: CRTheme.accentGold)
-                syncToggleCard(title: "Files", icon: "doc", keyPath: \.syncFiles, tint: CRTheme.accentBlue)
-                syncToggleCard(title: "Block Sensitive", icon: "eye.slash.fill", keyPath: \.blockSensitiveText, tint: CRTheme.accentRed)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func syncToggleCard(title: String, icon: String, keyPath: WritableKeyPath<DeskdropSettingsSnapshot, Bool>, tint: Color) -> some View {
-        let isOn = binding(for: keyPath)
-        Button {
-            isOn.wrappedValue.toggle()
-        } label: {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isOn.wrappedValue ? tint.opacity(0.15) : CRTheme.inkSubtle.opacity(0.1))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: icon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(isOn.wrappedValue ? tint : CRTheme.inkSubtle)
-                }
-
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isOn.wrappedValue ? Color.primary : CRTheme.inkSoft)
-
-                Spacer()
-
-                Toggle("", isOn: isOn)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .controlSize(.mini)
-                    .tint(tint)
-            }
-            .padding(10)
-            .crCard(cornerRadius: 8)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func binding(for keyPath: WritableKeyPath<DeskdropSettingsSnapshot, Bool>) -> Binding<Bool> {
-        Binding(
-            get: { store.settings?[keyPath: keyPath] ?? false },
-            set: { newValue in
-                guard var s = store.settings else { return }
-                s[keyPath: keyPath] = newValue
-                store.saveSettings(s)
-            }
-        )
-    }
-
-    // ── Recent Activity ───────────────────────────────────────────────────────
-
-    private var recentActivitySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Recent Activity")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(CRTheme.ink)
-                Spacer()
-                Button("See all") { store.selectedSection = .history }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(CRTheme.accentBlue)
-            }
-
-            VStack(spacing: 0) {
-                let recentItems = Array(store.timeline.prefix(5))
-                ForEach(Array(recentItems.enumerated()), id: \.element.id) { index, item in
-                    HStack(spacing: 12) {
-                        Image(systemName: activityIcon(for: item))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(activityTint(for: item))
-                            .frame(width: 28, height: 28)
-                            .background(activityTint(for: item).opacity(0.10),
-                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(item.title)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(CRTheme.ink)
-                                .lineLimit(1)
-                            Text(item.sourceDevice)
-                                .font(.system(size: 11))
-                                .foregroundStyle(CRTheme.inkSoft)
-                        }
-
-                        Spacer()
-
-                        Text(item.timestamp.relativeTimeString())
-                            .font(.system(size: 11))
-                            .foregroundStyle(CRTheme.inkSubtle)
-
-                        if let text = item.fullText, !text.isEmpty {
-                            Button("Copy") {
-                                store.applyClipboardLocally(text: text)
-                            }
-                            .buttonStyle(CRSecondaryButtonStyle())
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(CRTheme.surfaceElevated)
-                    
-                    if index < recentItems.count - 1 {
-                        CRDivider()
-                    }
-                }
-            }
-            .crCard(cornerRadius: 8)
-        }
-    }
-
-    private func activityIcon(for item: TimelineItem) -> String {
-        let t = item.typeLabel.lowercased()
-        if t.contains("image") { return "photo" }
-        if t.contains("file")  { return "doc.fill" }
-        return "doc.on.clipboard"
-    }
-
-    private func activityTint(for item: TimelineItem) -> Color {
-        let t = item.typeLabel.lowercased()
-        if t.contains("image") { return CRTheme.accentIndigo }
-        if t.contains("file")  { return CRTheme.accentGold }
-        return CRTheme.brandElectric
     }
 }
 
 // MARK: - Hero Device Layouts
 
-private struct EmptyHeroCard: View {
+private struct CompactEmptyState: View {
     @ObservedObject var store: DeskdropStore
-    @Environment(\.colorScheme) var colorScheme
-    
+
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "antenna.radiowaves.left.and.right")
-                .font(.system(size: 48))
-                .foregroundStyle(CRTheme.brandElectric)
-            Text("No Devices Connected")
-                .font(.system(size: 20, weight: .bold))
-            Text("Open the app on your phone or tablet to start syncing.")
-                .font(.system(size: 14))
-                .foregroundStyle(Color.secondary)
-            Button("Scan for devices") { store.scanForDevices() }
-                .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-                .padding(.top, 8)
+            ZStack {
+                Circle().fill(CRTheme.brandElectric.opacity(0.1)).frame(width: 48, height: 48)
+                Image(systemName: "macbook.and.iphone").foregroundStyle(CRTheme.brandElectric).font(.system(size: 24))
+            }
+            Text("No devices connected")
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(CRTheme.ink)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(NSColor.controlBackgroundColor))
-                .shadow(color: .black.opacity(0.04), radius: 10, y: 4)
-        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+        .background(CRTheme.surfaceElevated.opacity(0.5))
+        .crCard(cornerRadius: 16)
     }
 }
 
-private struct HeroDeviceCard: View {
+private struct CompactDeviceCard: View {
     let device: ManagedDevice
     @ObservedObject var store: DeskdropStore
+    let onSendFiles: () -> Void
     @Environment(\.colorScheme) var colorScheme
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Left Half: Massive Visual Mockup
+        HStack(spacing: 16) {
+            // Icon
             ZStack {
-                Rectangle()
-                    .fill(Color.primary.opacity(0.03))
-                
-                // Device Mockup
-                ZStack {
-                    RoundedRectangle(cornerRadius: 32, style: .continuous)
-                        .fill(Color.black.opacity(0.85))
-                        .frame(width: 160, height: 320)
-                        .shadow(color: .black.opacity(0.25), radius: 30, x: 0, y: 15)
-                    
-                    // Screen area
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(
-                            LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandViolet], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
-                        .frame(width: 146, height: 306)
-                        .overlay {
-                            VStack {
-                                Spacer()
-                                Image(systemName: "applelogo")
-                                    .font(.system(size: 48))
-                                    .foregroundStyle(.white.opacity(0.9))
-                                Spacer()
-                            }
-                        }
-                }
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandViolet], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 48, height: 48)
+                Image(systemName: device.name.lowercased().contains("mac") ? "laptopcomputer" : "iphone")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.white)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             
-            // Right Half: Details and Actions
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button(action: { store.disconnect(device) }) {
-                        Label("Disconnect", systemImage: "link.badge.minus")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.secondary)
-                    
-                    Button(action: {}) {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 13, weight: .bold))
-                            .rotationEffect(.degrees(90))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.secondary)
-                    .padding(.leading, 12)
-                }
-                .padding(.bottom, 40)
-                
+            // Text
+            VStack(alignment: .leading, spacing: 4) {
                 Text(device.name)
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(Color.primary)
-                    .padding(.bottom, 12)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(CRTheme.ink)
+                    .lineLimit(1)
                 
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     HStack(spacing: 4) {
                         Circle().fill(CRTheme.accentGreen).frame(width: 6, height: 6)
                         Text("Connected")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(CRTheme.accentGreen)
                     }
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Capsule().fill(CRTheme.accentGreen.opacity(0.1)))
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "battery.100").foregroundStyle(Color.primary)
-                        Text("100%")
-                            .font(.system(size: 12, weight: .medium))
+                    if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
+                        BatteryIndicatorPill(level: battery.level, charging: battery.charging)
                     }
                 }
-                .padding(.bottom, 60)
-                
-                // Action Grid
-                HStack(spacing: 0) {
-                    HeroActionButton(icon: "folder", label: "Files") {
-                        // Trigger file dialog
-                    }
-                    Spacer()
-                    HeroActionButton(icon: "macwindow", label: "Screencast") {
-                        // Placeholder
-                    }
-                    Spacer()
-                    HeroActionButton(icon: "arrow.triangle.2.circlepath", label: "Content sync") {
-                        store.selectedSection = .history
-                    }
-                }
-                .padding(.trailing, 20)
-                
-                Spacer()
             }
-            .padding(40)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
-        }
-        .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(NSColor.controlBackgroundColor))
-                .shadow(color: .black.opacity(0.06), radius: 15, y: 5)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-private struct HeroActionButton: View {
-    let icon: String
-    let label: String
-    let action: () -> Void
-    @State private var isHovered = false
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(isHovered ? CRTheme.brandElectric.opacity(0.1) : Color.primary.opacity(0.03))
-                        .frame(width: 48, height: 48)
-                    Image(systemName: icon)
-                        .font(.system(size: 18))
-                        .foregroundStyle(isHovered ? CRTheme.brandElectric : Color.primary)
-                }
-                Text(label)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.secondary)
-            }
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-    }
-}
-
-private struct UnifiedDeviceCard: View {
-    let device: ManagedDevice
-    @Environment(\.colorScheme) var colorScheme
-    @State private var isHovered = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                Image(systemName: "iphone") // or dynamic based on device type
-                    .font(.system(size: 24))
-                    .foregroundStyle(CRTheme.brandElectric)
-                
-                Spacer()
-                
-                Text(device.connectionState == .connected ? "Active" : "Linked")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(CRTheme.brandElectric)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(device.name)
-                    .font(.system(size: 18, weight: .bold))
-                Text(device.connectionState == .connected ? "Continuity Active" : "Proximity Syncing...")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.secondary)
-            }
-
-            CRDividerDark()
-
-            VStack(spacing: 6) {
-                HStack {
-                    Label("Battery", systemImage: "battery.100")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.secondary)
-                    Spacer()
-                    Text("100%")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                HStack {
-                    Label("Last Sync", systemImage: "clock")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.secondary)
-                    Spacer()
-                    Text(device.lastSync?.relativeTimeString() ?? "Just now")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-            }
-
+            
+            Spacer(minLength: 8)
+            
+            // Actions
             HStack(spacing: 8) {
-                Button("Copy Last") {}
-                    .buttonStyle(CRSecondaryButtonStyle())
-                Button("Manage") {}
-                    .buttonStyle(CRSecondaryButtonStyle())
+                Button(action: onSendFiles) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(CRTheme.ink)
+                }
+                .buttonStyle(CRSecondaryButtonStyle())
+                .help("Send Files")
+                
+                Button(action: { store.disconnect(device) }) {
+                    Image(systemName: "link.badge.minus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(CRTheme.ink)
+                }
+                .buttonStyle(CRSecondaryButtonStyle())
+                .help("Disconnect")
             }
         }
-        .padding(20)
-        .frame(width: 240)
-        .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(NSColor.controlBackgroundColor))
-        }
+        .padding(16)
+        .background(CRTheme.surfaceElevated)
+        .crCard(cornerRadius: 16)
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.05), lineWidth: 1)
+                .strokeBorder(CRTheme.brandElectric.opacity(isHovered ? 0.3 : 0.0), lineWidth: 1)
         }
-        // Gradient Glow
-        .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(LinearGradient(colors: [CRTheme.brandElectric.opacity(0.3), CRTheme.brandPink.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .blur(radius: 20)
-                .opacity(isHovered ? 1.0 : 0.4)
-                .offset(y: 8)
-        }
-        .scaleEffect(isHovered ? 1.02 : 1.0)
-        .animation(.crSpring, value: isHovered)
         .onHover { isHovered = $0 }
+        .animation(.crSpring, value: isHovered)
     }
 }
 
@@ -1835,6 +1373,11 @@ struct QRCodePairingSheet: View {
                 self.localIP = ip
             }
         }
+        .onChange(of: store.connectedDevices.count) { _ in
+            if !store.connectedDevices.isEmpty {
+                dismiss()
+            }
+        }
     }
 
     private func generateQRCode(from string: String) -> NSImage? {
@@ -1885,7 +1428,227 @@ func getLocalIPAddress() -> String? {
     return address
 }
 
-// MARK: - Extracted Subviews
+// MARK: - New Ecosystem UI Components
+
+struct DeviceIdentityCard: View {
+    let device: ManagedDevice
+    var isOnline: Bool = true
+    @State private var isHovered = false
+    
+    // Platform distinct identity
+    private var platformBrand: Color {
+        let name = device.name.lowercased()
+        if name.contains("mac") { return CRTheme.ink } // Silver/Dark
+        if name.contains("android") { return CRTheme.accentGreen } // Android green
+        if name.contains("windows") { return CRTheme.accentBlue } // Windows blue
+        return CRTheme.accentIndigo
+    }
+    
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack(alignment: .bottomTrailing) {
+                // Outer glow ring
+                Circle()
+                    .stroke(platformBrand.opacity(isOnline ? 0.3 : 0.0), lineWidth: 2)
+                    .frame(width: 46, height: 46)
+                    .overlay(
+                        Circle()
+                            .trim(from: 0.0, to: 0.8) // Mock 80% battery
+                            .stroke(platformBrand, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .opacity(isOnline ? 1.0 : 0.0)
+                    )
+                
+                DeviceAvatar(name: device.name, platform: nil, size: 38, color: platformBrand)
+                
+                if isOnline {
+                    StatusDot(isOnline: true, size: 10)
+                        .overlay(Circle().stroke(CRTheme.surfaceElevated, lineWidth: 2))
+                        .offset(x: 2, y: 2)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 3) {
+                Text(device.name)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(isOnline ? CRTheme.ink : CRTheme.inkSoft)
+                
+                HStack(spacing: 6) {
+                    Image(systemName: device.name.lowercased().contains("mac") ? "macbook.and.iphone" : "iphone")
+                        .font(.system(size: 11))
+                    
+                    Text(isOnline ? "Active · 23ms" : "Offline") // Mock ping
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(isOnline ? platformBrand : CRTheme.inkSubtle)
+            }
+            .padding(.trailing, 10)
+            
+            if isOnline {
+                // Live ping waves
+                HStack(spacing: 2) {
+                    ForEach(0..<3) { i in
+                        Capsule()
+                            .fill(platformBrand.opacity(0.4))
+                            .frame(width: 2, height: CGFloat.random(in: 4...12))
+                    }
+                }
+                .padding(.leading, 8)
+                .animation(.easeInOut(duration: 0.5).repeatForever(), value: isHovered)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(CRTheme.surfaceElevated.opacity(isHovered ? 1.0 : 0.6))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(isHovered ? platformBrand.opacity(0.3) : CRTheme.stroke.opacity(0.5), lineWidth: 1)
+        )
+        .opacity(isOnline ? 1.0 : 0.5)
+        .shadow(color: isHovered ? platformBrand.opacity(0.15) : Color.clear, radius: 8, y: 4)
+        .crHoverScale(scale: isOnline ? 1.04 : 1.0)
+        .onHover { isHovered = $0 }
+    }
+}
+
+struct PushClipboardFeaturedCard: View {
+    let action: () -> Void
+    @State private var isHovered = false
+    @ObservedObject var store: DeskdropStore // Need store for avatars and preview
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Push Clipboard")
+                            .font(.system(size: 24, weight: .semibold, design: .rounded))
+                            .foregroundStyle(CRTheme.ink)
+                        Text("Sync copied text instantly")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    }
+                    Spacer()
+                    ZStack {
+                        Circle().fill(CRTheme.accentBlue.opacity(0.15)).frame(width: 48, height: 48)
+                        Image(systemName: "doc.on.clipboard.fill")
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(CRTheme.accentBlue)
+                        
+                        // Sync ripple
+                        if isHovered {
+                            Circle()
+                                .stroke(CRTheme.brandElectric.opacity(0.5), lineWidth: 1)
+                                .frame(width: 48, height: 48)
+                                .scaleEffect(1.5)
+                                .opacity(0.0)
+                                .animation(.easeOut(duration: 1.0).repeatForever(autoreverses: false), value: isHovered)
+                        }
+                    }
+                }
+                
+                Spacer(minLength: 24)
+                
+                VStack(alignment: .leading, spacing: 14) {
+                    // Live Clipboard Preview
+                    if let lastText = store.timeline.first(where: { $0.typeLabel == "Text" })?.fullText {
+                        Text("\"\(lastText.prefix(40))...\"")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundStyle(CRTheme.brandElectric)
+                            .lineLimit(1)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(CRTheme.brandElectric.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        Text("Clipboard ready...")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundStyle(CRTheme.inkSubtle)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(CRTheme.inkSubtle.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    
+                    // Connected Targets & Live Status
+                    HStack(alignment: .center) {
+                        Text("Synced to:")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(CRTheme.inkSoft)
+                        
+                        if !store.connectedDevices.isEmpty {
+                            HStack(spacing: -6) {
+                                ForEach(Array(store.connectedDevices.prefix(3))) { d in
+                                    DeviceAvatar(name: d.name, platform: nil, size: 20, color: CRTheme.accentBlue)
+                                        .overlay(Circle().stroke(CRTheme.surfaceElevated, lineWidth: 2))
+                                }
+                            }
+                        } else {
+                            Text("No devices")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(CRTheme.inkSubtle)
+                        }
+                        
+                        Spacer()
+                        
+                        // Tiny waveform animation
+                        HStack(spacing: 2) {
+                            ForEach(0..<4) { i in
+                                Capsule()
+                                    .fill(CRTheme.brandElectric.opacity(0.6))
+                                    .frame(width: 2, height: isHovered ? CGFloat.random(in: 4...12) : 4)
+                            }
+                        }
+                        .animation(.easeInOut(duration: 0.3).repeatForever(), value: isHovered)
+                        
+                        Text("Live now")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(CRTheme.accentBlue)
+                    }
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .crCard(cornerRadius: 24, highlighted: isHovered, accent: CRTheme.accentBlue)
+            .crHoverScale(scale: 1.02)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+struct SecondaryActionCard: View {
+    let icon: String
+    let title: String
+    let color: Color
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                ZStack {
+                    Circle().fill(color.opacity(0.15)).frame(width: 36, height: 36)
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(color)
+                }
+                
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(CRTheme.ink)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .crCard(cornerRadius: 16, highlighted: isHovered, accent: color)
+            .crHoverScale(scale: 1.03)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Legacy Action Cards
 
 struct QuickActionCard: View {
     let icon: String
@@ -1954,9 +1717,12 @@ struct DeviceListRow: View {
                 Text(device.name)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Color.primary)
-                Text(device.lastSync?.relativeTimeString() ?? "Synced just now")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Color.secondary)
+                HStack {
+                    Text(device.lastSync?.relativeTimeString() ?? "Synced just now")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Color.secondary)
+
+                }
             }
             Spacer()
             
@@ -1977,5 +1743,47 @@ struct DeviceListRow: View {
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 14)
+    }
+}
+
+// MARK: - Continuity Orb
+
+struct FloatingContinuityOrb: View {
+    @State private var phase = 0.0
+    var activeCount: Int
+    
+    var body: some View {
+        ZStack {
+            // Core orb
+            Circle()
+                .fill(CRTheme.brandCyan.opacity(0.15))
+                .frame(width: 60, height: 60)
+                .blur(radius: 8)
+                .scaleEffect(1.0 + phase * 0.1)
+            
+            Circle()
+                .stroke(CRTheme.brandCyan.opacity(0.4), lineWidth: 1)
+                .frame(width: 60, height: 60)
+            
+            Image(systemName: "network")
+                .font(.system(size: 24, weight: .light))
+                .foregroundStyle(CRTheme.brandCyan)
+            
+            // Orbiting particles
+            if activeCount > 0 {
+                ForEach(0..<activeCount, id: \.self) { i in
+                    Circle()
+                        .fill(CRTheme.brandElectric)
+                        .frame(width: 6, height: 6)
+                        .offset(x: 40)
+                        .rotationEffect(.degrees(Double(i) * (360.0 / Double(activeCount)) + phase * 360))
+                }
+            }
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
+                phase = 1.0
+            }
+        }
     }
 }

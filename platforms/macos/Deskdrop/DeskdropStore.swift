@@ -38,7 +38,7 @@ final class DeskdropStore: ObservableObject {
     @Published var clipboardPolicy = ClipboardPolicy()
 
     // ── Dashboard UI state ────────────────────────────────────────────────────
-    @Published var selectedSection: DashboardSection = .dashboard
+    @Published var selectedSection: DashboardSection = .devices
     @Published var toasts: [ToastItem] = []
     @Published var manualConnectAddress: String = ""
     @Published var settings: DeskdropSettingsSnapshot? = nil
@@ -215,12 +215,22 @@ final class DeskdropStore: ObservableObject {
                 }
             }
             peers = uniquePeers
+            
+
             pendingClipboardCount = s.pending_clipboard_count ?? 0
             if let fp = s.local_fingerprint { localFingerprint = fp }
             
             if let ats = s.active_transfers {
                 activeTransfers = ats.map { t in
-                    let status: FileTransferStatus = t.status == "paused" ? .paused : .transferring
+                    let status: FileTransferStatus
+                    switch t.status {
+                    case "paused": status = .paused
+                    case "incoming": status = .incoming
+                    case "verifying": status = .verifying
+                    case "failed": status = .failed(reason: "Unknown Error")
+                    case "cancelled": status = .cancelled
+                    default: status = .transferring
+                    }
                     return FileTransferState(
                         id: t.transfer_id,
                         fromDeviceName: t.from_device,
@@ -356,6 +366,12 @@ final class DeskdropStore: ObservableObject {
     }
     func rename(_ device: ManagedDevice, to newName: String) {
         Task { try? await ipc.renameDevice(deviceId: device.id, displayName: newName); await refresh() }
+    }
+    func sendPairingRequest(_ device: ManagedDevice) {
+        Task { try? await ipc.sendPairingRequest(deviceId: device.id); await refresh() }
+    }
+    func respondToPairing(_ device: ManagedDevice, accepted: Bool) {
+        Task { try? await ipc.respondToPairing(deviceId: device.id, accepted: accepted); await refresh() }
     }
 
     // MARK: - Device actions (PeerViewModel variants)
@@ -787,9 +803,8 @@ final class DeskdropStore: ObservableObject {
 
     func performCommand(_ command: String) {
         let cmd = command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if cmd.hasPrefix("/history") || cmd.hasPrefix("/timeline") { selectedSection = .history }
+        if cmd.hasPrefix("/history") || cmd.hasPrefix("/timeline") { selectedSection = .clipboard }
         else if cmd.hasPrefix("/devices") { selectedSection = .devices }
-        else if cmd.hasPrefix("/trust")   { selectedSection = .workflows }
         else if cmd.hasPrefix("/settings") || cmd.hasPrefix("/prefs") { selectedSection = .settings }
         else if cmd.hasPrefix("/connect ") {
             manualConnectAddress = String(command.dropFirst(9))
@@ -927,8 +942,10 @@ final class DeskdropStore: ObservableObject {
             syncEnabled: raw.sync_enabled ?? true,
             autoConnect: raw.auto_connect ?? true,
             lastError:   raw.last_error,
+            pairingRequested: raw.pairing_requested ?? false,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
-            lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+            lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) },
+            ip:          raw.ip
         )
     }
 

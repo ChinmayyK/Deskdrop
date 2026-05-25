@@ -24,19 +24,13 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::time::timeout;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
 
 /// RFC 7396 JSON merge-patch: recursively overwrite `target` with non-null
 /// fields from `patch`, removing null-keyed fields.
@@ -204,6 +198,16 @@ pub enum EngineEvent {
         from_device: Uuid,
         data: Vec<u8>,
     },
+    /// An untrusted peer has requested to pair with this device.
+    PairingRequest {
+        device_id: Uuid,
+        device_name: String,
+    },
+    /// A peer responded to our pairing request.
+    PairingResponse {
+        device_id: Uuid,
+        accepted: bool,
+    },
     Warning(String),
 }
 
@@ -270,9 +274,9 @@ impl Default for EngineConfig {
             trust_store_path: default_trust_store_path(),
             peer_store_path: default_peer_store_path(),
             identity_path: IdentityStore::default_path(),
-            connect_timeout: Duration::from_secs(5),
-            heartbeat_interval: Duration::from_secs(45),
-            heartbeat_timeout: Duration::from_secs(120),
+            connect_timeout: Duration::from_secs(10),
+            heartbeat_interval: Duration::from_secs(30),
+            heartbeat_timeout: Duration::from_secs(300),
             bind_ip: None,
             enable_discovery: true,
             network_poll_interval: Duration::from_secs(2),
@@ -480,6 +484,7 @@ impl Engine {
         engine.spawn_network_monitor().await?;
         engine.spawn_peer_pruner();
         engine.spawn_sensitive_history_pruner();
+        engine.spawn_auto_reconnector();
         Ok(engine)
     }
 
@@ -1388,8 +1393,16 @@ impl Engine {
         // Notify all peers.
         let peers = self.shared.peer_manager.all_trusted_senders();
         for (_, tx) in peers {
-            let _ = tx.try_send(cancel_msg.clone());
+            let msg = cancel_msg.clone();
+            tokio::spawn(async move {
+                let _ = tx.send(msg).await;
+            });
         }
+        let _ = self.shared.event_tx.send(EngineEvent::FileTransferFailed {
+            transfer_id,
+            from_device: Uuid::nil(),
+            reason: "User cancelled".to_string()
+        }).await;
         Ok(())
     }
 
@@ -1406,7 +1419,10 @@ impl Engine {
         }
         let peers = self.shared.peer_manager.all_trusted_senders();
         for (_, tx) in peers {
-            let _ = tx.try_send(pause_msg.clone());
+            let msg = pause_msg.clone();
+            tokio::spawn(async move {
+                let _ = tx.send(msg).await;
+            });
         }
         let _ = self.shared.event_tx.send(EngineEvent::FileTransferPaused { transfer_id }).await;
         Ok(())
@@ -1415,30 +1431,88 @@ impl Engine {
     /// Resume a paused file transfer.
     pub async fn resume_file_transfer(&self, transfer_id: [u8; 16]) -> Result<()> {
         let resume_msg = AppMessage::FileTransferResume { transfer_id };
+        let mut was_outbound = false;
+        let mut target_device = None;
         {
             let mut mgr = self.shared.file_transfers.lock().await;
             if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
                 t.paused = false;
+                was_outbound = true;
+                target_device = t.target_device;
             } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
                 t.paused = false;
             }
         }
         let peers = self.shared.peer_manager.all_trusted_senders();
-        for (_, tx) in peers {
-            let _ = tx.try_send(resume_msg.clone());
+        for (peer_id, tx) in peers {
+            let msg = resume_msg.clone();
+            let tx_clone = tx.clone();
+            tokio::spawn(async move {
+                let _ = tx_clone.send(msg).await;
+            });
+            
+            // If we are the sender, we need to restart the chunking loop!
+            // `tx` is the `session_outbox_tx` for this peer.
+            if was_outbound && target_device.map(|td| td == peer_id).unwrap_or(true) {
+                let bg_outbox = tx.clone();
+                let bg_shared = self.shared.clone();
+                let bg_transfer_id = transfer_id;
+                tokio::spawn(async move {
+                    const BATCH_SIZE: usize = 8;
+                    'outer: loop {
+                        let batch: Vec<AppMessage> = {
+                            let mut mgr = bg_shared.file_transfers.lock().await;
+                            let mut msgs = Vec::with_capacity(BATCH_SIZE);
+                            for _ in 0..BATCH_SIZE {
+                                match mgr.get_outbound_mut(&bg_transfer_id) {
+                                    Some(transfer) => match transfer.next_chunk_message() {
+                                        Ok(Some(FileTransferMessage::Chunk {
+                                            transfer_id,
+                                            chunk_index,
+                                            total_chunks,
+                                            data,
+                                        })) => msgs.push(AppMessage::FileChunk {
+                                            transfer_id,
+                                            chunk_index,
+                                            total_chunks,
+                                            data,
+                                        }),
+                                        Ok(None) => break,
+                                        Ok(_) => continue,
+                                        Err(err) => {
+                                            warn!(error = %err, "failed to read outbound file chunk on resume");
+                                            mgr.cancel_outbound(&bg_transfer_id);
+                                            break 'outer;
+                                        }
+                                    },
+                                    None => break,
+                                }
+                            }
+                            msgs
+                        };
+
+                        if batch.is_empty() {
+                            break;
+                        }
+                        for wire_msg in batch {
+                            if bg_outbox.send(wire_msg).await.is_err() {
+                                break 'outer;
+                            }
+                        }
+                    }
+
+                    let all_sent = {
+                        let mut mgr = bg_shared.file_transfers.lock().await;
+                        mgr.get_outbound_mut(&bg_transfer_id)
+                            .map(|transfer| transfer.is_all_sent())
+                            .unwrap_or(false)
+                    };
+                    if all_sent {
+                        let _ = bg_outbox.send(AppMessage::FileTransferComplete { transfer_id: bg_transfer_id }).await;
+                    }
+                });
+            }
         }
-        
-        // If we are the sender, we need to restart the chunking loop!
-        // We will do this by sending an internal `FileTransferResume` to ourselves?
-        // Actually, `resume_msg` goes out to peers. 
-        // Wait! The background `tokio::spawn` task inside `FileTransferAccept` died when we returned `Ok(None)`.
-        // So we need to re-spawn it. Where does it get spawned? 
-        // It gets spawned in `handle_peer_session`. Since we are outside the session, we can't easily get the `session_outbox_tx`.
-        // What if we just send `resume_msg` to ALL peers, and when our OWN receiver receives it, it ignores it?
-        // No, we need the session outbox tx.
-        // I will instead send a dummy `FileTransferAccept` to ourselves! No, wait. 
-        // The easiest way is to let the RECEIVER send a `FileTransferResume`. 
-        // When the SENDER receives `FileTransferResume` via the network loop (in `handle_peer_session`), the sender will spawn the chunk loop!
         
         let _ = self.shared.event_tx.send(EngineEvent::FileTransferResumed { transfer_id }).await;
         Ok(())
@@ -1450,8 +1524,9 @@ impl Engine {
     pub async fn rescan_peers(&self) {
         if let Some(tx) = &self.shared.discovery_tx {
             let state = self.shared.network_state.lock().await;
+            let bind_ip = state.active_interface.as_ref().map(|i| i.ip).unwrap_or(state.bind_addr.ip());
             let _ = tx.send(DiscoveryCommand::Restart {
-                bind_ip: state.bind_addr.ip(),
+                bind_ip,
                 port: self.shared.config.port,
             }).await;
         }
@@ -1528,6 +1603,13 @@ impl Engine {
             sync_files,
             "sync settings updated live"
         );
+    }
+
+    /// Called by the Android JNI layer when the OS reports network restored
+    /// (e.g., Wi-Fi comes back after Doze). Immediately attempts to reconnect
+    /// to all known trusted peers.
+    pub async fn reconnect_all_peers(&self) {
+        reconnect_known_peers(self.shared.clone()).await;
     }
 
     pub async fn connect_to_peer(&self, ip: String, port: u16) -> Result<()> {
@@ -1647,6 +1729,7 @@ impl Engine {
         };
         if changed.is_some() {
             self.shared.peer_manager.update_trust(device_id, false)?;
+            let _ = self.disconnect_peer(device_id).await;
         }
         Ok(())
     }
@@ -1660,6 +1743,38 @@ impl Engine {
                 .mark_disconnected(device_id, Some("trust revoked".to_string()))?;
         }
         Ok(removed)
+    }
+
+    pub async fn send_pairing_request(&self, target_device: Uuid) {
+        let msg = AppMessage::PairingRequest {
+            origin_device: self.shared.config.device_id,
+            origin_device_name: self.shared.config.device_name.clone(),
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers.into_iter().find(|(id, _)| *id == target_device).map(|(_, tx)| tx) {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    pub async fn respond_to_pairing(&self, requester_device: Uuid, accepted: bool) -> Result<()> {
+        let _ = self.shared.peer_manager.set_pairing_requested(requester_device, false);
+        if accepted {
+            // Trust them persistently
+            self.trust_peer(requester_device).await?;
+        }
+        let msg = AppMessage::PairingResponse {
+            origin_device: self.shared.config.device_id,
+            accepted,
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers.into_iter().find(|(id, _)| *id == requester_device).map(|(_, tx)| tx) {
+            let _ = tx.send(msg).await;
+        }
+        if !accepted {
+            // If we decline, disconnect the untrusted session
+            let _ = self.disconnect_peer(requester_device).await;
+        }
+        Ok(())
     }
 
     /// Pause Sync: keep connection alive, suppress clipboard data flow.
@@ -1748,6 +1863,67 @@ impl Engine {
             }
         });
     }
+
+    /// Background watchdog to aggressively reconnect to known endpoints for trusted 
+    /// peers that drop offline. Bypasses the need for mDNS discovery to trigger a reconnect.
+    fn spawn_auto_reconnector(&self) {
+        let shared = self.shared.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            // Track when we last attempted reconnection per peer to avoid flooding.
+            let mut last_attempt: std::collections::HashMap<uuid::Uuid, tokio::time::Instant> =
+                std::collections::HashMap::new();
+            loop {
+                interval.tick().await;
+                let peers = shared.peer_manager.list();
+                for peer in peers {
+                    // Only consider peers that are not currently connected.
+                    let is_offline = peer.status == crate::peer_manager::PeerConnectionState::Disconnected
+                        || peer.status == crate::peer_manager::PeerConnectionState::Failed;
+                    if !is_offline {
+                        continue;
+                    }
+                    // Must be trusted + remembered + auto_connect.
+                    if !peer.trusted || !peer.remembered || !peer.auto_connect {
+                        continue;
+                    }
+                    // If explicit_disconnect was set by user, respect it.
+                    if peer.explicit_disconnect {
+                        continue;
+                    }
+                    // Rate-limit: don't attempt more than once every 15 seconds per peer.
+                    let now = tokio::time::Instant::now();
+                    if let Some(&last) = last_attempt.get(&peer.id) {
+                        if now.duration_since(last) < Duration::from_secs(15) {
+                            continue;
+                        }
+                    }
+                    if let Some(endpoint) = shared.peer_manager.endpoint_for(peer.id) {
+                        last_attempt.insert(peer.id, now);
+                        let shared_clone = shared.clone();
+                        let peer_id = peer.id;
+                        let discovery = peer.discovery;
+                        tokio::spawn(async move {
+                            tracing::debug!(
+                                peer_id = %peer_id,
+                                endpoint = %endpoint,
+                                "auto-reconnector: attempting reconnection"
+                            );
+                            let _ = connect_once(
+                                shared_clone,
+                                endpoint,
+                                Some(peer_id),
+                                discovery,
+                            ).await;
+                        });
+                    }
+                }
+            }
+        });
+    }
+
+
 
     async fn spawn_network_monitor(&self) -> Result<()> {
         let mut changes = network_manager::spawn_network_monitor(
@@ -2242,6 +2418,10 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         );
     }
 
+    if hs.peer_device_id == shared.config.device_id {
+        anyhow::bail!("aborting inbound connect — cannot connect to self");
+    }
+
     // Skip if this peer already has a live, connected session.
     // Without this guard, mDNS re-announcements cause the remote peer to
     // repeatedly connect, replacing the existing session each time, which
@@ -2359,6 +2539,10 @@ async fn connect_once(
             expected,
             hs.peer_device_id
         );
+    }
+
+    if hs.peer_device_id == shared.config.device_id {
+        anyhow::bail!("aborting outbound connect — cannot connect to self");
     }
 
     // If the peer already has an active session (e.g. an incoming connection
@@ -2692,6 +2876,13 @@ fn register_session(
                         }
                         Ok(AppMessage::FileTransferAnnounce { meta }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                let _ = shared.event_tx.send(EngineEvent::Warning(format!(
+                                    "ignoring file transfer from untrusted peer {}",
+                                    peer_name
+                                ))).await;
+                                continue;
+                            }
                             let transfer_id = meta.transfer_id;
                             let file_name = meta.file_name.clone();
                             let file_bytes = meta.size_bytes;
@@ -3046,6 +3237,26 @@ fn register_session(
                             last_seen = Instant::now();
                             let _ = sess.send(&AppMessage::Pong { timestamp_ms }).await;
                         }
+                        Ok(AppMessage::PairingRequest { origin_device, origin_device_name }) => {
+                            last_seen = Instant::now();
+                            let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
+                            let _ = shared.event_tx.send(EngineEvent::PairingRequest {
+                                device_id: origin_device,
+                                device_name: origin_device_name,
+                            }).await;
+                        }
+                        Ok(AppMessage::PairingResponse { origin_device, accepted }) => {
+                            last_seen = Instant::now();
+                            if accepted {
+                                let _ = shared.peer_manager.update_trust(origin_device, true);
+                                let mut trust = shared.trust.lock().await;
+                                let _ = trust.trust_peer(origin_device);
+                            }
+                            let _ = shared.event_tx.send(EngineEvent::PairingResponse {
+                                device_id: origin_device,
+                                accepted,
+                            }).await;
+                        }
                         Ok(AppMessage::Pong { timestamp_ms: _ }) => {
                             last_seen = Instant::now();
                             // Feed the RTT sample into the peer's quality probe
@@ -3123,7 +3334,10 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::Bye) => {
-                            let _ = shared.peer_manager.set_explicit_disconnect(peer_id, true);
+                            // Do NOT set explicit_disconnect here — receiving Bye from
+                            // the remote peer (e.g., Android OS killed the socket) is
+                            // not a user-initiated disconnect. Auto-reconnect must stay
+                            // enabled so the watchdog can re-establish the link.
                             break "peer closed session".to_string();
                         }
                         Ok(AppMessage::NotificationRelay {
@@ -3150,6 +3364,9 @@ fn register_session(
                         }
                         Ok(AppMessage::CameraStreamRequest { origin_device }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             let _ = shared.event_tx.send(EngineEvent::CameraStreamRequest {
                                 from_device: origin_device,
                             }).await;

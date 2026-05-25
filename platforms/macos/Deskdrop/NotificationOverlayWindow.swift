@@ -106,14 +106,17 @@ private struct ToastOverlayPanelView: View {
                     toast: toast,
                     onDismiss: { store.dismissToast(id: toast.id) }
                 )
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.8)),
+                    removal: .move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.95))
+                ))
             }
             Spacer(minLength: 0)
         }
         .padding(.top, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .padding(10)
-        .animation(.spring(response: 0.45, dampingFraction: 0.82, blendDuration: 0.1), value: store.toasts.map(\.id))
+        .animation(.spring(response: 0.5, dampingFraction: 0.65, blendDuration: 0.1), value: store.toasts.map(\.id))
     }
 }
 
@@ -121,144 +124,153 @@ private struct ToastOverlayCard: View {
     let toast: ToastItem
     let onDismiss: () -> Void
 
-    private let titleColor = Color.primary
-    private let bodyColor = Color.secondary
-
     @Environment(\.colorScheme) var colorScheme
     @State private var hovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(toast.tint.opacity(0.12))
-                        .frame(width: 32, height: 32)
-                    Image(systemName: toast.systemImage)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(toast.tint)
-                        .symbolRenderingMode(.hierarchical)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(toast.title)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(titleColor)
-                    Text(toast.body)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(bodyColor)
-                        .lineSpacing(1)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let detail = toast.detail, !detail.isEmpty {
-                        Text(detail)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(bodyColor.opacity(0.72))
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                Button(action: onDismiss) {
-                    ZStack {
-                        Circle().fill(Color.white.opacity(0.0)).frame(width: 20, height: 20)
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(bodyColor.opacity(0.8))
-                    }
-                }
-                .buttonStyle(.plain)
-                .opacity(hovered ? 1 : 0)
-                .animation(.crFast, value: hovered)
+        HStack(alignment: .center, spacing: 14) {
+            // Left Icon Column
+            ZStack {
+                // Clean glass well for icon
+                Circle()
+                    .fill(Color.black.opacity(0.1))
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                            .blendMode(.overlay)
+                    )
+                    .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
+                    
+                Image(systemName: toast.systemImage)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(toast.tint)
+                    .shadow(color: toast.tint.opacity(0.5), radius: 4, x: 0, y: 2)
             }
+            .padding(.vertical, 8)
 
-            if let progress = toast.progress {
-                VStack(alignment: .leading, spacing: 4) {
-                    CRProgressBar(value: progress, tint: toast.tint, height: 4)
-                    Text("\(Int(progress * 100))% complete")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(bodyColor.opacity(0.8))
+            // Content Column
+            VStack(alignment: .leading, spacing: 3) {
+                Text(toast.title)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.primary)
+                
+                Text(toast.body)
+                    .font(.system(size: 12, weight: .medium, design: .default))
+                    .foregroundStyle(Color.secondary.opacity(0.9))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                if let detail = toast.detail, !detail.isEmpty {
+                    Text(detail)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.secondary.opacity(0.6))
+                        .padding(.top, 2)
                 }
-                .padding(.top, 4)
-            }
 
-            if toast.primaryAction != nil || toast.secondaryAction != nil {
-                HStack(spacing: 8) {
-                    if let secondary = toast.secondaryAction {
-                        ToastOverlayButton(action: secondary)
+                if let progress = toast.progress {
+                    VStack(alignment: .leading, spacing: 6) {
+                        CRProgressBar(value: progress, tint: toast.tint, height: 4)
+                        Text("\(Int(progress * 100))%")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(toast.tint)
                     }
-                    Spacer(minLength: 0)
-                    if let primary = toast.primaryAction {
-                        ToastOverlayButton(action: primary)
-                    }
+                    .padding(.top, 6)
                 }
-                .padding(.top, 4)
+
+                if toast.primaryAction != nil || toast.secondaryAction != nil {
+                    HStack(spacing: 8) {
+                        if let secondary = toast.secondaryAction {
+                            ToastOverlayButton(action: secondary)
+                        }
+                        Spacer(minLength: 0)
+                        if let primary = toast.primaryAction {
+                            ToastOverlayButton(action: primary)
+                        }
+                    }
+                    .padding(.top, 8)
+                }
             }
+            .padding(.vertical, 4)
+
+            Spacer(minLength: 8)
+
+            // Close Button
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.secondary.opacity(hovered ? 0.8 : 0.4))
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 4)
+            .opacity(hovered ? 1 : 0.4)
+            .animation(.easeOut(duration: 0.15), value: hovered)
         }
-        .padding(14)
-        .frame(maxWidth: 300, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(width: 320, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(colorScheme == .dark ? Color(white: 0.1).opacity(0.6) : Color.white.opacity(0.7))
-                .background(CRHUDMaterial().clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous)))
-                .overlay {
+                .fill(.ultraThinMaterial)
+                .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08), lineWidth: 0.5)
-                }
-                .shadow(color: Color.black.opacity(0.12), radius: 16, y: 8)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.4), Color.white.opacity(0.1), Color.white.opacity(0.0)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.5
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.2), radius: 15, x: 0, y: 8)
         }
         .scaleEffect(hovered ? 1.02 : 1.0)
         .onHover { hovered = $0 }
-        .animation(.crSpring, value: hovered)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovered)
     }
 }
 
 private struct ToastOverlayButton: View {
     let action: ToastAction
-
     @Environment(\.colorScheme) var colorScheme
 
-    private var fill: Color {
-        switch action.role {
-        case .primary: return Color.accentColor
-        case .secondary: return Color.clear // Handled by background material
-        case .positive: return Color(hex: 0x30D158)
-        case .destructive: return Color.red
-        }
-    }
-
-    private var foreground: Color {
-        switch action.role {
-        case .secondary: return Color.primary
-        default: return .white
-        }
-    }
-
     var body: some View {
-        Button(action.title) { action.handler() }
-            .buttonStyle(.plain)
-            .font(.system(size: 11.5, weight: .semibold))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background {
-                Capsule()
-                    .fill(action.role == .secondary ? Color.clear : fill)
-                    .background {
-                        if action.role == .secondary {
-                            Capsule().fill(.ultraThinMaterial)
-                                .overlay {
-                                    Capsule().fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.05))
-                                }
+        Button(action: action.handler) {
+            Text(action.title.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .tracking(0.5)
+                .foregroundStyle(action.role == .secondary ? Color.primary.opacity(0.8) : .white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .background {
+                    Capsule()
+                        .fill(
+                            action.role == .secondary
+                            ? Color.primary.opacity(0.05)
+                            : (action.role == .destructive ? Color.red : Color.accentColor)
+                        )
+                        .overlay {
+                            // Inner highlight (Top light)
+                            Capsule()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.4), .clear],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    ),
+                                    lineWidth: 1
+                                )
+                            
+                            // Secondary button subtle border
+                            if action.role == .secondary {
+                                Capsule().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+                            }
                         }
-                    }
-                    .overlay {
-                        if action.role == .secondary {
-                            Capsule().strokeBorder(colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.15), lineWidth: 0.5)
-                        } else {
-                            Capsule().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-                        }
-                    }
-                    .shadow(color: action.role != .secondary ? fill.opacity(0.3) : Color.clear, radius: 4, y: 2)
-            }
+                        .shadow(color: Color.black.opacity(0.1), radius: 2, y: 1) // Button drop shadow
+                }
+        }
+        .buttonStyle(.plain)
     }
 }
+

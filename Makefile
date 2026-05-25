@@ -108,8 +108,8 @@ macos:
 	$(CARGO) build --release --target aarch64-apple-darwin
 	$(CARGO) build --release --target x86_64-apple-darwin
 	lipo -create \
-		deskdrop-core/target/aarch64-apple-darwin/release/libdeskdrop_core.dylib \
-		deskdrop-core/target/x86_64-apple-darwin/release/libdeskdrop_core.dylib \
+		target/aarch64-apple-darwin/release/libdeskdrop_core.dylib \
+		target/x86_64-apple-darwin/release/libdeskdrop_core.dylib \
 		-output libdeskdrop_core.dylib
 	@echo -e "$(GREEN)✓ Universal dylib: libdeskdrop_core.dylib$(RESET)"
 	@echo "  Next: bash scripts/build-macos.sh"

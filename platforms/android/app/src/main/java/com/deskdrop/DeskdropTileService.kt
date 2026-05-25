@@ -2,7 +2,6 @@ package com.deskdrop
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -28,6 +27,31 @@ import android.provider.OpenableColumns
 import android.widget.ProgressBar
 import android.content.res.ColorStateList
 import android.util.Log
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.deskdrop.ui.theme.AppTheme
+import com.deskdrop.ui.theme.CRTheme
 
 /**
  * Quick Settings tile — lets users toggle clipboard sync from the notification shade.
@@ -41,39 +65,40 @@ import android.util.Log
  */
 class DeskdropTileService : TileService() {
 
-    companion object {
-        const val ACTION_SYNC_ENABLE  = "com.deskdrop.SYNC_ENABLE"
-        const val ACTION_SYNC_DISABLE = "com.deskdrop.SYNC_DISABLE"
-    }
-
     override fun onStartListening() {
         super.onStartListening()
         refreshTile()
     }
 
-    override fun onStopListening() {
-        super.onStopListening()
-    }
-
     override fun onClick() {
         super.onClick()
-        toggleSync()
+        pushClipboard()
     }
 
-    private fun isSyncEnabled(): Boolean =
-        getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
-            .getBoolean("sync_enabled", true)
+    private fun refreshTile() {
+        val tile = qsTile ?: return
+        val prefs   = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
+        val count   = prefs.getInt("connected_count", 0)
 
-    private fun setSyncEnabled(enabled: Boolean) {
-        getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
-            .edit()
-            .putBoolean("sync_enabled", enabled)
-            .apply()
+        tile.state = if (count > 0) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.label = "Push Clipboard"
 
-        val intent = Intent(this, DeskdropService::class.java).apply {
-            action = if (enabled) ACTION_SYNC_ENABLE else ACTION_SYNC_DISABLE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            tile.subtitle = when {
+                count == 0   -> "No devices"
+                count == 1   -> "1 device"
+                else         -> "$count devices"
+            }
         }
 
+        tile.contentDescription = "Push Clipboard to Mac"
+        tile.updateTile()
+    }
+
+    private fun pushClipboard() {
+        val intent = Intent(this, DeskdropService::class.java).apply {
+            action = DeskdropService.ACTION_PUSH_CLIPBOARD
+        }
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 ContextCompat.startForegroundService(this, intent)
@@ -81,37 +106,9 @@ class DeskdropTileService : TileService() {
                 startService(intent)
             }
         }
-    }
-
-    private fun refreshTile() {
-        val tile = qsTile ?: return
-        val enabled = isSyncEnabled()
-        val prefs   = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
-        val count   = prefs.getInt("connected_count", 0)
-
-        tile.state = if (enabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "Deskdrop"
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            tile.subtitle = when {
-                !enabled     -> "Paused"
-                count == 0   -> "No devices"
-                count == 1   -> "1 device"
-                else         -> "$count devices"
-            }
-        }
-
-        tile.contentDescription = if (enabled) "Deskdrop clipboard sync is active" else "Deskdrop clipboard sync is paused"
-        tile.updateTile()
-    }
-
-    private fun toggleSync() {
-        val newState = !isSyncEnabled()
-        setSyncEnabled(newState)
-        refreshTile()
         Toast.makeText(
             applicationContext,
-            if (newState) "Deskdrop sync enabled" else "Deskdrop sync paused",
+            "Pushing clipboard...",
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -121,15 +118,18 @@ class DeskdropTileService : TileService() {
  * Share target — appears in Android's share sheet, letting users push
  * any shared text directly to Deskdrop peers without opening the app.
  */
-class DeskdropShareTarget : androidx.appcompat.app.AppCompatActivity() {
+class DeskdropShareTarget : ComponentActivity() {
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
     private fun c(@ColorRes id: Int): Int = ContextCompat.getColor(this, id)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+        window.decorView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
         val sharedUris = when (intent?.action) {
             Intent.ACTION_SEND -> {
@@ -170,263 +170,61 @@ class DeskdropShareTarget : androidx.appcompat.app.AppCompatActivity() {
             Toast.makeText(this, "Pushed to Deskdrop peers", Toast.LENGTH_SHORT).show()
             finish()
         } else if (!sharedUris.isNullOrEmpty()) {
-            val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.Theme_Deskdrop_Dialog)
-            val view = buildPicker(sharedUris, sharedName, dialog)
-            dialog.setContentView(view)
-            dialog.setOnDismissListener { finish() }
-            dialog.show()
+            val peers = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
+                .peerSnapshots()
+                .filter { it.isConnected }
+            val isDark = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).getBoolean("dark_mode", false)
+
+            setContent {
+                AppTheme(useDarkTheme = isDark) {
+                    ShareTargetUI(
+                        sharedUris = sharedUris,
+                        sharedName = sharedName,
+                        peers = peers,
+                        isDark = isDark,
+                        onCancel = { finish() },
+                        onSend = { targetId ->
+                            sendFiles(sharedUris, sharedName, targetId)
+                        }
+                    )
+                }
+            }
         } else {
             Toast.makeText(this, "Nothing to push", Toast.LENGTH_SHORT).show()
             finish()
         }
     }
 
-    private fun buildPicker(sharedUris: List<Uri>, sharedName: String?, dialog: android.app.Dialog): View {
-        val peers = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
-            .peerSnapshots()
-            .filter { it.isConnected }
-
-        val selectedDevice = arrayOf<String?>(null)
-        val selectionCards = mutableListOf<Pair<String?, View>>()
-
-        // Standard colors for premium look
-        val brandColor = c(R.color.cr_accent)
-        val brandColorLight = c(R.color.cr_accent_bg)
-        val textColor1 = c(R.color.cr_text_1)
-        val textColor3 = c(R.color.cr_text_3)
-        val borderColor = c(R.color.cr_border)
-
-        fun updateSelection(targetId: String?) {
-            selectedDevice[0] = targetId
-            selectionCards.forEach { (id, view) ->
-                val selected = id == targetId
-                view.background = cardBackground(selected)
-                view.findViewWithTag<View>("selected_indicator")?.background =
-                    GradientDrawable().also {
-                        it.shape = GradientDrawable.OVAL
-                        it.setColor(if (selected) brandColor else Color.TRANSPARENT)
-                        it.setStroke(dp(1.5f.toInt()), if (selected) brandColor else borderColor)
-                    }
-            }
-        }
-
-        val container = FrameLayout(this).apply {
-            setBackgroundColor(Color.TRANSPARENT)
-        }
-
-        val mainLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(16), dp(24), dp(24))
-
-            // Beautiful Top Pill Handle
-            addView(View(this@DeskdropShareTarget).apply {
-                background = GradientDrawable().also {
-                    it.cornerRadius = dp(4).toFloat()
-                    it.setColor(borderColor)
+    private fun sendFiles(sharedUris: List<Uri>, sharedName: String?, targetId: String?) {
+        Thread {
+            val stagedUris = mutableListOf<String>()
+            sharedUris.forEachIndexed { index, uri ->
+                val stagedFileUri = stageFileInActivity(uri, index + 1)
+                if (stagedFileUri != null) {
+                    stagedUris.add(stagedFileUri.toString())
                 }
-                layoutParams = LinearLayout.LayoutParams(dp(36), dp(5)).also {
-                    it.gravity = Gravity.CENTER_HORIZONTAL
-                    it.bottomMargin = dp(24)
-                }
-            })
-
-            // Header Layout (Logo + Title)
-            addView(LinearLayout(this@DeskdropShareTarget).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-
-                // Animated glowing Deskdrop logo icon
-                addView(FrameLayout(this@DeskdropShareTarget).apply {
-                    layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).also {
-                        it.marginEnd = dp(14)
-                    }
-                    background = GradientDrawable().also {
-                        it.shape = GradientDrawable.OVAL
-                        it.colors = intArrayOf(brandColor, c(R.color.cr_accent_dim))
-                        it.orientation = GradientDrawable.Orientation.TL_BR
-                    }
-                    addView(TextView(this@DeskdropShareTarget).apply {
-                        text = ""
-                        textSize = 20f
-                        gravity = Gravity.CENTER
-                    })
-                })
-
-                addView(LinearLayout(this@DeskdropShareTarget).apply {
-                    orientation = LinearLayout.VERTICAL
-                    addView(TextView(this@DeskdropShareTarget).apply {
-                        text = "Send with Deskdrop"
-                        textSize = 20f
-                        setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-                        setTextColor(textColor1)
-                    })
-                    addView(TextView(this@DeskdropShareTarget).apply {
-                        val noun = if (sharedUris.size == 1) "file" else "files"
-                        text = "Staging ${sharedUris.size} $noun to send"
-                        textSize = 13f
-                        setTextColor(textColor3)
-                    })
-                })
-            })
-
-            addView(space(20))
-
-            // Sub-header indicator
-            addView(TextView(this@DeskdropShareTarget).apply {
-                text = if (peers.isEmpty()) "NO PEERS AVAILABLE" else "CONNECTED PEERS (${peers.size})"
-                textSize = 11f
-                letterSpacing = 0.08f
-                setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD))
-                setTextColor(brandColor)
-            })
-
-            addView(space(10))
-
-            // Scrollable Peer List
-            addView(ScrollView(this@DeskdropShareTarget).apply {
-                overScrollMode = View.OVER_SCROLL_NEVER
-                isVerticalScrollBarEnabled = false
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    dp(220)
-                )
-
-                addView(LinearLayout(this@DeskdropShareTarget).apply {
-                    orientation = LinearLayout.VERTICAL
-                    if (peers.isEmpty()) {
-                        addView(emptyState())
-                    } else {
-                        // All Connected option
-                        val allCard = selectionCard(
-                            title = "All connected devices",
-                            subtitle = peers.joinToString(", ") { it.name },
-                            avatarLabel = "ALL",
-                            gradientColors = intArrayOf(brandColor, c(R.color.cr_accent_dim))
-                        ) { updateSelection(null) }
-                        selectionCards += null to allCard
-                        addView(allCard)
-
-                        peers.forEach { peer ->
-                            addView(space(10))
-                            val isMac = peer.name.contains("mac", ignoreCase = true) || peer.name.contains("book", ignoreCase = true)
-                            val isAndroid = peer.name.contains("phone", ignoreCase = true) || peer.name.contains("android", ignoreCase = true)
-                            val avatarGrad = if (isMac) {
-                                intArrayOf(c(R.color.cr_purple), c(R.color.cr_purple_bg))
-                            } else {
-                                intArrayOf(c(R.color.cr_green), c(R.color.cr_green_bg))
-                            }
-                            
-                            val card = selectionCard(
-                                title = peer.name,
-                                subtitle = if (peer.trusted) "Ready to receive" else "Connected now",
-                                avatarLabel = peer.name.firstOrNull()?.uppercase() ?: "?",
-                                gradientColors = avatarGrad
-                            ) { updateSelection(peer.id) }
-                            selectionCards += peer.id to card
-                            addView(card)
-                        }
-
-                        updateSelection(null)
-                    }
-                })
-            })
-
-            addView(space(24))
-
-            // Buttons row
-            val btnRow = LinearLayout(this@DeskdropShareTarget).apply {
-                orientation = LinearLayout.HORIZONTAL
             }
 
-            btnRow.addView(actionButton("Cancel", filled = false) { dialog.dismiss() }, LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-            ).also { it.marginEnd = dp(10) })
-
-            val sendButton = actionButton("Send Files", filled = true) {
-                if (peers.isEmpty()) {
-                    startActivity(packageManager.getLaunchIntentForPackage(packageName))
-                    dialog.dismiss()
-                    return@actionButton
+            runOnUiThread {
+                if (stagedUris.isNotEmpty()) {
+                    val svc = Intent(this@DeskdropShareTarget, DeskdropService::class.java).apply {
+                        action = DeskdropService.ACTION_PUSH_SHARED_URI
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        putStringArrayListExtra(
+                            DeskdropService.EXTRA_SHARED_URIS,
+                            ArrayList(stagedUris)
+                        )
+                        sharedName?.let { putExtra(DeskdropService.EXTRA_SHARED_NAME, it) }
+                        targetId?.let { putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, it) }
+                    }
+                    runCatching { ContextCompat.startForegroundService(this@DeskdropShareTarget, svc) }
+                    Toast.makeText(this@DeskdropShareTarget, "Sending to Deskdrop", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@DeskdropShareTarget, "Staging failed", Toast.LENGTH_SHORT).show()
                 }
-
-                // Show dynamic premium loading screen while staging URIs in background!
-                showLoadingOverlay(container)
-
-                Thread {
-                    val stagedUris = mutableListOf<String>()
-                    sharedUris.forEachIndexed { index, uri ->
-                        val stagedFileUri = stageFileInActivity(uri, index + 1)
-                        if (stagedFileUri != null) {
-                            stagedUris.add(stagedFileUri.toString())
-                        }
-                    }
-
-                    runOnUiThread {
-                        if (stagedUris.isNotEmpty()) {
-                            val svc = Intent(this@DeskdropShareTarget, DeskdropService::class.java).apply {
-                                action = DeskdropService.ACTION_PUSH_SHARED_URI
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                putStringArrayListExtra(
-                                    DeskdropService.EXTRA_SHARED_URIS,
-                                    ArrayList(stagedUris)
-                                )
-                                sharedName?.let { putExtra(DeskdropService.EXTRA_SHARED_NAME, it) }
-                                selectedDevice[0]?.let { putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, it) }
-                            }
-                            runCatching { ContextCompat.startForegroundService(this@DeskdropShareTarget, svc) }
-                            Toast.makeText(
-                                this@DeskdropShareTarget,
-                                if (selectedDevice[0] == null) "Sharing to all connected devices"
-                                else "Sharing to selected device",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        } else {
-                            Toast.makeText(this@DeskdropShareTarget, "Staging failed", Toast.LENGTH_SHORT).show()
-                        }
-                        dialog.dismiss()
-                    }
-                }.start()
+                finish()
             }
-            btnRow.addView(sendButton, LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-            ))
-
-            addView(btnRow)
-        }
-
-        container.addView(mainLayout)
-        return container
-    }
-
-    private fun showLoadingOverlay(container: FrameLayout) {
-        container.removeAllViews()
-        val loadingLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(24), dp(60), dp(24), dp(60))
-
-            // Premium circular loader
-            addView(ProgressBar(this@DeskdropShareTarget).apply {
-                indeterminateTintList = ColorStateList.valueOf(c(R.color.cr_accent))
-                layoutParams = LinearLayout.LayoutParams(dp(56), dp(56)).also {
-                    it.bottomMargin = dp(20)
-                }
-            })
-
-            addView(TextView(this@DeskdropShareTarget).apply {
-                text = "Preparing secure transfer..."
-                textSize = 16f
-                setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-                setTextColor(c(R.color.cr_text_1))
-            })
-            addView(space(6))
-            addView(TextView(this@DeskdropShareTarget).apply {
-                text = "Staging files locally"
-                textSize = 13f
-                setTextColor(c(R.color.cr_text_3))
-            })
-        }
-        container.addView(loadingLayout)
+        }.start()
     }
 
     private fun stageFileInActivity(uri: Uri, fallbackIndex: Int): Uri? = runCatching {
@@ -446,7 +244,6 @@ class DeskdropShareTarget : androidx.appcompat.app.AppCompatActivity() {
         }
         
         val stagedDir = java.io.File(cacheDir, "shared-outgoing").also { it.mkdirs() }
-        // Sanitize file name to prevent illegal chars
         val sanitizedName = displayName.replace("[\\\\/:*?\"<>|]".toRegex(), "_")
         val finalExt = if (ext.isNotEmpty()) ".$ext" else ""
         val stagedFile = java.io.File(stagedDir, if (sanitizedName.endsWith(finalExt)) sanitizedName else "$sanitizedName$finalExt")
@@ -459,144 +256,301 @@ class DeskdropShareTarget : androidx.appcompat.app.AppCompatActivity() {
         
         Uri.fromFile(stagedFile)
     }.onFailure { Log.w("DeskdropShareTarget", "Failed to stage shared URI $uri", it) }.getOrNull()
+}
 
-    private fun actionButton(
-        label: String,
-        filled: Boolean,
-        onClick: () -> Unit
-    ): View = TextView(this).apply {
-        text = label
-        gravity = Gravity.CENTER
-        textSize = 15f
-        setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-        setTextColor(if (filled) c(R.color.cr_on_accent) else c(R.color.cr_text_2))
-        setPadding(dp(16), dp(14), dp(16), dp(14))
-        background = if (filled) {
-            GradientDrawable().also {
-                it.cornerRadius = dp(24).toFloat()
-                it.colors = intArrayOf(c(R.color.cr_accent), c(R.color.cr_accent_dim))
-                it.orientation = GradientDrawable.Orientation.LEFT_RIGHT
-            }
-        } else {
-            GradientDrawable().also {
-                it.cornerRadius = dp(24).toFloat()
-                it.setColor(c(R.color.cr_bg_inset))
-                it.setStroke(dp(1), c(R.color.cr_border))
-            }
-        }
-        setOnClickListener { onClick() }
-    }
+@Composable
+fun ShareTargetUI(
+    sharedUris: List<Uri>,
+    sharedName: String?,
+    peers: List<PeerSnapshot>,
+    isDark: Boolean,
+    onCancel: () -> Unit,
+    onSend: (String?) -> Unit
+) {
+    var selectedDevice by remember { mutableStateOf<String?>(if (peers.size == 1) peers.first().id else null) }
+    var isSending by remember { mutableStateOf(false) }
 
-    private fun emptyState(): View = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER
-        setPadding(dp(24), dp(32), dp(24), dp(32))
-        background = GradientDrawable().also {
-            it.cornerRadius = dp(20).toFloat()
-            it.setColor(c(R.color.cr_bg_card))
-            it.setStroke(dp(1), c(R.color.cr_border))
-        }
-        addView(TextView(this@DeskdropShareTarget).apply {
-            text = "No connected devices"
-            textSize = 15f
-            setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-            setTextColor(c(R.color.cr_text_1))
-        })
-        addView(space(6))
-        addView(TextView(this@DeskdropShareTarget).apply {
-            text = "Open Deskdrop on your Mac, or launch the app to search again."
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(c(R.color.cr_text_3))
-            setLineSpacing(0f, 1.35f)
-        })
-    }
+    val sheetBg = if (isDark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
+    val cardBg = if (isDark) Color(0xFF2C2C2E) else Color.White
+    val sheetShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
 
-    private fun selectionCard(
-        title: String,
-        subtitle: String,
-        avatarLabel: String,
-        gradientColors: IntArray,
-        onClick: () -> Unit
-    ): View = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(14), dp(14), dp(14), dp(14))
-        background = cardBackground(false)
-        isClickable = true
-        isFocusable = true
-        setOnClickListener { onClick() }
-
-        addView(FrameLayout(this@DeskdropShareTarget).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).also {
-                it.marginEnd = dp(14)
-            }
-            background = GradientDrawable().also {
-                it.shape = GradientDrawable.OVAL
-                it.colors = gradientColors
-                it.orientation = GradientDrawable.Orientation.TL_BR
-            }
-            addView(TextView(this@DeskdropShareTarget).apply {
-                text = avatarLabel
-                gravity = Gravity.CENTER
-                textSize = if (avatarLabel.length > 1) 10f else 16f
-                setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-                setTextColor(Color.WHITE)
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                onClick = onCancel
+            ),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        // Apply the clipping and background at this container level to fix the overflow issue
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(sheetShape)
+                .background(sheetBg)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    onClick = {} // consume clicks
                 )
-            })
-        })
-
-        addView(LinearLayout(this@DeskdropShareTarget).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(this@DeskdropShareTarget).apply {
-                text = title
-                textSize = 15f
-                setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-                setTextColor(c(R.color.cr_text_1))
-            })
-            addView(space(3))
-            addView(TextView(this@DeskdropShareTarget).apply {
-                text = subtitle
-                textSize = 12.5f
-                setTextColor(c(R.color.cr_text_3))
-            })
-        })
-
-        addView(View(this@DeskdropShareTarget).apply {
-            tag = "selected_indicator"
-            background = GradientDrawable().also {
-                it.shape = GradientDrawable.OVAL
-                it.setColor(Color.TRANSPARENT)
-                it.setStroke(dp(1), c(R.color.cr_border))
-            }
-            layoutParams = LinearLayout.LayoutParams(dp(20), dp(20))
-        })
-    }
-
-    private fun cardBackground(selected: Boolean): RippleDrawable {
-        val base = GradientDrawable().also {
-            it.cornerRadius = dp(20).toFloat()
-            it.setColor(if (selected) c(R.color.cr_accent_bg) else c(R.color.cr_bg_card))
-            it.setStroke(
-                dp(1),
-                if (selected) c(R.color.cr_accent) else c(R.color.cr_border)
+        ) {
+            // Inner subtle border for premium feel
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .border(
+                        1.dp,
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = if (isDark) 0.15f else 0.5f),
+                                Color.Transparent
+                            )
+                        ),
+                        sheetShape
+                    )
             )
-        }
-        return RippleDrawable(
-            android.content.res.ColorStateList.valueOf(c(R.color.cr_ripple)),
-            base,
-            null
-        )
-    }
 
-    private fun space(height: Int): View = View(this).apply {
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(height)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(bottom = 32.dp)
+            ) {
+                // Drag handle
+                Box(
+                    modifier = Modifier
+                        .padding(top = 16.dp, bottom = 24.dp)
+                        .width(48.dp)
+                        .height(5.dp)
+                        .clip(CircleShape)
+                        .background(if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.2f))
+                        .align(Alignment.CenterHorizontally)
+                )
+
+                if (isSending) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            color = CRTheme.brandElectric,
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "Preparing secure transfer...",
+                            color = CRTheme.textHigh(isDark),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Staging ${sharedUris.size} files locally",
+                            color = CRTheme.textMedium(isDark),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                } else {
+                    // Header
+                    Row(
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(
+                                    Brush.linearGradient(listOf(CRTheme.brandElectric, CRTheme.brandViolet)),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // Fallback to text icon if material icons are missing
+                            Text("↑", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column(modifier = Modifier.padding(start = 16.dp)) {
+                            Text(
+                                text = "Send with Deskdrop",
+                                color = CRTheme.textHigh(isDark),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            val noun = if (sharedUris.size == 1) "file" else "files"
+                            Text(
+                                text = "Sharing ${sharedUris.size} $noun",
+                                color = CRTheme.brandElectric,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Text(
+                        text = if (peers.isEmpty()) "NO DEVICES FOUND" else "SELECT DEVICE",
+                        color = CRTheme.textMedium(isDark),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Peer Grid (No scrolling for up to 4 items)
+                    if (peers.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .background(cardBg, RoundedCornerShape(20.dp))
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No connected devices",
+                                color = CRTheme.textHigh(isDark),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Open Deskdrop on your Mac, or launch the app to search again.",
+                                color = CRTheme.textMedium(isDark),
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        // Use a horizontal scrolling row for a more compact "Command Deck" feel
+                        androidx.compose.foundation.lazy.LazyRow(
+                            contentPadding = PaddingValues(horizontal = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            item {
+                                PeerSelectionCard(
+                                    title = "All Devices",
+                                    subtitle = "Broadcast",
+                                    avatarText = "ALL",
+                                    gradient = listOf(CRTheme.brandElectric, CRTheme.brandViolet),
+                                    isSelected = selectedDevice == null,
+                                    isDark = isDark,
+                                    cardBg = cardBg,
+                                    onClick = { selectedDevice = null }
+                                )
+                            }
+                            items(peers) { peer ->
+                                val isMac = peer.name.contains("mac", ignoreCase = true) || peer.name.contains("book", ignoreCase = true)
+                                val gradient = if (isMac) listOf(Color(0xFF5E5CE6), Color(0xFF3F3D96)) else listOf(CRTheme.accentGreen, Color(0xFF1E6E3C))
+                                PeerSelectionCard(
+                                    title = peer.name,
+                                    subtitle = if (peer.trusted) "Ready" else "Connected",
+                                    avatarText = peer.name.firstOrNull()?.uppercase() ?: "?",
+                                    gradient = gradient,
+                                    isSelected = selectedDevice == peer.id,
+                                    isDark = isDark,
+                                    cardBg = cardBg,
+                                    onClick = { selectedDevice = peer.id }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Action Buttons
+                    Row(modifier = Modifier.padding(horizontal = 24.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(cardBg)
+                                .clickable(onClick = onCancel),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Cancel", color = CRTheme.textHigh(isDark), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (peers.isNotEmpty()) Brush.horizontalGradient(listOf(CRTheme.brandElectric, CRTheme.brandViolet)) else Brush.horizontalGradient(listOf(Color.Gray, Color.DarkGray)))
+                                .clickable(enabled = peers.isNotEmpty()) {
+                                    isSending = true
+                                    onSend(selectedDevice)
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Send", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PeerSelectionCard(
+    title: String,
+    subtitle: String,
+    avatarText: String,
+    gradient: List<Color>,
+    isSelected: Boolean,
+    isDark: Boolean,
+    cardBg: Color,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isSelected) CRTheme.brandElectric else if (isDark) Color.White.copy(alpha=0.05f) else Color.Black.copy(alpha=0.05f)
+    val bgColor = if (isSelected) CRTheme.brandElectric.copy(alpha = 0.15f) else cardBg
+    
+    Column(
+        modifier = Modifier
+            .width(120.dp)
+            .height(140.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(bgColor)
+            .border(2.dp, borderColor, RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(Brush.linearGradient(gradient), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(avatarText, color = Color.White, fontSize = if (avatarText.length > 1) 14.sp else 20.sp, fontWeight = FontWeight.Bold)
+            if (isSelected) {
+                // Checkmark or dot overlay
+                Box(modifier = Modifier.align(Alignment.BottomEnd).offset(x=4.dp, y=4.dp).size(16.dp).background(Color.White, CircleShape).padding(2.dp).background(CRTheme.brandElectric, CircleShape))
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            title, 
+            color = CRTheme.textHigh(isDark), 
+            fontSize = 14.sp, 
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            subtitle, 
+            color = CRTheme.textMedium(isDark), 
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         )
     }
 }

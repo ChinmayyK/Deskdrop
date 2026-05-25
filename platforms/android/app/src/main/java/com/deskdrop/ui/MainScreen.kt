@@ -1,46 +1,66 @@
 package com.deskdrop.ui
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.ExitToApp
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.deskdrop.ActivityEntry
 import com.deskdrop.ActivityKind
 import com.deskdrop.PeerSnapshot
+import com.deskdrop.TransferProgress
 import com.deskdrop.ui.theme.CRBackground
 import com.deskdrop.ui.theme.CRTheme
-import com.deskdrop.ui.theme.SectionHeader
-import com.deskdrop.ui.theme.crCard
-import kotlinx.coroutines.delay
+import com.deskdrop.ui.theme.CRTypography
+import com.deskdrop.ui.theme.crGlassCard
+import com.deskdrop.ui.theme.crPressScale
 
-@OptIn(ExperimentalAnimationApi::class)
+val CRTheme.brandElectric get() = Color(0xFF0066FF)
+val CRTheme.brandViolet get() = Color(0xFF8B5CF6)
+val CRTheme.brandCyan get() = Color(0xFF06B6D4)
+val CRTheme.brandPink get() = Color(0xFFEC4899)
+val CRTheme.accentGreen get() = Color(0xFF10B981)
+val CRTheme.accentRed get() = Color(0xFFEF4444)
+val CRTheme.accentAmber get() = Color(0xFFF59E0B)
+
+enum class AppTab { Home, Activity, Devices, Settings }
+
 @Composable
 fun MainScreen(
     isDark: Boolean,
@@ -49,6 +69,7 @@ fun MainScreen(
     peers: List<PeerSnapshot>,
     feed: List<ActivityEntry>,
     ambientStatus: String,
+    activeTransfers: List<TransferProgress>,
     onStartSync: () -> Unit,
     onResumeSync: () -> Unit,
     onScanNow: () -> Unit,
@@ -58,66 +79,88 @@ fun MainScreen(
     onActionDisconnectAll: () -> Unit,
     onActionStopService: () -> Unit,
     onActionStreamCamera: () -> Unit,
+    onActionPauseTransfer: (String) -> Unit,
+    onActionResumeTransfer: (String) -> Unit,
+    onActionCancelTransfer: (String) -> Unit,
+    onActionSendFiles: () -> Unit,
     onApplyClipboard: (ActivityEntry) -> Unit,
     onTrustPeer: (PeerSnapshot) -> Unit,
     onRejectPeer: (PeerSnapshot) -> Unit,
+    onSendPairingRequest: (PeerSnapshot) -> Unit,
+    onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var currentTab by remember { mutableStateOf(AppTab.Home) }
+    val hasConnectedDevices = peers.any { it.isConnected }
 
-    CRBackground(isDark = isDark) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AnimatedContent(
-                targetState = selectedTab,
-                transitionSpec = {
-                    if (targetState > initialState) {
-                        slideInHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMedium), initialOffsetX = { fullWidth -> fullWidth }) + fadeIn() togetherWith
-                                slideOutHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMedium), targetOffsetX = { fullWidth -> -fullWidth }) + fadeOut()
-                    } else {
-                        slideInHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMedium), initialOffsetX = { fullWidth -> -fullWidth }) + fadeIn() togetherWith
-                                slideOutHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMedium), targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
+    CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices) {
+        Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                CompactStatusStrip(isDark = isDark, peers = peers, ambientStatus = ambientStatus)
+                
+                Box(modifier = Modifier.weight(1f)) {
+                    AnimatedContent(
+                        targetState = currentTab,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
+                        },
+                        label = "tab_content"
+                    ) { tab ->
+                        when (tab) {
+                            AppTab.Home -> HomeTab(
+                                isDark = isDark,
+                                peers = peers,
+                                feed = feed,
+                                activeTransfers = activeTransfers,
+                                onActionPushClipboard = onActionPushClipboard,
+                                onActionPairMagicLink = onActionPairMagicLink,
+                                onActionSendFiles = onActionSendFiles,
+                                onActionStreamCamera = onActionStreamCamera,
+                                onApplyClipboard = onApplyClipboard,
+                                onActionPauseTransfer = onActionPauseTransfer,
+                                onActionResumeTransfer = onActionResumeTransfer,
+                                onActionCancelTransfer = onActionCancelTransfer,
+                                onTabSelected = { currentTab = it }
+                            )
+                            AppTab.Activity -> ActivityTab(
+                                isDark = isDark,
+                                feed = feed,
+                                onApplyClipboard = onApplyClipboard
+                            )
+                            AppTab.Devices -> DevicesTab(
+                                isDark = isDark,
+                                peers = peers,
+                                onTrustPeer = onTrustPeer,
+                                onRejectPeer = onRejectPeer,
+                                onSendPairingRequest = onSendPairingRequest,
+                                onRespondPairing = onRespondPairing
+                            )
+                            AppTab.Settings -> SettingsTab(
+                                isDark = isDark,
+                                isSyncEnabled = isSyncEnabled,
+                                isServiceRunning = isServiceRunning,
+                                onStartSync = onStartSync,
+                                onResumeSync = onResumeSync,
+                                onScanNow = onScanNow,
+                                onActionPauseSync = onActionPauseSync,
+                                onActionDisconnectAll = onActionDisconnectAll,
+                                onActionStopService = onActionStopService,
+                                onOpenSettings = onOpenSettings
+                            )
+                        }
                     }
-                }, label = "tab_transition",
-                modifier = Modifier.fillMaxSize()
-            ) { targetTab ->
-                when (targetTab) {
-                    0 -> DashboardTab(
-                        isDark = isDark,
-                        isServiceRunning = isServiceRunning,
-                        isSyncEnabled = isSyncEnabled,
-                        peers = peers,
-                        ambientStatus = ambientStatus,
-                        onTrustPeer = onTrustPeer,
-                        onRejectPeer = onRejectPeer,
-                        onActionPushClipboard = onActionPushClipboard,
-                        onActionPairMagicLink = onActionPairMagicLink,
-                        onActionPauseSync = onActionPauseSync,
-                        onActionDisconnectAll = onActionDisconnectAll,
-                        onActionStopService = onActionStopService,
-                        onOpenSettings = onOpenSettings,
-                        onStartSync = onStartSync,
-                        onResumeSync = onResumeSync,
-                        onScanNow = onScanNow,
-                        onActionStreamCamera = onActionStreamCamera
-                    )
-                    1 -> ActivityFeedTab(
-                        isDark = isDark,
-                        feed = feed,
-                        onApplyClipboard = onApplyClipboard
-                    )
                 }
             }
-
-            // Floating Bottom Navigation Bar
+            
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp, start = 32.dp, end = 32.dp)
+                    .padding(bottom = 16.dp)
             ) {
-                FloatingNavBar(
-                    selectedTab = selectedTab,
-                    isDark = isDark,
-                    onTabSelected = { selectedTab = it }
+                BottomDock(
+                    currentTab = currentTab,
+                    onTabSelected = { currentTab = it },
+                    isDark = isDark
                 )
             }
         }
@@ -125,691 +168,876 @@ fun MainScreen(
 }
 
 @Composable
-fun FloatingNavBar(selectedTab: Int, isDark: Boolean, onTabSelected: (Int) -> Unit) {
-    val haptic = LocalHapticFeedback.current
+fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus: String) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Reverse),
+        label = "pulseAlpha"
+    )
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.8f, targetValue = 1.2f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Reverse),
+        label = "scalePulse"
+    )
+    
+    val connectedPeersCount = peers.count { it.isConnected }
+    val isSearching = ambientStatus.contains("Looking", ignoreCase = true)
+    
+    val statusText = if (connectedPeersCount > 0) {
+        "$connectedPeersCount nearby device${if (connectedPeersCount > 1) "s" else ""} available"
+    } else if (isSearching) {
+        "Scanning nearby devices"
+    } else {
+        ambientStatus
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .crCard(isDark = isDark, cornerRadius = 0.dp)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
-        CRNavButton(
-            icon = Icons.Default.Home,
-            label = "Dashboard",
-            isSelected = selectedTab == 0,
-            isDark = isDark,
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onTabSelected(0)
-            }
-        )
-        CRNavButton(
-            icon = Icons.AutoMirrored.Filled.List,
-            label = "Activity",
-            isSelected = selectedTab == 1,
-            isDark = isDark,
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onTabSelected(1)
-            }
+        Box(contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .scale(if (isSearching && connectedPeersCount == 0) scale else 1f)
+                    .blur(4.dp)
+                    .background(
+                        if (connectedPeersCount > 0) CRTheme.statusGreen.copy(alpha = alpha * 0.6f)
+                        else (if (isSearching) CRTheme.indigoSoft else CRTheme.statusAmber).copy(alpha = alpha * 0.4f),
+                        CircleShape
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .background(
+                        if (connectedPeersCount > 0) CRTheme.statusGreen
+                        else (if (isSearching) CRTheme.indigoSoft else CRTheme.statusAmber),
+                        CircleShape
+                    )
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = statusText,
+            style = CRTypography.caption,
+            color = CRTheme.textMedium(isDark)
         )
     }
 }
 
 @Composable
-fun CRNavButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    isSelected: Boolean,
+fun HomeTab(
     isDark: Boolean,
-    onClick: () -> Unit
+    peers: List<PeerSnapshot>,
+    feed: List<ActivityEntry>,
+    activeTransfers: List<TransferProgress>,
+    onActionPushClipboard: () -> Unit,
+    onActionPairMagicLink: () -> Unit,
+    onActionSendFiles: () -> Unit,
+    onActionStreamCamera: () -> Unit,
+    onApplyClipboard: (ActivityEntry) -> Unit,
+    onActionPauseTransfer: (String) -> Unit,
+    onActionResumeTransfer: (String) -> Unit,
+    onActionCancelTransfer: (String) -> Unit,
+    onTabSelected: (AppTab) -> Unit
 ) {
-    val tint = if (isSelected) CRTheme.bg(isDark) else CRTheme.textMedium(isDark)
-    val pillBg = if (isSelected) CRTheme.textHigh(isDark) else Color.Transparent
-    
-    Row(
+    Column(modifier = Modifier.fillMaxSize()) {
+        val hasConnectedPeers = peers.any { it.isConnected || it.trusted }
+        
+        Spacer(modifier = Modifier.height(24.dp)) // Contextual gap from Status Strip
+        
+        if (activeTransfers.isNotEmpty()) {
+            Text(
+                text = "Active Transfers",
+                style = CRTypography.h2,
+                color = CRTheme.textHigh(isDark),
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(activeTransfers) { t ->
+                    ActiveTransferCard(
+                        isDark = isDark,
+                        transfer = t,
+                        onPause = { onActionPauseTransfer(t.id) },
+                        onResume = { onActionResumeTransfer(t.id) },
+                        onCancel = { onActionCancelTransfer(t.id) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        if (peers.isEmpty()) {
+            EmptyStateEcosystem(isDark = isDark, onPair = onActionPairMagicLink)
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Ecosystem",
+                    style = CRTypography.h2,
+                    color = CRTheme.textHigh(isDark)
+                )
+                // Inline Add Action
+                Row(
+                    modifier = Modifier
+                        .crPressScale(0.95f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onActionPairMagicLink() }
+                        .background(CRTheme.indigoSoft.copy(alpha = 0.15f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = CRTheme.indigoSoft, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add", style = CRTypography.caption, color = CRTheme.indigoSoft)
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp)) // Related gap
+            
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(peers) { peer ->
+                    DeviceCard(isDark = isDark, peer = peer)
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp)) // Contextual gap
+        
+        Text(
+            text = "Actions",
+            style = CRTypography.h2,
+            color = CRTheme.textHigh(isDark),
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
+        
+        Spacer(modifier = Modifier.height(12.dp)) // Related gap
+        
+        QuickActionsGrid(
+            isDark = isDark,
+            enabled = hasConnectedPeers,
+            onActionPushClipboard = onActionPushClipboard,
+            onActionSendFiles = onActionSendFiles,
+            onActionStreamCamera = onActionStreamCamera,
+            onActionLinks = {}
+        )
+        
+        Spacer(modifier = Modifier.height(32.dp)) // Contextual gap
+        
+        if (feed.isNotEmpty()) {
+            RecentActivityPill(
+                isDark = isDark,
+                entry = feed.first(),
+                onClick = { onTabSelected(AppTab.Activity) }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(120.dp)) // Space for dock
+    }
+}
+
+@Composable
+fun EmptyStateEcosystem(isDark: Boolean, onPair: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Column(
         modifier = Modifier
-            .height(48.dp)
-            .background(pillBg)
-            .border(if (isSelected) 1.dp else 0.dp, if (isSelected) CRTheme.stroke(isDark) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = if (isSelected) 24.dp else 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .crGlassCard(isDark = isDark, cornerRadius = 24.dp, dashed = true, onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onPair()
+            })
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(20.dp)
+            imageVector = Icons.Default.Devices,
+            contentDescription = null,
+            tint = CRTheme.brandElectric,
+            modifier = Modifier.size(48.dp)
         )
-        if (isSelected) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = label.uppercase(),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = tint,
-                letterSpacing = 1.sp
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "No devices connected",
+            style = CRTypography.label,
+            color = CRTheme.textHigh(isDark)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Tap to pair a new device to your ecosystem.",
+            style = CRTypography.caption,
+            color = CRTheme.textMedium(isDark)
+        )
+    }
+}
+
+@Composable
+fun QuickActionsGrid(
+    isDark: Boolean,
+    enabled: Boolean,
+    onActionPushClipboard: () -> Unit,
+    onActionSendFiles: () -> Unit,
+    onActionStreamCamera: () -> Unit,
+    onActionLinks: () -> Unit
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Large Primary Action
+        QuickActionCardPrimary(
+            isDark = isDark,
+            enabled = enabled,
+            icon = Icons.Default.ContentCopy,
+            title = "Clipboard Sync",
+            subtitle = "Send copied text & images",
+            color = CRTheme.brandElectric,
+            onClick = onActionPushClipboard
+        )
+        
+        // Smaller Secondary Actions
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            QuickActionCard(
+                modifier = Modifier.weight(1f),
+                isDark = isDark,
+                enabled = enabled,
+                icon = Icons.Default.Folder,
+                label = "Files",
+                color = CRTheme.brandViolet,
+                onClick = onActionSendFiles
+            )
+            QuickActionCard(
+                modifier = Modifier.weight(1f),
+                isDark = isDark,
+                enabled = enabled,
+                icon = Icons.Default.Videocam,
+                label = "Camera",
+                color = CRTheme.brandCyan,
+                onClick = onActionStreamCamera
+            )
+            QuickActionCard(
+                modifier = Modifier.weight(1f),
+                isDark = isDark,
+                enabled = enabled,
+                icon = Icons.Default.Link,
+                label = "Links",
+                color = CRTheme.brandPink,
+                onClick = onActionLinks
             )
         }
     }
 }
 
 @Composable
-fun PlatformBadge(name: String, isDark: Boolean) {
-    val clean = name.lowercase()
-    val label = when {
-        clean.contains("mac") || clean.contains("apple") || clean.contains("macbook") || clean.contains("imac") -> "macOS"
-        clean.contains("win") || clean.contains("pc") || clean.contains("windows") -> "Windows"
-        clean.contains("linux") || clean.contains("ubuntu") -> "Linux"
-        else -> "Android"
+fun ActiveTransferCard(
+    isDark: Boolean,
+    transfer: TransferProgress,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Column(
+        modifier = Modifier
+            .width(280.dp)
+            .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
+            .padding(20.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(CRTheme.brandCyan.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Folder,
+                    contentDescription = null,
+                    tint = CRTheme.brandCyan,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = transfer.fileName,
+                    style = CRTypography.label,
+                    color = CRTheme.textHigh(isDark),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (transfer.isPaused) "Paused" else "${transfer.percent}% • " + 
+                           if (transfer.speedBps > 0) "${transfer.speedBps / 1024 / 1024} MB/s" else "Calculating...",
+                    style = CRTypography.caption,
+                    color = CRTheme.textMedium(isDark),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Progress Bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f), RoundedCornerShape(3.dp))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(transfer.percent / 100f)
+                    .height(6.dp)
+                    .background(if (transfer.isPaused) CRTheme.accentAmber else CRTheme.brandCyan, RoundedCornerShape(3.dp))
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Action Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .crGlassCard(isDark = isDark, cornerRadius = 18.dp, onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        if (transfer.isPaused) onResume() else onPause()
+                    }),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (transfer.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                    contentDescription = if (transfer.isPaused) "Resume" else "Pause",
+                    tint = CRTheme.textHigh(isDark),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .crGlassCard(isDark = isDark, cornerRadius = 18.dp, onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onCancel()
+                    }),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Cancel",
+                    tint = CRTheme.accentRed,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
     }
-    
-    Text(
-        text = label.uppercase(),
-        fontSize = 10.sp,
-        fontWeight = FontWeight.Medium,
-        color = CRTheme.textLow(isDark),
-        letterSpacing = 1.sp
-    )
 }
 
 @Composable
-fun DashboardTab(
+fun QuickActionCardPrimary(
     isDark: Boolean,
-    isServiceRunning: Boolean,
-    isSyncEnabled: Boolean,
-    peers: List<PeerSnapshot>,
-    ambientStatus: String,
-    onTrustPeer: (PeerSnapshot) -> Unit,
-    onRejectPeer: (PeerSnapshot) -> Unit,
-    onActionPushClipboard: () -> Unit,
-    onActionPairMagicLink: () -> Unit,
-    onActionPauseSync: () -> Unit,
-    onActionDisconnectAll: () -> Unit,
-    onActionStopService: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onStartSync: () -> Unit,
-    onResumeSync: () -> Unit,
-    onScanNow: () -> Unit,
-    onActionStreamCamera: () -> Unit
+    enabled: Boolean,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    color: Color,
+    onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    val connectedPeers = peers.filter { it.isConnected }
+    val displayColor = if (enabled) color else CRTheme.textMedium(isDark)
     
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().systemBarsPadding(),
-        contentPadding = PaddingValues(top = 24.dp, start = 24.dp, end = 24.dp, bottom = 140.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulseScale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulseAlpha"
+    )
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .crPressScale(targetScale = 0.98f)
+            .crGlassCard(
+                isDark = isDark,
+                cornerRadius = 24.dp,
+                onClick = if (enabled) {
+                    {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onClick()
+                    }
+                } else null
+            )
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        item {
+        Box(contentAlignment = Alignment.Center) {
+            if (enabled) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .scale(pulseScale)
+                        .background(displayColor.copy(alpha = pulseAlpha), CircleShape)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(displayColor.copy(alpha = if (enabled) 0.15f else 0.05f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(imageVector = icon, contentDescription = title, tint = displayColor, modifier = Modifier.size(22.dp))
+            }
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(text = title, style = CRTypography.label, color = if (enabled) CRTheme.textHigh(isDark) else CRTheme.textMedium(isDark))
+            Text(text = if (enabled) "Last synced just now" else subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark))
+        }
+    }
+}
+
+@Composable
+fun QuickActionCard(
+    modifier: Modifier = Modifier,
+    isDark: Boolean,
+    enabled: Boolean = true,
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val displayColor = if (enabled) color else CRTheme.textMedium(isDark)
+    
+    Column(
+        modifier = modifier
+            .crPressScale(targetScale = 0.95f)
+            .crGlassCard(
+                isDark = isDark,
+                cornerRadius = 16.dp,
+                onClick = if (enabled) {
+                    {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onClick()
+                    }
+                } else null
+            )
+            .padding(vertical = 12.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp) // Reduced from 38.dp
+                .background(displayColor.copy(alpha = if (enabled) 0.15f else 0.05f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = label, tint = displayColor, modifier = Modifier.size(16.dp)) // Reduced from 20.dp
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = label, style = CRTypography.caption, color = if (enabled) CRTheme.textHigh(isDark) else CRTheme.textMedium(isDark))
+    }
+}
+
+@Composable
+fun RecentActivityPill(
+    isDark: Boolean,
+    entry: ActivityEntry,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .crPressScale(targetScale = 0.98f)
+            .crGlassCard(
+                isDark = isDark,
+                cornerRadius = 24.dp,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
+            )
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(CRTheme.brandViolet.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Bolt,
+                contentDescription = null,
+                tint = CRTheme.brandViolet,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Recently Connected: ${entry.deviceName}",
+                style = CRTypography.label,
+                color = CRTheme.textHigh(isDark),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "Just now • Tap to view activity",
+                style = CRTypography.caption,
+                color = CRTheme.textMedium(isDark)
+            )
+        }
+        Icon(
+            imageVector = Icons.Default.KeyboardArrowRight,
+            contentDescription = "View",
+            tint = CRTheme.textMedium(isDark)
+        )
+    }
+}
+
+@Composable
+fun DeviceCard(isDark: Boolean, peer: PeerSnapshot) {
+    val haptic = LocalHapticFeedback.current
+    val isPhone = peer.name.contains("phone", ignoreCase = true) || peer.name.contains("pixel", ignoreCase = true)
+    
+    Column(
+        modifier = Modifier
+            .width(150.dp)
+            .height(100.dp)
+            .crPressScale(targetScale = 0.95f)
+            .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            })
+            .padding(16.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(if (peer.trusted) CRTheme.indigoSoft.copy(alpha = 0.15f) else CRTheme.textMedium(isDark).copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isPhone) Icons.Default.Smartphone else Icons.Default.LaptopMac,
+                    contentDescription = null,
+                    tint = if (peer.trusted) CRTheme.indigoSoft else CRTheme.textMedium(isDark),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            if (peer.isConnected) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .blur(2.dp)
+                        .background(CRTheme.statusGreen, CircleShape)
+                ) {
+                    Box(modifier = Modifier.size(8.dp).background(CRTheme.statusGreen, CircleShape))
+                }
+            }
+        }
+        
+        Column {
+            Text(
+                text = peer.name,
+                style = CRTypography.label,
+                color = CRTheme.textHigh(isDark),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (peer.trusted) {
+                Text(
+                    text = if (peer.isConnected) "Nearby" else "Offline",
+                    style = CRTypography.caption,
+                    color = CRTheme.textMedium(isDark)
+                )
+            } else {
+                Text(
+                    text = "Pending",
+                    style = CRTypography.caption,
+                    color = CRTheme.statusAmber
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AddDeviceCard(isDark: Boolean, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Column(
+        modifier = Modifier
+            .width(150.dp)
+            .height(100.dp)
+            .crPressScale(targetScale = 0.95f)
+            .crGlassCard(
+                isDark = isDark,
+                cornerRadius = 24.dp,
+                dashed = true,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "Add Device",
+            tint = CRTheme.textMedium(isDark),
+            modifier = Modifier.size(32.dp)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "Add Device",
+            style = CRTypography.label,
+            color = CRTheme.textMedium(isDark)
+        )
+    }
+}
+
+@Composable
+fun ActivityTab(
+    isDark: Boolean,
+    feed: List<ActivityEntry>,
+    onApplyClipboard: (ActivityEntry) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "Activity Feed",
+            style = CRTypography.h2,
+            color = CRTheme.textHigh(isDark),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        
+        LazyColumn(
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(feed) { entry ->
+                ActivityFeedCardNew(
+                    isDark = isDark,
+                    entry = entry,
+                    onClick = {
+                        if (entry.kind == ActivityKind.CLIPBOARD_TEXT || entry.kind == ActivityKind.CLIPBOARD_IMAGE) {
+                            onApplyClipboard(entry)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ActivityFeedCardNew(
+    isDark: Boolean,
+    entry: ActivityEntry,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val tagColor = when (entry.kind) {
+        ActivityKind.CLIPBOARD_TEXT -> CRTheme.brandElectric
+        ActivityKind.CLIPBOARD_IMAGE -> CRTheme.brandPink
+        else -> CRTheme.textMedium(isDark)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .crGlassCard(
+                isDark = isDark,
+                cornerRadius = 16.dp,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
+            )
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(40.dp)
+                .background(tagColor, RoundedCornerShape(2.dp))
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = "Deskdrop",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Light,
-                        color = CRTheme.textHigh(isDark),
-                        letterSpacing = (-1).sp
-                    )
-                    Text(
-                        text = ambientStatus,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = CRTheme.textMedium(isDark)
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .border(0.5.dp, CRTheme.stroke(isDark))
-                        .clickable { onOpenSettings() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        tint = CRTheme.textHigh(isDark),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
-
-        if (peers.isEmpty()) {
-            item {
-                HeroEmptyState(
-                    isDark = isDark,
-                    isServiceRunning = isServiceRunning,
-                    isSyncEnabled = isSyncEnabled,
-                    onStartSync = onStartSync,
-                    onResumeSync = onResumeSync,
-                    onScanNow = onScanNow
+                Text(
+                    text = entry.deviceName,
+                    style = CRTypography.label,
+                    color = CRTheme.textHigh(isDark)
+                )
+                val timeString = android.text.format.DateFormat.format("hh:mm a", entry.timestamp).toString()
+                Text(
+                    text = timeString,
+                    style = CRTypography.caption,
+                    color = CRTheme.textMedium(isDark)
                 )
             }
-        } else {
-            item {
-                HeroConnectedState(isDark = isDark, connectedPeers = connectedPeers)
-            }
-
-            items(peers) { peer ->
-                PeerRow(isDark = isDark, peer = peer, onTrust = { onTrustPeer(peer) }, onReject = { onRejectPeer(peer) })
-            }
-        }
-
-        item {
-            SectionHeader(isDark, "Quick Actions")
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (connectedPeers.isNotEmpty() && isSyncEnabled) {
-                        ActionCard(
-                            isDark = isDark,
-                            title = "Send Clipboard",
-                            icon = Icons.Default.Send,
-                            modifier = Modifier.weight(1f),
-                            onClick = onActionPushClipboard
-                        )
-                    } else {
-                        ActionCard(
-                            isDark = isDark,
-                            title = "Pair Device",
-                            icon = Icons.Default.Add,
-                            modifier = Modifier.weight(1f),
-                            onClick = onActionPairMagicLink
-                        )
-                    }
-                    
-                    val syncIcon = if (isSyncEnabled) Icons.Default.Clear else Icons.Default.PlayArrow
-                    val syncLabel = if (isSyncEnabled) "Pause Sync" else "Resume Sync"
-                    ActionCard(
-                        isDark = isDark,
-                        title = syncLabel,
-                        icon = syncIcon,
-                        modifier = Modifier.weight(1f),
-                        onClick = onActionPauseSync
-                    )
-                }
-                
-                if (isServiceRunning) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        if (connectedPeers.isNotEmpty()) {
-                            ActionCard(
-                                  isDark = isDark,
-                                  title = "Disconnect All",
-                                  icon = Icons.Default.ExitToApp,
-                                  modifier = Modifier.weight(1f),
-                                  onClick = onActionDisconnectAll
-                            )
-                            ActionCard(
-                                isDark = isDark,
-                                title = "Stream Camera",
-                                icon = Icons.Default.PlayArrow,
-                                modifier = Modifier.weight(1f),
-                                onClick = onActionStreamCamera
-                            )
-                        }
-                        ActionCard(
-                            isDark = isDark,
-                            title = "Stop Service",
-                            icon = Icons.Default.ExitToApp,
-                            modifier = Modifier.weight(1f),
-                            onClick = onActionStopService
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun HeroEmptyState(
-    isDark: Boolean,
-    isServiceRunning: Boolean,
-    isSyncEnabled: Boolean,
-    onStartSync: () -> Unit,
-    onResumeSync: () -> Unit,
-    onScanNow: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .crCard(isDark, cornerRadius = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 24.dp).size(120.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .border(1.dp, CRTheme.stroke(isDark), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Home,
-                        contentDescription = null,
-                        tint = CRTheme.textHigh(isDark),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-            
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = if (!isServiceRunning) "SYNC STOPPED" else "LOOKING FOR DEVICES",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
+                text = entry.preview.replace("\n", " "),
+                style = CRTypography.bodyMedium,
                 color = CRTheme.textMedium(isDark),
-                letterSpacing = 1.sp
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = FontFamily.Monospace
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = if (!isServiceRunning) "Start the service to discover devices seamlessly on your local network." else "Ensure you are on the same Wi-Fi network and Deskdrop is open on other devices.",
-                fontSize = 14.sp,
-                color = CRTheme.textLow(isDark),
-                textAlign = TextAlign.Center,
-                lineHeight = 22.sp
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            Button(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    when {
-                        !isServiceRunning -> onStartSync()
-                        !isSyncEnabled -> onResumeSync()
-                        else -> onScanNow()
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(CRTheme.textHigh(isDark))
-                        .border(1.dp, CRTheme.stroke(isDark)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = when {
-                            !isServiceRunning -> "START SYNCING"
-                            !isSyncEnabled -> "RESUME SYNC"
-                            else -> "SCAN NEARBY"
-                        },
-                        color = CRTheme.bg(isDark),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 1.sp
-                    )
-                }
-            }
         }
     }
 }
 
 @Composable
-fun HeroConnectedState(isDark: Boolean, connectedPeers: List<PeerSnapshot>) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .crCard(isDark, cornerRadius = 0.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(32.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .border(1.dp, CRTheme.textMedium(isDark), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Home,
-                    contentDescription = null,
-                    tint = CRTheme.textHigh(isDark),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(28.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "MESH ACTIVE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = CRTheme.textMedium(isDark),
-                    letterSpacing = 1.5.sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = connectedPeers.size.toString(),
-                        fontSize = 42.sp,
-                        fontWeight = FontWeight.Light,
-                        color = CRTheme.textHigh(isDark),
-                        lineHeight = 42.sp
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = if (connectedPeers.size == 1) "Device\nConnected" else "Devices\nConnected",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = CRTheme.textLow(isDark),
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun PeerRow(isDark: Boolean, peer: PeerSnapshot, onTrust: () -> Unit, onReject: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .crCard(
-                isDark = isDark, 
-                cornerRadius = 0.dp, 
-                highlighted = peer.isConnected,
-                accentColor = CRTheme.textHigh(isDark),
-                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
-            )
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(CRTheme.surface(isDark))
-                    .border(0.5.dp, CRTheme.stroke(isDark)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = peer.name.take(1).uppercase(),
-                    color = CRTheme.textHigh(isDark),
-                    fontWeight = FontWeight.Light,
-                    fontSize = 20.sp
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = peer.name, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = CRTheme.textHigh(isDark))
-                    PlatformBadge(name = peer.name, isDark = isDark)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = peer.status.uppercase(),
-                    fontSize = 10.sp,
-                    color = CRTheme.textMedium(isDark),
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.sp
-                )
-            }
-            if (!peer.trusted && peer.status != "connected") {
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onTrust()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    modifier = Modifier.border(1.dp, CRTheme.textHigh(isDark))
-                ) {
-                    Text("TRUST", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = CRTheme.textHigh(isDark), letterSpacing = 1.sp)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ActionCard(
+fun DevicesTab(
     isDark: Boolean,
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    peers: List<PeerSnapshot>,
+    onTrustPeer: (PeerSnapshot) -> Unit,
+    onRejectPeer: (PeerSnapshot) -> Unit,
+    onSendPairingRequest: (PeerSnapshot) -> Unit,
+    onRespondPairing: (PeerSnapshot, Boolean) -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
-    Box(
-        modifier = modifier
-            .crCard(isDark, cornerRadius = 0.dp, highlighted = false, onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            })
-            .padding(20.dp)
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .border(0.5.dp, CRTheme.stroke(isDark)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(imageVector = icon, contentDescription = title, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(18.dp))
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "All Devices",
+            style = CRTypography.h2,
+            color = CRTheme.textHigh(isDark),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        LazyColumn(
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                HotspotTipCard(isDark = isDark)
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = title.uppercase(),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                color = CRTheme.textHigh(isDark),
-                letterSpacing = 1.sp,
-                textAlign = TextAlign.Center
-            )
+            items(peers) { peer ->
+                PeerListCard(
+                    isDark = isDark,
+                    peer = peer,
+                    onTrust = { onTrustPeer(peer) },
+                    onReject = { onRejectPeer(peer) },
+                    onPair = { onSendPairingRequest(peer) },
+                    onRespond = { accepted -> onRespondPairing(peer, accepted) }
+                )
+            }
         }
     }
-}
-
-data class GroupedActivity(val title: String, val items: List<ActivityEntry>)
-
-fun groupActivities(feed: List<ActivityEntry>): List<GroupedActivity> {
-    val now = System.currentTimeMillis()
-    val dayMillis = 24 * 60 * 60 * 1000L
-    
-    val today = mutableListOf<ActivityEntry>()
-    val yesterday = mutableListOf<ActivityEntry>()
-    val earlier = mutableListOf<ActivityEntry>()
-    
-    feed.forEach { entry ->
-        val diff = now - entry.timestamp
-        when {
-            diff < dayMillis -> today.add(entry)
-            diff < 2 * dayMillis -> yesterday.add(entry)
-            else -> earlier.add(entry)
-        }
-    }
-    
-    return buildList {
-        if (today.isNotEmpty()) add(GroupedActivity("Today", today))
-        if (yesterday.isNotEmpty()) add(GroupedActivity("Yesterday", yesterday))
-        if (earlier.isNotEmpty()) add(GroupedActivity("Earlier", earlier))
-    }
-}
-
-fun formatSize(bytes: Long): String {
-    if (bytes <= 0) return "0 B"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
-    return String.format("%.1f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
 }
 
 @Composable
-fun ActivityCardContent(isDark: Boolean, entry: ActivityEntry, onApplyClipboard: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    Column(modifier = Modifier.padding(20.dp)) {
+fun HotspotTipCard(isDark: Boolean) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .crGlassCard(isDark = isDark, cornerRadius = 16.dp)
+            .padding(horizontal = 20.dp, vertical = 20.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
-                    .border(0.5.dp, CRTheme.stroke(isDark)),
+                    .size(36.dp)
+                    .background(CRTheme.brandCyan.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = entry.deviceName.take(1).uppercase(),
-                    color = CRTheme.textMedium(isDark),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
+                Icon(
+                    imageVector = Icons.Rounded.Wifi,
+                    contentDescription = null,
+                    tint = CRTheme.brandCyan,
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(text = entry.deviceName, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = CRTheme.textHigh(isDark))
-            Spacer(modifier = Modifier.width(8.dp))
-            
-            val tagLabel = when (entry.kind) {
-                ActivityKind.CLIPBOARD_TEXT -> "TEXT"
-                ActivityKind.CLIPBOARD_IMAGE -> "IMAGE"
-                ActivityKind.FILE_SENT -> "SENT"
-                ActivityKind.FILE_RECEIVED -> "RECEIVED"
-                ActivityKind.FILE_TRANSFER_INCOMING -> "INCOMING"
-                ActivityKind.FILE_TRANSFER_PROGRESS -> "TRANSFERRING"
-                ActivityKind.FILE_TRANSFER_COMPLETE -> "SUCCESS"
-                ActivityKind.FILE_TRANSFER_FAILED -> "FAILED"
-                else -> "SYSTEM"
-            }
-            
-            Text(text = tagLabel, fontSize = 9.sp, fontWeight = FontWeight.Medium, color = CRTheme.textMedium(isDark), letterSpacing = 1.sp)
-
-            Spacer(modifier = Modifier.weight(1f))
-            
-            val timeString = android.text.format.DateFormat.format("hh:mm a", entry.timestamp).toString()
+            Spacer(modifier = Modifier.width(16.dp))
             Text(
-                text = timeString, 
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Normal,
-                color = CRTheme.textLow(isDark)
+                text = "Choose a connection method",
+                style = CRTypography.bodyMedium,
+                color = CRTheme.textHigh(isDark)
             )
         }
-        Spacer(modifier = Modifier.height(14.dp))
-
-        when (entry.kind) {
-            ActivityKind.CLIPBOARD_TEXT -> {
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        Column(
+            modifier = Modifier.padding(start = 52.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .background(CRTheme.surface(isDark))
-                        .border(0.5.dp, CRTheme.stroke(isDark))
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = entry.preview,
-                        fontSize = 14.sp,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        color = CRTheme.textHigh(isDark),
-                        lineHeight = 20.sp,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.height(14.dp))
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onApplyClipboard()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
-                    modifier = Modifier.height(38.dp).border(1.dp, CRTheme.textHigh(isDark))
-                ) {
-                    Text("COPY TO CLIPBOARD", fontSize = 10.sp, color = CRTheme.textHigh(isDark), fontWeight = FontWeight.Medium, letterSpacing = 1.sp)
-                }
-            }
-            ActivityKind.CLIPBOARD_IMAGE -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .background(CRTheme.surface(isDark))
-                        .border(0.5.dp, CRTheme.stroke(isDark)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Home,
-                            contentDescription = null,
-                            tint = CRTheme.textMedium(isDark),
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "IMAGE VIEWPORT ACTIVE",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = CRTheme.textLow(isDark),
-                            letterSpacing = 1.sp
-                        )
-                    }
-                }
-            }
-            ActivityKind.FILE_TRANSFER_INCOMING, ActivityKind.FILE_TRANSFER_PROGRESS -> {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = entry.preview,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = CRTheme.textHigh(isDark)
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    
-                    Box(modifier = Modifier.fillMaxWidth().height(2.dp).background(CRTheme.stroke(isDark))) {
-                        Box(modifier = Modifier.fillMaxWidth(entry.progressPercent / 100f).height(2.dp).background(CRTheme.textHigh(isDark)))
-                    }
-                    
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${entry.progressPercent}%",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = CRTheme.textHigh(isDark),
-                            letterSpacing = 1.sp
-                        )
-                        if (entry.transferBytesReceived > 0) {
-                            Text(
-                                text = "${formatSize(entry.transferBytesReceived)} / ${formatSize(entry.fileTotalBytes)}",
-                                fontSize = 11.sp,
-                                color = CRTheme.textLow(isDark),
-                                fontWeight = FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-            }
-            else -> {
+                        .padding(top = 7.dp)
+                        .size(4.dp)
+                        .background(CRTheme.textMedium(isDark).copy(alpha = 0.5f), CircleShape)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = entry.preview, 
-                    fontSize = 14.sp, 
-                    color = CRTheme.textMedium(isDark), 
-                    lineHeight = 22.sp
+                    text = "Mobile Hotspot (for travel)",
+                    style = CRTypography.caption,
+                    color = CRTheme.textMedium(isDark)
+                )
+            }
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 7.dp)
+                        .size(4.dp)
+                        .background(CRTheme.textMedium(isDark).copy(alpha = 0.5f), CircleShape)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Same Wi-Fi Network (for home/office)",
+                    style = CRTypography.caption,
+                    color = CRTheme.textMedium(isDark)
                 )
             }
         }
@@ -817,62 +1045,73 @@ fun ActivityCardContent(isDark: Boolean, entry: ActivityEntry, onApplyClipboard:
 }
 
 @Composable
-fun ActivityFeedTab(isDark: Boolean, feed: List<ActivityEntry>, onApplyClipboard: (ActivityEntry) -> Unit) {
-    val grouped = groupActivities(feed)
-    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-        Text(
-            text = "Activity",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Light,
-            color = CRTheme.textHigh(isDark),
-            letterSpacing = (-1).sp,
-            modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 8.dp)
+fun PeerListCard(
+    isDark: Boolean,
+    peer: PeerSnapshot,
+    onTrust: () -> Unit,
+    onReject: () -> Unit,
+    onPair: () -> Unit,
+    onRespond: (Boolean) -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .crGlassCard(isDark = isDark, cornerRadius = 16.dp)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Computer,
+            contentDescription = null,
+            tint = if (peer.trusted) CRTheme.brandElectric else CRTheme.textMedium(isDark),
+            modifier = Modifier.size(32.dp)
         )
-
-        if (grouped.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(bottom = 140.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.List,
-                        contentDescription = null,
-                        tint = CRTheme.textLow(isDark),
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("No recent activity", fontSize = 16.sp, fontWeight = FontWeight.Normal, color = CRTheme.textMedium(isDark))
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = peer.name,
+                style = CRTypography.label,
+                color = CRTheme.textHigh(isDark)
+            )
+            Text(
+                text = if (peer.trusted) "Trusted Device" else "Pending Approval",
+                style = CRTypography.caption,
+                color = if (peer.trusted) CRTheme.accentGreen else CRTheme.accentAmber
+            )
+        }
+        if (!peer.trusted) {
+            if (peer.pairingRequested) {
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onRespond(true)
+                }) {
+                    Icon(Icons.Default.Check, contentDescription = "Accept", tint = CRTheme.accentGreen)
                 }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 140.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                grouped.forEach { group ->
-                    item {
-                        Text(
-                            text = group.title.uppercase(),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = CRTheme.textMedium(isDark),
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                    
-                    itemsIndexed(group.items) { index, entry ->
-                        var isVisible by remember { mutableStateOf(false) }
-                        LaunchedEffect(Unit) {
-                            delay(index * 40L)
-                            isVisible = true
-                        }
-                        AnimatedVisibility(
-                            visible = isVisible,
-                            enter = fadeIn()
-                        ) {
-                            ActivityFeedRow(isDark = isDark, entry = entry, onApplyClipboard = { onApplyClipboard(entry) })
-                        }
-                    }
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onRespond(false)
+                }) {
+                    Icon(Icons.Default.Close, contentDescription = "Decline", tint = CRTheme.accentRed)
+                }
+            } else {
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onPair()
+                }) {
+                    Icon(Icons.Default.Link, contentDescription = "Pair", tint = CRTheme.brandElectric)
+                }
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onTrust()
+                }) {
+                    Icon(Icons.Default.Check, contentDescription = "Trust", tint = CRTheme.accentGreen)
+                }
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onReject()
+                }) {
+                    Icon(Icons.Default.Close, contentDescription = "Reject", tint = CRTheme.accentRed)
                 }
             }
         }
@@ -880,16 +1119,142 @@ fun ActivityFeedTab(isDark: Boolean, feed: List<ActivityEntry>, onApplyClipboard
 }
 
 @Composable
-fun ActivityFeedRow(isDark: Boolean, entry: ActivityEntry, onApplyClipboard: () -> Unit) {
+fun SettingsTab(
+    isDark: Boolean,
+    isSyncEnabled: Boolean,
+    isServiceRunning: Boolean,
+    onStartSync: () -> Unit,
+    onResumeSync: () -> Unit,
+    onScanNow: () -> Unit,
+    onActionPauseSync: () -> Unit,
+    onActionDisconnectAll: () -> Unit,
+    onActionStopService: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "Settings",
+            style = CRTypography.h2,
+            color = CRTheme.textHigh(isDark),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        LazyColumn(
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                if (isSyncEnabled) {
+                    SettingsActionTile(isDark = isDark, icon = Icons.Default.Pause, label = "Pause Sync", color = CRTheme.accentAmber, onClick = onActionPauseSync)
+                } else {
+                    SettingsActionTile(isDark = isDark, icon = Icons.Default.PlayArrow, label = "Resume Sync", color = CRTheme.accentGreen, onClick = onResumeSync)
+                }
+            }
+            item {
+                if (!isServiceRunning) {
+                    SettingsActionTile(isDark = isDark, icon = Icons.Default.PlayCircle, label = "Start Service", color = CRTheme.accentGreen, onClick = onStartSync)
+                }
+            }
+            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Search, label = "Scan Now", color = CRTheme.brandCyan, onClick = onScanNow) }
+            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.LinkOff, label = "Disconnect All", color = CRTheme.brandPink, onClick = onActionDisconnectAll) }
+            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Stop, label = "Stop Service", color = CRTheme.accentRed, onClick = onActionStopService) }
+            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Settings, label = "Advanced Settings", color = CRTheme.textMedium(isDark), onClick = onOpenSettings) }
+        }
+    }
+}
+
+@Composable
+fun SettingsActionTile(
+    isDark: Boolean,
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .crGlassCard(
+                isDark = isDark,
+                cornerRadius = 16.dp,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
+            )
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(color.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = label,
+            style = CRTypography.label,
+            color = CRTheme.textHigh(isDark)
+        )
+    }
+}
+
+@Composable
+fun BottomDock(
+    currentTab: AppTab,
+    onTabSelected: (AppTab) -> Unit,
+    isDark: Boolean
+) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .crCard(isDark, cornerRadius = 0.dp)
+            .padding(horizontal = 48.dp) // Slightly wider to accommodate pill
     ) {
-        ActivityCardContent(
-            isDark = isDark,
-            entry = entry,
-            onApplyClipboard = onApplyClipboard
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .crGlassCard(isDark = isDark, cornerRadius = 36.dp, elevated = true)
+                .padding(horizontal = 8.dp, vertical = 6.dp), // Thinner padding for smaller navbar
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppTab.values().forEach { tab ->
+                val isSelected = currentTab == tab
+                
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onTabSelected(tab)
+                            }
+                        )
+                        .background(if (isSelected) CRTheme.indigoSoft.copy(alpha = 0.15f) else Color.Transparent)
+                        .padding(horizontal = if (isSelected) 20.dp else 16.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val iconColor = if (isSelected) CRTheme.indigoSoft else CRTheme.textHigh(isDark).copy(alpha = 0.4f)
+                    
+                    Icon(
+                        imageVector = when (tab) {
+                            AppTab.Home -> Icons.Default.Home
+                            AppTab.Activity -> Icons.Default.List
+                            AppTab.Devices -> Icons.Default.Devices
+                            AppTab.Settings -> Icons.Default.Settings
+                        },
+                        contentDescription = tab.name,
+                        tint = iconColor,
+                        modifier = Modifier.size(22.dp) // Slightly smaller icon to make the bar thinner
+                    )
+                }
+            }
+        }
     }
 }

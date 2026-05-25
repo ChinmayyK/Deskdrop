@@ -95,6 +95,10 @@ pub enum IpcRequest {
     TrustPeer { device_id: String },
     /// Reject a peer without trusting it.
     RejectPeer { device_id: String },
+    /// Request to pair with an untrusted device.
+    SendPairingRequest { device_id: String },
+    /// Respond to a pairing request from a device.
+    RespondToPairing { device_id: String, accepted: bool },
     /// Revoke a trusted device by UUID.
     RevokeTrustedDevice { device_id: String },
     /// Push clipboard text to all peers.
@@ -535,7 +539,6 @@ pub mod client {
         let handler = std::sync::Arc::new(move |req: IpcRequest| {
             let eng = engine.clone();
             async move {
-                use crate::engine::Engine;
                 match req {
                     IpcRequest::Status => {
                         let snap = eng.status_snapshot().await;
@@ -599,6 +602,27 @@ pub mod client {
                         match crate::ipc::parse_uuid(&device_id)
                             .ok()
                             .map(|id| eng.reject_peer(id))
+                        {
+                            Some(fut) => match fut.await {
+                                Ok(_) => IpcResponse::ok_empty(),
+                                Err(e) => IpcResponse::err(e.to_string()),
+                            },
+                            None => IpcResponse::err("invalid device id"),
+                        }
+                    }
+                    IpcRequest::SendPairingRequest { device_id } => {
+                        match crate::ipc::parse_uuid(&device_id).ok() {
+                            Some(id) => {
+                                eng.send_pairing_request(id).await;
+                                IpcResponse::ok_empty()
+                            }
+                            None => IpcResponse::err("invalid device id"),
+                        }
+                    }
+                    IpcRequest::RespondToPairing { device_id, accepted } => {
+                        match crate::ipc::parse_uuid(&device_id)
+                            .ok()
+                            .map(|id| eng.respond_to_pairing(id, accepted))
                         {
                             Some(fut) => match fut.await {
                                 Ok(_) => IpcResponse::ok_empty(),
@@ -1109,7 +1133,6 @@ pub mod client {
                     IpcRequest::Feedback { last } => {
                         IpcResponse::ok(eng.feedback_recent(last).await)
                     }
-                    _ => IpcResponse::err("not supported in this build"),
                 }
             }
         });

@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 
 // MARK: - Delegate protocol
 
+@MainActor
 protocol MenuBarDropViewDelegate: AnyObject {
     /// Called when the user drops one or more file URLs onto the menu bar icon.
     func menuBarDropView(_ view: MenuBarDropView, didReceiveFiles urls: [URL])

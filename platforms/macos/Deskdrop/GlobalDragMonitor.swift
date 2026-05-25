@@ -6,46 +6,44 @@ class GlobalDragMonitor: ObservableObject {
     
     @Published var isDraggingFile = false
     
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+    private var timer: Timer?
     private var lastChangeCount: Int = 0
     private let dragPasteboard = NSPasteboard(name: .drag)
     
     private init() {}
     
     func startMonitoring() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        let _ = AXIsProcessTrustedWithOptions(options)
-        
         lastChangeCount = dragPasteboard.changeCount
         
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp]) { [weak self] event in
-            self?.handleEvent(event)
+        // Use a high-frequency timer on the common runloop to poll for drags.
+        // This completely eliminates the need for Accessibility permissions.
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            self?.checkDragState()
         }
-        
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp]) { [weak self] event in
-            self?.handleEvent(event)
-            return event
-        }
+        RunLoop.main.add(timer!, forMode: .common)
     }
     
-    private func handleEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDragged {
-            let currentChangeCount = dragPasteboard.changeCount
-            if currentChangeCount != lastChangeCount {
-                lastChangeCount = currentChangeCount
-                
-                if let types = dragPasteboard.types, types.contains(.fileURL) {
-                    if !isDraggingFile {
-                        isDraggingFile = true
-                    }
+    private func checkDragState() {
+        let currentChangeCount = dragPasteboard.changeCount
+        
+        // 1. Detect if a new drag started
+        if currentChangeCount != lastChangeCount {
+            lastChangeCount = currentChangeCount
+            
+            if let types = dragPasteboard.types, types.contains(.fileURL) {
+                if !isDraggingFile {
+                    isDraggingFile = true
                 }
             }
-        } else if event.type == .leftMouseUp {
-            if isDraggingFile {
+        }
+        
+        // 2. Detect if drag has ended
+        if isDraggingFile {
+            // NSEvent.pressedMouseButtons queries hardware state (0 = no buttons pressed)
+            if NSEvent.pressedMouseButtons == 0 {
                 isDraggingFile = false
-                // Reset change count so the next drag is reliably detected
-                lastChangeCount = dragPasteboard.changeCount
+                // Reset so the next drag doesn't falsely trigger
+                lastChangeCount = dragPasteboard.changeCount 
             }
         }
     }

@@ -201,11 +201,16 @@ private fun processImage(image: ImageProxy) {
 
             val handle = DeskdropService.activeEngineHandle
             if (handle != 0L) {
-                DeskdropJni.pushVideoFrame(handle, jpegBytes)
+                val result = DeskdropJni.pushVideoFrame(handle, jpegBytes)
+                android.util.Log.d("CameraStream", "Pushed frame: ${jpegBytes.size} bytes, result=$result")
+            } else {
+                android.util.Log.w("CameraStream", "Engine handle is 0 — service not running? Cannot push frame.")
             }
+        } else {
+            android.util.Log.w("CameraStream", "Unexpected image format: ${image.format}")
         }
     } catch (e: Exception) {
-        e.printStackTrace()
+        android.util.Log.e("CameraStream", "Error processing image", e)
     } finally {
         image.close()
     }

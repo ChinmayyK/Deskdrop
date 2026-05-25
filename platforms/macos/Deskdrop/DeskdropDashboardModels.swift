@@ -7,52 +7,52 @@ import SwiftUI
 // MARK: - Dashboard Navigation
 
 enum DashboardSection: String, CaseIterable, Identifiable {
-    case dashboard, history, devices, workflows, settings
+    case devices, clipboard, transfers, remoteControl, settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .dashboard: return "Dashboard"
-        case .history:   return "Clipboard History"
-        case .devices:  return "Synced Devices"
-        case .workflows: return "Workflows"
-        case .settings: return "Settings"
+        case .devices:       return "Devices"
+        case .clipboard:     return "Clipboard"
+        case .transfers:     return "Transfers"
+        case .remoteControl: return "Remote control"
+        case .settings:      return "Settings"
         }
     }
 
     var icon: String {
         switch self {
-        case .dashboard: return "house"
-        case .history:   return "doc.text"
-        case .devices:  return "arrow.triangle.2.circlepath"
-        case .workflows: return "square.grid.2x2"
-        case .settings: return "gearshape"
+        case .devices:       return "list.bullet.rectangle"
+        case .clipboard:     return "doc.on.clipboard"
+        case .transfers:     return "arrow.up.arrow.down"
+        case .remoteControl: return "display"
+        case .settings:      return "gearshape"
         }
     }
 
     var eyebrow: String {
         switch self {
-        case .dashboard: return "Overview"
-        case .history:   return "Activity"
-        case .devices:  return "Network"
-        case .workflows: return "Automation"
-        case .settings: return "Configuration"
+        case .devices:       return "Overview"
+        case .clipboard:     return "Activity"
+        case .transfers:     return "Files"
+        case .remoteControl: return "Control"
+        case .settings:      return "Configuration"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .dashboard:
-            return "Modern clipboard sync and continuity manager."
-        case .history:
-            return "All clipboard activity across your devices, in order."
         case .devices:
-            return "Discover, connect, and manage nearby peers."
-        case .workflows:
-            return "Custom actions and automations for incoming clipboards."
+            return "Manage your connected ecosystem."
+        case .clipboard:
+            return "Cross-device clipboard history."
+        case .transfers:
+            return "Recent file transfers."
+        case .remoteControl:
+            return "Control devices remotely."
         case .settings:
-            return "Tune sync behaviour, filters, and network settings."
+            return "Configure your workspace."
         }
     }
 }
@@ -236,7 +236,7 @@ struct ManagedDevice: Identifiable {
     let lastSeen: Date?
     let lastSync: Date?
     let lastError: String?
-
+    let pairingRequested: Bool
     var isConnected: Bool { connectionState == .connected }
     var canReconnect: Bool { trustState == .trusted && remembered && autoConnect && connectionState != .connected }
 
@@ -269,6 +269,7 @@ struct ManagedDevice: Identifiable {
         self.lastSeen        = peer.lastSeen
         self.lastSync        = peer.lastSync
         self.lastError       = peer.lastError
+        self.pairingRequested = peer.pairingRequested
     }
 }
 

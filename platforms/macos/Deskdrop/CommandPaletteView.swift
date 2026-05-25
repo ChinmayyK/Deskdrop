@@ -29,25 +29,25 @@ struct CommandPaletteView: View {
         let isSyncPaused = store.settings?.syncEnabled == false
         return [
             PaletteGroup(title: "Navigate", commands: [
-                cmd(id: "nav.timeline", icon: "house",
-                    label: "Dashboard", hint: "View the dashboard",
-                    tint: CRTheme.brandElectric, shortcut: "⌘1")
-                { store.selectedSection = .dashboard },
-
-                cmd(id: "nav.history", icon: "doc.text",
-                    label: "Clipboard History", hint: "View recent clipboard activity",
-                    tint: CRTheme.accentGreen, shortcut: "⌘2")
-                { store.selectedSection = .history },
-
                 cmd(id: "nav.devices", icon: "desktopcomputer",
                     label: "Devices", hint: "Manage connected peers",
-                    tint: CRTheme.accentOrange, shortcut: "⌘3")
+                    tint: CRTheme.brandElectric, shortcut: "⌘1")
                 { store.selectedSection = .devices },
 
-                cmd(id: "nav.workflows", icon: "square.grid.2x2",
-                    label: "Workflows", hint: "Review automation workflows",
+                cmd(id: "nav.clipboard", icon: "doc.on.clipboard",
+                    label: "Clipboard", hint: "View clipboard history",
+                    tint: CRTheme.accentGreen, shortcut: "⌘2")
+                { store.selectedSection = .clipboard },
+
+                cmd(id: "nav.transfers", icon: "arrow.left.arrow.right",
+                    label: "Transfers", hint: "File transfer history",
+                    tint: CRTheme.accentOrange, shortcut: "⌘3")
+                { store.selectedSection = .transfers },
+
+                cmd(id: "nav.remote", icon: "macwindow",
+                    label: "Remote Control", hint: "Screen sharing and control",
                     tint: CRTheme.accentPurple, shortcut: "⌘4")
-                { store.selectedSection = .workflows },
+                { store.selectedSection = .remoteControl },
 
                 cmd(id: "nav.settings", icon: "slider.horizontal.3",
                     label: "Settings", hint: "Tune sync and network options",
@@ -176,14 +176,14 @@ struct CommandPaletteView: View {
                 PaletteFooter()
             }
         }
-        .frame(width: 520)
+        .frame(width: 600)
         .fixedSize(horizontal: false, vertical: true)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(PaletteSurface.stroke, lineWidth: 0.5)
         }
-        .shadow(color: .black.opacity(0.14), radius: 38, x: 0, y: 18)
+        .shadow(color: .black.opacity(0.18), radius: 42, x: 0, y: 22)
         .onAppear { inputFocused = true; selectedIndex = 0 }
         .onChange(of: query) { _ in selectedIndex = 0 }
         .background(
@@ -320,28 +320,31 @@ private struct PaletteRow: View {
     var isRecent:   Bool
 
     var body: some View {
-        HStack(spacing: 11) {
+        HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(command.tint.opacity(isSelected ? 0.22 : 0.10))
-                    .frame(width: 30, height: 30)
+                    .frame(width: 26, height: 26)
                 Image(systemName: command.icon)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(command.tint).symbolRenderingMode(.hierarchical)
             }
 
-            VStack(alignment: .leading, spacing: 1.5) {
-                HStack(spacing: 6) {
-                    Text(command.label)
-                        .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                        .foregroundStyle(CRTheme.ink.opacity(isSelected ? 1.0 : 0.86))
-                    if isRecent {
-                        CRTag(text: "recent", tint: CRTheme.brandElectric)
-                    }
+            HStack(spacing: 8) {
+                Text(command.label)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(CRTheme.ink.opacity(isSelected ? 1.0 : 0.86))
+                    .layoutPriority(1)
+                    
+                if isRecent {
+                    CRTag(text: "recent", tint: CRTheme.brandElectric)
                 }
+
                 Text(command.hint)
-                    .font(.system(size: 11))
-                    .foregroundStyle(CRTheme.inkSoft.opacity(isSelected ? 0.95 : 0.82))
+                    .font(.system(size: 12))
+                    .foregroundStyle(CRTheme.inkSoft.opacity(isSelected ? 0.95 : 0.65))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
 
             Spacer(minLength: 0)
@@ -364,18 +367,18 @@ private struct PaletteRow: View {
                 if isSelected { KbdChip("↵", dark: false).transition(.opacity) }
             }
         }
-        .padding(.horizontal, 10).padding(.vertical, 8)
+        .padding(.horizontal, 10).padding(.vertical, 5)
         .background {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isSelected ? PaletteSurface.rowSelected : .clear)
                 .overlay {
                     if isSelected {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(CRTheme.brandElectric.opacity(0.18), lineWidth: 0.5)
                     }
                 }
         }
-        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .animation(.crFast, value: isSelected)
     }
 }

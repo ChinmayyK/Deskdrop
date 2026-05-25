@@ -19,6 +19,8 @@ struct IpcPeerRecord: Codable {
     let auto_connect: Bool?
     let last_seen: Int?
     let last_sync: Int?
+    let ip: String?
+    let pairing_requested: Bool?
 }
 
 struct IpcStatusResponse: Codable {
@@ -142,6 +144,14 @@ final class DeskdropIPCClient {
 
     func rejectTrust(deviceId: String) async throws {
         _ = try await send(cmd: ["cmd": "reject_peer", "device_id": deviceId])
+    }
+
+    func sendPairingRequest(deviceId: String) async throws {
+        _ = try await send(cmd: ["cmd": "send_pairing_request", "device_id": deviceId])
+    }
+
+    func respondToPairing(deviceId: String, accepted: Bool) async throws {
+        _ = try await send(cmd: ["cmd": "respond_to_pairing", "device_id": deviceId, "accepted": accepted])
     }
 
     // ── Activity Feed ─────────────────────────────────────────────────────────

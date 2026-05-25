@@ -106,6 +106,12 @@ object DeskdropJni {
     @JvmStatic external fun trustPeer(engineHandle: Long, deviceId: String): Int
     /** Reject a peer after the user denies the pairing prompt. */
     @JvmStatic external fun rejectPeer(engineHandle: Long, deviceId: String): Int
+    /** Forget a previously connected device. */
+    @JvmStatic external fun forgetPeer(engineHandle: Long, deviceId: String): Int
+    /** Send a pairing request to an untrusted device. */
+    @JvmStatic external fun sendPairingRequest(engineHandle: Long, deviceId: String): Int
+    /** Respond to an incoming pairing request. */
+    @JvmStatic external fun respondToPairing(engineHandle: Long, deviceId: String, accepted: Boolean): Int
 
     // ── File transfer accessors ───────────────────────────────────────────────
     @JvmStatic external fun eventTransferId(event: Long): String?
@@ -179,6 +185,14 @@ object DeskdropJni {
     @JvmStatic external fun pushBatteryStatus(
         handle: Long, level: Int, charging: Boolean
     ): Int
+
+    // ── Network lifecycle ─────────────────────────────────────────────────────
+    /**
+     * Notify the Rust engine that Android's default network is available again
+     * (e.g., after Doze, Wi-Fi reconnect, airplane mode toggle).
+     * Triggers immediate reconnection to all known trusted peers.
+     */
+    @JvmStatic external fun notifyNetworkRestored(handle: Long): Int
 }
 
 // ── Activity feed model ───────────────────────────────────────────────────────
@@ -226,8 +240,8 @@ data class ActivityEntry(
         ActivityKind.FILE_TRANSFER_RESUMED  -> "[$deviceName] resumed — $preview"
         ActivityKind.FILE_TRANSFER_COMPLETE -> "[$deviceName] ✓ $preview"
         ActivityKind.FILE_TRANSFER_FAILED   -> "[$deviceName] ✗ transfer failed: $preview"
-        ActivityKind.PEER_CONNECTED  -> "[$deviceName] connected"
-        ActivityKind.PEER_DISCONNECTED -> "[$deviceName] disconnected"
+        ActivityKind.PEER_CONNECTED  -> "[$deviceName] Connected"
+        ActivityKind.PEER_DISCONNECTED -> "[$deviceName] Disconnected"
         ActivityKind.WARNING         -> "$preview"
     }
     /** True if the user can tap "Apply" to write this to local clipboard. */
@@ -244,6 +258,7 @@ enum class BackgroundSyncMode {
 // ── Service ───────────────────────────────────────────────────────────────────
 
 data class TransferProgress(
+    val id: String,
     val fileName: String,
     val percent: Int,
     val bytesReceived: Long,
@@ -260,6 +275,9 @@ class DeskdropService : Service() {
 
         // Expose engine handle for high-throughput zero-copy JNI calls (e.g. video frames)
         @Volatile var activeEngineHandle: Long = 0L
+
+        // Flow to expose active transfers to UI
+        val activeTransfersFlow = kotlinx.coroutines.flow.MutableStateFlow<List<TransferProgress>>(emptyList())
 
         // Notification channels
         private const val CHAN_SERVICE = "cr_service"   // IMPORTANCE_MIN — silent persistent
@@ -297,6 +315,9 @@ class DeskdropService : Service() {
         const val ACTION_CONNECT_MANUAL     = "com.deskdrop.CONNECT_MANUAL"
         const val ACTION_TRUST_PEER         = "com.deskdrop.TRUST_PEER"
         const val ACTION_REJECT_PEER        = "com.deskdrop.REJECT_PEER"
+        const val ACTION_FORGET_PEER        = "com.deskdrop.FORGET_PEER"
+        const val ACTION_SEND_PAIRING_REQUEST = "com.deskdrop.SEND_PAIRING_REQUEST"
+        const val ACTION_RESPOND_TO_PAIRING = "com.deskdrop.RESPOND_TO_PAIRING"
 
         // Intent extras
         const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
@@ -371,6 +392,14 @@ class DeskdropService : Service() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var pairingReceiverRegistered = false
 
+    private val activeTransfers = mutableMapOf<String, TransferProgress>()
+
+    private fun publishActiveTransfers() {
+        activeTransfersFlow.value = activeTransfers.values.toList()
+    }
+
+    private var heartbeatHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     private val pairingResultReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != PairingActivity.ACTION_PAIRING_RESULT) return
@@ -405,9 +434,6 @@ class DeskdropService : Service() {
     // Without it, NSD registration succeeds but packets are silently dropped,
     // so the Mac never sees the Android advertisement and vice versa.
     private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
-
-    private val activeTransfers = mutableMapOf<String, TransferProgress>()
-
     private val clipboardManager: ClipboardManager by lazy {
         getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
     }
@@ -479,8 +505,6 @@ class DeskdropService : Service() {
             ACTION_PAUSE_SYNC   -> { setSyncEnabled(false); return START_STICKY }
             ACTION_RESUME_SYNC  -> { setSyncEnabled(true);  return START_STICKY }
             ACTION_DISCONNECT_ALL -> { disconnectAllPeers(); return START_STICKY }
-            DeskdropTileService.ACTION_SYNC_DISABLE -> { setSyncEnabled(false); return START_STICKY }
-            DeskdropTileService.ACTION_SYNC_ENABLE  -> { setSyncEnabled(true);  return START_STICKY }
             ACTION_CONNECT_MANUAL -> {
                 val ip = intent?.getStringExtra("ip")
                 val port = intent?.getIntExtra("port", 47823) ?: 47823
@@ -506,6 +530,55 @@ class DeskdropService : Service() {
                 if (h != 0L) {
                     val result = DeskdropJni.rejectPeer(h, deviceId)
                     Log.i(TAG, "Manual reject request for $deviceId: result=$result")
+                    persistStatus()
+                }
+                return START_STICKY
+            }
+            ACTION_FORGET_PEER -> {
+                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
+                val h = engineHandle
+                if (h != 0L) {
+                    val result = DeskdropJni.forgetPeer(h, deviceId)
+                    Log.i(TAG, "Manual forget request for $deviceId: result=$result")
+                    persistStatus()
+                }
+                // Also eagerly remove from shared preferences so UI updates immediately
+                val prefs = prefs()
+                val peersStr = prefs.getString(PREF_PEER_SNAPSHOTS_JSON, "[]")
+                try {
+                    val arr = org.json.JSONArray(peersStr)
+                    val newArr = org.json.JSONArray()
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        if (obj.optString("id") != deviceId) {
+                            newArr.put(obj)
+                        }
+                    }
+                    prefs.edit().putString(PREF_PEER_SNAPSHOTS_JSON, newArr.toString()).apply()
+                    sendBroadcast(Intent(ACTION_STATUS_CHANGED).setPackage(packageName))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to update peers JSON on forget", e)
+                }
+                return START_STICKY
+            }
+
+            ACTION_SEND_PAIRING_REQUEST -> {
+                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
+                val h = engineHandle
+                if (h != 0L) {
+                    val result = DeskdropJni.sendPairingRequest(h, deviceId)
+                    Log.i(TAG, "Manual pairing request for $deviceId: result=$result")
+                    persistStatus()
+                }
+                return START_STICKY
+            }
+            ACTION_RESPOND_TO_PAIRING -> {
+                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
+                val accepted = intent?.getBooleanExtra(PairingActivity.EXTRA_APPROVED, false) ?: false
+                val h = engineHandle
+                if (h != 0L) {
+                    val result = DeskdropJni.respondToPairing(h, deviceId, accepted)
+                    Log.i(TAG, "Pairing response for $deviceId accepted=$accepted result=$result")
                     persistStatus()
                 }
                 return START_STICKY
@@ -609,6 +682,7 @@ class DeskdropService : Service() {
                     return START_NOT_STICKY
                 }
 
+                activeEngineHandle = engineHandle
                 Log.i(TAG, "Engine started — $deviceName")
                 scheduleEventDrain()
                 scheduleClipboardWatch()
@@ -890,10 +964,10 @@ class DeskdropService : Service() {
                     kind = ActivityKind.CLIPBOARD_TEXT,
                     preview = preview,
                     contentHash = textContentHash(text),
-                    appliedLocally = autoApplied
+                    appliedLocally = autoApplied && DeskdropApp.isAppInForeground
                 ))
 
-                if (autoApplied) {
+                if (autoApplied && DeskdropApp.isAppInForeground) {
                     applyText(text, from)
                 } else {
                     // Show a dismissable notification with an "Apply" action.
@@ -970,7 +1044,8 @@ class DeskdropService : Service() {
                 )
                 
                 val isPaused = activeTransfers[tid]?.isPaused ?: false
-                activeTransfers[tid] = TransferProgress(name, percent, bytesReceived, speedBps, etaSecs, isPaused)
+                activeTransfers[tid] = TransferProgress(tid, name, percent, bytesReceived, speedBps, etaSecs, isPaused)
+                publishActiveTransfers()
                 
                 updateFileTransferNotificationProgress(
                     tid = tid,
@@ -1003,6 +1078,7 @@ class DeskdropService : Service() {
                 cancelFileTransferNotification(tid)
                 showFileTransferCompleteNotification(from, fileName, destPath)
                 activeTransfers.remove(tid)
+                publishActiveTransfers()
             }
 
             // ── Dedicated file transfer: failed ───────────────────────────────
@@ -1015,20 +1091,23 @@ class DeskdropService : Service() {
                 updateActivityTransferFailed(tid)
                 cancelFileTransferNotification(tid)
                 activeTransfers.remove(tid)
+                publishActiveTransfers()
             }
 
             DeskdropJni.CR_EVENT_FILE_TRANSFER_PAUSED -> {
                 val tid = DeskdropJni.eventTransferId(ev) ?: return
                 val state = activeTransfers[tid]
                 if (state != null) {
-                    state.isPaused = true
+                    val newState = state.copy(isPaused = true)
+                    activeTransfers[tid] = newState
+                    publishActiveTransfers()
                     updateFileTransferNotificationProgress(
                         tid = tid,
-                        fileName = state.fileName,
-                        percent = state.percent,
-                        bytesReceived = state.bytesReceived,
-                        speedBps = state.speedBps,
-                        etaSecs = state.etaSecs,
+                        fileName = newState.fileName,
+                        percent = newState.percent,
+                        bytesReceived = newState.bytesReceived,
+                        speedBps = newState.speedBps,
+                        etaSecs = newState.etaSecs,
                         isPaused = true
                     )
                 }
@@ -1038,14 +1117,16 @@ class DeskdropService : Service() {
                 val tid = DeskdropJni.eventTransferId(ev) ?: return
                 val state = activeTransfers[tid]
                 if (state != null) {
-                    state.isPaused = false
+                    val newState = state.copy(isPaused = false)
+                    activeTransfers[tid] = newState
+                    publishActiveTransfers()
                     updateFileTransferNotificationProgress(
                         tid = tid,
-                        fileName = state.fileName,
-                        percent = state.percent,
-                        bytesReceived = state.bytesReceived,
-                        speedBps = state.speedBps,
-                        etaSecs = state.etaSecs,
+                        fileName = newState.fileName,
+                        percent = newState.percent,
+                        bytesReceived = newState.bytesReceived,
+                        speedBps = newState.speedBps,
+                        etaSecs = newState.etaSecs,
                         isPaused = false
                     )
                 }
@@ -1057,7 +1138,13 @@ class DeskdropService : Service() {
                 val name = resolvePeerDisplayName(deviceId, DeskdropJni.eventDeviceName(ev))
                 val fp   = DeskdropJni.eventFingerprint(ev) ?: ""
                 prefs().edit().putString("fingerprint_$deviceId", fp).apply()
-                showPairingPrompt(deviceId, name, fp)
+                
+                // Auto-trust new devices on LAN (especially after QR scan)
+                // This matches the macOS behavior and avoids the disruptive pairing screen.
+                engineHandle?.let { h ->
+                    DeskdropJni.trustPeer(h, deviceId)
+                    Log.i(TAG, "Auto-trusted new peer: $name ($deviceId)")
+                }
             }
 
             // ── Peer connected ────────────────────────────────────────────────
@@ -1070,7 +1157,7 @@ class DeskdropService : Service() {
                 Log.i(TAG, "Peer connected: $name (id=$deviceId)")
                 connectedPeerIds[deviceId] = name
                 addActivity(ActivityEntry(deviceName = name,
-                    kind = ActivityKind.PEER_CONNECTED, preview = "connected"))
+                    kind = ActivityKind.PEER_CONNECTED, preview = "Connected"))
                 persistStatus()
                 updateForegroundNotification()
                 // Connection established — cancel any pending retry scans and
@@ -1089,7 +1176,7 @@ class DeskdropService : Service() {
                 Log.i(TAG, "Peer disconnected: $name (id=$deviceId)")
                 if (deviceId != null) connectedPeerIds.remove(deviceId)
                 addActivity(ActivityEntry(deviceName = name,
-                    kind = ActivityKind.PEER_DISCONNECTED, preview = "disconnected"))
+                    kind = ActivityKind.PEER_DISCONNECTED, preview = "Disconnected"))
                 persistStatus()
                 updateForegroundNotification()
                 // If we're now peerless, schedule a retry scan so we reconnect
@@ -1207,7 +1294,7 @@ class DeskdropService : Service() {
             putExtra(EXTRA_CLIPBOARD_TEXT, fullText)
             putExtra(EXTRA_CONTENT_HASH, contentHash)
         }
-        val applyPi = PendingIntent.getBroadcast(
+        val applyPi = PendingIntent.getService(
             this, fullText.hashCode(),
             applyIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -1994,12 +2081,20 @@ class DeskdropService : Service() {
             private var lastChargingState: Boolean? = null
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == Intent.ACTION_BATTERY_CHANGED) {
-                    val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                    val rawLevel = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                    val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
                     val status = intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+                    
+                    val level = if (rawLevel >= 0 && scale > 0) {
+                        (rawLevel * 100f / scale).toInt()
+                    } else {
+                        rawLevel
+                    }
+                    
                     val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
                                    status == android.os.BatteryManager.BATTERY_STATUS_FULL
 
-                    val levelChanged = Math.abs(level - lastLevel) >= 5
+                    val levelChanged = Math.abs(level - lastLevel) >= 1 // Update on 1% change instead of 5% for better UX
                     val statusChanged = charging != lastChargingState
 
                     if (levelChanged || statusChanged || lastLevel == -1) {
@@ -2124,6 +2219,29 @@ class DeskdropService : Service() {
             .onFailure { Log.w(TAG, "NSD: discoverServices error", it) }
     }
 
+    private fun getLocalIpAddresses(): Set<String> {
+        val ips = mutableSetOf<String>()
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            if (interfaces != null) {
+                for (intf in interfaces) {
+                    val addrs = intf.inetAddresses
+                    for (addr in addrs) {
+                        if (!addr.isLoopbackAddress) {
+                            val hostAddr = addr.hostAddress
+                            if (hostAddr != null) {
+                                ips.add(hostAddr.substringBefore('%')) // Remove IPv6 scope if present
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            Log.e(TAG, "Failed to get local IPs", ex)
+        }
+        return ips
+    }
+
     /** Creates a one-shot resolve listener. NSD requires a unique instance per call. */
     private fun makeResolveListener(): NsdManager.ResolveListener {
         return object : NsdManager.ResolveListener {
@@ -2139,6 +2257,13 @@ class DeskdropService : Service() {
                 Log.i(TAG, "NSD: resolved peer at $ip:$port (service='${info.serviceName}')")
                 // Skip loopback addresses (self-discovery)
                 if (ip.startsWith("127.") || ip == "::1") return
+                
+                // Bulletproof self-connection filter: check if IP is one of our own interfaces
+                if (getLocalIpAddresses().contains(ip)) {
+                    Log.i(TAG, "NSD: skipping self by local IP $ip")
+                    return
+                }
+                
                 // Skip IPv6 link-local — they require a scope ID the engine can't supply.
                 if (ip.startsWith("fe80:") || ip.startsWith("FE80:")) {
                     Log.d(TAG, "NSD: skipping link-local address $ip")
@@ -2240,12 +2365,19 @@ class DeskdropService : Service() {
 
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                Log.i(TAG, "Network: default network available — restarting discovery")
+                Log.i(TAG, "Network: default network available — restarting discovery + reconnecting peers")
                 handler.post {
                     // Brief delay lets the IP stack settle before mDNS re-registers.
                     handler.postDelayed({
                         restartDiscoveryNow()
-                    }, 1_200L)
+                        // Immediately tell the Rust engine to reconnect all known peers.
+                        val h = engineHandle
+                        if (h != 0L) {
+                            Thread {
+                                DeskdropJni.notifyNetworkRestored(h)
+                            }.start()
+                        }
+                    }, 1_500L)
                 }
             }
 
@@ -2391,7 +2523,7 @@ class DeskdropService : Service() {
         nm.createNotificationChannel(NotificationChannel(
             CHAN_ALERTS,
             "Deskdrop Alerts",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Trust requests, received files, connection failures"
             setShowBadge(true)
@@ -2439,34 +2571,21 @@ class DeskdropService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Disconnect action
-        val disconnectPi = PendingIntent.getService(
-            this, 11,
-            Intent(this, DeskdropService::class.java).apply { action = ACTION_DISCONNECT_ALL },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
         return NotificationCompat.Builder(this, CHAN_SERVICE)
-            .setContentTitle("Deskdrop")
-            .setContentText(foregroundStatusText())
-            .setSubText(if (syncEnabled) null else "Sync paused")
+            .setContentTitle(if (syncEnabled) "Deskdrop is Active" else "Deskdrop is Paused")
+            .setContentText(if (connectedPeerIds.isNotEmpty()) "Secure connection established" else "Scanning for devices on LAN")
             .setSmallIcon(android.R.drawable.ic_menu_share)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // hide on lock screen
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(launchPi)
             .addAction(
-                android.R.drawable.ic_media_pause,
+                if (syncEnabled) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
                 syncActionLabel,
                 syncActionPi
-            )
-            .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                "Disconnect",
-                disconnectPi
             )
             .build()
     }

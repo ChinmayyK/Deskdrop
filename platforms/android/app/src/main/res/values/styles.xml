@@ -16,14 +16,14 @@
         <item name="android:forceDarkAllowed">false</item>
     </style>
 
-    <style name="Theme.Deskdrop.ShareTarget" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Deskdrop.ShareTarget" parent="android:Theme.Translucent.NoTitleBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowContentOverlay">@null</item>
-        <item name="android:backgroundDimEnabled">true</item>
-        <item name="colorPrimary">@color/cr_accent</item>
-        <item name="colorSurface">@color/cr_bg_card</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowIsFloating">false</item>
     </style>
 
     <style name="Theme.Deskdrop.Dialog" parent="Theme.Material3.DayNight.BottomSheetDialog">

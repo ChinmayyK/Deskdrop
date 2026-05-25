@@ -26,13 +26,16 @@ struct PeerViewModel: Identifiable, Equatable {
     let syncEnabled: Bool
     let autoConnect: Bool
     let lastError: String?
+    let pairingRequested: Bool
 
     // ── Timing ────────────────────────────────────────────────────────────────
     let lastSeen: Date?
     let lastSync: Date?
+    let ip: String?
 
     /// Short status description shown under the device name.
     var statusLine: String {
+        if pairingRequested { return "Wants to pair" }
         if connectionStatus == "connecting" { return "Reconnecting" }
         if connectionStatus == "failed" {
             if trusted { return "Needs attention" }
@@ -171,7 +174,7 @@ enum FileTransferStatus {
 
 struct ClipboardPolicy {
     var timelineFirstMode: Bool = true   // default: timeline-first
-    var autoApply: Bool = false          // default: manual apply
+    var autoApply: Bool = true           // default: auto-apply incoming clipboard
     var autoApplyDebounceMs: Int = 500
 }
 

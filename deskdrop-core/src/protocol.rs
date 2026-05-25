@@ -248,6 +248,16 @@ pub enum AppMessage {
     ClipboardAck {
         seq: u64,
     },
+    /// A request to trust this device for future auto-connections.
+    PairingRequest {
+        origin_device: Uuid,
+        origin_device_name: String,
+    },
+    /// Response to a pairing request (accepted or declined).
+    PairingResponse {
+        origin_device: Uuid,
+        accepted: bool,
+    },
     /// Announce a file transfer before sending chunks (dedicated pipeline).
     FileTransferAnnounce {
         meta: FileTransferMetadata,

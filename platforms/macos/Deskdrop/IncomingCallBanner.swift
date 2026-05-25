@@ -186,11 +186,14 @@ private struct CallBannerContainerView: View {
                     onDecline: { store.declineCall() },
                     onRouteAudio: { route in store.routeAudio(to: route) }
                 )
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.8)),
+                    removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.95))
+                ))
             }
         }
         .frame(width: 350, height: 80, alignment: .center)
-        .animation(.crSpring, value: store.activeCall)
+        .animation(.spring(response: 0.5, dampingFraction: 0.65, blendDuration: 0.1), value: store.activeCall)
     }
 }
 
@@ -233,6 +236,8 @@ private struct CallBannerView: View {
         HStack(spacing: 14) {
             // ── Caller avatar ───────────────────────────────────────────────
             ZStack {
+                // Remove the bleeding radial glow and just use a clean background for the pulse effect
+
                 if call.isRinging {
                     Circle()
                         .fill(acceptGreen.opacity(0.2))
@@ -240,6 +245,17 @@ private struct CallBannerView: View {
                         .scaleEffect(ringPulse ? 1.25 : 1.0)
                         .opacity(ringPulse ? 0.0 : 0.8)
                 }
+
+                // Embedded well effect
+                Circle()
+                    .fill(Color.black.opacity(0.1))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                            .blendMode(.overlay)
+                    )
+                    .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
 
                 Circle()
                     .fill(LinearGradient(colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -287,11 +303,16 @@ private struct CallBannerView: View {
                     Button(action: onDecline) {
                         ZStack {
                             Circle().fill(declineRed)
+                            Circle().strokeBorder(
+                                LinearGradient(colors: [Color.white.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom),
+                                lineWidth: 1
+                            )
                             Image(systemName: "phone.down.fill")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(.white)
                         }
                         .frame(width: 38, height: 38)
+                        .shadow(color: Color.black.opacity(0.15), radius: 2, y: 1)
                         .contentShape(Circle())
                     }
                     .buttonStyle(CallButtonStyle())
@@ -299,11 +320,16 @@ private struct CallBannerView: View {
                     Button(action: onAccept) {
                         ZStack {
                             Circle().fill(acceptGreen)
+                            Circle().strokeBorder(
+                                LinearGradient(colors: [Color.white.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom),
+                                lineWidth: 1
+                            )
                             Image(systemName: "phone.fill")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(.white)
                         }
                         .frame(width: 38, height: 38)
+                        .shadow(color: Color.black.opacity(0.15), radius: 2, y: 1)
                         .contentShape(Circle())
                     }
                     .buttonStyle(CallButtonStyle())
@@ -333,11 +359,16 @@ private struct CallBannerView: View {
                     Button(action: onDecline) {
                         ZStack {
                             Circle().fill(declineRed)
+                            Circle().strokeBorder(
+                                LinearGradient(colors: [Color.white.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom),
+                                lineWidth: 1
+                            )
                             Image(systemName: "phone.down.fill")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(.white)
                         }
                         .frame(width: 38, height: 38)
+                        .shadow(color: Color.black.opacity(0.15), radius: 2, y: 1)
                         .contentShape(Circle())
                     }
                     .buttonStyle(CallButtonStyle())
@@ -348,13 +379,16 @@ private struct CallBannerView: View {
         .padding(.vertical, 12)
         .frame(width: 350, height: 80)
         .background(
-            CRHUDMaterial()
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
-                )
-                .shadow(color: .black.opacity(0.15), radius: 24, y: 12)
+            ZStack {
+                CRHUDMaterial()
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                
+                // Clean macOS Glass Border (thin, light-catching stroke)
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
+            }
+            // Standard macOS drop shadow (tight radius to prevent NSWindow clipping/bleeding)
+            .shadow(color: Color.black.opacity(0.2), radius: 12, x: 0, y: 6)
         )
     }
 }

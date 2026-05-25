@@ -258,6 +258,8 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CameraStreamAccept { .. } => PB_EVENT_CAMERA_STREAM_ACCEPT,
         EngineEvent::CameraStreamStop { .. } => PB_EVENT_CAMERA_STREAM_STOP,
         EngineEvent::CameraFrameReceived { .. } => PB_EVENT_CAMERA_FRAME,
+        EngineEvent::PairingRequest { .. } => PB_EVENT_WARNING,
+        EngineEvent::PairingResponse { .. } => PB_EVENT_WARNING,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
     }
 }
