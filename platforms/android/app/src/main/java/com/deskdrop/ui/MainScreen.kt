@@ -201,9 +201,6 @@ fun MainScreen(
 
 @Composable
 fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus: String) {
-    val alpha = 1f
-    val scale = 1.0f
-    
     val connectedPeersCount = peers.count { it.isConnected }
     val isSearching = ambientStatus.contains("Looking", ignoreCase = true)
     
@@ -215,6 +212,26 @@ fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus
         ambientStatus
     }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "status_pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 2.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse_scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse_alpha"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -223,25 +240,21 @@ fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus
         horizontalArrangement = Arrangement.Center
     ) {
         Box(contentAlignment = Alignment.Center) {
+            val color = if (connectedPeersCount > 0) CRTheme.statusGreen else if (isSearching) CRTheme.indigoSoft else CRTheme.statusAmber
+            
+            if (connectedPeersCount > 0 || isSearching) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .scale(pulseScale)
+                        .background(color.copy(alpha = pulseAlpha), CircleShape)
+                )
+            }
+            
             Box(
                 modifier = Modifier
-                    .size(10.dp)
-                    .scale(if (isSearching && connectedPeersCount == 0) scale else 1f)
-                    .blur(4.dp)
-                    .background(
-                        if (connectedPeersCount > 0) CRTheme.statusGreen.copy(alpha = alpha * 0.6f)
-                        else (if (isSearching) CRTheme.indigoSoft else CRTheme.statusAmber).copy(alpha = alpha * 0.4f),
-                        CircleShape
-                    )
-            )
-            Box(
-                modifier = Modifier
-                    .size(5.dp)
-                    .background(
-                        if (connectedPeersCount > 0) CRTheme.statusGreen
-                        else (if (isSearching) CRTheme.indigoSoft else CRTheme.statusAmber),
-                        CircleShape
-                    )
+                    .size(6.dp)
+                    .background(color, CircleShape)
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
@@ -1389,7 +1402,7 @@ fun BottomDock(
                 modifier = Modifier
                     .offset(x = indicatorOffset)
                     .width(tabWidth)
-                    .matchParentSize()
+                    .height(42.dp)
                     .padding(horizontal = 4.dp)
                     .background(CRTheme.indigoSoft.copy(alpha = 0.15f), CircleShape)
             )
