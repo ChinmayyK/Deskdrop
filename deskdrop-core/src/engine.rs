@@ -2221,6 +2221,16 @@ async fn reconnect_known_peers(shared: EngineShared) {
             if !should_initiate_session(&shared, peer.id, peer.discovery) {
                 continue;
             }
+            
+            // CRITICAL FIX: Do not spawn a new connection loop if the peer is already
+            // connected or currently connecting. Spawning unconditionally causes massive
+            // connection storms (handshakes + diffie-hellman) which overheats mobile devices.
+            let is_offline = peer.status == crate::peer_manager::PeerConnectionState::Disconnected
+                || peer.status == crate::peer_manager::PeerConnectionState::Failed;
+            if !is_offline {
+                continue;
+            }
+
             scheduled.insert(endpoint);
             let shared_clone = shared.clone();
             tokio::spawn(async move {
@@ -3431,24 +3441,10 @@ fn register_session(
                     .map(|peer| peer.trusted || peer.discovery == DiscoverySource::Manual)
                     .unwrap_or(false)
                 {
-                    if !should_initiate_session(&shared, peer_id, discovery) {
-                        return;
-                    }
-                    if let Some(reconnect_endpoint) = shared.peer_manager.endpoint_for(peer_id) {
-                        let shared_clone = shared.clone();
-                        tokio::spawn(async move {
-                            if let Err(err) = connect_loop(
-                                shared_clone,
-                                reconnect_endpoint,
-                                Some(peer_id),
-                                discovery,
-                            )
-                            .await
-                            {
-                                warn!(peer_id = %peer_id, error = %err, "reconnect failed");
-                            }
-                        });
-                    }
+                    // Relies on `spawn_auto_reconnector` watchdog to pick up the reconnect
+                    // safely, rather than aggressively spinning a new connect_loop which
+                    // can cause 0-delay infinite reconnect loops if the socket immediately closes.
+                    tracing::debug!("peer disconnected, awaiting auto-reconnector watchdog");
                 }
             }
             Ok(false) => {}

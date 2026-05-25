@@ -169,17 +169,8 @@ fun MainScreen(
 
 @Composable
 fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus: String) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Reverse),
-        label = "pulseAlpha"
-    )
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.8f, targetValue = 1.2f,
-        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Reverse),
-        label = "scalePulse"
-    )
+    val alpha = 1f
+    val scale = 1.0f
     
     val connectedPeersCount = peers.count { it.isConnected }
     val isSearching = ambientStatus.contains("Looking", ignoreCase = true)
@@ -570,25 +561,7 @@ fun QuickActionCardPrimary(
     val haptic = LocalHapticFeedback.current
     val displayColor = if (enabled) color else CRTheme.textMedium(isDark)
     
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulseScale"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulseAlpha"
-    )
+    // Removed pulse animation based on user feedback
     
     Row(
         modifier = Modifier
@@ -608,14 +581,7 @@ fun QuickActionCardPrimary(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(contentAlignment = Alignment.Center) {
-            if (enabled) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .scale(pulseScale)
-                        .background(displayColor.copy(alpha = pulseAlpha), CircleShape)
-                )
-            }
+            // Removed pulsing background box
             Box(
                 modifier = Modifier
                     .size(44.dp)
