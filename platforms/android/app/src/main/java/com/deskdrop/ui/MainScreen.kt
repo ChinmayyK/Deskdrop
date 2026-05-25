@@ -9,6 +9,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -1382,36 +1387,60 @@ fun BottomDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 64.dp)
+            .padding(horizontal = 48.dp, vertical = 16.dp)
     ) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .crGlassCard(isDark = isDark, cornerRadius = 36.dp, elevated = true)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .crGlassCard(isDark = isDark, cornerRadius = 100.dp, elevated = true)
+                .padding(6.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             val tabWidth = maxWidth / tabs.size
-            val indicatorOffset by androidx.compose.animation.core.animateDpAsState(
-                targetValue = tabWidth * selectedIndex,
-                animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 300f),
-                label = "indicator"
-            )
+            
+            val transition = updateTransition(targetState = selectedIndex, label = "tabTransition")
+            
+            val indicatorLeft by transition.animateDp(
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        spring(dampingRatio = 0.7f, stiffness = 150f)
+                    } else {
+                        spring(dampingRatio = 0.7f, stiffness = 600f)
+                    }
+                },
+                label = "indicatorLeft"
+            ) { state: Int -> tabWidth * state.toFloat() }
+            
+            val indicatorRight by transition.animateDp(
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        spring(dampingRatio = 0.7f, stiffness = 600f)
+                    } else {
+                        spring(dampingRatio = 0.7f, stiffness = 150f)
+                    }
+                },
+                label = "indicatorRight"
+            ) { state: Int -> tabWidth * (state + 1).toFloat() }
             
             Box(
                 modifier = Modifier
-                    .offset(x = indicatorOffset)
-                    .width(tabWidth)
-                    .height(42.dp)
-                    .padding(horizontal = 4.dp)
-                    .background(CRTheme.indigoSoft.copy(alpha = 0.15f), CircleShape)
+                    .offset(x = indicatorLeft)
+                    .width(indicatorRight - indicatorLeft)
+                    .height(48.dp)
+                    .padding(horizontal = 2.dp)
+                    .background(CRTheme.indigoSoft.copy(alpha = 0.2f), CircleShape)
             )
             
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 tabs.forEach { tab ->
                     Box(
                         modifier = Modifier
                             .width(tabWidth)
+                            .height(48.dp)
                             .clip(CircleShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
@@ -1420,12 +1449,17 @@ fun BottomDock(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onTabSelected(tab)
                                 }
-                            )
-                            .padding(vertical = 10.dp),
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         val isSelected = currentTab == tab
                         val iconColor = if (isSelected) CRTheme.indigoSoft else CRTheme.textHigh(isDark).copy(alpha = 0.4f)
+                        
+                        val scale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.2f else 1f,
+                            animationSpec = spring(dampingRatio = 0.5f, stiffness = 300f)
+                        )
+                        
                         Icon(
                             imageVector = when (tab) {
                                 AppTab.Home -> Icons.Default.Home
@@ -1435,7 +1469,7 @@ fun BottomDock(
                             },
                             contentDescription = tab.name,
                             tint = iconColor,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(24.dp).scale(scale)
                         )
                     }
                 }
