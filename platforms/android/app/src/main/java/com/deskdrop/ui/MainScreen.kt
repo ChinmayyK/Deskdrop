@@ -159,6 +159,22 @@ fun MainScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                CRTheme.bg(isDark).copy(alpha = 0.8f),
+                                CRTheme.bg(isDark)
+                            )
+                        )
+                    )
+            )
+            
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp)
             ) {
                 BottomDock(
@@ -311,7 +327,11 @@ fun HomeTab(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(peers) { peer ->
-                    DeviceCard(isDark = isDark, peer = peer)
+                    DeviceCard(
+                        isDark = isDark, 
+                        peer = peer,
+                        modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.9f) else Modifier.width(150.dp)
+                    )
                 }
             }
         }
@@ -657,6 +677,22 @@ fun ActivityTimelineSection(
     onResend: (ActivityEntry) -> Unit,
     onViewAll: () -> Unit
 ) {
+    val filteredFeed = remember(feed) {
+        val result = mutableListOf<ActivityEntry>()
+        val seenDeviceEvents = mutableSetOf<String>()
+        for (entry in feed) {
+            if (entry.kind == ActivityKind.PEER_CONNECTED || entry.kind == ActivityKind.PEER_DISCONNECTED) {
+                if (!seenDeviceEvents.contains(entry.deviceName)) {
+                    result.add(entry)
+                    seenDeviceEvents.add(entry.deviceName)
+                }
+            } else {
+                result.add(entry)
+            }
+        }
+        result
+    }
+
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -665,10 +701,10 @@ fun ActivityTimelineSection(
         ) {
             Text(
                 text = "Activity",
-                style = CRTypography.h2,
+                style = CRTypography.label, // Medium/Semibold
                 color = CRTheme.textHigh(isDark)
             )
-            if (feed.size > 4) {
+            if (filteredFeed.size > 4) {
                 Row(
                     modifier = Modifier
                         .crPressScale(0.95f)
@@ -683,7 +719,7 @@ fun ActivityTimelineSection(
         }
         Spacer(modifier = Modifier.height(16.dp))
         
-        if (feed.isEmpty()) {
+        if (filteredFeed.isEmpty()) {
             Text(
                 "Your clipboard, files, and links will appear here.",
                 style = CRTypography.caption,
@@ -691,7 +727,7 @@ fun ActivityTimelineSection(
             )
         } else {
             Column {
-                feed.take(4).forEachIndexed { index, entry ->
+                filteredFeed.take(4).forEach { entry ->
                     androidx.compose.animation.AnimatedVisibility(
                         visible = true,
                         enter = androidx.compose.animation.slideInVertically() + androidx.compose.animation.fadeIn()
@@ -699,7 +735,6 @@ fun ActivityTimelineSection(
                         TimelineActivityRow(
                             isDark = isDark,
                             entry = entry,
-                            isLast = index == minOf(3, feed.size - 1),
                             onApply = onApply,
                             onDelete = onDelete,
                             onResend = onResend
@@ -715,7 +750,6 @@ fun ActivityTimelineSection(
 fun TimelineActivityRow(
     isDark: Boolean,
     entry: ActivityEntry,
-    isLast: Boolean,
     onApply: (ActivityEntry) -> Unit,
     onDelete: (ActivityEntry) -> Unit,
     onResend: (ActivityEntry) -> Unit
@@ -723,12 +757,15 @@ fun TimelineActivityRow(
     val haptic = LocalHapticFeedback.current
     var showMenu by remember { mutableStateOf(false) }
     
+    val isLink = entry.preview.startsWith("http")
+    
     val title = when (entry.kind) {
         ActivityKind.FILE_SENT -> "Sent to ${entry.deviceName}"
         ActivityKind.FILE_RECEIVED, ActivityKind.FILE_TRANSFER_COMPLETE -> "Received from ${entry.deviceName}"
-        ActivityKind.CLIPBOARD_TEXT, ActivityKind.CLIPBOARD_IMAGE -> "Clipboard synced to ${entry.deviceName}"
-        ActivityKind.PEER_CONNECTED -> "Device connected: ${entry.deviceName}"
-        ActivityKind.PEER_DISCONNECTED -> "Device disconnected: ${entry.deviceName}"
+        ActivityKind.CLIPBOARD_TEXT -> if (isLink) "Link opened" else "Clipboard synced"
+        ActivityKind.CLIPBOARD_IMAGE -> "Clipboard image synced"
+        ActivityKind.PEER_CONNECTED -> "${entry.deviceName} became available"
+        ActivityKind.PEER_DISCONNECTED -> "${entry.deviceName} went offline"
         else -> entry.preview.take(20)
     }
     
@@ -736,6 +773,15 @@ fun TimelineActivityRow(
         entry.preview
     } else {
         "Just now"
+    }
+    
+    val icon = when(entry.kind) {
+        ActivityKind.PEER_CONNECTED -> Icons.Default.Wifi
+        ActivityKind.PEER_DISCONNECTED -> Icons.Default.Close
+        ActivityKind.FILE_RECEIVED, ActivityKind.FILE_SENT, ActivityKind.FILE_TRANSFER_COMPLETE -> Icons.Default.Description
+        ActivityKind.CLIPBOARD_TEXT -> if (isLink) Icons.Default.Link else Icons.Default.ContentCopy
+        ActivityKind.CLIPBOARD_IMAGE -> Icons.Default.Image
+        else -> Icons.Default.Sync
     }
     
     val dotColor = when(entry.kind) {
@@ -758,33 +804,25 @@ fun TimelineActivityRow(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Timeline graphics column
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(20.dp)
+            // Icon Bullet
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(24.dp)
             ) {
-                Spacer(modifier = Modifier.height(6.dp))
-                // Dot
-                Box(modifier = Modifier.size(8.dp).background(dotColor, CircleShape))
-                
-                // Line
-                if (!isLast) {
-                    Box(modifier = Modifier
-                        .width(1.dp)
-                        .height(36.dp)
-                        .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f))
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(36.dp))
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = dotColor,
+                    modifier = Modifier.size(14.dp)
+                )
             }
             
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             
             // Content
-            Column(modifier = Modifier.weight(1f).padding(bottom = 12.dp)) {
+            Column(modifier = Modifier.weight(1f).padding(vertical = 4.dp)) {
                 Text(text = title, style = CRTypography.label, color = CRTheme.textHigh(isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(text = subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -819,13 +857,12 @@ fun TimelineActivityRow(
 }
 
 @Composable
-fun DeviceCard(isDark: Boolean, peer: PeerSnapshot) {
+fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifier.width(150.dp)) {
     val haptic = LocalHapticFeedback.current
     val isPhone = peer.name.contains("phone", ignoreCase = true) || peer.name.contains("pixel", ignoreCase = true)
     
     Column(
-        modifier = Modifier
-            .width(150.dp)
+        modifier = modifier
             .height(100.dp)
             .crPressScale(targetScale = 0.95f)
             .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
@@ -1296,7 +1333,7 @@ fun BottomDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 48.dp) // Slightly wider to accommodate pill
+            .padding(horizontal = 64.dp) // Thinner navbar
     ) {
         Row(
             modifier = Modifier
@@ -1321,7 +1358,7 @@ fun BottomDock(
                             }
                         )
                         .background(if (isSelected) CRTheme.indigoSoft.copy(alpha = 0.15f) else Color.Transparent)
-                        .padding(horizontal = if (isSelected) 20.dp else 16.dp, vertical = 10.dp),
+                        .padding(horizontal = if (isSelected) 16.dp else 12.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     val iconColor = if (isSelected) CRTheme.indigoSoft else CRTheme.textHigh(isDark).copy(alpha = 0.4f)

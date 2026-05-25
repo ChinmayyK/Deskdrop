@@ -67,13 +67,13 @@ object CRTheme {
     fun glass(isDark: Boolean) = if (isDark) Color.White.copy(alpha = 0.03f) else Color.White.copy(alpha = 0.6f)
 
     // Legacy Aliases
-    val brandElectric = Color.Blue
-    val brandViolet = Color.Blue
-    val brandCyan = Color.Blue
-    val brandPink = Color.Red
-    val accentGreen = Color.Green
-    val accentAmber = Color.Red
-    val accentRed = Color.Red
+    val brandElectric = indigoSoft
+    val brandViolet = indigoSoft
+    val brandCyan = cyanSoft
+    val brandPink = statusRed
+    val accentGreen = statusGreen
+    val accentAmber = statusAmber
+    val accentRed = statusRed
     fun textLow(isDark: Boolean) = textMedium(isDark).copy(alpha = 0.5f)
     
     // Ambient Ecosystem Glow Colors
