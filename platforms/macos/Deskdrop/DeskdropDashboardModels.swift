@@ -25,7 +25,7 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         switch self {
         case .devices:       return "list.bullet.rectangle"
         case .clipboard:     return "doc.on.clipboard"
-        case .transfers:     return "arrow.up.arrow.down"
+        case .transfers:     return "folder"
         case .remoteControl: return "display"
         case .settings:      return "gearshape"
         }

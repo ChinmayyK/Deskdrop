@@ -5,7 +5,7 @@ struct TransfersDashboardView: View {
     @Environment(\.colorScheme) var colorScheme
     
     var historyItems: [IpcActivityEntry] {
-        store.activityFeed.filter { $0.kind == "file" }
+        store.activityFeed.filter { $0.kind == "file_transfer_complete" || $0.kind == "file_transfer_started" }
     }
     
     var body: some View {
