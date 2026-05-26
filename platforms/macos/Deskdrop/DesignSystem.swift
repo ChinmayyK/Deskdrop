@@ -473,14 +473,28 @@ struct CRAppIconMark: View {
     var size: CGFloat = 34
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.30, style: .continuous)
-                .fill(CRTheme.brandGradient)
-                .frame(width: size, height: size)
-                .shadow(color: CRTheme.brandElectric.opacity(0.42), radius: size * 0.35, y: size * 0.12)
-            Image(systemName: "arrow.left.arrow.right.circle.fill")
-                .font(.system(size: size * 0.44, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.96))
-                .symbolRenderingMode(.hierarchical)
+            if let image = NSImage(named: NSImage.Name("AppIconSource")) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size, height: size)
+            } else if let imagePath = Bundle.main.path(forResource: "AppIconSource", ofType: "png"),
+                      let image = NSImage(contentsOfFile: imagePath) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size, height: size)
+            } else {
+                // Fallback
+                RoundedRectangle(cornerRadius: size * 0.30, style: .continuous)
+                    .fill(CRTheme.brandGradient)
+                    .frame(width: size, height: size)
+                    .shadow(color: CRTheme.brandElectric.opacity(0.42), radius: size * 0.35, y: size * 0.12)
+                Image(systemName: "arrow.left.arrow.right.circle.fill")
+                    .font(.system(size: size * 0.44, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.96))
+                    .symbolRenderingMode(.hierarchical)
+            }
         }
     }
 }

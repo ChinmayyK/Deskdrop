@@ -19,7 +19,7 @@ struct DashboardRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             CRSidebarView(store: store)
-                .frame(width: 80)
+                .frame(width: 180)
                 .background(.ultraThinMaterial)
                 .background(CRTheme.surface.opacity(0.4))
                 .overlay(alignment: .trailing) {
@@ -62,74 +62,50 @@ struct DashboardRootView: View {
 
 private struct CRSidebarView: View {
     @ObservedObject var store: DeskdropStore
-    @State private var hoveredItem: DashboardSection?
     @Environment(\.colorScheme) var scheme
 
     var body: some View {
-        VStack(alignment: .center, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             // Push content down to clear traffic lights
             Spacer().frame(height: 38)
             
-            // App Icon
-            CRAppIconMark(size: 36)
-                .padding(.bottom, 24)
+            // App Icon & Brand
+            HStack(spacing: 10) {
+                CRAppIconMark(size: 28)
+                Text("Deskdrop")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(CRTheme.ink)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
 
             // Navigation Items
-            VStack(spacing: 12) {
+            VStack(spacing: 2) {
                 ForEach([DashboardSection.devices, .clipboard, .transfers, .remoteControl], id: \.self) { section in
                     sidebarItem(for: section)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
 
             Spacer()
 
             // Bottom Settings
-            VStack(spacing: 12) {
+            VStack(spacing: 2) {
                 sidebarItem(for: .settings)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
             .padding(.bottom, 20)
         }
     }
 
     @ViewBuilder
     private func sidebarItem(for section: DashboardSection) -> some View {
-        let isSelected = store.selectedSection == section
-        let hovered = hoveredItem == section
-
-        Button(action: { store.selectedSection = section }) {
-            VStack(spacing: 4) {
-                ZStack {
-                    if isSelected {
-                        Capsule()
-                            .fill(CRTheme.brandElectric.opacity(0.15))
-                            .frame(width: 56, height: 32)
-                    } else if hovered {
-                        Capsule()
-                            .fill(CRTheme.ink.opacity(0.08))
-                            .frame(width: 56, height: 32)
-                    }
-                    
-                    Image(systemName: isSelected ? section.icon + ".fill" : section.icon)
-                        .font(.system(size: 20))
-                        .foregroundStyle(isSelected ? CRTheme.brandElectric : CRTheme.inkSoft.opacity(0.4))
-                }
-                .frame(width: 56, height: 32)
-                
-                Text(section.title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(isSelected ? CRTheme.ink : CRTheme.inkSoft.opacity(0.4))
-            }
-            .frame(width: 64, height: 56)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering in
-            withAnimation(.crFast) {
-                if isHovering { hoveredItem = section }
-                else if hoveredItem == section { hoveredItem = nil }
-            }
+        SidebarNavButton(
+            icon: section.icon,
+            label: section.title,
+            isSelected: store.selectedSection == section
+        ) {
+            store.selectedSection = section
         }
     }
 }
