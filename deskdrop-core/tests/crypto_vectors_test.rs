@@ -201,15 +201,15 @@ fn nonce_counter_reject_replay() {
     let _a_pub = alice.public_bytes;
     let b_pub = bob.public_bytes;
 
-    let _send = alice.derive_session_key(b_pub).unwrap();
+    let (_send, _) = alice.derive_session_key(b_pub).unwrap();
 
     // Bob needs his own key derivation.
     let alice2 = EphemeralKeypair::generate();
     let bob2 = EphemeralKeypair::generate();
     let a2_pub = alice2.public_bytes;
     let b2_pub = bob2.public_bytes;
-    let mut recv = bob2.derive_session_key(a2_pub).unwrap();
-    let mut send2 = alice2.derive_session_key(b2_pub).unwrap();
+    let (mut recv, _) = bob2.derive_session_key(a2_pub).unwrap();
+    let (mut send2, _) = alice2.derive_session_key(b2_pub).unwrap();
 
     let ct = send2.encrypt(b"frame 0").unwrap();
     // First decrypt — OK.
@@ -233,8 +233,8 @@ fn encrypt_decrypt_various_sizes() {
     let a2_pub = alice2.public_bytes;
     let b2_pub = bob2.public_bytes;
 
-    let mut send = alice2.derive_session_key(b2_pub).unwrap();
-    let mut recv = bob2.derive_session_key(a2_pub).unwrap();
+    let (mut send, _) = alice2.derive_session_key(b2_pub).unwrap();
+    let (mut recv, _) = bob2.derive_session_key(a2_pub).unwrap();
 
     for size in [0usize, 1, 15, 16, 64, 1024, 65535, 131072] {
         let plaintext = vec![0xCC_u8; size];

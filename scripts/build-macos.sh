@@ -107,7 +107,16 @@ log "Code signing with identity: ${IDENTITY}"
 
 codesign \
     --force \
-    --deep \
+    --sign "${IDENTITY}" \
+    "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
+
+codesign \
+    --force \
+    --sign "${IDENTITY}" \
+    "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
+
+codesign \
+    --force \
     --sign "${IDENTITY}" \
     --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/Deskdrop.entitlements" \
     --options runtime \

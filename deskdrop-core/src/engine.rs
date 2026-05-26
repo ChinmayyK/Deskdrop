@@ -15,7 +15,7 @@ use crate::protocol::{
 };
 use crate::retry::Backoff;
 use crate::settings::{default_peer_store_path, default_trust_store_path, Settings};
-use crate::trust::{format_fingerprint, TrustRecord, TrustState, TrustStore};
+use crate::trust::{TrustRecord, TrustState, TrustStore};
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
 use sha2::{Digest, Sha256};

@@ -225,13 +225,12 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
 
         // New device wants to pair.
         // Headless: log prominently + notify; user responds via deskdrop-cli.
-        EngineEvent::TofuPrompt {
+        EngineEvent::PairingRequested {
             device_id,
             device_name,
-            fingerprint_display,
-            ..
+            pin,
         } => {
-            let fp = fingerprint_display
+            let fp = pin
                 .lines()
                 .map(|l| format!("   {l}"))
                 .collect::<Vec<_>>()

@@ -405,7 +405,7 @@ final class DeskdropStore: ObservableObject {
     
     func connectAndPair(deviceId: String) {
         Task {
-            try? await ipc.send(cmd: ["cmd": "send_pairing_request", "device_id": deviceId])
+            _ = try? await ipc.send(cmd: ["cmd": "send_pairing_request", "device_id": deviceId])
             await refresh()
         }
     }

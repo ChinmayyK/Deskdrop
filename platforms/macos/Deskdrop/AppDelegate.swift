@@ -709,7 +709,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             platform: nil, trusted: false, remembered: false, connected: false,
             connectionStatus: "disconnected",
             syncEnabled: true, autoConnect: false, lastError: nil,
-            pairingRequested: false,
+            pairingRequested: false, pairingPin: nil,
             lastSeen: detail.lastSeen, lastSync: nil, ip: nil
         ))
 

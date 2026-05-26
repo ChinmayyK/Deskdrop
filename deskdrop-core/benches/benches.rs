@@ -19,7 +19,7 @@ fn bench_handshake(c: &mut Criterion) {
             let alice = EphemeralKeypair::generate();
             let bob = EphemeralKeypair::generate();
             let bob_pub = bob.public_bytes;
-            let _alice_sess = alice.derive_session_key(black_box(bob_pub)).unwrap();
+            let (_alice_sess, _) = alice.derive_session_key(black_box(bob_pub)).unwrap();
         })
     });
 }
@@ -35,7 +35,7 @@ fn bench_encryption(c: &mut Criterion) {
             let alice = EphemeralKeypair::generate();
             let bob = EphemeralKeypair::generate();
             let bob_pub = bob.public_bytes;
-            let mut sess = alice.derive_session_key(bob_pub).unwrap();
+            let (mut sess, _) = alice.derive_session_key(bob_pub).unwrap();
             b.iter(|| sess.encrypt(black_box(payload)).unwrap())
         });
 
@@ -47,13 +47,13 @@ fn bench_encryption(c: &mut Criterion) {
                 let bob = EphemeralKeypair::generate();
                 let _a_pub = alice.public_bytes;
                 let b_pub = bob.public_bytes;
-                let _send = alice.derive_session_key(b_pub).unwrap();
+                let (_send, _) = alice.derive_session_key(b_pub).unwrap();
                 let alice2 = EphemeralKeypair::generate();
                 let bob2 = EphemeralKeypair::generate();
                 let a2_pub = alice2.public_bytes;
                 let b2_pub = bob2.public_bytes;
-                let mut recv = bob2.derive_session_key(a2_pub).unwrap();
-                let mut send2 = alice2.derive_session_key(b2_pub).unwrap();
+                let (mut recv, _) = bob2.derive_session_key(a2_pub).unwrap();
+                let (mut send2, _) = alice2.derive_session_key(b2_pub).unwrap();
 
                 b.iter(|| {
                     let ct = send2.encrypt(black_box(payload)).unwrap();
