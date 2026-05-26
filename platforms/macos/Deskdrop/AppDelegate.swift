@@ -10,8 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private let store = DeskdropStore()
     private var statusItem: NSStatusItem!
     private var menuBarDropView: MenuBarDropView?
-    private var menuPopover: NSPopover!
     private var previousConnectedCount = 0
+    private var menuPanel: NSPanel!
+    private var localEventMonitor: Any?
+    private var globalEventMonitor: Any?
     private var dashboardController:      NSWindowController?
     private var quickAccessController:    NSWindowController?
     private var commandPaletteController: NSWindowController?
@@ -206,17 +208,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             button.toolTip  = "Deskdrop — Drag files here to send to your device"
         }
 
-        let popover = NSPopover()
-        popover.contentSize = NSSize(width: 320, height: 350)
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: MenuBarPopoverView(store: store, onAction: { [weak self] action in
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 350),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .popUpMenu
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentViewController = NSHostingController(rootView: MenuBarPopoverView(store: store, onAction: { [weak self] action in
             self?.handlePopoverAction(action)
         }))
-        menuPopover = popover
+        menuPanel = panel
     }
 
     private func handlePopoverAction(_ action: MenuBarPopoverAction) {
-        menuPopover.performClose(nil)
+        closeMenuPanel()
         switch action {
         case .dashboard: openDashboard()
         case .quickAccess: openQuickAccess()
@@ -951,15 +961,41 @@ extension AppDelegate: MenuBarDropViewDelegate {
     }
 
     @objc private func menuBarClicked() {
-        guard let button = statusItem.button else { return }
-        if menuPopover.isShown {
-            menuPopover.performClose(nil)
+        guard let button = statusItem.button, let window = button.window else { return }
+        
+        if menuPanel.isVisible {
+            closeMenuPanel()
         } else {
-            // Offset slightly so it renders closer, but not so much that NSPopover detaches
-            let rect = button.bounds.offsetBy(dx: 0, dy: 6)
-            menuPopover.show(relativeTo: rect, of: button, preferredEdge: .minY)
+            let buttonRect = button.convert(button.bounds, to: nil)
+            let screenRect = window.convertToScreen(buttonRect)
+            
+            let panelWidth: CGFloat = 320
+            let panelHeight: CGFloat = 350
+            let x = screenRect.midX - (panelWidth / 2)
+            // Anchor it flush with the bottom of the menu bar
+            let y = screenRect.minY - panelHeight - 2
+            
+            menuPanel.setFrame(NSRect(x: x, y: y, width: panelWidth, height: panelHeight), display: true)
+            menuPanel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            
+            // Monitor clicks outside to close
+            localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                if event.window != self?.menuPanel {
+                    self?.closeMenuPanel()
+                }
+                return event
+            }
+            globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                self?.closeMenuPanel()
+            }
         }
+    }
+
+    private func closeMenuPanel() {
+        menuPanel.orderOut(nil)
+        if let local = localEventMonitor { NSEvent.removeMonitor(local); localEventMonitor = nil }
+        if let global = globalEventMonitor { NSEvent.removeMonitor(global); globalEventMonitor = nil }
     }
 
     func menuBarDropViewDidEnterDrag(_ view: MenuBarDropView) {

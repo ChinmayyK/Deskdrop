@@ -118,9 +118,12 @@ struct MenuBarPopoverView: View {
             .overlay(Rectangle().frame(height: 1).opacity(0.05), alignment: .top)
         }
         .frame(width: 320)
-        // Background handles its own visual effect when placed in a popover,
-        // but we can enforce a clean layout here.
-        .background(Color.clear)
+        .background(CRVisualEffect(material: .popover))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+        )
     }
 }
 
