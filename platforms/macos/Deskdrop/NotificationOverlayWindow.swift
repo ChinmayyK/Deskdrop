@@ -128,43 +128,54 @@ private struct ToastOverlayCard: View {
     @State private var hovered = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            // Left Icon Column
+        HStack(alignment: .top, spacing: 16) {
+            // Left Icon Column (Glowing Orb Style)
             ZStack {
-                // Clean glass well for icon
                 Circle()
-                    .fill(Color.black.opacity(0.1))
-                    .frame(width: 36, height: 36)
+                    .fill(toast.tint.opacity(0.15))
+                    .frame(width: 42, height: 42)
                     .overlay(
                         Circle()
-                            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-                            .blendMode(.overlay)
+                            .strokeBorder(toast.tint.opacity(0.4), lineWidth: 1)
+                            .blendMode(.screen)
                     )
-                    .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
+                    .shadow(color: toast.tint.opacity(0.4), radius: 8, x: 0, y: 4)
                     
                 Image(systemName: toast.systemImage)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundStyle(toast.tint)
-                    .shadow(color: toast.tint.opacity(0.5), radius: 4, x: 0, y: 2)
             }
-            .padding(.vertical, 8)
+            .padding(.top, 4)
 
             // Content Column
-            VStack(alignment: .leading, spacing: 3) {
-                Text(toast.title)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.primary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .top) {
+                    Text(toast.title)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                    Spacer()
+                    // Close Button
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.secondary.opacity(hovered ? 0.8 : 0.0))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                    .padding(.trailing, 2)
+                }
                 
                 Text(toast.body)
-                    .font(.system(size: 12, weight: .medium, design: .default))
-                    .foregroundStyle(Color.secondary.opacity(0.9))
-                    .lineSpacing(2)
+                    .font(.system(size: 13, weight: .medium, design: .default))
+                    .foregroundStyle(Color.secondary.opacity(0.95))
+                    .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
                 
                 if let detail = toast.detail, !detail.isEmpty {
                     Text(detail)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.secondary.opacity(0.6))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(toast.tint.opacity(0.8))
                         .padding(.top, 2)
                 }
 
@@ -172,14 +183,14 @@ private struct ToastOverlayCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         CRProgressBar(value: progress, tint: toast.tint, height: 4)
                         Text("\(Int(progress * 100))%")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundStyle(toast.tint)
                     }
-                    .padding(.top, 6)
+                    .padding(.top, 8)
                 }
 
                 if toast.primaryAction != nil || toast.secondaryAction != nil {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 12) {
                         if let secondary = toast.secondaryAction {
                             ToastOverlayButton(action: secondary)
                         }
@@ -188,89 +199,85 @@ private struct ToastOverlayCard: View {
                             ToastOverlayButton(action: primary)
                         }
                     }
-                    .padding(.top, 8)
+                    .padding(.top, 12)
                 }
             }
-            .padding(.vertical, 4)
-
-            Spacer(minLength: 8)
-
-            // Close Button
-            Button(action: onDismiss) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Color.secondary.opacity(hovered ? 0.8 : 0.4))
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 4)
-            .opacity(hovered ? 1 : 0.4)
-            .animation(.easeOut(duration: 0.15), value: hovered)
+            .padding(.vertical, 2)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(width: 320, alignment: .leading)
+        .padding(.leading, 16)
+        .padding(.trailing, 12)
+        .padding(.vertical, 14)
+        .frame(width: 340, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .strokeBorder(
                             LinearGradient(
-                                colors: [Color.white.opacity(0.4), Color.white.opacity(0.1), Color.white.opacity(0.0)],
+                                colors: [Color.white.opacity(0.5), Color.white.opacity(0.1), Color.white.opacity(0.0)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 0.5
+                            lineWidth: 1
                         )
                 )
-                .shadow(color: Color.black.opacity(0.2), radius: 15, x: 0, y: 8)
+                .overlay(
+                    // Subtle tint glow on the edge
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(toast.tint.opacity(hovered ? 0.3 : 0.1), lineWidth: 1)
+                        .blendMode(.screen)
+                )
+                .shadow(color: Color.black.opacity(0.15), radius: 24, x: 0, y: 12)
+                .shadow(color: toast.tint.opacity(0.05), radius: 10, x: 0, y: 0)
         }
         .scaleEffect(hovered ? 1.02 : 1.0)
         .onHover { hovered = $0 }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovered)
+        .animation(.spring(response: 0.35, dampingFraction: 0.65), value: hovered)
     }
 }
 
 private struct ToastOverlayButton: View {
     let action: ToastAction
     @Environment(\.colorScheme) var colorScheme
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action.handler) {
-            Text(action.title.uppercased())
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .tracking(0.5)
+            Text(action.title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(action.role == .secondary ? Color.primary.opacity(0.8) : .white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
                 .background {
                     Capsule()
                         .fill(
                             action.role == .secondary
-                            ? Color.primary.opacity(0.05)
+                            ? Color.primary.opacity(isHovered ? 0.1 : 0.05)
                             : (action.role == .destructive ? Color.red : Color.accentColor)
                         )
                         .overlay {
-                            // Inner highlight (Top light)
-                            Capsule()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [Color.white.opacity(0.4), .clear],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    ),
-                                    lineWidth: 1
-                                )
-                            
-                            // Secondary button subtle border
-                            if action.role == .secondary {
+                            if action.role != .secondary {
+                                Capsule()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [Color.white.opacity(0.4), .clear],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            } else {
                                 Capsule().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
                             }
                         }
-                        .shadow(color: Color.black.opacity(0.1), radius: 2, y: 1) // Button drop shadow
+                        .shadow(color: Color.black.opacity(action.role == .secondary ? 0 : 0.15), radius: 4, y: 2)
                 }
+                .scaleEffect(isHovered ? 1.03 : 1.0)
+                .animation(.easeOut(duration: 0.15), value: isHovered)
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
 
