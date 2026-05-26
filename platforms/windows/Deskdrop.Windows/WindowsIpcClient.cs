@@ -132,17 +132,6 @@ namespace Deskdrop.Windows
             return sb.Length > 0 ? sb.ToString() : null;
         }
 
-        public void Dispose() { }
-    }
-
-    /// <summary>
-    /// Polls the daemon on a background timer, surfacing connectivity and
-    /// peer-count changes as events.  Uses adaptive interval: fast (1 s) when
-    /// peers are connected for near-real-time UI; slow (5 s) when idle.
-    /// </summary>
-    internal sealed class DaemonPoller : IDisposable
-    {
-
         public static JsonDocument? PushText(string text) =>
             Send(new { cmd = "push_text", text });
 
@@ -158,65 +147,9 @@ namespace Deskdrop.Windows
             Send(new { cmd = "revoke_trusted_device", device_id = deviceId });
 
         public static JsonDocument? Shutdown() => Send(new { cmd = "shutdown" });
-
-        // ── Private helpers ───────────────────────────────────────────────────
-
-        private static NamedPipeClientStream? OpenPipe(int timeoutMs)
-        {
-            var pipe = new NamedPipeClientStream(
-                ".",            // server name (local)
-                PipeName,
-                PipeDirection.InOut,
-                PipeOptions.Asynchronous);
-
-            try
-            {
-                pipe.Connect(timeoutMs);
-                pipe.ReadMode = PipeTransmissionMode.Byte;
-                return pipe;
-            }
-            catch (TimeoutException)
-            {
-                pipe.Dispose();
-                return null;
-            }
-            catch (IOException)
-            {
-                pipe.Dispose();
-                return null;
-            }
-        }
-
-        private static string? ReadLineWithTimeout(NamedPipeClientStream pipe, int timeoutMs)
-        {
-            var buf = new byte[65536];
-            var sb  = new StringBuilder();
-            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-
-            while (DateTime.UtcNow < deadline)
-            {
-                if (!pipe.IsConnected) break;
-                int n = 0;
-                try { n = pipe.Read(buf, 0, buf.Length); }
-                catch { break; }
-                if (n == 0) break;
-
-                var chunk = Encoding.UTF8.GetString(buf, 0, n);
-                sb.Append(chunk);
-                if (sb.ToString().Contains('\n'))
-                    return sb.ToString().Split('\n')[0].Trim();
-            }
-            return null;
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-        }
+        
+        public void Dispose() { }
     }
-
-    // ── Status poller ─────────────────────────────────────────────────────────
 
     /// <summary>
     /// Polls the daemon every N seconds and fires events on state changes.

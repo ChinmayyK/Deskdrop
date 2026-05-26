@@ -93,9 +93,21 @@ namespace Deskdrop.Windows
         }
     }
 
+    // ── History Item ─────────────────────────────────────────────────────────
+
+    public class HistoryItem
+    {
+        public string TypeIcon { get; set; } = "📝";
+        public string Summary { get; set; } = "";
+        public string FullText { get; set; } = "";
+        public string Source { get; set; } = "";
+        public string RelativeTime { get; set; } = "Just now";
+        public DateTime Time { get; set; } = DateTime.Now;
+    }
+
     // ── Clipboard Manager ────────────────────────────────────────────────────
 
-    internal sealed class ClipboardManager : IDisposable
+    public sealed class ClipboardManager : IDisposable
     {
         private IntPtr _handle;
         private System.Threading.Timer? _pollTimer;
