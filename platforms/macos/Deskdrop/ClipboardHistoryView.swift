@@ -4,13 +4,13 @@
 import SwiftUI
 
 private enum QuickAccessSurface {
-    static let chromeTop = Color.white.opacity(0.1)
-    static let chromeBottom = Color.white.opacity(0.05)
-    static let stroke = Color.white.opacity(0.15)
-    static let divider = Color.white.opacity(0.1)
-    static let card = Color.white.opacity(0.15)
-    static let cardStrong = Color.white.opacity(0.2)
-    static let rowHover = Color.white.opacity(0.1)
+    static let chromeTop = CRTheme.surface.opacity(0.60)
+    static let chromeBottom = CRTheme.surface.opacity(0.75)
+    static let stroke = Color.primary.opacity(0.12)
+    static let divider = Color.primary.opacity(0.08)
+    static let card = Color.primary.opacity(0.04)
+    static let cardStrong = Color.primary.opacity(0.08)
+    static let rowHover = Color.primary.opacity(0.06)
     static let rowSelected = CRTheme.brandElectric.opacity(0.15)
 }
 
@@ -371,7 +371,7 @@ private struct QuickRow: View {
                                     .font(.system(size: 12, weight: .bold))
                                     .foregroundStyle(CRTheme.inkSubtle)
                                     .padding(8)
-                                    .background(Circle().fill(Color.white.opacity(0.1)))
+                                    .background(Circle().fill(QuickAccessSurface.card))
                             }
                             .buttonStyle(.plain)
                         }
@@ -451,7 +451,7 @@ private struct QAFooter: View {
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background {
             Rectangle()
-                .fill(Color.white.opacity(0.32))
+                .fill(CRTheme.surface.opacity(0.85))
                 .overlay(alignment: .top) {
                     Rectangle().fill(QuickAccessSurface.divider).frame(height: 0.5)
                 }

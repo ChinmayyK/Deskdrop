@@ -4,14 +4,14 @@
 import SwiftUI
 
 private enum PaletteSurface {
-    static let chromeTop = Color(hex: 0xFFFFFF, opacity: 0.97)
-    static let chromeBottom = Color(hex: 0xEEF3FF, opacity: 0.98)
-    static let stroke = CRTheme.stroke.opacity(0.78)
-    static let divider = CRTheme.stroke.opacity(0.72)
-    static let card = Color.white.opacity(0.74)
-    static let cardStrong = Color.white.opacity(0.90)
-    static let rowHover = CRTheme.ink.opacity(0.035)
-    static let rowSelected = CRTheme.brandElectric.opacity(0.10)
+    static let chromeTop = CRTheme.surface.opacity(0.70)
+    static let chromeBottom = CRTheme.surface.opacity(0.85)
+    static let stroke = Color.primary.opacity(0.12)
+    static let divider = Color.primary.opacity(0.08)
+    static let card = Color.primary.opacity(0.04)
+    static let cardStrong = Color.primary.opacity(0.07)
+    static let rowHover = Color.primary.opacity(0.05)
+    static let rowSelected = CRTheme.brandElectric.opacity(0.15)
 }
 
 // MARK: - Root
