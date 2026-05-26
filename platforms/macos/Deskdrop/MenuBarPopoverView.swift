@@ -157,6 +157,6 @@ private struct PopoverActionButton: View {
         }
         .buttonStyle(.plain)
         .scaleEffect(isHovered ? 1.02 : 1.0)
-        .onHover { withAnimation(.crFast) { isHovered = $0 } }
+        .onHover { isHovering in withAnimation(.crFast) { isHovered = isHovering } }
     }
 }
