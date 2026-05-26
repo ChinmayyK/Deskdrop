@@ -23,7 +23,7 @@ namespace Deskdrop.Windows
     {
         private const string PipeName    = "deskdrop";
         private const int    TimeoutMs   = 1000;
-        private bool _disposed;
+
 
         // ── Public API ────────────────────────────────────────────────────────
 

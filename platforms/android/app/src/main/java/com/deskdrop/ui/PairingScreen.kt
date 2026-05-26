@@ -125,14 +125,14 @@ fun PairingScreen(
             
             // Bottom Section: Actions & Fingerprint
             Column {
-                // Microscopic Fingerprint
+                // Prominent Fingerprint
                 val formattedFingerprint = if (fingerprint.isBlank()) "N/A" else fingerprint.replace(":", "").chunked(4).joinToString(" ")
                 Text(
                     text = "FINGERPRINT: $formattedFingerprint",
-                    fontSize = 9.sp,
+                    fontSize = 14.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = CRTheme.textLow(isDark),
-                    lineHeight = 14.sp
+                    color = CRTheme.textMedium(isDark),
+                    lineHeight = 20.sp
                 )
                 
                 Spacer(modifier = Modifier.height(48.dp))

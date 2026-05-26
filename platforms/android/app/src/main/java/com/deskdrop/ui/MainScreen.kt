@@ -393,9 +393,11 @@ fun HomeTab(
         
         Spacer(modifier = Modifier.height(12.dp)) // Related gap
         
+        val maxSyncSecs = peers.mapNotNull { it.lastSyncSecs }.maxOrNull()
         QuickActionsGrid(
             isDark = isDark,
             enabled = hasConnectedPeers,
+            lastSyncSecs = maxSyncSecs,
             onActionPushClipboard = onActionPushClipboard,
             onActionSendFiles = { onActionSendFiles(null) },
             onActionStreamCamera = onActionStreamCamera,
@@ -457,6 +459,7 @@ fun EmptyStateEcosystem(isDark: Boolean, onPair: () -> Unit) {
 fun QuickActionsGrid(
     isDark: Boolean,
     enabled: Boolean,
+    lastSyncSecs: Long?,
     onActionPushClipboard: () -> Unit,
     onActionSendFiles: () -> Unit,
     onActionStreamCamera: () -> Unit,
@@ -472,7 +475,12 @@ fun QuickActionsGrid(
             enabled = enabled,
             icon = Icons.Default.ContentCopy,
             title = "Clipboard Sync",
-            subtitle = "Send copied text & images",
+            subtitle = if (lastSyncSecs != null) {
+                val diff = (System.currentTimeMillis() / 1000) - lastSyncSecs
+                if (diff < 60) "Last synced just now"
+                else if (diff < 3600) "Last synced ${diff / 60}m ago"
+                else "Last synced ${diff / 3600}h ago"
+            } else "Send copied text & images",
             color = CRTheme.brandElectric,
             onClick = onActionPushClipboard
         )
@@ -586,8 +594,8 @@ fun ActiveTransferCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
-                    .crGlassCard(isDark = isDark, cornerRadius = 18.dp, onClick = {
+                    .size(48.dp)
+                    .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         if (transfer.isPaused) onResume() else onPause()
                     }),
@@ -603,8 +611,8 @@ fun ActiveTransferCard(
             Spacer(modifier = Modifier.width(12.dp))
             Box(
                 modifier = Modifier
-                    .size(36.dp)
-                    .crGlassCard(isDark = isDark, cornerRadius = 18.dp, onClick = {
+                    .size(48.dp)
+                    .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onCancel()
                     }),
@@ -650,6 +658,7 @@ fun QuickActionCardPrimary(
                     }
                 } else null
             )
+            .semantics(mergeDescendants = true) {}
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -666,7 +675,7 @@ fun QuickActionCardPrimary(
         Spacer(modifier = Modifier.width(16.dp))
         Column {
             Text(text = title, style = CRTypography.label, color = if (enabled) CRTheme.textHigh(isDark) else CRTheme.textMedium(isDark))
-            Text(text = if (enabled) "Last synced just now" else subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark))
+            Text(text = subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark))
         }
     }
 }
@@ -1344,18 +1353,6 @@ fun PeerListCard(
                     onPair()
                 }) {
                     Icon(Icons.Default.Link, contentDescription = "Pair", tint = CRTheme.brandElectric)
-                }
-                IconButton(onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onTrust()
-                }) {
-                    Icon(Icons.Default.Check, contentDescription = "Trust", tint = CRTheme.accentGreen)
-                }
-                IconButton(onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onReject()
-                }) {
-                    Icon(Icons.Default.Close, contentDescription = "Reject", tint = CRTheme.accentRed)
                 }
             }
         }

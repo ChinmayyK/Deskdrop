@@ -131,9 +131,9 @@ class MainActivity : ComponentActivity() {
                                 val port = 8244 // Default port
                                 ContextCompat.startForegroundService(this@MainActivity,
                                     Intent(this@MainActivity, DeskdropService::class.java).apply {
-                                        action = DeskdropService.ACTION_CONNECT
-                                        putExtra(DeskdropService.EXTRA_TARGET_IP, ip)
-                                        putExtra(DeskdropService.EXTRA_TARGET_PORT, port)
+                                        action = DeskdropService.ACTION_CONNECT_MANUAL
+                                        putExtra("ip", ip)
+                                        putExtra("port", port)
                                     }
                                 )
                             },

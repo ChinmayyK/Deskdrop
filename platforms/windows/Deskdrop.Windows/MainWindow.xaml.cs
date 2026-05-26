@@ -173,20 +173,20 @@ namespace Deskdrop.Windows
             if (Step1Icon != null)
             {
                 Step1Icon.Text = foundDevice ? "\uE73E" : "\uE73E"; // Same icon but we can change color
-                Step1Icon.Foreground = new SolidColorBrush(foundDevice ? (Color)ColorConverter.ConvertFromString("#32ADE6") : (Color)ColorConverter.ConvertFromString("#38383A"));
-                Step1Text.Foreground = new SolidColorBrush(foundDevice ? (Color)ColorConverter.ConvertFromString("#FFFFFF") : (Color)ColorConverter.ConvertFromString("#8E8E93"));
+                Step1Icon.Foreground = new SolidColorBrush(foundDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
+                Step1Text.Foreground = new SolidColorBrush(foundDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
             }
             
             if (Step2Icon != null)
             {
-                Step2Icon.Foreground = new SolidColorBrush(pairedDevice ? (Color)ColorConverter.ConvertFromString("#32ADE6") : (Color)ColorConverter.ConvertFromString("#38383A"));
-                Step2Text.Foreground = new SolidColorBrush(pairedDevice ? (Color)ColorConverter.ConvertFromString("#FFFFFF") : (Color)ColorConverter.ConvertFromString("#8E8E93"));
+                Step2Icon.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
+                Step2Text.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
             }
 
             if (Step3Icon != null)
             {
-                Step3Icon.Foreground = new SolidColorBrush(pairedDevice ? (Color)ColorConverter.ConvertFromString("#32ADE6") : (Color)ColorConverter.ConvertFromString("#38383A"));
-                Step3Text.Foreground = new SolidColorBrush(pairedDevice ? (Color)ColorConverter.ConvertFromString("#FFFFFF") : (Color)ColorConverter.ConvertFromString("#8E8E93"));
+                Step3Icon.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
+                Step3Text.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
             }
 
             if (pairedDevice && BtnDismissOnboarding != null)
@@ -212,6 +212,10 @@ namespace Deskdrop.Windows
             public string device_id { get; set; } = "";
             public string friendly_name { get; set; } = "";
             public string status { get; set; } = "";
+            [System.Text.Json.Serialization.JsonPropertyName("trusted")]
+            public bool Trusted { get; set; }
+            [System.Text.Json.Serialization.JsonPropertyName("connected")]
+            public bool IsConnected { get; set; }
         }
 
         private void LoadSettingsView()
@@ -267,7 +271,7 @@ namespace Deskdrop.Windows
             ShowToast("Settings saved and applied.");
         }
 
-        private void BorderPushClipboard_Click(object sender, MouseButtonEventArgs e)
+        private void BorderPushClipboard_Click(object sender, RoutedEventArgs e)
         {
             System.Threading.Tasks.Task.Run(() =>
             {
@@ -279,7 +283,7 @@ namespace Deskdrop.Windows
             });
         }
 
-        private void BorderSendFiles_Click(object sender, MouseButtonEventArgs e)
+        private void BorderSendFiles_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.OpenFileDialog();
             dlg.Multiselect = false;
@@ -292,7 +296,7 @@ namespace Deskdrop.Windows
             }
         }
 
-        private void BorderStreamCamera_Click(object sender, MouseButtonEventArgs e)
+        private void BorderStreamCamera_Click(object sender, RoutedEventArgs e)
         {
             var previewWindow = new CameraPreviewWindow();
             previewWindow.Show();
@@ -325,7 +329,7 @@ namespace Deskdrop.Windows
             });
         }
 
-        private async void BorderBroadcastCamera_Click(object sender, MouseButtonEventArgs e)
+        private async void BorderBroadcastCamera_Click(object sender, RoutedEventArgs e)
         {
             if (_isBroadcasting)
             {
@@ -338,8 +342,7 @@ namespace Deskdrop.Windows
                 }
                 
                 TxtBroadcastTitle.Text = "Broadcast Camera";
-                TxtBroadcastDesc.Text = "Push local webcam to peers";
-                BorderBroadcastCamera.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xEB, 0xEC)); // #FFEBEC
+                BorderBroadcastCameraBtn.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xEB, 0xEC)); // #FFEBEC
             }
             else
             {
@@ -352,8 +355,7 @@ namespace Deskdrop.Windows
                     await _cameraPublisher.StartBroadcastingAsync();
                     
                     TxtBroadcastTitle.Text = "Stop Broadcasting";
-                    TxtBroadcastDesc.Text = "Camera is live (Broadcasting)";
-                    BorderBroadcastCamera.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xCD, 0xD2)); // Stronger red tint
+                    BorderBroadcastCameraBtn.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xCD, 0xD2)); // Stronger red tint
                 }
                 catch (Exception ex)
                 {

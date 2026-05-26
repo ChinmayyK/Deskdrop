@@ -73,7 +73,7 @@ class DiagnosticsActivity : ComponentActivity() {
                                 androidx.core.content.ContextCompat.startForegroundService(
                                     this@DiagnosticsActivity,
                                     android.content.Intent(this@DiagnosticsActivity, DeskdropService::class.java).apply {
-                                        action = DeskdropService.ACTION_START_SYNC
+                                        action = DeskdropService.ACTION_START
                                     }
                                 )
                                 finish()
@@ -92,7 +92,7 @@ class DiagnosticsActivity : ComponentActivity() {
                                 androidx.core.content.ContextCompat.startForegroundService(
                                     this@DiagnosticsActivity,
                                     android.content.Intent(this@DiagnosticsActivity, DeskdropService::class.java).apply {
-                                        action = DeskdropService.ACTION_RESCAN
+                                        action = DeskdropService.ACTION_SCAN_NOW
                                     }
                                 )
                                 finish()
@@ -164,6 +164,7 @@ fun DiagnosticItem(
                     fontSize = 12.sp,
                     color = CRTheme.textMedium(isDark)
                 )
+            }
             if (actionLabel != null && onAction != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(

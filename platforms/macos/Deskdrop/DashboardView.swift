@@ -973,8 +973,6 @@ private struct DeviceCard: View {
                         Button("Decline") { store.respondToPairing(device, accepted: false) }.buttonStyle(CRDestructiveButtonStyle())
                     } else {
                         Button("Pair") { store.sendPairingRequest(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-                        Button("Trust (Legacy)")  { store.trust(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
-                        Button("Reject (Legacy)") { store.reject(device) }.buttonStyle(CRDestructiveButtonStyle())
                     }
                 } else {
                     Button("Rename")       { rename(device) }.buttonStyle(CRSecondaryButtonStyle())

@@ -21,6 +21,7 @@ struct RootContainerView: View {
 struct OnboardingView: View {
     @ObservedObject var store: DeskdropStore
     @State private var selectedPeerId: String? = nil
+    @State private var sessionStartTime: Date = Date()
     
     private var selectedPeer: PeerViewModel? {
         store.peers.first { $0.id == selectedPeerId }
@@ -29,8 +30,10 @@ struct OnboardingView: View {
     private var currentStep: Int {
         guard let peer = selectedPeer else { return 0 }
         if !peer.trusted { return 1 }
-        if peer.lastSync == nil { return 2 }
-        return 3
+        if let lastSync = peer.lastSync, lastSync > sessionStartTime {
+            return 3
+        }
+        return 2
     }
 
     let onComplete: () -> Void

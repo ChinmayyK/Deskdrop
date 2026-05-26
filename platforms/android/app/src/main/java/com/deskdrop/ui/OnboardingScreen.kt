@@ -34,13 +34,14 @@ fun OnboardingScreen(
     onComplete: () -> Unit
 ) {
     var selectedPeerId by remember { mutableStateOf<String?>(null) }
+    val sessionStartTimeSecs = remember { System.currentTimeMillis() / 1000 }
     val selectedPeer = peers.find { it.id == selectedPeerId }
 
     val currentStep = when {
         selectedPeer == null -> 0
         !selectedPeer.trusted -> 1
-        selectedPeer.lastSyncSecs == null -> 2
-        else -> 3
+        selectedPeer.lastSyncSecs != null && selectedPeer.lastSyncSecs > sessionStartTimeSecs -> 3
+        else -> 2
     }
 
     CRBackground(isDark = isDark) {
