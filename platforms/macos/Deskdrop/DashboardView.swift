@@ -11,6 +11,7 @@ struct DashboardRootView: View {
     @State private var renameTarget:   ManagedDevice?
     @State private var renameDraft     = ""
     @State private var density: CRDensityMode = .comfortable
+    @State private var isSidebarVisible = true
 
     private var pendingContinuityItems: [IpcActivityEntry] {
         store.activityFeed.filter(\.isApplicable)
@@ -18,18 +19,21 @@ struct DashboardRootView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            CRSidebarView(store: store)
-                .frame(width: 180)
-                .background(.ultraThinMaterial)
-                .background(CRTheme.surface.opacity(0.4))
-                .overlay(alignment: .trailing) {
-                    Rectangle()
-                        .fill(CRTheme.stroke.opacity(0.4))
-                        .frame(width: 1)
-                        .shadow(color: CRTheme.brandElectric.opacity(0.15), radius: 6, x: 2, y: 0)
-                }
+            if isSidebarVisible {
+                CRSidebarView(store: store)
+                    .frame(width: 180)
+                    .background(.ultraThinMaterial)
+                    .background(CRTheme.surface.opacity(0.4))
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(CRTheme.stroke.opacity(0.4))
+                            .frame(width: 1)
+                            .shadow(color: CRTheme.brandElectric.opacity(0.15), radius: 6, x: 2, y: 0)
+                    }
+                    .transition(.move(edge: .leading))
+            }
 
-            DetailContent(store: store, density: $density, beginRename: beginRename)
+            DetailContent(store: store, density: $density, isSidebarVisible: $isSidebarVisible, beginRename: beginRename)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(CRFluidBackgroundView())
@@ -69,19 +73,19 @@ private struct CRSidebarView: View {
             // Push content down to clear traffic lights
             Spacer().frame(height: 38)
             
-            // App Icon & Brand
+            // App Name only (no fake logo)
             HStack(spacing: 10) {
-                CRAppIconMark(size: 28)
                 Text("Deskdrop")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(CRTheme.ink)
             }
             .padding(.horizontal, 16)
+            .padding(.top, 14)
             .padding(.bottom, 24)
 
             // Navigation Items
             VStack(spacing: 2) {
-                ForEach([DashboardSection.devices, .clipboard, .transfers, .remoteControl], id: \.self) { section in
+                ForEach([DashboardSection.devices, .clipboard, .transfers], id: \.self) { section in
                     sidebarItem(for: section)
                 }
             }
@@ -115,12 +119,13 @@ private struct CRSidebarView: View {
 private struct DetailContent: View {
     @ObservedObject var store: DeskdropStore
     @Binding var density: CRDensityMode
+    @Binding var isSidebarVisible: Bool
     let beginRename: (ManagedDevice) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             // TOP SHELL / APPLICATION CHROME
-            ContinuityHeaderView(store: store)
+            ContinuityHeaderView(store: store, isSidebarVisible: $isSidebarVisible)
                 .zIndex(10)
 
             // CONTENT REGION
@@ -179,6 +184,7 @@ private struct DetailContent: View {
 
 private struct ContinuityHeaderView: View {
     @ObservedObject var store: DeskdropStore
+    @Binding var isSidebarVisible: Bool
     @State private var searchText = ""
     @Environment(\.colorScheme) var scheme
 
@@ -186,12 +192,24 @@ private struct ContinuityHeaderView: View {
         HStack(spacing: 24) {
             // Left Context
             HStack(spacing: 8) {
+                Button(action: {
+                    withAnimation(.crSpring) { isSidebarVisible.toggle() }
+                }) {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .crHoverScale()
+
                 StatusDot(isOnline: store.connectedCount > 0, size: 8)
                 Text(store.connectedCount > 0 ? "Local Network Active" : "Mesh Offline")
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(CRTheme.inkSoft)
             }
-            .frame(width: 160, alignment: .leading) // Match sidebar width approx or let it breathe
+            .frame(width: 200, alignment: .leading) // Match new sidebar width approx
 
             Spacer()
             
