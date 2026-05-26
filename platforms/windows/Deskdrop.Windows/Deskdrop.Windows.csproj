@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <!-- Native Rust DLL built by cargo build (release) -->
-    <None Include="..\..\..\deskdrop-core\target\release\deskdrop_core.dll">
+    <None Include="..\..\..\target\release\deskdrop_core.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
