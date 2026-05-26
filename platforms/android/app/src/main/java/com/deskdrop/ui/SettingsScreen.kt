@@ -151,15 +151,15 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .size(80.dp)
                                     .clip(CircleShape)
-                                    .background(CRTheme.indigoSoft.copy(alpha = 0.1f))
-                                    .border(2.dp, CRTheme.indigoSoft.copy(alpha = 0.5f), CircleShape),
+                                    .background(CRTheme.blueSoft.copy(alpha = 0.1f))
+                                    .border(2.dp, CRTheme.blueSoft.copy(alpha = 0.5f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = deviceName.take(1).uppercase(),
                                     fontSize = 32.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = CRTheme.indigoSoft
+                                    color = CRTheme.blueSoft
                                 )
                             }
                             Spacer(modifier = Modifier.height(20.dp))
@@ -194,9 +194,9 @@ fun SettingsScreen(
                             
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Rounded.Edit, contentDescription = null, tint = CRTheme.indigoSoft, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Rounded.Edit, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("TAP TO EDIT NAME", style = CRTypography.caption, color = CRTheme.indigoSoft)
+                                Text("TAP TO EDIT NAME", style = CRTypography.caption, color = CRTheme.blueSoft)
                             }
                         }
                     }
@@ -206,7 +206,7 @@ fun SettingsScreen(
                     SettingsSection(
                         isDark = isDarkMode,
                         title = "Appearance",
-                        accentColor = CRTheme.indigoSoft,
+                        accentColor = CRTheme.blueSoft,
                         icon = Icons.Rounded.Brush
                     ) {
                         SettingsSwitchRow(

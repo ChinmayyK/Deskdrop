@@ -50,15 +50,21 @@ class MainActivity : ComponentActivity() {
     private val isDarkMode = mutableStateOf(false)
     private val toastMessage = mutableStateOf("")
 
+    private var targetDeviceIdForNextSend: String? = null
+
     private val filePickerLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
             val intent = Intent(this, DeskdropService::class.java).apply {
                 action = DeskdropService.ACTION_PUSH_SHARED_URI
                 putStringArrayListExtra(DeskdropService.EXTRA_SHARED_URIS, java.util.ArrayList(uris.map { it.toString() }))
+                if (targetDeviceIdForNextSend != null) {
+                    putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, targetDeviceIdForNextSend)
+                }
             }
             ContextCompat.startForegroundService(this, intent)
             showSnack("Sending ${uris.size} file(s)...")
         }
+        targetDeviceIdForNextSend = null
     }
 
     private val feedRefreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -229,8 +235,19 @@ class MainActivity : ComponentActivity() {
                             putExtra(DeskdropService.EXTRA_TRANSFER_ID, tid)
                         })
                     },
-                    onActionSendFiles = {
+                    onActionSendFiles = { targetId ->
+                        targetDeviceIdForNextSend = targetId
                         filePickerLauncher.launch("*/*")
+                    },
+                    onForgetPeer = { peer ->
+                        ContextCompat.startForegroundService(this@MainActivity,
+                            Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_FORGET_PEER
+                                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                            }
+                        )
+                        showSnack("Forgot ${peer.name}")
+                        window.decorView.postDelayed({ refreshDashboardState() }, 200)
                     },
                     onOpenSettings = {
                         startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
@@ -262,6 +279,13 @@ class MainActivity : ComponentActivity() {
             startService(Intent(this, DeskdropService::class.java))
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed to refresh service onResume", e)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (targetDeviceIdForNextSend != null) {
+            outState.putString("targetDeviceIdForNextSend", targetDeviceIdForNextSend)
         }
     }
 

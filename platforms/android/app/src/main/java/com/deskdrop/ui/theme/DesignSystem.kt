@@ -49,7 +49,7 @@ object CRTheme {
     val strokeDark = Color(0xFF27272A)
     
     // STRICT ACCENT PALETTE
-    val indigoSoft = Color(0xFF6366F1)
+    val blueSoft = Color(0xFF0066FF)
     val cyanSoft = Color(0xFF06B6D4)
     val blueGray = Color(0xFF4B5563)
 
@@ -67,8 +67,8 @@ object CRTheme {
     fun glass(isDark: Boolean) = if (isDark) Color.White.copy(alpha = 0.03f) else Color.White.copy(alpha = 0.6f)
 
     // Legacy Aliases
-    val brandElectric = indigoSoft
-    val brandViolet = indigoSoft
+    val brandElectric = blueSoft
+    val brandViolet = blueSoft
     val brandCyan = cyanSoft
     val brandPink = statusRed
     val accentGreen = statusGreen
@@ -77,7 +77,7 @@ object CRTheme {
     fun textLow(isDark: Boolean) = textMedium(isDark).copy(alpha = 0.5f)
     
     // Ambient Ecosystem Glow Colors
-    val ambientLavender = Color(0xFFC4B5FD) // soft violet
+    val ambientLavender = Color(0xFF93C5FD) // soft blue
     val ambientMint = Color(0xFF6EE7B7) // soft mint
     val ambientSky = Color(0xFF7DD3FC) // soft sky blue
 }
@@ -152,7 +152,7 @@ fun SubtleNoiseOverlay(isDark: Boolean) {
 fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content: @Composable () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "mesh")
     val breatheShift by infiniteTransition.animateFloat(
-        initialValue = 0.95f, targetValue = 1.05f,
+        initialValue = 0f, targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(8000, easing = LinearEasing), RepeatMode.Reverse),
         label = "mesh_breathe"
     )
@@ -160,16 +160,26 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(CRTheme.bg(isDark))
+            .background(
+                Brush.linearGradient(
+                    colors = if (isDark) {
+                        listOf(Color(0xFF15151A), Color(0xFF0A0A0C), Color(0xFF000000))
+                    } else {
+                        listOf(Color(0xFFE5E5EA), Color(0xFFF2F4F8), Color(0xFFFFFFFF))
+                    },
+                    start = Offset(0f, 0f),
+                    end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                )
+            )
     ) {
         // Single controlled soft light source using radial gradient (100x faster than blur)
         androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            val centerOffset = Offset(size.width * 0.5f, size.height * 0.25f)
+            val centerOffset = Offset(size.width * 0.5f, size.height * (0.2f + (breatheShift * 0.1f)))
             
             if (hasConnectedDevices) {
                 // Signature ambient glow when devices are connected
-                val radius = size.width * 0.85f * breatheShift
-                val color = CRTheme.indigoSoft.copy(alpha = if (isDark) 0.12f else 0.08f)
+                val radius = size.width * (0.85f + (breatheShift * 0.05f))
+                val color = CRTheme.blueSoft.copy(alpha = if (isDark) 0.15f else 0.12f)
                 drawCircle(
                     brush = androidx.compose.ui.graphics.Brush.radialGradient(
                         colors = listOf(color, Color.Transparent),
@@ -180,8 +190,8 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
                     center = centerOffset
                 )
             } else {
-                val radius = size.width * 0.7f
-                val color = (if (isDark) Color.White else Color.Black).copy(alpha = 0.03f)
+                val radius = size.width * (0.7f + (breatheShift * 0.05f))
+                val color = (if (isDark) Color.White else Color.Black).copy(alpha = 0.04f)
                 drawCircle(
                     brush = androidx.compose.ui.graphics.Brush.radialGradient(
                         colors = listOf(color, Color.Transparent),
@@ -200,7 +210,7 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
 
 fun Modifier.crGlassCard(
     isDark: Boolean,
-    cornerRadius: Dp = 16.dp,
+    cornerRadius: Dp = 20.dp,
     highlighted: Boolean = false,
     dashed: Boolean = false,
     onClick: (() -> Unit)? = null,
@@ -216,14 +226,14 @@ fun Modifier.crGlassCard(
         label = "press_scale"
     )
 
-    val shadowColor = if (isDark) Color.Black.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.06f)
-    val borderColor = if (highlighted) CRTheme.indigoSoft.copy(alpha = 0.4f) else CRTheme.stroke(isDark).copy(alpha = if (isDark) 0.8f else 0.5f)
+    val shadowColor = if (isDark) Color.Black.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.12f)
+    val borderColor = if (highlighted) CRTheme.blueSoft.copy(alpha = 0.5f) else CRTheme.stroke(isDark).copy(alpha = if (isDark) 0.8f else 0.5f)
     val bgColor = if (elevated) CRTheme.surfaceElevated(isDark) else CRTheme.surface(isDark)
 
     var modifier = this
         .scale(scale)
         .shadow(
-            elevation = if (onClick != null) (if (isPressed) 1.dp else 6.dp) else (if (elevated) 8.dp else 4.dp),
+            elevation = if (onClick != null) (if (isPressed) 2.dp else 12.dp) else (if (elevated) 16.dp else 8.dp),
             shape = shape,
             ambientColor = shadowColor,
             spotColor = shadowColor
@@ -241,9 +251,18 @@ fun Modifier.crGlassCard(
     }
 
     if (dashed) {
-        modifier.border(1.dp, borderColor.copy(alpha = 0.5f), shape)
+        modifier.border(1.dp, SolidColor(borderColor.copy(alpha = 0.5f)), shape)
     } else {
-        modifier.border(1.dp, borderColor, shape)
+        // Gradient border for a top-inner light highlight
+        val borderBrush = Brush.linearGradient(
+            colors = listOf(
+                if (highlighted) CRTheme.blueSoft else (if (isDark) Color.White.copy(0.15f) else Color.White.copy(0.7f)),
+                borderColor
+            ),
+            start = Offset(0f, 0f),
+            end = Offset(0f, Float.POSITIVE_INFINITY)
+        )
+        modifier.border(1.dp, borderBrush, shape)
     }
 }
 
@@ -252,7 +271,7 @@ fun Modifier.crCard(
     isDark: Boolean,
     cornerRadius: Dp = 24.dp,
     highlighted: Boolean = false,
-    accentColor: Color = CRTheme.indigoSoft,
+    accentColor: Color = CRTheme.blueSoft,
     onClick: (() -> Unit)? = null
 ): Modifier = crGlassCard(
     isDark = isDark,

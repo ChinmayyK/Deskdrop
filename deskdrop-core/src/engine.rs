@@ -469,10 +469,14 @@ impl Engine {
             state.bind_addr
         };
         send_listener_rebind(&engine.shared, initial_bind).await?;
+        let discovery_ip = {
+            let state = engine.shared.network_state.lock().await;
+            state.active_interface.as_ref().map(|i| i.ip).unwrap_or(initial_bind.ip())
+        };
         if let Some(discovery_tx) = &engine.shared.discovery_tx {
             let _ = discovery_tx
                 .send(DiscoveryCommand::Restart {
-                    bind_ip: initial_bind.ip(),
+                    bind_ip: discovery_ip,
                     port: engine.shared.config.port,
                 })
                 .await;
@@ -2240,10 +2244,14 @@ async fn handle_network_change(shared: EngineShared, change: NetworkChangeEvent)
         send_listener_rebind(&shared, current_addr).await?;
     }
 
+    let discovery_ip = {
+        let state = shared.network_state.lock().await;
+        state.active_interface.as_ref().map(|i| i.ip).unwrap_or(current_addr.ip())
+    };
     if let Some(discovery_tx) = &shared.discovery_tx {
         let _ = discovery_tx
             .send(DiscoveryCommand::Restart {
-                bind_ip: current_addr.ip(),
+                bind_ip: discovery_ip,
                 port: shared.config.port,
             })
             .await;
@@ -2703,16 +2711,53 @@ async fn observe_trust(
             anyhow::bail!("peer {} is not trusted ({:?})", device_id, record.state);
         }
         TrustState::Untrusted => {
-            shared.peer_manager.update_trust(device_id, false)?;
-            let _ = shared
-                .event_tx
-                .send(EngineEvent::TofuPrompt {
-                    device_id,
-                    device_name,
-                    fingerprint_display: format_fingerprint(&record.key_fingerprint),
-                })
-                .await;
-            Ok(false)
+            // ── Auto-trust upgrade ───────────────────────────────────────
+            // When a new device ID arrives that is untrusted, check if a
+            // previously-trusted peer exists with the same friendly name
+            // AND the same IP address.  This covers the extremely common
+            // case of Android debug builds regenerating identity keys on
+            // each deploy, which creates a fresh device UUID every time.
+            //
+            // The check is conservative: both name AND IP must match to
+            // minimise the risk of trusting a rogue device.
+            let peer_ip = shared.peer_manager.get(device_id).and_then(|p| p.ip);
+            let should_auto_trust = shared
+                .peer_manager
+                .list()
+                .iter()
+                .any(|existing| {
+                    existing.id != device_id
+                        && existing.trusted
+                        && existing.friendly_name == device_name
+                        && existing.ip.is_some()
+                        && existing.ip == peer_ip
+                });
+
+            if should_auto_trust {
+                tracing::info!(
+                    peer_id = %device_id,
+                    peer_name = %device_name,
+                    "auto-trusting device — matches a previously-trusted peer with same name and IP"
+                );
+                {
+                    let mut trust = shared.trust.lock().await;
+                    trust.observe_peer(device_id, device_name.clone(), &identity_pubkey)?;
+                    trust.trust_peer(device_id)?;
+                }
+                shared.peer_manager.update_trust(device_id, true)?;
+                Ok(true)
+            } else {
+                shared.peer_manager.update_trust(device_id, false)?;
+                let _ = shared
+                    .event_tx
+                    .send(EngineEvent::TofuPrompt {
+                        device_id,
+                        device_name,
+                        fingerprint_display: format_fingerprint(&record.key_fingerprint),
+                    })
+                    .await;
+                Ok(false)
+            }
         }
     }
 }
@@ -2883,23 +2928,36 @@ fn register_session(
                                             .insert(hash_hex.clone(), text.clone());
                                     }
                                     let mut feed = shared.activity.lock().await;
-                                    if let ClipboardContent::Text(ref text) = content {
-                                        feed.record_remote_clipboard_text(
-                                            origin_device,
-                                            display_name.clone(),
-                                            text,
-                                            hash_hex.clone(),
-                                            relay_path.clone(),
-                                        )
-                                    } else {
-                                        feed.record_remote_clipboard_image(
-                                            origin_device,
-                                            display_name.clone(),
-                                            "image",
-                                            0,
-                                            hash_hex.clone(),
-                                            relay_path.clone(),
-                                        )
+                                    match &content {
+                                        ClipboardContent::Text(ref text) => {
+                                            feed.record_remote_clipboard_text(
+                                                origin_device,
+                                                display_name.clone(),
+                                                text,
+                                                hash_hex.clone(),
+                                                relay_path.clone(),
+                                            )
+                                        }
+                                        ClipboardContent::Image { mime, data } => {
+                                            feed.record_remote_clipboard_image(
+                                                origin_device,
+                                                display_name.clone(),
+                                                mime,
+                                                data.len() as u64,
+                                                hash_hex.clone(),
+                                                relay_path.clone(),
+                                            )
+                                        }
+                                        ClipboardContent::File { name, data } => {
+                                            feed.record_file_transfer_started(
+                                                origin_device,
+                                                display_name.clone(),
+                                                name.clone(),
+                                                data.len() as u64,
+                                                hash_hex.clone(),
+                                                false,
+                                            )
+                                        }
                                     }
                                 };
 

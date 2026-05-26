@@ -21,6 +21,7 @@ struct DropCanvasView: View {
             }
 
             VStack(spacing: 20) {
+                ZStack {
                     // Background shape
                     ZStack {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)

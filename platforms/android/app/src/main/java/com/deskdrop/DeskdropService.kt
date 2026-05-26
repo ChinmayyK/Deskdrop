@@ -486,7 +486,7 @@ class DeskdropService : Service() {
                         Log.i(TAG, "PUSH_CLIPBOARD: result=$result len=${text.length}")
                         if (result == 0) {
                             addActivity(ActivityEntry(
-                                deviceName = resolvedDeviceName(),
+                                deviceName = "All devices",
                                 kind       = ActivityKind.CLIPBOARD_TEXT,
                                 preview    = text.take(400)
                             ))
@@ -1522,7 +1522,7 @@ class DeskdropService : Service() {
                 if (result == 1) {
                     addToFeed(
                         ActivityEntry(
-                            deviceName = resolvedDeviceName(),
+                            deviceName = "All devices",
                             kind = ActivityKind.FILE_SENT,
                             preview = staged.displayName
                         )
@@ -1586,9 +1586,10 @@ class DeskdropService : Service() {
                     TAG,
                     "Queued shared URI ${staged.displayName} (${staged.localFile.length()} bytes) for target=${targetDeviceId ?: "all"}"
                 )
+                val targetName = if (targetDeviceId != null) connectedPeerIds[targetDeviceId] ?: "Device" else "All devices"
                 addToFeed(
                     ActivityEntry(
-                        deviceName = resolvedDeviceName(),
+                        deviceName = targetName,
                         kind = ActivityKind.FILE_SENT,
                         preview = staged.displayName
                     )
@@ -1753,6 +1754,22 @@ class DeskdropService : Service() {
             preferredName = preferredName,
             fallbackName = "file",
         )
+        // Prevent OOM and protocol frame size errors for massive files (e.g. videos/panoramas)
+        // Limit clipboard pushes to 32MB. Larger files must use standard file transfer.
+        var size = 0L
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (sizeIndex != -1) {
+                    size = cursor.getLong(sizeIndex)
+                }
+            }
+        }
+        if (size > 32L * 1024 * 1024) {
+            Log.w(TAG, "Skipping clipboard payload > 32MB ($size bytes). Please use 'Send Files' instead.")
+            return@runCatching null
+        }
+
         val bytes = openUriInputStream(uri)?.use { it.readBytes() } ?: return null
         if (mime.startsWith("image/")) OutgoingPayload.Image(mime.ifEmpty { "image/png" }, bytes)
         else OutgoingPayload.File(name, bytes)

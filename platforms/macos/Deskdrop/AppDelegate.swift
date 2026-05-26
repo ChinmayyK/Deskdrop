@@ -283,7 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         dashboardController = Self.makeWindow(
             title: "Deskdrop",
             size:  NSSize(width: 1020, height: 700),
-            rootView: DashboardRootView(store: store)
+            rootView: RootContainerView(store: store)
         )
         quickAccessController = Self.makePanel(
             title: "Quick Access",

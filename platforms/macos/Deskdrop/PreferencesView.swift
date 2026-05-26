@@ -232,6 +232,14 @@ private struct GeneralPane: View {
                      description: "Launch Deskdrop automatically at login.") {
                 Toggle("", isOn: $copy.startOnLogin).labelsHidden()
             }
+            PrefsDivider()
+            PrefsRow(icon: "sparkles", label: "Onboarding",
+                     description: "View the welcome tour again.") {
+                Button("Replay Tour") {
+                    UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+                }
+                .buttonStyle(CRSecondaryButtonStyle())
+            }
         }
 
         PrefsSection(title: "Notifications", icon: "app.badge.fill", tint: CRTheme.accentOrange) {

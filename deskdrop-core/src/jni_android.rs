@@ -149,8 +149,13 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushImage(
     if handle == 0 {
         return -1;
     }
-    let mime: String = env.get_string(&mime).map(|s| s.into()).unwrap_or_default();
     let data = unsafe { JByteArray::from_raw(data) };
+    let size = env.get_array_length(&data).unwrap_or(0) as usize;
+    if size > crate::protocol::MAX_IMAGE_BYTES {
+        tracing::warn!("Ignoring clipboard image because it exceeds 32MB limit");
+        return -1;
+    }
+    let mime: String = env.get_string(&mime).map(|s| s.into()).unwrap_or_default();
     let bytes = match env.convert_byte_array(&data) {
         Ok(b) => b,
         Err(_) => return -1,
@@ -175,8 +180,13 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushFile(
     if handle == 0 {
         return -1;
     }
-    let name: String = env.get_string(&name).map(|s| s.into()).unwrap_or_default();
     let data = unsafe { JByteArray::from_raw(data) };
+    let size = env.get_array_length(&data).unwrap_or(0) as usize;
+    if size > crate::protocol::MAX_IMAGE_BYTES { // Use same 32MB limit
+        tracing::warn!("Ignoring clipboard file because it exceeds 32MB limit");
+        return -1;
+    }
+    let name: String = env.get_string(&name).map(|s| s.into()).unwrap_or_default();
     let bytes = match env.convert_byte_array(&data) {
         Ok(b) => b,
         Err(_) => return -1,

@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.blur
@@ -88,10 +89,11 @@ fun MainScreen(
     onActionPauseTransfer: (String) -> Unit,
     onActionResumeTransfer: (String) -> Unit,
     onActionCancelTransfer: (String) -> Unit,
-    onActionSendFiles: () -> Unit,
+    onActionSendFiles: (String?) -> Unit,
     onApplyClipboard: (ActivityEntry) -> Unit,
     onTrustPeer: (PeerSnapshot) -> Unit,
     onRejectPeer: (PeerSnapshot) -> Unit,
+    onForgetPeer: (PeerSnapshot) -> Unit,
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
     onOpenSettings: () -> Unit,
@@ -139,6 +141,7 @@ fun MainScreen(
                                 onActionPauseTransfer = onActionPauseTransfer,
                                 onActionResumeTransfer = onActionResumeTransfer,
                                 onActionCancelTransfer = onActionCancelTransfer,
+                                onForgetPeer = onForgetPeer,
                                 onDeleteActivity = onDeleteActivity,
                                 onResendActivity = onResendActivity,
                                 onTabSelected = { currentTab = it }
@@ -237,37 +240,45 @@ fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus
         label = "pulse_alpha"
     )
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+            .padding(top = 16.dp, bottom = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            val color = if (connectedPeersCount > 0) CRTheme.statusGreen else if (isSearching) CRTheme.indigoSoft else CRTheme.statusAmber
-            
-            if (connectedPeersCount > 0 || isSearching) {
+        Row(
+            modifier = Modifier
+                .crGlassCard(isDark = isDark, cornerRadius = 24.dp, elevated = true)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                val color = if (connectedPeersCount > 0) CRTheme.statusGreen else if (isSearching) CRTheme.blueSoft else CRTheme.statusAmber
+                
+                if (connectedPeersCount > 0 || isSearching) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .scale(pulseScale)
+                            .background(color.copy(alpha = pulseAlpha), CircleShape)
+                    )
+                }
+                
                 Box(
                     modifier = Modifier
-                        .size(6.dp)
-                        .scale(pulseScale)
-                        .background(color.copy(alpha = pulseAlpha), CircleShape)
+                        .size(8.dp)
+                        .background(color, CircleShape)
                 )
             }
-            
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .background(color, CircleShape)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = statusText,
+                style = CRTypography.caption,
+                color = CRTheme.textHigh(isDark),
+                fontWeight = FontWeight.Medium
             )
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = statusText,
-            style = CRTypography.caption,
-            color = CRTheme.textMedium(isDark)
-        )
     }
 }
 
@@ -279,12 +290,13 @@ fun HomeTab(
     activeTransfers: List<TransferProgress>,
     onActionPushClipboard: () -> Unit,
     onActionPairMagicLink: () -> Unit,
-    onActionSendFiles: () -> Unit,
+    onActionSendFiles: (String?) -> Unit,
     onActionStreamCamera: () -> Unit,
     onApplyClipboard: (ActivityEntry) -> Unit,
     onActionPauseTransfer: (String) -> Unit,
     onActionResumeTransfer: (String) -> Unit,
     onActionCancelTransfer: (String) -> Unit,
+    onForgetPeer: (PeerSnapshot) -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit,
     onResendActivity: (ActivityEntry) -> Unit,
     onTabSelected: (AppTab) -> Unit
@@ -340,13 +352,13 @@ fun HomeTab(
                         .crPressScale(0.95f)
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onActionPairMagicLink() }
-                        .background(CRTheme.indigoSoft.copy(alpha = 0.15f))
+                        .background(CRTheme.blueSoft.copy(alpha = 0.15f))
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = CRTheme.indigoSoft, modifier = Modifier.size(14.dp))
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add", style = CRTypography.caption, color = CRTheme.indigoSoft)
+                    Text("Add", style = CRTypography.caption, color = CRTheme.blueSoft)
                 }
             }
             
@@ -360,6 +372,8 @@ fun HomeTab(
                     DeviceCard(
                         isDark = isDark, 
                         peer = peer,
+                        onSendFiles = { onActionSendFiles(peer.id) },
+                        onForget = { onForgetPeer(peer) },
                         modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp)
                     )
                 }
@@ -381,7 +395,7 @@ fun HomeTab(
             isDark = isDark,
             enabled = hasConnectedPeers,
             onActionPushClipboard = onActionPushClipboard,
-            onActionSendFiles = onActionSendFiles,
+            onActionSendFiles = { onActionSendFiles(null) },
             onActionStreamCamera = onActionStreamCamera,
             onActionLinks = {}
         )
@@ -638,14 +652,13 @@ fun QuickActionCardPrimary(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(contentAlignment = Alignment.Center) {
-            // Removed pulsing background box
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(56.dp)
                     .background(displayColor.copy(alpha = if (enabled) 0.15f else 0.05f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = title, tint = displayColor, modifier = Modifier.size(24.dp))
+                Icon(imageVector = icon, contentDescription = title, tint = displayColor, modifier = Modifier.size(28.dp))
             }
         }
         Spacer(modifier = Modifier.width(16.dp))
@@ -687,11 +700,11 @@ fun QuickActionCard(
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp) // Scaled up for better touch target
+                .size(48.dp) // Scaled up for better touch target
                 .background(displayColor.copy(alpha = if (enabled) 0.15f else 0.05f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = icon, contentDescription = label, tint = displayColor, modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = label, tint = displayColor, modifier = Modifier.size(24.dp))
         }
         Spacer(modifier = Modifier.height(10.dp))
         Text(text = label, style = CRTypography.caption, color = if (enabled) CRTheme.textHigh(isDark) else CRTheme.textMedium(isDark))
@@ -845,13 +858,15 @@ fun TimelineActivityRow(
             // Icon Bullet
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(dotColor.copy(alpha = 0.15f), CircleShape)
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = dotColor,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
             
@@ -893,9 +908,16 @@ fun TimelineActivityRow(
 }
 
 @Composable
-fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifier.width(170.dp)) {
+fun DeviceCard(
+    isDark: Boolean,
+    peer: PeerSnapshot,
+    onSendFiles: () -> Unit,
+    onForget: () -> Unit,
+    modifier: Modifier = Modifier.width(170.dp)
+) {
     val haptic = LocalHapticFeedback.current
     val isPhone = peer.name.contains("phone", ignoreCase = true) || peer.name.contains("pixel", ignoreCase = true)
+    var showMenu by remember { mutableStateOf(false) }
     
     val infiniteTransition = rememberInfiniteTransition(label = "glow")
     val glowAlpha by infiniteTransition.animateFloat(
@@ -908,72 +930,92 @@ fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifie
         label = "glow_alpha"
     )
     
-    Column(
-        modifier = modifier
-            .height(116.dp)
-            .crPressScale(targetScale = 0.95f)
-            .then(
-                if (peer.isConnected) Modifier.border(1.dp, CRTheme.statusGreen.copy(alpha = glowAlpha), RoundedCornerShape(24.dp))
-                else Modifier
-            )
-            .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            })
-            .padding(20.dp),
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .background(if (peer.trusted) CRTheme.indigoSoft.copy(alpha = 0.15f) else CRTheme.textMedium(isDark).copy(alpha = 0.1f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isPhone) Icons.Default.Smartphone else Icons.Default.LaptopMac,
-                    contentDescription = null,
-                    tint = if (peer.trusted) CRTheme.indigoSoft else CRTheme.textMedium(isDark),
-                    modifier = Modifier.size(20.dp)
+    Box(modifier = modifier.height(116.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .crPressScale(targetScale = 0.95f)
+                .then(
+                    if (peer.isConnected) Modifier.border(1.dp, CRTheme.statusGreen.copy(alpha = glowAlpha), RoundedCornerShape(24.dp))
+                    else Modifier
                 )
-            }
-            if (peer.isConnected) {
+                .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showMenu = true
+                })
+                .padding(20.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
-                        .blur(2.dp)
-                        .background(CRTheme.statusGreen, CircleShape)
+                        .size(38.dp)
+                        .background(if (peer.trusted) CRTheme.blueSoft.copy(alpha = 0.15f) else CRTheme.textMedium(isDark).copy(alpha = 0.1f), CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(modifier = Modifier.size(8.dp).background(CRTheme.statusGreen, CircleShape))
+                    Icon(
+                        imageVector = if (isPhone) Icons.Default.Smartphone else Icons.Default.LaptopMac,
+                        contentDescription = null,
+                        tint = if (peer.trusted) CRTheme.blueSoft else CRTheme.textMedium(isDark),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (peer.isConnected) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .blur(2.dp)
+                            .background(CRTheme.statusGreen, CircleShape)
+                    ) {
+                        Box(modifier = Modifier.size(8.dp).background(CRTheme.statusGreen, CircleShape))
+                    }
+                }
+            }
+            
+            Column {
+                Text(
+                    text = peer.name,
+                    style = CRTypography.label,
+                    color = CRTheme.textHigh(isDark),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (peer.trusted) {
+                    Text(
+                        text = if (peer.isConnected) "Nearby" else "Offline",
+                        style = CRTypography.caption,
+                        color = CRTheme.textMedium(isDark)
+                    )
+                } else {
+                    Text(
+                        text = "Pending",
+                        style = CRTypography.caption,
+                        color = CRTheme.statusAmber
+                    )
                 }
             }
         }
         
-        Column {
-            Text(
-                text = peer.name,
-                style = CRTypography.label,
-                color = CRTheme.textHigh(isDark),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (peer.trusted) {
-                Text(
-                    text = if (peer.isConnected) "Nearby" else "Offline",
-                    style = CRTypography.caption,
-                    color = CRTheme.textMedium(isDark)
-                )
-            } else {
-                Text(
-                    text = "Pending",
-                    style = CRTypography.caption,
-                    color = CRTheme.statusAmber
+        androidx.compose.material3.DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+            modifier = Modifier.background(if (isDark) Color(0xFF1E1E1E) else Color.White)
+        ) {
+            if (peer.isConnected) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Send Files", color = CRTheme.textHigh(isDark)) },
+                    onClick = { showMenu = false; onSendFiles() }
                 )
             }
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Forget Device", color = CRTheme.accentRed) },
+                onClick = { showMenu = false; onForget() }
+            )
         }
     }
 }
@@ -1428,7 +1470,7 @@ fun BottomDock(
                     .width(indicatorRight - indicatorLeft)
                     .height(48.dp)
                     .padding(horizontal = 2.dp)
-                    .background(CRTheme.indigoSoft.copy(alpha = 0.2f), CircleShape)
+                    .background(CRTheme.blueSoft.copy(alpha = 0.2f), CircleShape)
             )
             
             Row(
@@ -1453,7 +1495,7 @@ fun BottomDock(
                         contentAlignment = Alignment.Center
                     ) {
                         val isSelected = currentTab == tab
-                        val iconColor = if (isSelected) CRTheme.indigoSoft else CRTheme.textHigh(isDark).copy(alpha = 0.4f)
+                        val iconColor = if (isSelected) CRTheme.blueSoft else CRTheme.textHigh(isDark).copy(alpha = 0.4f)
                         
                         val scale by animateFloatAsState(
                             targetValue = if (isSelected) 1.2f else 1f,

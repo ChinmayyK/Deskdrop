@@ -382,6 +382,101 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
         EngineEvent::CameraStreamStop { .. } => {
             *state.latest_camera_frame.lock().await = None;
         }
+        EngineEvent::FileTransferIncoming {
+            transfer_id: _,
+            from_name,
+            file_name,
+            file_bytes,
+            ..
+        } => {
+            push_feedback(
+                &state,
+                FeedbackEvent {
+                    timestamp: now_secs(),
+                    kind: "file_transfer_incoming".into(),
+                    message: format!(
+                        "{from_name} wants to send {file_name} ({} bytes)",
+                        file_bytes
+                    ),
+                    device_id: None,
+                    device_name: Some(from_name),
+                    clipboard_id: None,
+                },
+            )
+            .await;
+        }
+        EngineEvent::FileTransferProgress {
+            file_name,
+            percent,
+            bytes_received,
+            total_bytes,
+            speed_bps,
+            ..
+        } => {
+            let speed_str = match speed_bps {
+                Some(bps) if bps > 1_000_000 => format!("{:.1} MB/s", bps as f64 / 1_000_000.0),
+                Some(bps) if bps > 1_000 => format!("{:.0} KB/s", bps as f64 / 1_000.0),
+                Some(bps) => format!("{bps} B/s"),
+                None => "calculating...".into(),
+            };
+            push_feedback(
+                &state,
+                FeedbackEvent {
+                    timestamp: now_secs(),
+                    kind: "file_transfer_progress".into(),
+                    message: format!(
+                        "Receiving {file_name}: {percent}% ({bytes_received}/{total_bytes} bytes, {speed_str})"
+                    ),
+                    device_id: None,
+                    device_name: None,
+                    clipboard_id: None,
+                },
+            )
+            .await;
+        }
+        EngineEvent::FileTransferComplete {
+            from_name,
+            file_name,
+            dest_path,
+            ..
+        } => {
+            let dest_str = dest_path.to_string_lossy().to_string();
+            push_feedback(
+                &state,
+                FeedbackEvent {
+                    timestamp: now_secs(),
+                    kind: "file_transfer_complete".into(),
+                    message: format!(
+                        "Received {file_name} from {from_name} → {dest_str}"
+                    ),
+                    device_id: None,
+                    device_name: Some(from_name),
+                    clipboard_id: None,
+                },
+            )
+            .await;
+        }
+        EngineEvent::FileTransferFailed {
+            from_device,
+            reason,
+            ..
+        } => {
+            push_feedback(
+                &state,
+                FeedbackEvent {
+                    timestamp: now_secs(),
+                    kind: "file_transfer_failed".into(),
+                    message: format!("File transfer failed: {reason}"),
+                    device_id: Some(from_device.to_string()),
+                    device_name: None,
+                    clipboard_id: None,
+                },
+            )
+            .await;
+        }
+        EngineEvent::FileTransferPaused { .. } | EngineEvent::FileTransferResumed { .. } => {
+            // These are informational only; no feedback needed.
+        }
         _ => {}
     }
 

@@ -11,29 +11,19 @@ struct DashboardRootView: View {
     @State private var renameTarget:   ManagedDevice?
     @State private var renameDraft     = ""
     @State private var density: CRDensityMode = .comfortable
-    @State private var isSidebarVisible = true
 
     private var pendingContinuityItems: [IpcActivityEntry] {
         store.activityFeed.filter(\.isApplicable)
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            if isSidebarVisible {
-                CRSidebarView(store: store)
-                    .frame(width: 180)
-                    .background(.ultraThinMaterial)
-                    .background(CRTheme.surface.opacity(0.4))
-                    .overlay(alignment: .trailing) {
-                        Rectangle()
-                            .fill(CRTheme.stroke.opacity(0.4))
-                            .frame(width: 1)
-                            .shadow(color: CRTheme.brandElectric.opacity(0.15), radius: 6, x: 2, y: 0)
-                    }
-                    .transition(.move(edge: .leading))
-            }
-            DetailContent(store: store, density: $density, isSidebarVisible: $isSidebarVisible, beginRename: beginRename)
+        ZStack(alignment: .bottom) {
+            DetailContent(store: store, density: $density, beginRename: beginRename)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            FloatingNavBar(store: store)
+                .padding(.bottom, 32)
+                .zIndex(50)
         }
         .background(CRFluidBackgroundView())
         .ignoresSafeArea(edges: .top)
@@ -64,53 +54,83 @@ struct DashboardRootView: View {
 
 // MARK: - Application Sidebar
 
-private struct CRSidebarView: View {
+private struct FloatingNavBar: View {
     @ObservedObject var store: DeskdropStore
-    @Environment(\.colorScheme) var scheme
-
+    @Namespace private var namespace
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Push content down to clear traffic lights
-            Spacer().frame(height: 38)
-            
-            // App Name only (no fake logo)
-            HStack(spacing: 10) {
-                Text("Deskdrop")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(CRTheme.ink)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 24)
-
-            // Navigation Items
-            VStack(spacing: 2) {
-                ForEach([DashboardSection.devices, .clipboard, .transfers], id: \.self) { section in
-                    sidebarItem(for: section)
+        HStack(spacing: 8) {
+            ForEach([DashboardSection.devices, .clipboard, .transfers], id: \.self) { section in
+                FloatingNavItem(
+                    section: section,
+                    isSelected: store.selectedSection == section,
+                    namespace: namespace
+                ) {
+                    if store.selectedSection != section {
+                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .default)
+                        withAnimation(.crSpring) { store.selectedSection = section }
+                    }
                 }
             }
-            .padding(.horizontal, 10)
-
-            Spacer()
-
-            // Bottom Settings
-            VStack(spacing: 2) {
-                sidebarItem(for: .settings)
-            }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 20)
         }
+        .padding(6)
+        .background(CRTheme.surfaceElevated.opacity(0.7))
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [CRTheme.stroke.opacity(0.8), CRTheme.stroke.opacity(0.3)],
+                        startPoint: .top, endPoint: .bottom
+                    ), 
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.12), radius: 24, y: 12)
+        .shadow(color: .black.opacity(0.04), radius: 8, y: 4)
     }
+}
 
-    @ViewBuilder
-    private func sidebarItem(for section: DashboardSection) -> some View {
-        SidebarNavButton(
-            icon: section.icon,
-            label: section.title,
-            isSelected: store.selectedSection == section
-        ) {
-            store.selectedSection = section
+private struct FloatingNavItem: View {
+    let section: DashboardSection
+    let isSelected: Bool
+    let namespace: Namespace.ID
+    let action: () -> Void
+    
+    @State private var hovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: isSelected ? section.icon + ".fill" : section.icon)
+                    .font(.system(size: 14, weight: isSelected ? .bold : .medium))
+                    .symbolRenderingMode(.hierarchical)
+                
+                if isSelected {
+                    Text(section.title)
+                        .font(.system(size: 13, weight: .bold))
+                }
+            }
+            .foregroundStyle(isSelected ? .white : (hovered ? CRTheme.ink : CRTheme.inkSoft))
+            .padding(.horizontal, isSelected ? 16 : 14)
+            .padding(.vertical, 10)
+            .background {
+                if isSelected {
+                    Capsule()
+                        .fill(CRTheme.brandElectric)
+                        .matchedGeometryEffect(id: "NAV_TAB", in: namespace)
+                        .shadow(color: CRTheme.brandElectric.opacity(0.35), radius: 8, y: 3)
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+                } else if hovered {
+                    Capsule()
+                        .fill(CRTheme.ink.opacity(0.04))
+                }
+            }
         }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .animation(.crFast, value: hovered)
     }
 }
 
@@ -119,13 +139,12 @@ private struct CRSidebarView: View {
 private struct DetailContent: View {
     @ObservedObject var store: DeskdropStore
     @Binding var density: CRDensityMode
-    @Binding var isSidebarVisible: Bool
     let beginRename: (ManagedDevice) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             // TOP SHELL / APPLICATION CHROME
-            ContinuityHeaderView(store: store, isSidebarVisible: $isSidebarVisible)
+            ContinuityHeaderView(store: store)
                 .zIndex(10)
 
             // CONTENT REGION
@@ -184,68 +203,58 @@ private struct DetailContent: View {
 
 private struct ContinuityHeaderView: View {
     @ObservedObject var store: DeskdropStore
-    @Binding var isSidebarVisible: Bool
     @State private var searchText = ""
     @Environment(\.colorScheme) var scheme
 
     var body: some View {
-        HStack(spacing: 24) {
-            // Left Context
-            HStack(spacing: 8) {
-                if !isSidebarVisible {
-                    Spacer().frame(width: 64) // Clear the traffic lights
-                }
-                
-                Button(action: {
-                    withAnimation(.crSpring) { isSidebarVisible.toggle() }
-                }) {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(CRTheme.inkSoft)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .crHoverScale()
-
-                StatusDot(isOnline: store.connectedCount > 0, size: 8)
-                Text(store.connectedCount > 0 ? "Local Network Active" : "Mesh Offline")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(CRTheme.inkSoft)
-            }
-            .frame(width: isSidebarVisible ? 200 : 264, alignment: .leading) // Expand width to accommodate the spacer
-
-            Spacer()
+        HStack(spacing: 16) {
+            // Left Context (Window controls clearance)
+            Spacer().frame(width: 72)
             
-            // Command Layer Search
+            Spacer(minLength: 0)
+            
+            // Command Layer Search (Centered)
             CRSearchField(placeholder: "Search devices, clipboard, files...", text: $searchText)
-                .frame(maxWidth: 480)
+                .frame(maxWidth: 420)
+                
+            Spacer(minLength: 16)
             
-            Spacer()
-            
-            // Quick Actions Group
-            HStack(spacing: 4) {
-                HeaderActionButton(icon: "antenna.radiowaves.left.and.right", tooltip: "Scan Network") {
-                    store.scanForDevices()
-                }
-                HeaderActionButton(icon: "paperplane.fill", tooltip: "Send File") {
-                    // Triggers file picker
+            // Right Side: Status + Quick Actions
+            HStack(spacing: 16) {
+                // Network Status
+                HStack(spacing: 6) {
+                    StatusDot(isOnline: store.connectedCount > 0, size: 8)
+                    Text(store.connectedCount > 0 ? "Active" : "Offline")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .fixedSize()
                 }
                 
-                Divider()
-                    .frame(height: 16)
-                    .padding(.horizontal, 4)
-                
-                HeaderActionButton(icon: "gearshape.fill", tooltip: "Settings") {
-                    store.selectedSection = .settings
+                // Quick Actions Pill
+                HStack(spacing: 4) {
+                    HeaderActionButton(icon: "antenna.radiowaves.left.and.right", tooltip: "Scan Network") {
+                        store.scanForDevices()
+                    }
+                    HeaderActionButton(icon: "paperplane.fill", tooltip: "Send File") {
+                        // Triggers file picker
+                    }
+                    
+                    Divider()
+                        .frame(height: 16)
+                        .padding(.horizontal, 4)
+                    
+                    HeaderActionButton(icon: "gearshape.fill", tooltip: "Settings") {
+                        store.selectedSection = .settings
+                    }
                 }
+                .padding(4)
+                .background(Color.black.opacity(0.04), in: Capsule())
+                .overlay(Capsule().stroke(CRTheme.stroke.opacity(0.3), lineWidth: 1))
             }
-            .padding(4)
-            .background(Color.black.opacity(0.04), in: Capsule())
-            .overlay(Capsule().stroke(CRTheme.stroke.opacity(0.3), lineWidth: 1))
+            .layoutPriority(1)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
         .background {
             ZStack {
                 CRVisualEffect(material: .headerView, blendingMode: .withinWindow)
@@ -572,6 +581,8 @@ private struct TimelineSectionView: View {
                                 ForEach(filteredItems) { item in
                                     TimelineCard(item: item, store: store, density: density)
                                         .modifier(MasonryGridModifier())
+                                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                                        .animation(.crSpring, value: filteredItems.count)
                                 }
                             }
                             .padding(.horizontal, 20)

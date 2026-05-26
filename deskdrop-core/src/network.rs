@@ -24,7 +24,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, info};
 use uuid::Uuid;
 
-const MAX_FRAME_SIZE: u32 = 70 * 1024 * 1024; // 70 MB hard cap
+const MAX_FRAME_SIZE: u32 = 40 * 1024 * 1024; // 40 MB limit for safety (to accommodate 32MB images)
 
 /// v3 fix: outbound connections must succeed within this window.
 /// A stale mDNS entry to a dead host would otherwise block forever.

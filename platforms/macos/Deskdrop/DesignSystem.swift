@@ -792,8 +792,35 @@ struct CRSectionToolbar<TrailingContent: View>: View {
 // MARK: - Fluid Background
 
 struct CRFluidBackgroundView: View {
+    @State private var phase: CGFloat = 0.0
+
     var body: some View {
-        CRTheme.surface.ignoresSafeArea()
+        ZStack {
+            CRTheme.surface.ignoresSafeArea()
+            
+            GeometryReader { geo in
+                ZStack {
+                    Circle()
+                        .fill(CRTheme.brandElectric.opacity(0.08))
+                        .frame(width: geo.size.width * 0.8)
+                        .offset(x: cos(phase) * geo.size.width * 0.2, y: sin(phase) * geo.size.height * 0.2)
+                        .blur(radius: 80)
+                    
+                    Circle()
+                        .fill(CRTheme.brandViolet.opacity(0.06))
+                        .frame(width: geo.size.width * 0.6)
+                        .offset(x: -sin(phase) * geo.size.width * 0.3, y: -cos(phase) * geo.size.height * 0.2)
+                        .blur(radius: 60)
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+            }
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.linear(duration: 20.0).repeatForever(autoreverses: true)) {
+                phase = .pi * 2
+            }
+        }
     }
 }
 

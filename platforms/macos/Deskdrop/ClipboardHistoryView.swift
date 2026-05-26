@@ -273,14 +273,15 @@ private struct QuickSendStrip: View {
 
             quickSendTargets
         }
-        .padding(12)
+        .padding(14)
         .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(CRTheme.brandElectric.opacity(0.08))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(LinearGradient(colors: [CRTheme.brandElectric.opacity(0.15), CRTheme.brandViolet.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(CRTheme.brandElectric.opacity(0.17), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(LinearGradient(colors: [CRTheme.brandElectric.opacity(0.35), CRTheme.brandViolet.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
                 }
+                .shadow(color: CRTheme.brandElectric.opacity(0.15), radius: 12, y: 6)
         }
     }
 
@@ -407,8 +408,15 @@ private struct QuickRow: View {
             }
         }
         .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isSelected ? QuickAccessSurface.rowSelected : (hovered ? QuickAccessSurface.rowHover : .clear))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isSelected ? CRTheme.surfaceElevated : (hovered ? CRTheme.surfaceElevated.opacity(0.4) : .clear))
+                .overlay {
+                    if isSelected || hovered {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(isSelected ? CRTheme.brandElectric.opacity(0.5) : CRTheme.stroke, lineWidth: isSelected ? 1.5 : 0.5)
+                    }
+                }
+                .shadow(color: isSelected ? CRTheme.brandElectric.opacity(0.15) : .black.opacity(0.03), radius: isSelected ? 8 : 4, y: isSelected ? 3 : 1)
         }
         .padding(.horizontal, 4).padding(.vertical, 2)
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
