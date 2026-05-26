@@ -9,36 +9,38 @@
         ResizeMode="NoResize">
 
     <Window.Resources>
-        <LinearGradientBrush x:Key="AppBackground" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#0b0812" Offset="0"/>
-            <GradientStop Color="#1a1130" Offset="0.5"/>
-            <GradientStop Color="#0b0812" Offset="1"/>
-        </LinearGradientBrush>
+        <SolidColorBrush x:Key="AppBackground" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Stroke" Color="#E5E5EA"/>
+        <SolidColorBrush x:Key="Ink" Color="#111111"/>
+        <SolidColorBrush x:Key="InkSoft" Color="#6E6E73"/>
     </Window.Resources>
 
-    <Border Background="{StaticResource AppBackground}" CornerRadius="16" BorderBrush="#20FFFFFF" BorderThickness="1" ClipToBounds="True">
+    <Border Background="{StaticResource AppBackground}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" ClipToBounds="True">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" Opacity="0.1" BlurRadius="20" ShadowDepth="4" Direction="270"/>
+        </Border.Effect>
         <Grid>
             <!-- Title Bar for Dragging -->
             <Grid Height="40" VerticalAlignment="Top" Background="Transparent" MouseLeftButtonDown="Window_MouseDown" Panel.ZIndex="10">
-                <Button Content="✕" Width="30" Height="30" HorizontalAlignment="Right" Margin="0,0,10,0" Background="Transparent" Foreground="#B0B0B0" BorderThickness="0" Click="BtnClose_Click"/>
+                <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" HorizontalAlignment="Right" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnClose_Click"/>
             </Grid>
 
-            <Grid Margin="24,40,24,24">
+            <Grid Margin="32,48,32,32">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Text="Magic Link Pair" FontSize="20" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                <TextBlock Text="Magic Link Pair" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Ink}" HorizontalAlignment="Center"/>
                 <TextBlock Grid.Row="1" Text="Scan the QR code below from the Deskdrop Android app to pair instantly." 
-                           Foreground="#B0B0B0" TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,24"/>
+                           Foreground="{StaticResource InkSoft}" FontSize="14" TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,32"/>
                 
-                <Border Grid.Row="2" Background="White" CornerRadius="16" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border Grid.Row="2" Background="White" CornerRadius="16" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="{StaticResource Stroke}" BorderThickness="1">
                     <Border.Effect>
-                        <DropShadowEffect Color="Black" Opacity="0.5" BlurRadius="20" ShadowDepth="5"/>
+                        <DropShadowEffect Color="Black" Opacity="0.05" BlurRadius="12" ShadowDepth="2" Direction="270"/>
                     </Border.Effect>
-                    <Image x:Name="ImgQRCode" Width="220" Height="220" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    <Image x:Name="ImgQRCode" Width="200" Height="200" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                 </Border>
             </Grid>
         </Grid>

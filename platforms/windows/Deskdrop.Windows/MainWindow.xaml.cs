@@ -271,7 +271,7 @@ namespace Deskdrop.Windows
                 
                 TxtBroadcastTitle.Text = "Broadcast Camera";
                 TxtBroadcastDesc.Text = "Push local webcam to peers";
-                BorderBroadcastCamera.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x11, 0xFF, 0x3B, 0x30)); // Red tint
+                BorderBroadcastCamera.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xEB, 0xEC)); // #FFEBEC
             }
             else
             {
@@ -285,7 +285,7 @@ namespace Deskdrop.Windows
                     
                     TxtBroadcastTitle.Text = "Stop Broadcasting";
                     TxtBroadcastDesc.Text = "Camera is live (Broadcasting)";
-                    BorderBroadcastCamera.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x33, 0xFF, 0x3B, 0x30)); // Stronger red tint
+                    BorderBroadcastCamera.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xCD, 0xD2)); // Stronger red tint
                 }
                 catch (Exception ex)
                 {
