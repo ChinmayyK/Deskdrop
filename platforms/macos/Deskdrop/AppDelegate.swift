@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var statusItem: NSStatusItem!
     private var menuBarDropView: MenuBarDropView?
     private var menuPopover: NSPopover!
+    private var previousConnectedCount = 0
     private var dashboardController:      NSWindowController?
     private var quickAccessController:    NSWindowController?
     private var commandPaletteController: NSWindowController?
@@ -362,16 +363,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     // Allow notifications to show as banners even when app is in foreground
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .sound])
     }
     
     // Handle notification click
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        // Just bring app to front or open history panel if appropriate
-        NSApp.activate(ignoringOtherApps: true)
-        openQuickAccess()
-        completionHandler()
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        Task { @MainActor in
+            NSApp.activate(ignoringOtherApps: true)
+            self.openQuickAccess()
+            completionHandler()
+        }
     }
 
     private func pulseMenuBarIcon() {
