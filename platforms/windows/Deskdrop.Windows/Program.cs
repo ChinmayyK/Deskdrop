@@ -511,7 +511,7 @@ namespace Deskdrop.Windows
             if ((DateTime.Now - _lastBalloonAt).TotalSeconds < 3) return;
             _lastBalloonAt = DateTime.Now;
             string preview = text.Length > 60 ? text[..57] + "…" : text;
-            _tray.BeginInvoke(() =>
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 _tray.ShowBalloonTip(3000, $"📋 Clipboard from {from}", preview, ToolTipIcon.Info));
         }
 
@@ -519,7 +519,7 @@ namespace Deskdrop.Windows
 
         private void OnTofuPrompt(string deviceName, string fingerprint)
         {
-            _tray.BeginInvoke(() =>
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 string fp = FormatFingerprint(fingerprint);
                 var form = new Form
@@ -567,7 +567,7 @@ namespace Deskdrop.Windows
             {
                 bool ok = DaemonClient.Send(new { cmd = "push_clipboard" }) != null;
                 if (ok)
-                    _tray.BeginInvoke(() =>
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         _tray.ShowBalloonTip(1500, "Deskdrop", "Clipboard sent.", ToolTipIcon.Info));
             });
         }
@@ -598,12 +598,12 @@ namespace Deskdrop.Windows
                     ? new { cmd = "connect_manual", host = parts[0], port = (int)p }
                     : (object)new { cmd = "connect_manual", host = addr };
                 var resp = DaemonClient.Send(cmd);
-                _tray.BeginInvoke(() =>
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (resp != null)
                         _tray.ShowBalloonTip(2000, "Deskdrop", $"Connecting to {addr}…", ToolTipIcon.Info);
                     else
-                        MessageBox.Show($"Could not reach daemon.\nMake sure Deskdrop is running.",
+                        System.Windows.Forms.MessageBox.Show($"Could not reach daemon.\nMake sure Deskdrop is running.",
                             "Connection failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 });
             });
@@ -732,7 +732,7 @@ namespace Deskdrop.Windows
             using var mutex = new Mutex(true, "Deskdrop_SingleInstance_v1", out bool isNew);
             if (!isNew)
             {
-                MessageBox.Show("Deskdrop is already running in the system tray.",
+                System.Windows.Forms.MessageBox.Show("Deskdrop is already running in the system tray.",
                     "Already running", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }

@@ -27,7 +27,7 @@ namespace Deskdrop.Windows
             {
                 try
                 {
-                    var state = DaemonClient.GetState();
+                    var state = DaemonClient.Status();
                     if (state == null) return;
 
                     var root = state.RootElement;
@@ -63,7 +63,7 @@ namespace Deskdrop.Windows
                 }
                 catch (Exception ex)
                 {
-                    Dispatcher.Invoke(() => MessageBox.Show("Could not generate QR Code: " + ex.Message));
+                    Dispatcher.Invoke(() => System.Windows.MessageBox.Show("Could not generate QR Code: " + ex.Message));
                 }
             });
         }

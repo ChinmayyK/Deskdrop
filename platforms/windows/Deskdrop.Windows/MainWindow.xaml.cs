@@ -190,7 +190,7 @@ namespace Deskdrop.Windows
                 });
             });
             
-            MessageBox.Show("Settings saved and applied.", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show("Settings saved and applied.", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void BorderPushClipboard_Click(object sender, MouseButtonEventArgs e)
@@ -200,7 +200,7 @@ namespace Deskdrop.Windows
                 bool ok = DaemonClient.Send(new { cmd = "push_clipboard" }) != null;
                 if (ok)
                 {
-                    Dispatcher.Invoke(() => MessageBox.Show("Clipboard sent to connected devices.", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information));
+                    Dispatcher.Invoke(() => System.Windows.MessageBox.Show("Clipboard sent to connected devices.", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information));
                 }
             });
         }
@@ -214,7 +214,7 @@ namespace Deskdrop.Windows
             {
                 var file = dlg.FileName;
                 _clipboardManager?.PushFile(file);
-                MessageBox.Show($"Sending file: {System.IO.Path.GetFileName(file)}", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
+                System.Windows.MessageBox.Show($"Sending file: {System.IO.Path.GetFileName(file)}", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
@@ -241,11 +241,11 @@ namespace Deskdrop.Windows
                 {
                     if (resp == null)
                     {
-                        MessageBox.Show("Could not reach daemon.\nMake sure Deskdrop is running.", "Connection failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        System.Windows.MessageBox.Show("Could not reach daemon.\nMake sure Deskdrop is running.", "Connection failed", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                     else
                     {
-                        MessageBox.Show($"Connecting to {addr}...", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
+                        System.Windows.MessageBox.Show($"Connecting to {addr}...", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                 });
             });
@@ -288,7 +288,7 @@ namespace Deskdrop.Windows
                     _cameraPublisher = null;
                     
                     TxtBroadcastTitle.Text = "Broadcast Camera";
-                    MessageBox.Show($"Failed to start camera: {ex.Message}", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Error);
+                    System.Windows.MessageBox.Show($"Failed to start camera: {ex.Message}", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
