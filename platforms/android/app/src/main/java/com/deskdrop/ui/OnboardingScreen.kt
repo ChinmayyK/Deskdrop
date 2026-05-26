@@ -29,12 +29,19 @@ import com.deskdrop.ui.theme.crGlassCard
 fun OnboardingScreen(
     isDark: Boolean,
     peers: List<PeerSnapshot>,
-    onTrustPeer: (PeerSnapshot) -> Unit,
+    onConnectPeer: (PeerSnapshot) -> Unit,
     onSendSampleText: (PeerSnapshot) -> Unit,
     onComplete: () -> Unit
 ) {
-    var currentStep by remember { mutableStateOf(0) }
-    var selectedPeer by remember { mutableStateOf<PeerSnapshot?>(null) }
+    var selectedPeerId by remember { mutableStateOf<String?>(null) }
+    val selectedPeer = peers.find { it.id == selectedPeerId }
+
+    val currentStep = when {
+        selectedPeer == null -> 0
+        !selectedPeer.trusted -> 1
+        selectedPeer.lastSyncSecs == null -> 2
+        else -> 3
+    }
 
     CRBackground(isDark = isDark) {
         Column(
@@ -61,14 +68,13 @@ fun OnboardingScreen(
             Box(modifier = Modifier.weight(1f)) {
                 AnimatedContent(targetState = currentStep, label = "step") { step ->
                     when (step) {
-                        0 -> StepOneFindDevice(isDark, peers, selectedPeer, onPeerSelect = { selectedPeer = it; currentStep = 1 })
-                        1 -> StepTwoVerify(isDark, selectedPeer, onTrust = { 
-                            if (it != null) onTrustPeer(it)
-                            currentStep = 2 
+                        0 -> StepOneFindDevice(isDark, peers, selectedPeer, onPeerSelect = {
+                            selectedPeerId = it.id
+                            onConnectPeer(it)
                         })
+                        1 -> StepTwoPairing(isDark, selectedPeer)
                         2 -> StepThreeSendSample(isDark, selectedPeer, onSend = {
                             if (it != null) onSendSampleText(it)
-                            currentStep = 3
                         })
                         3 -> StepFourCompletion(isDark, onComplete = onComplete)
                     }
@@ -81,23 +87,15 @@ fun OnboardingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (currentStep > 0) {
-                    TextButton(onClick = { currentStep -= 1 }) {
-                        Text("BACK", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
+                if (currentStep > 0 && currentStep < 3) {
+                    TextButton(onClick = { selectedPeerId = null }) {
+                        Text("CANCEL", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
                     }
                 } else {
                     Spacer(modifier = Modifier.width(64.dp))
                 }
 
-                if (currentStep < 3) {
-                    Button(
-                        onClick = { currentStep += 1 },
-                        colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft),
-                        enabled = (currentStep == 0 && selectedPeer != null) || currentStep > 0
-                    ) {
-                        Text("NEXT", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
-                    }
-                } else {
+                if (currentStep == 3) {
                     Button(
                         onClick = onComplete,
                         colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft)
@@ -151,37 +149,19 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
 }
 
 @Composable
-private fun StepTwoVerify(isDark: Boolean, selectedPeer: PeerSnapshot?, onTrust: (PeerSnapshot?) -> Unit) {
+private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Text("Step 2: Verify & Trust", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
+        Text("Step 2: Connect & Pair", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Ensure this matches the code on ${selectedPeer?.name ?: "the device"}:", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+        Text("Connecting to ${selectedPeer?.name ?: "the device"}...", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(CRTheme.surface(isDark))
-                .padding(24.dp)
-        ) {
-            Text(
-                (selectedPeer?.id?.take(6) ?: "------").uppercase(),
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 8.sp,
-                color = CRTheme.textHigh(isDark)
-            )
-        }
+        CircularProgressIndicator(color = CRTheme.blueSoft)
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        Button(
-            onClick = { onTrust(selectedPeer) },
-            colors = ButtonDefaults.buttonColors(containerColor = CRTheme.statusGreen)
-        ) {
-            Text("TRUST DEVICE", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
-        }
+        Text("A pairing prompt with a secure PIN will appear shortly.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
     }
 }
 

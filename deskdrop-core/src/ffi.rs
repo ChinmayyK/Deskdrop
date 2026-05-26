@@ -210,7 +210,7 @@ pub const PB_EVENT_NONE: c_int = 0;
 pub const PB_EVENT_CLIPBOARD_TEXT: c_int = 1;
 pub const PB_EVENT_CLIPBOARD_IMAGE: c_int = 2;
 pub const PB_EVENT_CLIPBOARD_FILE: c_int = 3;
-pub const PB_EVENT_TOFU_PROMPT: c_int = 4;
+pub const PB_EVENT_PAIRING_REQUESTED: c_int = 4;
 pub const PB_EVENT_PEER_CONNECTED: c_int = 5;
 pub const PB_EVENT_PEER_DISCONNECTED: c_int = 6;
 pub const PB_EVENT_WARNING: c_int = 7;
@@ -230,6 +230,7 @@ pub const PB_EVENT_CAMERA_STREAM_REQUEST: c_int = 22;
 pub const PB_EVENT_CAMERA_STREAM_ACCEPT: c_int = 23;
 pub const PB_EVENT_CAMERA_STREAM_STOP: c_int = 24;
 pub const PB_EVENT_CAMERA_FRAME: c_int = 25;
+pub const PB_EVENT_SYSTEM_HEALTH_UPDATED: c_int = 26;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -290,7 +291,13 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
             }
         }
         EngineEvent::HistoryMetadataReceived { .. } => PB_EVENT_WARNING,
-        EngineEvent::TofuPrompt { .. } => PB_EVENT_TOFU_PROMPT,
+        EngineEvent::SystemHealthUpdated(_) => PB_EVENT_SYSTEM_HEALTH_UPDATED,
+        EngineEvent::ClipboardDeliveryStatus { .. } => PB_EVENT_WARNING,
+        EngineEvent::PairingRequested { .. } => PB_EVENT_PAIRING_REQUESTED,
+        EngineEvent::PairingConfirmed { .. } => PB_EVENT_WARNING,
+        EngineEvent::PairingRejected { .. } => PB_EVENT_WARNING,
+        EngineEvent::PairingRequest { .. } => PB_EVENT_WARNING,
+        EngineEvent::PairingResponse { .. } => PB_EVENT_WARNING,
         EngineEvent::ClipboardSynced { .. } => PB_EVENT_CLIPBOARD_SYNCED,
         EngineEvent::ClipboardSyncFailed { .. } => PB_EVENT_WARNING,
         EngineEvent::PeerConnected { .. } => PB_EVENT_PEER_CONNECTED,
@@ -310,8 +317,6 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CameraStreamAccept { .. } => PB_EVENT_CAMERA_STREAM_ACCEPT,
         EngineEvent::CameraStreamStop { .. } => PB_EVENT_CAMERA_STREAM_STOP,
         EngineEvent::CameraFrameReceived { .. } => PB_EVENT_CAMERA_FRAME,
-        EngineEvent::PairingRequest { .. } => PB_EVENT_WARNING,
-        EngineEvent::PairingResponse { .. } => PB_EVENT_WARNING,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
     }
 }
@@ -342,7 +347,7 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::HistoryMetadataReceived { from_name, .. } => Some(from_name.as_str()),
         EngineEvent::ClipboardSynced { peer_name, .. } => Some(peer_name.as_str()),
         EngineEvent::ClipboardSyncFailed { peer_name, .. } => Some(peer_name.as_str()),
-        EngineEvent::TofuPrompt { device_name, .. } => Some(device_name.as_str()),
+        EngineEvent::PairingRequested { device_name, .. } => Some(device_name.as_str()),
         EngineEvent::PeerConnected { device_name, .. } => Some(device_name.as_str()),
         EngineEvent::FileTransferIncoming { from_name, .. } => Some(from_name.as_str()),
         EngineEvent::FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
@@ -481,12 +486,12 @@ pub unsafe extern "C" fn deskdrop_event_transfer_dest_path(event: *mut PbEvent) 
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_fingerprint(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    if let EngineEvent::TofuPrompt {
-        fingerprint_display,
+    if let EngineEvent::PairingRequested {
+        pin,
         ..
     } = &e.inner
     {
-        let cs = CString::new(fingerprint_display.as_bytes()).unwrap_or_default();
+        let cs = CString::new(pin.as_bytes()).unwrap_or_default();
         e.cached_mime = Some(cs);
         e.cached_mime.as_ref().unwrap().as_ptr()
     } else {

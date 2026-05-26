@@ -126,14 +126,16 @@ class MainActivity : ComponentActivity() {
                         OnboardingScreen(
                             isDark = isDarkMode.value,
                             peers = peers.value,
-                            onTrustPeer = { peer ->
+                            onConnectPeer = { peer ->
+                                val ip = peer.ip ?: return@OnboardingScreen
+                                val port = 8244 // Default port
                                 ContextCompat.startForegroundService(this@MainActivity,
                                     Intent(this@MainActivity, DeskdropService::class.java).apply {
-                                        action = DeskdropService.ACTION_TRUST_PEER
-                                        putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                                        action = DeskdropService.ACTION_CONNECT
+                                        putExtra(DeskdropService.EXTRA_TARGET_IP, ip)
+                                        putExtra(DeskdropService.EXTRA_TARGET_PORT, port)
                                     }
                                 )
-                                showSnack("Trusted ${peer.name}")
                             },
                             onSendSampleText = { peer ->
                                 val svc = Intent(this@MainActivity, DeskdropService::class.java).apply {

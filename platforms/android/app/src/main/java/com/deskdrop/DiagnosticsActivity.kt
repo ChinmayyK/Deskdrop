@@ -61,14 +61,23 @@ class DiagnosticsActivity : ComponentActivity() {
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         
-                        // Items
                         DiagnosticItem(
                             isDark = isDark,
                             icon = Icons.Default.Bolt,
                             title = "Background Service",
                             status = if (isServiceRunning) "Running" else "Stopped",
                             isOk = isServiceRunning,
-                            suggestion = if (isServiceRunning) null else "Start the service from Settings or check if Battery Optimization is killing it."
+                            suggestion = if (isServiceRunning) null else "Service is not running.",
+                            actionLabel = if (isServiceRunning) null else "Start Service",
+                            onAction = {
+                                androidx.core.content.ContextCompat.startForegroundService(
+                                    this@DiagnosticsActivity,
+                                    android.content.Intent(this@DiagnosticsActivity, DeskdropService::class.java).apply {
+                                        action = DeskdropService.ACTION_START_SYNC
+                                    }
+                                )
+                                finish()
+                            }
                         )
                         
                         DiagnosticItem(
@@ -77,7 +86,17 @@ class DiagnosticsActivity : ComponentActivity() {
                             title = "Local Network",
                             status = if (connectedCount > 0) "Connected to $connectedCount peers" else "Looking for peers",
                             isOk = connectedCount > 0,
-                            suggestion = if (connectedCount > 0) null else "Ensure devices are on the same Wi-Fi network and the app is open on the other device."
+                            suggestion = if (connectedCount > 0) null else "No peers found on current network.",
+                            actionLabel = if (connectedCount > 0) null else "Scan Again",
+                            onAction = {
+                                androidx.core.content.ContextCompat.startForegroundService(
+                                    this@DiagnosticsActivity,
+                                    android.content.Intent(this@DiagnosticsActivity, DeskdropService::class.java).apply {
+                                        action = DeskdropService.ACTION_RESCAN
+                                    }
+                                )
+                                finish()
+                            }
                         )
                         
                         DiagnosticItem(
@@ -86,7 +105,12 @@ class DiagnosticsActivity : ComponentActivity() {
                             title = "Clipboard Sync",
                             status = if (autoApply) "Auto-Apply Enabled" else "Manual/Paused",
                             isOk = autoApply,
-                            suggestion = if (autoApply) null else "Enable Auto-Apply in Advanced Settings for seamless paste."
+                            suggestion = if (autoApply) null else "Enable Auto-Apply for seamless paste.",
+                            actionLabel = if (autoApply) null else "Enable",
+                            onAction = {
+                                prefs.edit().putBoolean("auto_apply_clipboard", true).apply()
+                                finish()
+                            }
                         )
                     }
                 }
@@ -102,7 +126,9 @@ fun DiagnosticItem(
     title: String,
     status: String,
     isOk: Boolean,
-    suggestion: String?
+    suggestion: String?,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -138,6 +164,16 @@ fun DiagnosticItem(
                     fontSize = 12.sp,
                     color = CRTheme.textMedium(isDark)
                 )
+            if (actionLabel != null && onAction != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onAction,
+                    colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(actionLabel, color = CRTheme.bg(isDark), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

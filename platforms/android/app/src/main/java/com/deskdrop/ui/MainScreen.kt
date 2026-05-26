@@ -906,13 +906,23 @@ fun TimelineActivityRow(
             }
         }
         
+        val primaryActionLabel = when (entry.kind) {
+            ActivityKind.CLIPBOARD_TEXT -> if (isLink) "Open Link" else "Copy Again"
+            ActivityKind.CLIPBOARD_IMAGE -> "Copy Image"
+            ActivityKind.FILE_RECEIVED, ActivityKind.FILE_TRANSFER_COMPLETE -> "Show in Downloads"
+            ActivityKind.FILE_SENT -> "Send Again"
+            ActivityKind.PEER_CONNECTED -> "Open Device"
+            ActivityKind.WARNING -> "Fix Issue"
+            else -> "Open / Copy"
+        }
+        
         androidx.compose.material3.DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false },
             modifier = Modifier.background(if (isDark) Color(0xFF1E1E1E) else Color.White)
         ) {
             androidx.compose.material3.DropdownMenuItem(
-                text = { Text("Open / Copy", color = CRTheme.textHigh(isDark)) },
+                text = { Text(primaryActionLabel, color = CRTheme.textHigh(isDark)) },
                 onClick = { showMenu = false; onApply(entry) }
             )
             androidx.compose.material3.DropdownMenuItem(

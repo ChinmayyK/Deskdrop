@@ -300,7 +300,11 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         HistoryMetadataReceived { .. } => 7,
         ClipboardSynced { .. } => 8,
         ClipboardSyncFailed { .. } => 7,
-        TofuPrompt { .. } => 4,
+        PairingRequested { .. } => 4,
+        SystemHealthUpdated(_) => 26,
+        ClipboardDeliveryStatus { .. } => 7,
+        PairingConfirmed { .. } => 7,
+        PairingRejected { .. } => 7,
         PeerConnected { .. } => 5,
         PeerDisconnected { .. } => 6,
         FileTransferIncoming { .. } => 12,
@@ -397,7 +401,8 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
         HistoryMetadataReceived { from_name, .. } => Some(from_name.as_str()),
         ClipboardSynced { peer_name, .. } => Some(peer_name.as_str()),
         ClipboardSyncFailed { peer_name, .. } => Some(peer_name.as_str()),
-        TofuPrompt { device_name, .. } => Some(device_name.as_str()),
+        PairingRequested { device_name, .. } => Some(device_name.as_str()),
+        ClipboardDeliveryStatus { .. } => None,
         PeerConnected { device_name, .. } => Some(device_name.as_str()),
         PeerDisconnected { device_name, .. } => device_name.as_deref(),
         _ => None,
@@ -425,7 +430,10 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         HistoryMetadataReceived { from_device, .. } => Some(*from_device),
         ClipboardSynced { peer_device, .. } => Some(*peer_device),
         ClipboardSyncFailed { peer_device, .. } => Some(*peer_device),
-        TofuPrompt { device_id, .. } => Some(*device_id),
+        PairingRequested { device_id, .. } => Some(*device_id),
+        PairingConfirmed { device_id, .. } => Some(*device_id),
+        PairingRejected { device_id, .. } => Some(*device_id),
+        ClipboardDeliveryStatus { .. } => None,
         PeerConnected { device_id, .. } => Some(*device_id),
         PeerDisconnected { device_id, .. } => Some(*device_id),
         FileTransferIncoming { from_device, .. } => Some(*from_device),
@@ -503,12 +511,12 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFingerprint(
         return std::ptr::null_mut();
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::TofuPrompt {
-        fingerprint_display,
+    if let crate::engine::EngineEvent::PairingRequested {
+        pin,
         ..
     } = ev
     {
-        env.new_string(fingerprint_display)
+        env.new_string(pin)
             .ok()
             .map(|s| s.into_raw())
             .unwrap_or(std::ptr::null_mut())

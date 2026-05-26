@@ -212,6 +212,7 @@ async fn recv_encrypted(stream: &mut TcpStream, session: &mut SessionKey) -> Res
 
 pub struct HandshakeResult {
     pub session: SessionKey,
+    pub pin: crate::pairing::PairingPin,
     pub peer_device_id: Uuid,
     pub peer_device_name: String,
     pub peer_identity_pubkey_bytes: [u8; 32],
@@ -273,7 +274,7 @@ pub async fn handshake_initiator(
         "handshake nonce_response is trivial (all-zero responder contribution)"
     );
 
-    let session = ephemeral
+    let (session, pin) = ephemeral
         .derive_session_key(ack.ecdh_pubkey)
         .context("ECDH key derivation")?;
 
@@ -284,6 +285,7 @@ pub async fn handshake_initiator(
 
     Ok(HandshakeResult {
         session,
+        pin,
         peer_device_id: ack.device_id,
         peer_device_name: ack.device_name,
         peer_identity_pubkey_bytes: ack.identity_pubkey,
@@ -328,12 +330,13 @@ pub async fn handshake_responder(
 
     send_frame(stream, &ack).await.context("sending HelloAck")?;
 
-    let session = ephemeral
+    let (session, pin) = ephemeral
         .derive_session_key(hello.ecdh_pubkey)
         .context("ECDH key derivation")?;
 
     Ok(HandshakeResult {
         session,
+        pin,
         peer_device_id: hello.device_id,
         peer_device_name: hello.device_name,
         peer_identity_pubkey_bytes: hello.identity_pubkey,

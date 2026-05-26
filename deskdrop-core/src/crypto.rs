@@ -106,8 +106,8 @@ impl EphemeralKeypair {
         }
     }
 
-    /// Consume the ephemeral secret, perform ECDH, derive session key.
-    pub fn derive_session_key(mut self, peer_pubkey_bytes: [u8; 32]) -> Result<SessionKey> {
+    /// Consume the ephemeral secret, perform ECDH, derive session key and PIN.
+    pub fn derive_session_key(mut self, peer_pubkey_bytes: [u8; 32]) -> Result<(SessionKey, crate::pairing::PairingPin)> {
         let secret = self.secret.take().context("keypair already consumed")?;
         let peer_public = PublicKey::from(peer_pubkey_bytes);
         let shared = secret.diffie_hellman(&peer_public);
@@ -125,6 +125,9 @@ impl EphemeralKeypair {
         let info = format!("deskdrop-v{}-session", crate::protocol::PROTOCOL_VERSION);
         let hk = Hkdf::<Sha256>::new(None, &shared_bytes);
 
+        // Derive the pairing PIN before zeroizing shared_bytes.
+        let pin = crate::pairing::derive_pin(&shared_bytes);
+
         // Zeroize the raw DH secret immediately after feeding it into HKDF;
         // it must not linger in process memory (CRIT-02).
         shared_bytes.zeroize();
@@ -140,7 +143,7 @@ impl EphemeralKeypair {
         };
 
         okm.zeroize();
-        Ok(key)
+        Ok((key, pin))
     }
 }
 
@@ -304,8 +307,8 @@ mod tests {
         let alice_pub = alice.public_bytes;
         let bob_pub = bob.public_bytes;
 
-        let mut alice_sess = alice.derive_session_key(bob_pub).unwrap();
-        let mut bob_sess = bob.derive_session_key(alice_pub).unwrap();
+        let (mut alice_sess, _) = alice.derive_session_key(bob_pub).unwrap();
+        let (mut bob_sess, _) = bob.derive_session_key(alice_pub).unwrap();
 
         let msg = b"hello deskdrop!";
         let ct = alice_sess.encrypt(msg).unwrap();
@@ -319,8 +322,8 @@ mod tests {
         let bob = EphemeralKeypair::generate();
         let alice_pub = alice.public_bytes;
         let bob_pub = bob.public_bytes;
-        let mut alice_sess = alice.derive_session_key(bob_pub).unwrap();
-        let mut bob_sess = bob.derive_session_key(alice_pub).unwrap();
+        let (mut alice_sess, _) = alice.derive_session_key(bob_pub).unwrap();
+        let (mut bob_sess, _) = bob.derive_session_key(alice_pub).unwrap();
 
         let ct = alice_sess.encrypt(b"first").unwrap();
         bob_sess.decrypt(&ct).unwrap();

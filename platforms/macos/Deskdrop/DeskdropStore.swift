@@ -106,6 +106,25 @@ final class DeskdropStore: ObservableObject {
         pollTimer = nil
         watcher.stop()
     }
+    
+    func restartDaemon() {
+        // macOS app wraps daemon lifecycle, we can just restart the background polling or tell the user to restart the app
+        // for now just stop and start
+        stop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            self.start()
+        }
+    }
+    
+    func rescanNetwork() {
+        scanForDevices()
+    }
+    
+    func enableAutoApply() {
+        if !clipboardPolicy.autoApply {
+            toggleSync()
+        }
+    }
 
     // ── Clipboard watcher setup ───────────────────────────────────────────────
 
@@ -383,6 +402,13 @@ final class DeskdropStore: ObservableObject {
     func respondToPairing(_ device: ManagedDevice, accepted: Bool) {
         Task { try? await ipc.respondToPairing(deviceId: device.id, accepted: accepted); await refresh() }
     }
+    
+    func connectAndPair(deviceId: String) {
+        Task {
+            try? await ipc.send(cmd: ["cmd": "send_pairing_request", "device_id": deviceId])
+            await refresh()
+        }
+    }
 
     // MARK: - Device actions (PeerViewModel variants)
 
@@ -487,9 +513,6 @@ final class DeskdropStore: ObservableObject {
     }
 
     // MARK: - Device discovery
-
-    /// Trigger a fresh NSD/mDNS scan. The daemon re-registers its advertisement
-    /// and re-starts discovery, picking up any peers that came online recently.
     func scanForDevices() {
         Task {
             _ = try? await ipc.send(cmd: ["cmd": "rescan_peers"])
@@ -962,6 +985,7 @@ final class DeskdropStore: ObservableObject {
             autoConnect: raw.auto_connect ?? true,
             lastError:   raw.last_error,
             pairingRequested: raw.pairing_requested ?? false,
+            pairingPin: raw.pairing_pin,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             ip:          raw.ip

@@ -27,6 +27,7 @@ struct PeerViewModel: Identifiable, Equatable {
     let autoConnect: Bool
     let lastError: String?
     let pairingRequested: Bool
+    let pairingPin: String?
 
     // ── Timing ────────────────────────────────────────────────────────────────
     let lastSeen: Date?

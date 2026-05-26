@@ -21,6 +21,7 @@ struct IpcPeerRecord: Codable {
     let last_sync: Int?
     let ip: String?
     let pairing_requested: Bool?
+    let pairing_pin: String?
 }
 
 struct IpcStatusResponse: Codable {

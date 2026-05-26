@@ -52,7 +52,7 @@ object DeskdropJni {
     const val CR_EVENT_CLIPBOARD_TEXT        = 1   // auto-applied to local clipboard
     const val CR_EVENT_CLIPBOARD_IMAGE       = 2   // auto-applied
     const val CR_EVENT_CLIPBOARD_FILE        = 3   // auto-applied (legacy)
-    const val CR_EVENT_TOFU_PROMPT           = 4
+    const val CR_EVENT_PAIRING_REQUESTED     = 4
     const val CR_EVENT_PEER_CONNECTED        = 5
     const val CR_EVENT_PEER_DISCONNECTED     = 6
     const val CR_EVENT_WARNING               = 7
@@ -67,6 +67,8 @@ object DeskdropJni {
     const val CR_EVENT_FILE_TRANSFER_RESUMED   = 21
     const val CR_EVENT_ACTIVITY_UPDATED        = 16
     const val CR_EVENT_CALL_STATE_CHANGED       = 17
+    const val CR_EVENT_CAMERA_FRAME          = 25
+    const val CR_EVENT_SYSTEM_HEALTH_UPDATED = 26
     const val CR_EVENT_CALL_ACTION              = 18
     const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
 
@@ -1132,19 +1134,23 @@ class DeskdropService : Service() {
                 }
             }
 
-            // ── Trust (TOFU) prompt ───────────────────────────────────────────
-            DeskdropJni.CR_EVENT_TOFU_PROMPT -> {
+            // ── True SAS Pairing (No auto-trust) ──────────────────────────────
+            DeskdropJni.CR_EVENT_PAIRING_REQUESTED -> {
                 val deviceId = DeskdropJni.eventDeviceId(ev) ?: return
                 val name = resolvePeerDisplayName(deviceId, DeskdropJni.eventDeviceName(ev))
-                val fp   = DeskdropJni.eventFingerprint(ev) ?: ""
-                prefs().edit().putString("fingerprint_$deviceId", fp).apply()
+                val pin  = DeskdropJni.eventFingerprint(ev) ?: "" // JNI returns pin via eventFingerprint for now
                 
-                // Auto-trust new devices on LAN (especially after QR scan)
-                // This matches the macOS behavior and avoids the disruptive pairing screen.
-                engineHandle?.let { h ->
-                    DeskdropJni.trustPeer(h, deviceId)
-                    Log.i(TAG, "Auto-trusted new peer: $name ($deviceId)")
+                // Launch PairingActivity with the PIN
+                val intent = Intent(this@DeskdropService, PairingActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra("device_id", deviceId)
+                    putExtra("device_name", name)
+                    putExtra("pin", pin)
                 }
+                startActivity(intent)
+            }
+            DeskdropJni.CR_EVENT_SYSTEM_HEALTH_UPDATED -> {
+                // TODO: Update system health state model
             }
 
             // ── Peer connected ────────────────────────────────────────────────

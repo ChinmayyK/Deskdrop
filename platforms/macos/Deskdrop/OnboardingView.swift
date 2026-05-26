@@ -20,9 +20,19 @@ struct RootContainerView: View {
 
 struct OnboardingView: View {
     @ObservedObject var store: DeskdropStore
-    @State private var currentStep = 0
-    @State private var selectedPeer: PeerViewModel?
+    @State private var selectedPeerId: String? = nil
     
+    private var selectedPeer: PeerViewModel? {
+        store.peers.first { $0.id == selectedPeerId }
+    }
+    
+    private var currentStep: Int {
+        guard let peer = selectedPeer else { return 0 }
+        if !peer.trusted { return 1 }
+        if peer.lastSync == nil { return 2 }
+        return 3
+    }
+
     let onComplete: () -> Void
 
     var body: some View {
@@ -46,13 +56,13 @@ struct OnboardingView: View {
 
                 ZStack {
                     if currentStep == 0 {
-                        StepOneFindDevice(store: store, selectedPeer: $selectedPeer, onNext: { withAnimation { currentStep = 1 } })
+                        StepOneFindDevice(store: store, selectedPeerId: $selectedPeerId)
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     } else if currentStep == 1 {
-                        StepTwoVerify(store: store, selectedPeer: selectedPeer, onNext: { withAnimation { currentStep = 2 } })
+                        StepTwoVerify(store: store, selectedPeer: selectedPeer)
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     } else if currentStep == 2 {
-                        StepThreeSendSample(store: store, selectedPeer: selectedPeer, onNext: { withAnimation { currentStep = 3 } })
+                        StepThreeSendSample(store: store, selectedPeer: selectedPeer)
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     } else if currentStep == 3 {
                         StepFourCompletion(onComplete: onComplete)
@@ -66,8 +76,8 @@ struct OnboardingView: View {
                 // Footer Navigation
                 HStack {
                     if currentStep > 0 {
-                        Button("Back") {
-                            withAnimation(.crSpring) { currentStep -= 1 }
+                        Button("Cancel") {
+                            withAnimation(.crSpring) { selectedPeerId = nil }
                         }
                         .buttonStyle(CRSecondaryButtonStyle())
                     } else {
@@ -76,12 +86,7 @@ struct OnboardingView: View {
                     
                     Spacer()
                     
-                    if currentStep < 3 {
-                        Button("Next") {
-                            withAnimation(.crSpring) { currentStep += 1 }
-                        }
-                        .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-                    } else {
+                    if currentStep == 3 {
                         Button("Get Started") {
                             onComplete()
                         }
@@ -98,8 +103,7 @@ struct OnboardingView: View {
 
 private struct StepOneFindDevice: View {
     @ObservedObject var store: DeskdropStore
-    @Binding var selectedPeer: PeerViewModel?
-    var onNext: () -> Void
+    @Binding var selectedPeerId: String?
     
     var body: some View {
         VStack(spacing: 24) {
@@ -115,8 +119,8 @@ private struct StepOneFindDevice: View {
                     } else {
                         ForEach(store.peers) { peer in
                             Button {
-                                selectedPeer = peer
-                                onNext()
+                                selectedPeerId = peer.id
+                                store.connectAndPair(deviceId: peer.id)
                             } label: {
                                 HStack {
                                     Image(systemName: peer.displayName.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
@@ -124,9 +128,9 @@ private struct StepOneFindDevice: View {
                                     Spacer()
                                 }
                                 .padding()
-                                .background(selectedPeer?.id == peer.id ? CRTheme.brandElectric.opacity(0.1) : CRTheme.surfaceElevated)
+                                .background(selectedPeerId == peer.id ? CRTheme.brandElectric.opacity(0.1) : CRTheme.surfaceElevated)
                                 .cornerRadius(12)
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selectedPeer?.id == peer.id ? CRTheme.brandElectric : CRTheme.stroke, lineWidth: 1))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selectedPeerId == peer.id ? CRTheme.brandElectric : CRTheme.stroke, lineWidth: 1))
                             }
                             .buttonStyle(.plain)
                         }
@@ -142,7 +146,6 @@ private struct StepOneFindDevice: View {
 private struct StepTwoVerify: View {
     @ObservedObject var store: DeskdropStore
     var selectedPeer: PeerViewModel?
-    var onNext: () -> Void
     
     var body: some View {
         VStack(spacing: 24) {
@@ -150,22 +153,35 @@ private struct StepTwoVerify: View {
                 .font(.system(size: 28, weight: .bold, design: .rounded))
             
             if let peer = selectedPeer {
-                Text("Ensure this matches the code on \(peer.displayName):")
-                    .foregroundStyle(CRTheme.inkSoft)
-                
-                // Using ID as a fallback for short code in this view
-                Text(String(peer.id.prefix(6).uppercased()))
-                    .font(.system(size: 32, weight: .black, design: .monospaced))
-                    .tracking(8)
-                    .padding()
-                    .background(CRTheme.surfaceElevated)
-                    .cornerRadius(12)
-                
-                Button("Trust Device") {
-                    store.trust(ManagedDevice(peer: peer))
-                    onNext()
+                if let pin = peer.pairingPin {
+                    Text("Ensure this matches the code on \(peer.displayName):")
+                        .foregroundStyle(CRTheme.inkSoft)
+                    
+                    Text(pin)
+                        .font(.system(size: 32, weight: .black, design: .monospaced))
+                        .tracking(8)
+                        .padding()
+                        .background(CRTheme.surfaceElevated)
+                        .cornerRadius(12)
+                    
+                    if peer.pairingRequested {
+                        HStack(spacing: 16) {
+                            Button("Decline") {
+                                store.respondToPairing(ManagedDevice(peer: peer), accepted: false)
+                            }
+                            .buttonStyle(CRSecondaryButtonStyle())
+                            
+                            Button("Trust Device") {
+                                store.respondToPairing(ManagedDevice(peer: peer), accepted: true)
+                            }
+                            .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
+                        }
+                    }
+                } else {
+                    Text("Connecting to \(peer.displayName)...")
+                        .foregroundStyle(CRTheme.inkSoft)
+                    ProgressView()
                 }
-                .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
             } else {
                 Text("No device selected.")
             }
@@ -176,7 +192,6 @@ private struct StepTwoVerify: View {
 private struct StepThreeSendSample: View {
     @ObservedObject var store: DeskdropStore
     var selectedPeer: PeerViewModel?
-    var onNext: () -> Void
     
     var body: some View {
         VStack(spacing: 24) {
@@ -191,10 +206,8 @@ private struct StepThreeSendSample: View {
             Button("Send 'Hello from Mac'") {
                 if let peer = selectedPeer {
                     store.applyClipboardLocally(text: "Hello from Mac")
-                    // Note: sending directly to peer would require IPC method
                     store.sendCurrentClipboard(to: ManagedDevice(peer: peer))
                 }
-                onNext()
             }
             .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
         }

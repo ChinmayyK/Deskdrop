@@ -80,6 +80,8 @@ pub struct PeerRecord {
     pub explicit_disconnect: bool,
     /// Indicates that this untrusted peer has requested pairing.
     pub pairing_requested: bool,
+    /// The generated pairing PIN to display, if pairing is requested.
+    pub pairing_pin: Option<String>,
 }
 
 impl Default for PeerRecord {
@@ -101,6 +103,7 @@ impl Default for PeerRecord {
             last_error: None,
             explicit_disconnect: false,
             pairing_requested: false,
+            pairing_pin: None,
         }
     }
 }
@@ -245,6 +248,7 @@ impl PeerManager {
                 last_error: None,
                 explicit_disconnect: false,
                 pairing_requested: false,
+                pairing_pin: None,
             });
 
             record.friendly_name = friendly_name;
@@ -466,6 +470,23 @@ impl PeerManager {
             let mut store = self.store.write().unwrap();
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.pairing_requested = requested;
+                true
+            } else {
+                false
+            }
+        };
+        if found {
+            self.save()?;
+        }
+        Ok(found)
+    }
+
+    /// Sets the pairing PIN for this peer.
+    pub fn set_pairing_pin(&self, device_id: Uuid, pin: Option<String>) -> Result<bool> {
+        let found = {
+            let mut store = self.store.write().unwrap();
+            if let Some(entry) = store.peers.get_mut(&device_id) {
+                entry.pairing_pin = pin;
                 true
             } else {
                 false

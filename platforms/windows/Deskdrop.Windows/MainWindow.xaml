@@ -280,35 +280,61 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <StackPanel Margin="48,24,48,24" Grid.Row="0">
-                            <!-- Quick Actions Ribbon -->
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,32">
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderPushClipboard_Click">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                            <TextBlock Text="Sync Clipboard" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                            <Grid Margin="0,0,0,32">
+                                <!-- Quick Actions Ribbon -->
+                                <ScrollViewer x:Name="QuickActionsRibbon" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderPushClipboard_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Sync Clipboard" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderSendFiles_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandViolet}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Send Files" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderStreamCamera_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandCyan}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Stream Camera" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderBroadcastCamera_Click" x:Name="BorderBroadcastCameraBtn">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#FF3B30" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtBroadcastTitle" Text="Broadcast Camera" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </ScrollViewer>
+                                
+                                <!-- Onboarding Checklist -->
+                                <Border x:Name="OnboardingGrid" Visibility="Collapsed" Background="#1C1C1E" CornerRadius="12" BorderBrush="#38383A" BorderThickness="1" Padding="24">
+                                    <StackPanel>
+                                        <TextBlock Text="Welcome to Deskdrop" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
+                                        
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                            <TextBlock x:Name="Step1Icon" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="Step1Text" Text="Step 1: Find a nearby device" Foreground="{StaticResource Ink}" VerticalAlignment="Center" FontSize="14"/>
                                         </StackPanel>
-                                    </Button>
-                                    <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderSendFiles_Click">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandViolet}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                            <TextBlock Text="Send Files" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                        
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                            <TextBlock x:Name="Step2Icon" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource Stroke}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="Step2Text" Text="Step 2: Connect and trust a device" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" FontSize="14"/>
                                         </StackPanel>
-                                    </Button>
-                                    <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderStreamCamera_Click">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandCyan}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                            <TextBlock Text="Stream Camera" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                        
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                            <TextBlock x:Name="Step3Icon" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource Stroke}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="Step3Text" Text="Step 3: Ready to use!" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" FontSize="14"/>
                                         </StackPanel>
-                                    </Button>
-                                    <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderBroadcastCamera_Click" x:Name="BorderBroadcastCameraBtn">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#FF3B30" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="TxtBroadcastTitle" Text="Broadcast Camera" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                </StackPanel>
-                            </ScrollViewer>
+                                        
+                                        <Button x:Name="BtnDismissOnboarding" Visibility="Collapsed" Content="Get Started" Style="{StaticResource ModernButton}" HorizontalAlignment="Left" Click="BtnDismissOnboarding_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                             
                             <TextBlock Text="Activity" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                             <TextBlock Text="Your clipboard history" FontSize="16" Foreground="{StaticResource InkSoft}" Margin="0,8,0,0"/>

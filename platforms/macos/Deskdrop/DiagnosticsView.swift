@@ -30,7 +30,9 @@ struct DiagnosticsView: View {
                         title: "Daemon Status",
                         status: store.isRunning ? "Running" : "Stopped",
                         isOk: store.isRunning,
-                        suggestion: store.isRunning ? nil : "Restart the app or check Activity Monitor for deskdrop-daemon."
+                        suggestion: store.isRunning ? nil : "Restart the app or check Activity Monitor for deskdrop-daemon.",
+                        actionLabel: store.isRunning ? nil : "Restart Daemon",
+                        onAction: { store.restartDaemon() }
                     )
                     
                     DiagnosticItem(
@@ -38,7 +40,9 @@ struct DiagnosticsView: View {
                         title: "Local Network",
                         status: store.connectedCount > 0 ? "Connected to \(store.connectedCount) peers" : "Looking for peers",
                         isOk: store.connectedCount > 0,
-                        suggestion: store.connectedCount > 0 ? nil : "Ensure devices are on the same Wi-Fi network and no firewall is blocking Deskdrop."
+                        suggestion: store.connectedCount > 0 ? nil : "Ensure devices are on the same Wi-Fi network and no firewall is blocking Deskdrop.",
+                        actionLabel: store.connectedCount > 0 ? nil : "Scan Again",
+                        onAction: { store.rescanNetwork() }
                     )
                     
                     DiagnosticItem(
@@ -46,7 +50,9 @@ struct DiagnosticsView: View {
                         title: "Clipboard Sync",
                         status: store.clipboardPolicy.autoApply ? "Enabled" : "Paused",
                         isOk: store.clipboardPolicy.autoApply,
-                        suggestion: store.clipboardPolicy.autoApply ? nil : "Enable auto-apply in Settings for instant paste."
+                        suggestion: store.clipboardPolicy.autoApply ? nil : "Enable auto-apply in Settings for instant paste.",
+                        actionLabel: store.clipboardPolicy.autoApply ? nil : "Enable",
+                        onAction: { store.enableAutoApply() }
                     )
                     
                     if let status = store.status {
@@ -55,7 +61,9 @@ struct DiagnosticsView: View {
                             title: "Daemon Version",
                             status: status.daemonVersion ?? "Unknown",
                             isOk: status.daemonVersion != nil,
-                            suggestion: nil
+                            suggestion: nil,
+                            actionLabel: nil,
+                            onAction: nil
                         )
                     }
                 }
@@ -73,6 +81,8 @@ private struct DiagnosticItem: View {
     let status: String
     let isOk: Bool
     let suggestion: String?
+    let actionLabel: String?
+    let onAction: (() -> Void)?
     
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -97,6 +107,14 @@ private struct DiagnosticItem: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Color.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                if let actionLabel = actionLabel, let onAction = onAction {
+                    Button(actionLabel) {
+                        onAction()
+                    }
+                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                    .padding(.top, 8)
                 }
             }
         }

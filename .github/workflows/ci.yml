@@ -145,9 +145,9 @@ jobs:
         run: |
           swiftc \
             -typecheck \
-            platforms/macos/ProxiBoard/AppDelegate.swift \
-            platforms/macos/ProxiBoard/PreferencesView.swift \
-            -import-objc-header platforms/macos/ProxiBoard/ProxiBoardBridge.h \
+            platforms/macos/Deskdrop/AppDelegate.swift \
+            platforms/macos/Deskdrop/PreferencesView.swift \
+            -import-objc-header platforms/macos/Deskdrop/DeskdropBridge.h \
             -sdk $(xcrun --sdk macosx --show-sdk-path) \
             -target arm64-apple-macos13.0 \
         continue-on-error: true
@@ -166,11 +166,11 @@ jobs:
       - name: Build C# project
         run: |
           # Create a stub DLL so the csproj can resolve the native ref.
-          New-Item -ItemType Directory -Force -Path platforms\windows\ProxiBoard.Windows\
+          New-Item -ItemType Directory -Force -Path platforms\windows\Deskdrop.Windows\
           Copy-Item target\release\deskdrop_core.dll `
-                    platforms\windows\ProxiBoard.Windows\deskdrop_core.dll `
+                    platforms\windows\Deskdrop.Windows\deskdrop_core.dll `
                     -ErrorAction SilentlyContinue
-          dotnet build platforms\windows\ProxiBoard.Windows\ProxiBoard.Windows.csproj `
+          dotnet build platforms\windows\Deskdrop.Windows\Deskdrop.Windows.csproj `
             -c Release --no-restore
 
   # ── Security audit ────────────────────────────────────────────────────────

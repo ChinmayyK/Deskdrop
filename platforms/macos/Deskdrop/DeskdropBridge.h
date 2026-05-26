@@ -18,7 +18,7 @@ typedef struct PbEvent         PbEvent;
 #define PB_EVENT_CLIPBOARD_TEXT          1   // auto-applied to local clipboard
 #define PB_EVENT_CLIPBOARD_IMAGE         2   // auto-applied
 #define PB_EVENT_CLIPBOARD_FILE          3   // auto-applied (legacy)
-#define PB_EVENT_TOFU_PROMPT             4
+#define PB_EVENT_PAIRING_REQUESTED       4
 #define PB_EVENT_PEER_CONNECTED          5
 #define PB_EVENT_PEER_DISCONNECTED       6
 #define PB_EVENT_WARNING                 7
@@ -30,6 +30,7 @@ typedef struct PbEvent         PbEvent;
 #define PB_EVENT_FILE_TRANSFER_COMPLETE 14
 #define PB_EVENT_FILE_TRANSFER_FAILED   15
 #define PB_EVENT_ACTIVITY_UPDATED       16
+#define PB_EVENT_SYSTEM_HEALTH_UPDATED  26
 
 // ── Engine lifecycle ──────────────────────────────────────────────────────────
 /// Start engine. Returns NULL on failure.

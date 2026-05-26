@@ -592,19 +592,26 @@ namespace Deskdrop.Windows
 
         // ── Settings ──────────────────────────────────────────────────────────
 
-        private record AppSettings(bool SyncEnabled, bool ShowNotifications,
-            string DeviceName, ushort Port);
+        public record AppSettings(bool SyncEnabled, bool ShowNotifications,
+            string DeviceName, ushort Port, bool HasCompletedOnboarding);
 
-        private static AppSettings LoadSettings()
+        public static AppSettings LoadSettings()
         {
             using var key = Registry.CurrentUser.OpenSubKey(@"Software\Deskdrop");
-            if (key == null) return new AppSettings(true, true, "", 47823);
+            if (key == null) return new AppSettings(true, true, "", 47823, false);
             return new AppSettings(
                 SyncEnabled:       ((int?)key.GetValue("SyncEnabled",       1) ?? 1) != 0,
                 ShowNotifications: ((int?)key.GetValue("ShowNotifications", 1) ?? 1) != 0,
                 DeviceName:        (string?)key.GetValue("DeviceName", "") ?? "",
                 Port:              (ushort)Math.Clamp(
-                    (int?)key.GetValue("Port", 47823) ?? 47823, 1024, 65535));
+                    (int?)key.GetValue("Port", 47823) ?? 47823, 1024, 65535),
+                HasCompletedOnboarding: ((int?)key.GetValue("HasCompletedOnboarding", 0) ?? 0) != 0);
+        }
+        
+        public static void CompleteOnboarding()
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(@"Software\Deskdrop");
+            key.SetValue("HasCompletedOnboarding", 1);
         }
 
         // ── Tray icon ─────────────────────────────────────────────────────────

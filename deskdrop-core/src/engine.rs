@@ -53,6 +53,31 @@ fn json_merge_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
     }
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub enum SystemHealthState {
+    Ready,
+    NoPeers,
+    DiscoveryInProgress,
+    NeedsLocalNetworkPermission,
+    NeedsNotificationsPermission,
+    BatteryRestricted,
+    DaemonStopped,
+    FirewallOrNetworkBlocked,
+    TrustPending,
+    SyncPaused,
+    DeliveryQueued,
+    ActionRequired(String),
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub enum DeliveryStatus {
+    Queued,
+    Sent,
+    Delivered,
+    Applied,
+    Failed(String),
+}
+
 #[derive(Debug)]
 pub enum EngineEvent {
     /// A remote clipboard item arrived and was added to the activity feed.
@@ -85,10 +110,21 @@ pub enum EngineEvent {
         seq: u64,
         reason: String,
     },
-    TofuPrompt {
+    PairingRequested {
         device_id: Uuid,
         device_name: String,
-        fingerprint_display: String,
+        pin: String,
+    },
+    PairingConfirmed {
+        device_id: Uuid,
+    },
+    PairingRejected {
+        device_id: Uuid,
+    },
+    SystemHealthUpdated(SystemHealthState),
+    ClipboardDeliveryStatus {
+        activity_id: u64,
+        status: DeliveryStatus,
     },
     PeerConnected {
         device_id: Uuid,
@@ -2538,6 +2574,7 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         hs.peer_device_id,
         hs.peer_device_name.clone(),
         hs.peer_identity_pubkey_bytes,
+        hs.pin,
     )
     .await?;
 
@@ -2658,6 +2695,7 @@ async fn connect_once(
         hs.peer_device_id,
         hs.peer_device_name.clone(),
         hs.peer_identity_pubkey_bytes,
+        hs.pin,
     )
     .await?;
 
@@ -2695,6 +2733,7 @@ async fn observe_trust(
     device_id: Uuid,
     device_name: String,
     identity_pubkey: [u8; 32],
+    pin: crate::pairing::PairingPin,
 ) -> Result<bool> {
     let record = {
         let mut trust = shared.trust.lock().await;
@@ -2748,12 +2787,13 @@ async fn observe_trust(
                 Ok(true)
             } else {
                 shared.peer_manager.update_trust(device_id, false)?;
+                let _ = shared.peer_manager.set_pairing_pin(device_id, Some(pin.display()));
                 let _ = shared
                     .event_tx
-                    .send(EngineEvent::TofuPrompt {
+                    .send(EngineEvent::PairingRequested {
                         device_id,
                         device_name,
-                        fingerprint_display: format_fingerprint(&record.key_fingerprint),
+                        pin: pin.display(),
                     })
                     .await;
                 Ok(false)

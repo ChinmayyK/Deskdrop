@@ -303,23 +303,35 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             )
             .await;
         }
-        EngineEvent::TofuPrompt {
+        EngineEvent::SystemHealthUpdated(state) => {
+            tracing::info!("[HEALTH] System state updated: {:?}", state);
+        }
+        EngineEvent::ClipboardDeliveryStatus { activity_id, status } => {
+            tracing::info!("[DELIVERY] Activity {} status: {:?}", activity_id, status);
+        }
+        EngineEvent::PairingRequested {
             device_id,
             device_name,
-            ..
+            pin,
         } => {
             push_feedback(
                 &state,
                 FeedbackEvent {
                     timestamp: now_secs(),
                     kind: "trust_prompt".into(),
-                    message: format!("{device_name} wants to connect"),
+                    message: format!("{device_name} wants to connect. PIN: {pin}"),
                     device_id: Some(device_id.to_string()),
                     device_name: Some(device_name),
                     clipboard_id: None,
                 },
             )
             .await;
+        }
+        EngineEvent::PairingConfirmed { device_id } => {
+            tracing::info!("[PAIRING] Confirmed for device {}", device_id);
+        }
+        EngineEvent::PairingRejected { device_id } => {
+            tracing::info!("[PAIRING] Rejected for device {}", device_id);
         }
         EngineEvent::PeerConnected {
             device_id,

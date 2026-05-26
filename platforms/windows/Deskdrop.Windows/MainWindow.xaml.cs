@@ -11,6 +11,7 @@ namespace Deskdrop.Windows
         private readonly ClipboardManager _clipboardManager;
         private CameraPublisher? _cameraPublisher;
         private bool _isBroadcasting;
+        private bool _hasCompletedOnboarding;
 
         public MainWindow(ClipboardManager clipboardManager)
         {
@@ -101,11 +102,32 @@ namespace Deskdrop.Windows
             if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
             
-            // Reload timeline items
-            if (_clipboardManager != null && TimelineList != null)
-            {
+            _hasCompletedOnboarding = Program.LoadSettings().HasCompletedOnboarding;
+            UpdateOnboardingVisibility();
+            
+            if (TimelineList != null)
                 TimelineList.ItemsSource = _clipboardManager.GetHistory();
+        }
+
+        private void UpdateOnboardingVisibility()
+        {
+            if (_hasCompletedOnboarding)
+            {
+                if (OnboardingGrid != null) OnboardingGrid.Visibility = Visibility.Collapsed;
+                if (QuickActionsRibbon != null) QuickActionsRibbon.Visibility = Visibility.Visible;
             }
+            else
+            {
+                if (OnboardingGrid != null) OnboardingGrid.Visibility = Visibility.Visible;
+                if (QuickActionsRibbon != null) QuickActionsRibbon.Visibility = Visibility.Collapsed;
+            }
+        }
+        
+        private void BtnDismissOnboarding_Click(object sender, RoutedEventArgs e)
+        {
+            _hasCompletedOnboarding = true;
+            Program.CompleteOnboarding();
+            UpdateOnboardingVisibility();
         }
 
         private void LoadDevicesView()
@@ -130,11 +152,47 @@ namespace Deskdrop.Windows
                         Dispatcher.Invoke(() =>
                         {
                             if (DevicesList != null) DevicesList.ItemsSource = peers;
+                            if (!_hasCompletedOnboarding)
+                            {
+                                UpdateOnboardingStatus(peers);
+                            }
                         });
                     }
                 }
                 catch { /* ignored */ }
             });
+        }
+
+        private void UpdateOnboardingStatus(System.Collections.Generic.List<PeerViewModel> peers)
+        {
+            if (_hasCompletedOnboarding) return;
+            
+            bool foundDevice = peers.Count > 0;
+            bool pairedDevice = peers.Exists(p => p.Trusted);
+            
+            if (Step1Icon != null)
+            {
+                Step1Icon.Text = foundDevice ? "\uE73E" : "\uE73E"; // Same icon but we can change color
+                Step1Icon.Foreground = new SolidColorBrush(foundDevice ? (Color)ColorConverter.ConvertFromString("#32ADE6") : (Color)ColorConverter.ConvertFromString("#38383A"));
+                Step1Text.Foreground = new SolidColorBrush(foundDevice ? (Color)ColorConverter.ConvertFromString("#FFFFFF") : (Color)ColorConverter.ConvertFromString("#8E8E93"));
+            }
+            
+            if (Step2Icon != null)
+            {
+                Step2Icon.Foreground = new SolidColorBrush(pairedDevice ? (Color)ColorConverter.ConvertFromString("#32ADE6") : (Color)ColorConverter.ConvertFromString("#38383A"));
+                Step2Text.Foreground = new SolidColorBrush(pairedDevice ? (Color)ColorConverter.ConvertFromString("#FFFFFF") : (Color)ColorConverter.ConvertFromString("#8E8E93"));
+            }
+
+            if (Step3Icon != null)
+            {
+                Step3Icon.Foreground = new SolidColorBrush(pairedDevice ? (Color)ColorConverter.ConvertFromString("#32ADE6") : (Color)ColorConverter.ConvertFromString("#38383A"));
+                Step3Text.Foreground = new SolidColorBrush(pairedDevice ? (Color)ColorConverter.ConvertFromString("#FFFFFF") : (Color)ColorConverter.ConvertFromString("#8E8E93"));
+            }
+
+            if (pairedDevice && BtnDismissOnboarding != null)
+            {
+                BtnDismissOnboarding.Visibility = Visibility.Visible;
+            }
         }
 
         private void BtnDisconnectDevice_Click(object sender, RoutedEventArgs e)
