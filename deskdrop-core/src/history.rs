@@ -572,7 +572,8 @@ impl History {
 
     fn purge_expired_sensitive_entries_with_now(&mut self, now: u64) -> Result<usize> {
         let before = self.entries.len();
-        self.entries.retain(|entry| !entry.is_sensitive_expired(now));
+        self.entries
+            .retain(|entry| !entry.is_sensitive_expired(now));
         let removed = before.saturating_sub(self.entries.len());
         if removed > 0 {
             self.persist()?;
@@ -690,9 +691,15 @@ fn is_probable_otp(text: &str) -> bool {
     if is_digit_run(text, 4, 8) {
         return true;
     }
-    let mentions_otp = ["otp", "2fa", "passcode", "verification code", "security code"]
-        .iter()
-        .any(|needle| lowered.contains(needle));
+    let mentions_otp = [
+        "otp",
+        "2fa",
+        "passcode",
+        "verification code",
+        "security code",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle));
     mentions_otp && contains_digit_run_in_range(text, 4, 8)
 }
 

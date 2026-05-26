@@ -621,7 +621,10 @@ pub mod client {
                             None => IpcResponse::err("invalid device id"),
                         }
                     }
-                    IpcRequest::RespondToPairing { device_id, accepted } => {
+                    IpcRequest::RespondToPairing {
+                        device_id,
+                        accepted,
+                    } => {
                         match crate::ipc::parse_uuid(&device_id)
                             .ok()
                             .map(|id| eng.respond_to_pairing(id, accepted))
@@ -638,16 +641,21 @@ pub mod client {
                         std::process::exit(0);
                     }
                     // ── Call continuity ────────────────────────────────────────────────
-                    IpcRequest::CallAction { action, target_device } => {
-                        match crate::ipc::parse_uuid(&target_device) {
-                            Ok(uuid) => {
-                                eng.send_call_action(action, uuid).await;
-                                IpcResponse::ok_empty()
-                            }
-                            Err(e) => IpcResponse::error(format!("bad target_device: {e}")),
+                    IpcRequest::CallAction {
+                        action,
+                        target_device,
+                    } => match crate::ipc::parse_uuid(&target_device) {
+                        Ok(uuid) => {
+                            eng.send_call_action(action, uuid).await;
+                            IpcResponse::ok_empty()
                         }
-                    }
-                    IpcRequest::PushCallState { state, number, contact_name } => {
+                        Err(e) => IpcResponse::error(format!("bad target_device: {e}")),
+                    },
+                    IpcRequest::PushCallState {
+                        state,
+                        number,
+                        contact_name,
+                    } => {
                         eng.push_call_state(state, number, contact_name).await;
                         IpcResponse::ok_empty()
                     }

@@ -389,10 +389,8 @@ mod platform {
         #[test]
         fn provisional_name_uses_service_label_when_present() {
             let id = Uuid::parse_str("12345678-1234-5678-1234-567812345678").unwrap();
-            let name = provisional_device_name(
-                "deskdrop-12345678-Pixel-8-Pro._deskdrop._tcp.local.",
-                id,
-            );
+            let name =
+                provisional_device_name("deskdrop-12345678-Pixel-8-Pro._deskdrop._tcp.local.", id);
             assert_eq!(name, "Pixel 8 Pro");
         }
     }

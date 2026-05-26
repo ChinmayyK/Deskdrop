@@ -35,7 +35,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const KEEPALIVE_IDLE: Duration = Duration::from_secs(60);
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
 const KEEPALIVE_RETRIES: u32 = 6;
-const SOCKET_BUFFER_MIN: usize = 4 * 1024 * 1024;      // 4 MB
+const SOCKET_BUFFER_MIN: usize = 4 * 1024 * 1024; // 4 MB
 const SOCKET_BUFFER_PREFERRED: usize = 8 * 1024 * 1024; // 8 MB — room for ≥2 full chunks in flight
 
 // ── TCP helpers ───────────────────────────────────────────────────────────────
@@ -164,7 +164,9 @@ async fn send_encrypted(
     msg: &AppMessage,
 ) -> Result<()> {
     let mut buffer = bincode::serialize(msg).context("serializing AppMessage")?;
-    let nonce = session.encrypt_in_place(&mut buffer).context("encrypting")?;
+    let nonce = session
+        .encrypt_in_place(&mut buffer)
+        .context("encrypting")?;
     let len = (12 + buffer.len()) as u32;
     stream.write_all(&len.to_le_bytes()).await?;
     stream.write_all(nonce.as_slice()).await?;
@@ -182,7 +184,9 @@ async fn send_encrypted_no_flush(
     msg: &AppMessage,
 ) -> Result<()> {
     let mut buffer = bincode::serialize(msg).context("serializing AppMessage")?;
-    let nonce = session.encrypt_in_place(&mut buffer).context("encrypting")?;
+    let nonce = session
+        .encrypt_in_place(&mut buffer)
+        .context("encrypting")?;
     let len = (12 + buffer.len()) as u32;
     stream.write_all(&len.to_le_bytes()).await?;
     stream.write_all(nonce.as_slice()).await?;
@@ -198,7 +202,9 @@ async fn recv_encrypted(stream: &mut TcpStream, session: &mut SessionKey) -> Res
 
     let mut cipher_buffer = vec![0u8; len as usize];
     stream.read_exact(&mut cipher_buffer).await?;
-    session.decrypt_in_place(&mut cipher_buffer).context("decrypting")?;
+    session
+        .decrypt_in_place(&mut cipher_buffer)
+        .context("decrypting")?;
     bincode::deserialize(&cipher_buffer).context("deserializing AppMessage")
 }
 

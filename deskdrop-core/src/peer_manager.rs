@@ -171,7 +171,7 @@ impl PeerManager {
         } else {
             PeerStoreData::default()
         };
-        
+
         // Connections do not persist across restarts.
         for peer in store.peers.values_mut() {
             peer.status = PeerConnectionState::Disconnected;
@@ -562,13 +562,7 @@ impl PeerManager {
             .read()
             .unwrap()
             .iter()
-            .filter(|(id, _)| {
-                store
-                    .peers
-                    .get(*id)
-                    .map(|p| p.trusted)
-                    .unwrap_or(false)
-            })
+            .filter(|(id, _)| store.peers.get(*id).map(|p| p.trusted).unwrap_or(false))
             .map(|(id, session)| (*id, session.sender.clone()))
             .collect()
     }

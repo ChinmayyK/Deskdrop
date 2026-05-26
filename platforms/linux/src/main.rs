@@ -220,10 +220,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
         }
 
         EngineEvent::PeerDisconnected { device_name, .. } => {
-            tracing::info!(
-                "{} disconnected",
-                device_name.as_deref().unwrap_or("peer")
-            );
+            tracing::info!("{} disconnected", device_name.as_deref().unwrap_or("peer"));
         }
 
         // New device wants to pair.

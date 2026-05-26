@@ -209,7 +209,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushVideoFrame(
     0
 }
 
-
 // ── pollEvent ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -652,10 +651,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferBytesReceived(
         return -1;
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::FileTransferProgress {
-        bytes_received, ..
-    } = ev
-    {
+    if let crate::engine::EngineEvent::FileTransferProgress { bytes_received, .. } = ev {
         *bytes_received as jlong
     } else {
         -1
@@ -817,7 +813,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_rejectPeer(
     match rt().block_on(h.engine.reject_peer(device_id)) {
         Ok(()) => 1,
         Err(_) => 0,
-}
+    }
 }
 
 #[no_mangle]
@@ -1249,7 +1245,10 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushCallState(
         Ok(s) => s.into(),
         Err(_) => return -1,
     };
-    let number: String = env.get_string(&number).map(|s| s.into()).unwrap_or_default();
+    let number: String = env
+        .get_string(&number)
+        .map(|s| s.into())
+        .unwrap_or_default();
     let contact_name: String = env
         .get_string(&contact_name)
         .map(|s| s.into())
@@ -1308,9 +1307,9 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventCallContactName(
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     let val = match ev {
-        crate::engine::EngineEvent::CallStateChanged {
-            contact_name, ..
-        } => Some(contact_name.as_str()),
+        crate::engine::EngineEvent::CallStateChanged { contact_name, .. } => {
+            Some(contact_name.as_str())
+        }
         _ => None,
     };
     val.and_then(|s| env.new_string(s).ok())

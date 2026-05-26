@@ -128,8 +128,7 @@ fn chunked_large_text_roundtrip() {
     let mut result = None;
 
     for msg in msgs {
-        if let Some(deskdrop_core::chunked::ReassemblerOutput::Complete(c)) = r.feed(msg).unwrap()
-        {
+        if let Some(deskdrop_core::chunked::ReassemblerOutput::Complete(c)) = r.feed(msg).unwrap() {
             result = Some(c);
         }
     }
@@ -150,8 +149,7 @@ fn chunked_image_roundtrip() {
     let mut result = None;
 
     for msg in msgs {
-        if let Some(deskdrop_core::chunked::ReassemblerOutput::Complete(c)) = r.feed(msg).unwrap()
-        {
+        if let Some(deskdrop_core::chunked::ReassemblerOutput::Complete(c)) = r.feed(msg).unwrap() {
             result = Some(c);
         }
     }

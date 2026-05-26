@@ -134,8 +134,7 @@ pub mod client {
                         return Err(e).context("connecting to named pipe");
                     }
                     Err(e) => {
-                        return Err(e)
-                            .context("daemon not running — start with `deskdrop-daemon`");
+                        return Err(e).context("daemon not running — start with `deskdrop-daemon`");
                     }
                 }
             }

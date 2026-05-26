@@ -37,9 +37,9 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks saturate
-                                                 // encrypt/serialize/frame/flush overhead.
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16;    // ACK every 16 MB — keeps the pipeline full
-                                                 // on LAN while still bounding in-flight data.
+                                                    // encrypt/serialize/frame/flush overhead.
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16; // ACK every 16 MB — keeps the pipeline full
+                                             // on LAN while still bounding in-flight data.
 
 pub type TransferId = [u8; 16];
 
@@ -184,8 +184,10 @@ impl OutboundTransfer {
                 .with_context(|| format!("missing outbound chunk {}", idx))?,
             OutboundSource::FilePath(path, cached_file) => {
                 if cached_file.is_none() {
-                    *cached_file = Some(std::fs::File::open(&path)
-                        .with_context(|| format!("opening outbound file {}", path.display()))?);
+                    *cached_file =
+                        Some(std::fs::File::open(&path).with_context(|| {
+                            format!("opening outbound file {}", path.display())
+                        })?);
                 }
                 read_file_chunk_from_file(cached_file.as_mut().unwrap(), idx, self.meta.size_bytes)?
             }
@@ -369,8 +371,7 @@ impl InboundTransfer {
 
     fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
         if let Some(file) = &mut self.file_handle {
-            file.write_all(data)
-                .context("writing chunk to temp file")?;
+            file.write_all(data).context("writing chunk to temp file")?;
         } else {
             anyhow::bail!("transfer has not been accepted or file handle is missing");
         }
@@ -595,11 +596,13 @@ impl FileTransferManager {
             .outbound
             .values()
             .filter(|transfer| {
-                matches!(transfer.status, TransferStatus::Pending | TransferStatus::Transferring)
-                    && match transfer.target_device {
-                        Some(target) => target == peer_id,
-                        None => true,
-                    }
+                matches!(
+                    transfer.status,
+                    TransferStatus::Pending | TransferStatus::Transferring
+                ) && match transfer.target_device {
+                    Some(target) => target == peer_id,
+                    None => true,
+                }
             })
             .collect();
 
@@ -624,7 +627,13 @@ impl FileTransferManager {
                 TransferStatus::Complete => "complete",
                 TransferStatus::Failed => "failed",
                 TransferStatus::Cancelled => "cancelled",
-                TransferStatus::Transferring => if t.paused { "paused" } else { "transferring" },
+                TransferStatus::Transferring => {
+                    if t.paused {
+                        "paused"
+                    } else {
+                        "transferring"
+                    }
+                }
             };
             transfers.push(serde_json::json!({
                 "transfer_id": hex::encode(t.transfer_id),
@@ -649,7 +658,13 @@ impl FileTransferManager {
                 TransferStatus::Complete => "complete",
                 TransferStatus::Failed => "failed",
                 TransferStatus::Cancelled => "cancelled",
-                TransferStatus::Transferring => if t.paused { "paused" } else { "transferring" },
+                TransferStatus::Transferring => {
+                    if t.paused {
+                        "paused"
+                    } else {
+                        "transferring"
+                    }
+                }
             };
             transfers.push(serde_json::json!({
                 "transfer_id": hex::encode(t.transfer_id),
@@ -752,14 +767,16 @@ fn chunk_count(size_bytes: u64) -> Result<u32> {
     let chunks = if size_bytes == 0 {
         0
     } else {
-        size_bytes
-            .saturating_add(FILE_CHUNK_SIZE as u64 - 1)
-            / FILE_CHUNK_SIZE as u64
+        size_bytes.saturating_add(FILE_CHUNK_SIZE as u64 - 1) / FILE_CHUNK_SIZE as u64
     };
     u32::try_from(chunks).context("file is too large to address with 32-bit chunk indices")
 }
 
-fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64) -> Result<Vec<u8>> {
+fn read_file_chunk_from_file(
+    file: &mut File,
+    chunk_index: u32,
+    total_bytes: u64,
+) -> Result<Vec<u8>> {
     let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
     let remaining = total_bytes.saturating_sub(offset);
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
@@ -775,8 +792,8 @@ fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64
 }
 
 fn checksum_file(path: &Path) -> Result<String> {
-    let mut file =
-        File::open(path).with_context(|| format!("opening file for checksum {}", path.display()))?;
+    let mut file = File::open(path)
+        .with_context(|| format!("opening file for checksum {}", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 1024 * 1024];
 

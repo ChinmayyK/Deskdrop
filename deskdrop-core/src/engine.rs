@@ -31,7 +31,6 @@ use tokio::time::timeout;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-
 /// RFC 7396 JSON merge-patch: recursively overwrite `target` with non-null
 /// fields from `patch`, removing null-keyed fields.
 fn json_merge_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
@@ -311,10 +310,7 @@ enum ListenerCommand {
 
 #[derive(Debug)]
 enum DiscoveryCommand {
-    Restart {
-        bind_ip: IpAddr,
-        port: u16,
-    },
+    Restart { bind_ip: IpAddr, port: u16 },
 }
 
 /// Active phone call state tracked by the engine.
@@ -504,8 +500,12 @@ impl Engine {
 
         let peers = self.shared.peer_manager.all_connected_senders();
         for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
-            if !peer.trusted { continue; }
+            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
+                continue;
+            };
+            if !peer.trusted {
+                continue;
+            }
             let _ = tx.send(msg.clone()).await;
         }
     }
@@ -513,21 +513,34 @@ impl Engine {
     /// Send an accept/decline call action to a specific Android peer.
     /// Called by the macOS IPC layer when the user taps Accept or Decline.
     pub async fn send_call_action(&self, action: String, target_device: Uuid) {
-        tracing::info!("send_call_action: action={}, target_device={}", action, target_device);
+        tracing::info!(
+            "send_call_action: action={}, target_device={}",
+            action,
+            target_device
+        );
         let msg = AppMessage::CallAction {
             action,
             origin_device: self.shared.config.device_id,
         };
 
         let peers = self.shared.peer_manager.all_connected_senders();
-        tracing::info!("send_call_action: all connected peers count={}", peers.len());
+        tracing::info!(
+            "send_call_action: all connected peers count={}",
+            peers.len()
+        );
         for (peer_id, tx) in peers {
             tracing::info!("send_call_action: checking peer_id={}", peer_id);
             if peer_id != target_device {
-                tracing::info!("send_call_action: peer_id mismatch (expected {}, got {})", target_device, peer_id);
+                tracing::info!(
+                    "send_call_action: peer_id mismatch (expected {}, got {})",
+                    target_device,
+                    peer_id
+                );
                 continue;
             }
-            tracing::info!("send_call_action: peer MATCHED! Sending call action message over socket...");
+            tracing::info!(
+                "send_call_action: peer MATCHED! Sending call action message over socket..."
+            );
             let _ = tx.send(msg.clone()).await;
         }
     }
@@ -551,14 +564,24 @@ impl Engine {
 
         let peers = self.shared.peer_manager.all_trusted_senders();
         for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
-            if !peer.trusted { continue; }
+            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
+                continue;
+            };
+            if !peer.trusted {
+                continue;
+            }
             let _ = tx.send(msg.clone()).await;
         }
     }
 
     /// Relay a push notification to all connected, trusted peers.
-    pub async fn push_notification(&self, id: String, package: String, title: String, text: String) {
+    pub async fn push_notification(
+        &self,
+        id: String,
+        package: String,
+        title: String,
+        text: String,
+    ) {
         let msg = AppMessage::NotificationRelay {
             id,
             package,
@@ -570,8 +593,12 @@ impl Engine {
 
         let peers = self.shared.peer_manager.all_connected_senders();
         for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
-            if !peer.trusted { continue; }
+            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
+                continue;
+            };
+            if !peer.trusted {
+                continue;
+            }
             let _ = tx.send(msg.clone()).await;
         }
     }
@@ -583,15 +610,25 @@ impl Engine {
         };
         let peers = self.shared.peer_manager.all_connected_senders();
         for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else { continue };
-            if !peer.trusted { continue; }
+            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
+                continue;
+            };
+            if !peer.trusted {
+                continue;
+            }
             let _ = tx.send(msg.clone()).await;
         }
     }
 
     /// Get battery states for all peers that have reported their level.
     pub async fn peer_batteries(&self) -> Vec<PeerBatteryState> {
-        self.shared.peer_batteries.lock().await.values().cloned().collect()
+        self.shared
+            .peer_batteries
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub async fn push_clipboard(&self, content: ClipboardContent) -> usize {
@@ -1325,7 +1362,10 @@ impl Engine {
             if send_result.is_ok() {
                 announced_to += 1;
             } else {
-                warn!("file transfer announce queue unavailable for peer {}", peer_id);
+                warn!(
+                    "file transfer announce queue unavailable for peer {}",
+                    peer_id
+                );
             }
         }
 
@@ -1338,14 +1378,18 @@ impl Engine {
             return Err(anyhow!("target peer queue unavailable"));
         }
 
-        self.shared.activity.lock().await.record_file_transfer_started(
-            self.shared.config.device_id,
-            self.shared.config.device_name.clone(),
-            file_name,
-            size_bytes,
-            hex::encode(transfer_id),
-            true,
-        );
+        self.shared
+            .activity
+            .lock()
+            .await
+            .record_file_transfer_started(
+                self.shared.config.device_id,
+                self.shared.config.device_name.clone(),
+                file_name,
+                size_bytes,
+                hex::encode(transfer_id),
+                true,
+            );
         Ok(())
     }
 
@@ -1399,11 +1443,15 @@ impl Engine {
                 let _ = tx.send(msg).await;
             });
         }
-        let _ = self.shared.event_tx.send(EngineEvent::FileTransferFailed {
-            transfer_id,
-            from_device: Uuid::nil(),
-            reason: "User cancelled".to_string()
-        }).await;
+        let _ = self
+            .shared
+            .event_tx
+            .send(EngineEvent::FileTransferFailed {
+                transfer_id,
+                from_device: Uuid::nil(),
+                reason: "User cancelled".to_string(),
+            })
+            .await;
         Ok(())
     }
 
@@ -1425,7 +1473,11 @@ impl Engine {
                 let _ = tx.send(msg).await;
             });
         }
-        let _ = self.shared.event_tx.send(EngineEvent::FileTransferPaused { transfer_id }).await;
+        let _ = self
+            .shared
+            .event_tx
+            .send(EngineEvent::FileTransferPaused { transfer_id })
+            .await;
         Ok(())
     }
 
@@ -1451,7 +1503,7 @@ impl Engine {
             tokio::spawn(async move {
                 let _ = tx_clone.send(msg).await;
             });
-            
+
             // If we are the sender, we need to restart the chunking loop!
             // `tx` is the `session_outbox_tx` for this peer.
             if was_outbound && target_device.map(|td| td == peer_id).unwrap_or(true) {
@@ -1509,13 +1561,21 @@ impl Engine {
                             .unwrap_or(false)
                     };
                     if all_sent {
-                        let _ = bg_outbox.send(AppMessage::FileTransferComplete { transfer_id: bg_transfer_id }).await;
+                        let _ = bg_outbox
+                            .send(AppMessage::FileTransferComplete {
+                                transfer_id: bg_transfer_id,
+                            })
+                            .await;
                     }
                 });
             }
         }
-        
-        let _ = self.shared.event_tx.send(EngineEvent::FileTransferResumed { transfer_id }).await;
+
+        let _ = self
+            .shared
+            .event_tx
+            .send(EngineEvent::FileTransferResumed { transfer_id })
+            .await;
         Ok(())
     }
 
@@ -1525,11 +1585,17 @@ impl Engine {
     pub async fn rescan_peers(&self) {
         if let Some(tx) = &self.shared.discovery_tx {
             let state = self.shared.network_state.lock().await;
-            let bind_ip = state.active_interface.as_ref().map(|i| i.ip).unwrap_or(state.bind_addr.ip());
-            let _ = tx.send(DiscoveryCommand::Restart {
-                bind_ip,
-                port: self.shared.config.port,
-            }).await;
+            let bind_ip = state
+                .active_interface
+                .as_ref()
+                .map(|i| i.ip)
+                .unwrap_or(state.bind_addr.ip());
+            let _ = tx
+                .send(DiscoveryCommand::Restart {
+                    bind_ip,
+                    port: self.shared.config.port,
+                })
+                .await;
         }
     }
 
@@ -1752,13 +1818,20 @@ impl Engine {
             origin_device_name: self.shared.config.device_name.clone(),
         };
         let peers = self.shared.peer_manager.all_connected_senders();
-        if let Some(tx) = peers.into_iter().find(|(id, _)| *id == target_device).map(|(_, tx)| tx) {
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
             let _ = tx.send(msg).await;
         }
     }
 
     pub async fn respond_to_pairing(&self, requester_device: Uuid, accepted: bool) -> Result<()> {
-        let _ = self.shared.peer_manager.set_pairing_requested(requester_device, false);
+        let _ = self
+            .shared
+            .peer_manager
+            .set_pairing_requested(requester_device, false);
         if accepted {
             // Trust them persistently
             self.trust_peer(requester_device).await?;
@@ -1768,7 +1841,11 @@ impl Engine {
             accepted,
         };
         let peers = self.shared.peer_manager.all_connected_senders();
-        if let Some(tx) = peers.into_iter().find(|(id, _)| *id == requester_device).map(|(_, tx)| tx) {
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == requester_device)
+            .map(|(_, tx)| tx)
+        {
             let _ = tx.send(msg).await;
         }
         if !accepted {
@@ -1832,7 +1909,7 @@ impl Engine {
             last_sync_at: self.shared.peer_manager.last_sync_at(),
         }
     }
-    
+
     pub async fn active_transfers(&self) -> Vec<serde_json::Value> {
         self.shared.file_transfers.lock().await.active_transfers()
     }
@@ -1865,7 +1942,7 @@ impl Engine {
         });
     }
 
-    /// Background watchdog to aggressively reconnect to known endpoints for trusted 
+    /// Background watchdog to aggressively reconnect to known endpoints for trusted
     /// peers that drop offline. Bypasses the need for mDNS discovery to trigger a reconnect.
     fn spawn_auto_reconnector(&self) {
         let shared = self.shared.clone();
@@ -1880,7 +1957,8 @@ impl Engine {
                 let peers = shared.peer_manager.list();
                 for peer in peers {
                     // Only consider peers that are not currently connected.
-                    let is_offline = peer.status == crate::peer_manager::PeerConnectionState::Disconnected
+                    let is_offline = peer.status
+                        == crate::peer_manager::PeerConnectionState::Disconnected
                         || peer.status == crate::peer_manager::PeerConnectionState::Failed;
                     if !is_offline {
                         continue;
@@ -1911,20 +1989,14 @@ impl Engine {
                                 endpoint = %endpoint,
                                 "auto-reconnector: attempting reconnection"
                             );
-                            let _ = connect_once(
-                                shared_clone,
-                                endpoint,
-                                Some(peer_id),
-                                discovery,
-                            ).await;
+                            let _ = connect_once(shared_clone, endpoint, Some(peer_id), discovery)
+                                .await;
                         });
                     }
                 }
             }
         });
     }
-
-
 
     async fn spawn_network_monitor(&self) -> Result<()> {
         let mut changes = network_manager::spawn_network_monitor(
@@ -2147,7 +2219,10 @@ async fn handle_network_change(shared: EngineShared, change: NetworkChangeEvent)
     );
 
     let should_rebind = previous_addr != current_addr;
-    let should_shutdown_sessions = should_rebind || change.kinds.contains(&crate::network_manager::NetworkChangeKind::NetworkLost);
+    let should_shutdown_sessions = should_rebind
+        || change
+            .kinds
+            .contains(&crate::network_manager::NetworkChangeKind::NetworkLost);
 
     if should_shutdown_sessions {
         let sessions = shared.peer_manager.shutdown_all_sessions(&reason)?;
@@ -2164,7 +2239,7 @@ async fn handle_network_change(shared: EngineShared, change: NetworkChangeEvent)
     if should_rebind {
         send_listener_rebind(&shared, current_addr).await?;
     }
-    
+
     if let Some(discovery_tx) = &shared.discovery_tx {
         let _ = discovery_tx
             .send(DiscoveryCommand::Restart {
@@ -2222,7 +2297,7 @@ async fn reconnect_known_peers(shared: EngineShared) {
             if !should_initiate_session(&shared, peer.id, peer.discovery) {
                 continue;
             }
-            
+
             // CRITICAL FIX: Do not spawn a new connection loop if the peer is already
             // connected or currently connecting. Spawning unconditionally causes massive
             // connection storms (handshakes + diffie-hellman) which overheats mobile devices.
@@ -2333,7 +2408,9 @@ fn is_obviously_local_peer(
     match (peer_ip, local_ip) {
         (Some(peer_ip), Some(local_ip))
             if peer_ip == local_ip
-                && peer_name.trim().eq_ignore_ascii_case(local_device_name.trim()) =>
+                && peer_name
+                    .trim()
+                    .eq_ignore_ascii_case(local_device_name.trim()) =>
         {
             true
         }
@@ -2345,7 +2422,9 @@ fn peer_should_replace(current: &PeerRecord, candidate: &PeerRecord) -> bool {
     peer_display_rank(candidate) < peer_display_rank(current)
 }
 
-fn peer_display_rank(peer: &PeerRecord) -> (u8, u8, u8, std::cmp::Reverse<u64>, std::cmp::Reverse<u64>) {
+fn peer_display_rank(
+    peer: &PeerRecord,
+) -> (u8, u8, u8, std::cmp::Reverse<u64>, std::cmp::Reverse<u64>) {
     let status_rank = match peer.status {
         PeerConnectionState::Connected => 0,
         PeerConnectionState::Connecting => 1,
@@ -2654,16 +2733,17 @@ fn register_session(
     // file reading loop so we don't blow up Android's memory limits.
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(16);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
-    match shared.peer_manager.upsert_peer(peer_id, peer_name.clone(), endpoint, trusted, discovery) {
+    match shared
+        .peer_manager
+        .upsert_peer(peer_id, peer_name.clone(), endpoint, trusted, discovery)
+    {
         Ok(_) => {}
         Err(e) => {
             warn!("peer discovery connect failed error={:?}", e);
             return Err(e.into());
         }
     }
-    let _ = shared
-        .peer_manager
-        .set_explicit_disconnect(peer_id, false);
+    let _ = shared.peer_manager.set_explicit_disconnect(peer_id, false);
     let (session_id, replaced) = shared.peer_manager.replace_live_session(
         peer_id,
         endpoint,
@@ -3416,7 +3496,11 @@ fn register_session(
             .mark_disconnected_if_current(peer_id, session_id, reason.clone())
         {
             Ok(true) => {
-                tracing::warn!("peer disconnected: peer_id={}, reason={:?}", peer_id, reason);
+                tracing::warn!(
+                    "peer disconnected: peer_id={}, reason={:?}",
+                    peer_id,
+                    reason
+                );
                 let _ = shared
                     .event_tx
                     .send(EngineEvent::PeerDisconnected {

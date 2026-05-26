@@ -187,7 +187,7 @@ impl SessionKey {
         self.cipher
             .encrypt_in_place(&nonce, &[], buffer)
             .map_err(|e| anyhow::anyhow!("encrypt: {:?}", e))?;
-        
+
         Ok(nonce)
     }
 
@@ -223,12 +223,15 @@ impl SessionKey {
     /// followed by the ciphertext. Upon success, the buffer is shrunk to just the plaintext.
     pub fn decrypt_in_place(&mut self, buffer: &mut Vec<u8>) -> Result<()> {
         use chacha20poly1305::aead::AeadInPlace;
-        anyhow::ensure!(buffer.len() >= 12 + 16, "frame too short (must have nonce and tag)");
-        
+        anyhow::ensure!(
+            buffer.len() >= 12 + 16,
+            "frame too short (must have nonce and tag)"
+        );
+
         let mut nonce_bytes = [0u8; 12];
         nonce_bytes.copy_from_slice(&buffer[..12]);
         let nonce = Nonce::from_slice(&nonce_bytes);
-        
+
         let counter = u64::from_be_bytes(nonce_bytes[..8].try_into().unwrap());
         anyhow::ensure!(
             counter == self.recv_counter,
@@ -247,7 +250,7 @@ impl SessionKey {
         self.cipher
             .decrypt_in_place(nonce, &[], buffer)
             .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e))?;
-            
+
         Ok(())
     }
 }

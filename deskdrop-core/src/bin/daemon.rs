@@ -6,9 +6,7 @@ use deskdrop_core::{
     ipc::{IpcRequest, IpcResponse},
     peer_manager::PeerConnectionState,
     protocol::ClipboardContent,
-    settings::{
-        default_history_path, default_settings_path, ClipboardTemplate, SettingsStore,
-    },
+    settings::{default_history_path, default_settings_path, ClipboardTemplate, SettingsStore},
     trust::format_fingerprint,
 };
 use serde::Serialize;
@@ -495,11 +493,20 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::SendPairingRequest { device_id } => {
-            state.engine.send_pairing_request(parse_uuid(&device_id)?).await;
+            state
+                .engine
+                .send_pairing_request(parse_uuid(&device_id)?)
+                .await;
             Ok(IpcResponse::ok_empty())
         }
-        IpcRequest::RespondToPairing { device_id, accepted } => {
-            let _ = state.engine.respond_to_pairing(parse_uuid(&device_id)?, accepted).await;
+        IpcRequest::RespondToPairing {
+            device_id,
+            accepted,
+        } => {
+            let _ = state
+                .engine
+                .respond_to_pairing(parse_uuid(&device_id)?, accepted)
+                .await;
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::RevokeTrustedDevice { device_id } => {
@@ -1071,13 +1078,26 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
         }
 
         // ── Call continuity ─────────────────────────────────────────────────
-        IpcRequest::CallAction { action, target_device } => {
-            state.engine.send_call_action(action, parse_uuid(&target_device)?).await;
+        IpcRequest::CallAction {
+            action,
+            target_device,
+        } => {
+            state
+                .engine
+                .send_call_action(action, parse_uuid(&target_device)?)
+                .await;
             Ok(IpcResponse::ok_empty())
         }
         // Android pushes its phone call state via IPC (daemon relays it to Mac).
-        IpcRequest::PushCallState { state: call_state, number, contact_name } => {
-            state.engine.push_call_state(call_state, number, contact_name).await;
+        IpcRequest::PushCallState {
+            state: call_state,
+            number,
+            contact_name,
+        } => {
+            state
+                .engine
+                .push_call_state(call_state, number, contact_name)
+                .await;
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::PushBatteryStatus { level, charging } => {

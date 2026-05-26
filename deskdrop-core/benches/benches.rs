@@ -3,13 +3,13 @@
 // Run:  cargo bench
 // HTML: target/criterion/report/index.html
 
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use deskdrop_core::{
     chunked::{maybe_chunk, Reassembler},
     crypto::EphemeralKeypair,
     dedup::{hash_content, Deduplicator},
     protocol::ClipboardContent,
 };
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 // ── Crypto benchmarks ─────────────────────────────────────────────────────────
 

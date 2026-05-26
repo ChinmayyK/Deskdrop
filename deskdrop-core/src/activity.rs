@@ -365,8 +365,8 @@ impl ActivityFeed {
         transfer_id: String,
         dest_path: Option<String>,
     ) -> u64 {
-        // Mark the corresponding FileTransferStarted entry to show it completed, 
-        // but DO NOT change its kind to FileTransferComplete, to avoid 
+        // Mark the corresponding FileTransferStarted entry to show it completed,
+        // but DO NOT change its kind to FileTransferComplete, to avoid
         // duplicate notifications on clients that poll incrementally.
         for e in self.entries.iter_mut() {
             if e.transfer_id.as_deref() == Some(&transfer_id)
