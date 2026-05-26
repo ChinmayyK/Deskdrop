@@ -955,7 +955,9 @@ extension AppDelegate: MenuBarDropViewDelegate {
         if menuPopover.isShown {
             menuPopover.performClose(nil)
         } else {
-            menuPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // Offset the rect upwards so the popover renders closer to the menu bar
+            let rect = button.bounds.offsetBy(dx: 0, dy: 8)
+            menuPopover.show(relativeTo: rect, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
         }
     }
