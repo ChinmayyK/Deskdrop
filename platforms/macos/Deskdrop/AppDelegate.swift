@@ -966,8 +966,8 @@ extension AppDelegate: MenuBarDropViewDelegate {
         if menuPanel.isVisible {
             closeMenuPanel()
         } else {
-            let buttonRect = button.convert(button.bounds, to: nil)
-            let screenRect = window.convertToScreen(buttonRect)
+            // The button's window frame is already in screen coordinates
+            let screenRect = window.frame
             
             let panelWidth: CGFloat = 320
             let panelHeight: CGFloat = 350
