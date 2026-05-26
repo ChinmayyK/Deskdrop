@@ -174,11 +174,16 @@ struct QuickAccessHistoryView: View {
     private func navigate(_ delta: Int) {
         let upperBound = flatResults.count - 1
         guard upperBound >= 0 else { return }
-        selectedIndex = Swift.min(upperBound, Swift.max(0, selectedIndex + delta))
+        let next = Swift.min(upperBound, Swift.max(0, selectedIndex + delta))
+        if next != selectedIndex {
+            selectedIndex = next
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .default)
+        }
     }
 
     private func runSelected() {
         guard selectedIndex < flatResults.count else { return }
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         store.copyTimelineItem(flatResults[selectedIndex])
     }
 }

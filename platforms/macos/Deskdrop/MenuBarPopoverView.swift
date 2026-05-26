@@ -136,7 +136,10 @@ private struct PopoverActionButton: View {
     @State private var isHovered = false
     
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+            action()
+        }) {
             VStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 18, weight: .medium))

@@ -21,18 +21,32 @@ struct DropCanvasView: View {
             }
 
             VStack(spacing: 20) {
-                ZStack {
                     // Background shape
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(CRTheme.surfaceElevated.opacity(0.4))
-                        .overlay(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(CRTheme.surfaceElevated.opacity(0.4))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(
+                                        isTargeted ? CRTheme.brandElectric : CRTheme.stroke,
+                                        lineWidth: isTargeted ? 2 : 1
+                                    )
+                                    .shadow(color: isTargeted ? CRTheme.brandElectric.opacity(0.4) : .clear, radius: 8, x: 0, y: 0)
+                            )
+                        
+                        if isTargeted {
+                            // Animated radar rings
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(
-                                    isTargeted ? CRTheme.brandElectric : CRTheme.stroke,
-                                    lineWidth: isTargeted ? 2 : 1
-                                )
-                                .shadow(color: isTargeted ? CRTheme.brandElectric.opacity(0.4) : .clear, radius: 8, x: 0, y: 0)
-                        )
+                                .stroke(CRTheme.brandElectric, lineWidth: 2)
+                                .scaleEffect(pulse ? 1.05 : 1.0)
+                                .opacity(pulse ? 0 : 0.8)
+                            
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(CRTheme.brandElectric, lineWidth: 1)
+                                .scaleEffect(pulse ? 1.1 : 1.0)
+                                .opacity(pulse ? 0 : 0.4)
+                        }
+                    }
 
                     VStack(spacing: 12) {
                         ZStack {
@@ -98,6 +112,7 @@ struct CanvasDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         isTargeted = false
         NotificationCenter.default.post(name: .init("closeDropCanvas"), object: nil)
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         
         let providers = info.itemProviders(for: [.fileURL])
         let group = DispatchGroup()

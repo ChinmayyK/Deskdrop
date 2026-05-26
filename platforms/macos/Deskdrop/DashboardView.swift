@@ -32,7 +32,6 @@ struct DashboardRootView: View {
                     }
                     .transition(.move(edge: .leading))
             }
-
             DetailContent(store: store, density: $density, isSidebarVisible: $isSidebarVisible, beginRename: beginRename)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -46,6 +45,7 @@ struct DashboardRootView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(.crSpring, value: pendingContinuityItems.isEmpty)
         .sheet(item: $renameTarget) { device in
             RenameDeviceSheet(
                 device: device, draft: renameDraft,
@@ -460,8 +460,26 @@ private struct ContinuityStagingDrawer: View {
                     }
                     .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
             }
+            .overlay(alignment: .bottomLeading) {
+                // Animated shrinking progress line
+                Rectangle()
+                    .fill(CRTheme.brandElectric)
+                    .frame(height: 3)
+                    .frame(maxWidth: progress * 336, alignment: .leading)
+                    .clipShape(RoundedRectangle(cornerRadius: 1.5))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
+            }
+            .onAppear {
+                progress = 1.0
+                withAnimation(.linear(duration: 5.0)) {
+                    progress = 0.0
+                }
+            }
         }
     }
+    
+    @State private var progress: CGFloat = 1.0
 
     private func isLikelyOTP(_ text: String?) -> Bool {
         guard let text else { return false }
