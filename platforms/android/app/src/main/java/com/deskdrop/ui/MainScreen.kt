@@ -360,7 +360,7 @@ fun HomeTab(
                     DeviceCard(
                         isDark = isDark, 
                         peer = peer,
-                        modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.9f) else Modifier.width(150.dp)
+                        modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp)
                     )
                 }
             }
@@ -505,9 +505,9 @@ fun ActiveTransferCard(
     val haptic = LocalHapticFeedback.current
     Column(
         modifier = Modifier
-            .width(280.dp)
+            .width(320.dp)
             .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
-            .padding(20.dp)
+            .padding(24.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -634,18 +634,18 @@ fun QuickActionCardPrimary(
                     }
                 } else null
             )
-            .padding(12.dp),
+            .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(contentAlignment = Alignment.Center) {
             // Removed pulsing background box
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(44.dp)
                     .background(displayColor.copy(alpha = if (enabled) 0.15f else 0.05f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = title, tint = displayColor, modifier = Modifier.size(16.dp))
+                Icon(imageVector = icon, contentDescription = title, tint = displayColor, modifier = Modifier.size(24.dp))
             }
         }
         Spacer(modifier = Modifier.width(16.dp))
@@ -682,18 +682,18 @@ fun QuickActionCard(
                     }
                 } else null
             )
-            .padding(vertical = 12.dp, horizontal = 8.dp),
+            .padding(vertical = 16.dp, horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
-                .size(32.dp) // Reduced from 38.dp
+                .size(40.dp) // Scaled up for better touch target
                 .background(displayColor.copy(alpha = if (enabled) 0.15f else 0.05f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = icon, contentDescription = label, tint = displayColor, modifier = Modifier.size(16.dp)) // Reduced from 20.dp
+            Icon(imageVector = icon, contentDescription = label, tint = displayColor, modifier = Modifier.size(20.dp))
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Text(text = label, style = CRTypography.caption, color = if (enabled) CRTheme.textHigh(isDark) else CRTheme.textMedium(isDark))
     }
 }
@@ -893,7 +893,7 @@ fun TimelineActivityRow(
 }
 
 @Composable
-fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifier.width(150.dp)) {
+fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifier.width(170.dp)) {
     val haptic = LocalHapticFeedback.current
     val isPhone = peer.name.contains("phone", ignoreCase = true) || peer.name.contains("pixel", ignoreCase = true)
     
@@ -910,7 +910,7 @@ fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifie
     
     Column(
         modifier = modifier
-            .height(100.dp)
+            .height(116.dp)
             .crPressScale(targetScale = 0.95f)
             .then(
                 if (peer.isConnected) Modifier.border(1.dp, CRTheme.statusGreen.copy(alpha = glowAlpha), RoundedCornerShape(24.dp))
@@ -919,7 +919,7 @@ fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifie
             .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             })
-            .padding(16.dp),
+            .padding(20.dp),
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -930,7 +930,7 @@ fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifie
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(38.dp)
                     .background(if (peer.trusted) CRTheme.indigoSoft.copy(alpha = 0.15f) else CRTheme.textMedium(isDark).copy(alpha = 0.1f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
@@ -938,7 +938,7 @@ fun DeviceCard(isDark: Boolean, peer: PeerSnapshot, modifier: Modifier = Modifie
                     imageVector = if (isPhone) Icons.Default.Smartphone else Icons.Default.LaptopMac,
                     contentDescription = null,
                     tint = if (peer.trusted) CRTheme.indigoSoft else CRTheme.textMedium(isDark),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
             if (peer.isConnected) {
@@ -983,8 +983,8 @@ fun AddDeviceCard(isDark: Boolean, onClick: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     Column(
         modifier = Modifier
-            .width(150.dp)
-            .height(100.dp)
+            .width(170.dp)
+            .height(116.dp)
             .crPressScale(targetScale = 0.95f)
             .crGlassCard(
                 isDark = isDark,
