@@ -147,7 +147,7 @@ namespace Deskdrop.Windows
                 using var stream = new global::Windows.Storage.Streams.InMemoryRandomAccessStream();
                 var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, stream);
                 // Set quality to 60% to keep size small
-                var propertySet = new global::Windows.Foundation.Collections.PropertySet();
+                var propertySet = new BitmapPropertySet();
                 var qualityValue = new BitmapTypedValue(0.6, global::Windows.Foundation.PropertyType.Single);
                 propertySet.Add("ImageQuality", qualityValue);
                 
