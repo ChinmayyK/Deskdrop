@@ -8,7 +8,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Deskdrop</AssemblyName>
-    <ApplicationIcon>Assets\deskdrop.ico</ApplicationIcon>
     <Company>Deskdrop</Company>
     <Product>Deskdrop</Product>
     <Version>0.1.0</Version>
