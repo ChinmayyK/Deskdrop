@@ -23,6 +23,7 @@ class SettingsActivity : ComponentActivity() {
     private val syncText = mutableStateOf(true)
     private val syncImages = mutableStateOf(true)
     private val syncFiles = mutableStateOf(true)
+    private val callContinuityEnabled = mutableStateOf(false)
     private val isDarkMode = mutableStateOf(false)
     private val peers = mutableStateOf(emptyList<PeerSnapshot>())
 
@@ -50,6 +51,7 @@ class SettingsActivity : ComponentActivity() {
                     syncText = syncText.value,
                     syncImages = syncImages.value,
                     syncFiles = syncFiles.value,
+                    callContinuityEnabled = callContinuityEnabled.value,
                     isDarkMode = isDarkMode.value,
                     peers = peers.value,
                     onSyncEnabledChange = {
@@ -67,6 +69,13 @@ class SettingsActivity : ComponentActivity() {
                     onSyncFilesChange = {
                         syncFiles.value = it
                         saveBooleanPref("sync_files", it)
+                    },
+                    onCallContinuityChange = {
+                        callContinuityEnabled.value = it
+                        saveBooleanPref("call_continuity_enabled", it)
+                        if (it) {
+                            requestCallContinuityPermissions()
+                        }
                     },
                     onDarkModeChange = {
                         isDarkMode.value = it
@@ -101,6 +110,7 @@ class SettingsActivity : ComponentActivity() {
         syncText.value = prefs.getBoolean("sync_text", true)
         syncImages.value = prefs.getBoolean("sync_images", true)
         syncFiles.value = prefs.getBoolean("sync_files", true)
+        callContinuityEnabled.value = prefs.getBoolean("call_continuity_enabled", false)
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
         peers.value = prefs.peerSnapshots()
     }
@@ -162,5 +172,24 @@ class SettingsActivity : ComponentActivity() {
                 action = DeskdropService.ACTION_START 
             }
         )
+    }
+
+    private fun requestCallContinuityPermissions() {
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_PHONE_STATE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.READ_PHONE_STATE
+        }
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.READ_CONTACTS
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && ContextCompat.checkSelfPermission(this, android.Manifest.permission.ANSWER_PHONE_CALLS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.ANSWER_PHONE_CALLS
+        }
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.READ_CALL_LOG
+        }
+        if (needed.isNotEmpty()) {
+            requestPermissions(needed.toTypedArray(), 1002)
+        }
     }
 }

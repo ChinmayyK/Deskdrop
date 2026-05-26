@@ -54,38 +54,50 @@ namespace Deskdrop.Windows
             Hide();
         }
 
-        private void NavHome_Checked(object sender, RoutedEventArgs e)
-        {
-            LoadHomeView();
-        }
-
-        private void NavTimeline_Checked(object sender, RoutedEventArgs e)
-        {
-            LoadTimelineView();
-        }
-
-        private void NavDevices_Checked(object sender, RoutedEventArgs e)
+        private void NavDevices_Click(object sender, RoutedEventArgs e)
         {
             LoadDevicesView();
         }
 
-        private void NavSettings_Checked(object sender, RoutedEventArgs e)
+        private void NavSettings_Click(object sender, RoutedEventArgs e)
         {
             LoadSettingsView();
+        }
+
+        private void BtnBack_Click(object sender, RoutedEventArgs e)
+        {
+            LoadHomeView();
+        }
+
+        public void ShowToast(string message, bool isError = false)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                NotificationMessage.Text = message;
+                if (isError)
+                {
+                    NotificationIcon.Text = "\xE783"; // Warning icon
+                    NotificationIcon.Foreground = new SolidColorBrush(Color.FromRgb(255, 59, 48)); // Red
+                }
+                else
+                {
+                    NotificationIcon.Text = "\xE946"; // Info icon
+                    NotificationIcon.Foreground = (SolidColorBrush)FindResource("BrandElectric");
+                }
+                
+                NotificationToast.Visibility = Visibility.Visible;
+                
+                // Auto-hide after 3 seconds
+                System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ => 
+                {
+                    Dispatcher.Invoke(() => NotificationToast.Visibility = Visibility.Collapsed);
+                });
+            });
         }
 
         private void LoadHomeView()
         {
             if (HomeView != null) HomeView.Visibility = Visibility.Visible;
-            if (TimelineView != null) TimelineView.Visibility = Visibility.Collapsed;
-            if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
-            if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
-        }
-
-        private void LoadTimelineView()
-        {
-            if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
-            if (TimelineView != null) TimelineView.Visibility = Visibility.Visible;
             if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
             
@@ -99,7 +111,6 @@ namespace Deskdrop.Windows
         private void LoadDevicesView()
         {
             if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
-            if (TimelineView != null) TimelineView.Visibility = Visibility.Collapsed;
             if (DevicesView != null) DevicesView.Visibility = Visibility.Visible;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
             
@@ -148,7 +159,6 @@ namespace Deskdrop.Windows
         private void LoadSettingsView()
         {
             if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
-            if (TimelineView != null) TimelineView.Visibility = Visibility.Collapsed;
             if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Visible;
             
@@ -196,7 +206,7 @@ namespace Deskdrop.Windows
                 });
             });
             
-            System.Windows.MessageBox.Show("Settings saved and applied.", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowToast("Settings saved and applied.");
         }
 
         private void BorderPushClipboard_Click(object sender, MouseButtonEventArgs e)
@@ -206,7 +216,7 @@ namespace Deskdrop.Windows
                 bool ok = DaemonClient.Send(new { cmd = "push_clipboard" }) != null;
                 if (ok)
                 {
-                    Dispatcher.Invoke(() => System.Windows.MessageBox.Show("Clipboard sent to connected devices.", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information));
+                    ShowToast("Clipboard sent to connected devices.");
                 }
             });
         }
@@ -220,7 +230,7 @@ namespace Deskdrop.Windows
             {
                 var file = dlg.FileName;
                 _clipboardManager?.PushFile(file);
-                System.Windows.MessageBox.Show($"Sending file: {System.IO.Path.GetFileName(file)}", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowToast($"Sending file: {System.IO.Path.GetFileName(file)}");
             }
         }
 
@@ -247,11 +257,11 @@ namespace Deskdrop.Windows
                 {
                     if (resp == null)
                     {
-                        System.Windows.MessageBox.Show("Could not reach daemon.\nMake sure Deskdrop is running.", "Connection failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        ShowToast("Could not reach daemon. Make sure Deskdrop is running.", true);
                     }
                     else
                     {
-                        System.Windows.MessageBox.Show($"Connecting to {addr}...", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowToast($"Connecting to {addr}...");
                     }
                 });
             });
@@ -294,7 +304,7 @@ namespace Deskdrop.Windows
                     _cameraPublisher = null;
                     
                     TxtBroadcastTitle.Text = "Broadcast Camera";
-                    System.Windows.MessageBox.Show($"Failed to start camera: {ex.Message}", "Deskdrop", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowToast($"Failed to start camera: {ex.Message}", true);
                 }
             }
         }
@@ -304,6 +314,52 @@ namespace Deskdrop.Windows
             var qrWindow = new QRPairingWindow();
             qrWindow.Owner = this;
             qrWindow.ShowDialog();
+        }
+
+        private string? _currentTofuDevice;
+
+        public void ShowTofuPrompt(string deviceName, string fingerprint)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                _currentTofuDevice = deviceName;
+                TxtTofuDeviceName.Text = deviceName;
+                TxtTofuFingerprint.Text = FormatFingerprint(fingerprint);
+                TofuPromptOverlay.Visibility = Visibility.Visible;
+            });
+        }
+
+        private void BtnTofuTrust_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentTofuDevice != null)
+            {
+                _clipboardManager?.RespondToTrust(_currentTofuDevice, true);
+                ShowToast($"{_currentTofuDevice} trusted.");
+                _currentTofuDevice = null;
+            }
+            TofuPromptOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void BtnTofuReject_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentTofuDevice != null)
+            {
+                _clipboardManager?.RespondToTrust(_currentTofuDevice, false);
+                _currentTofuDevice = null;
+            }
+            TofuPromptOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private static string FormatFingerprint(string raw)
+        {
+            var clean = raw.Replace(":", "").ToUpperInvariant();
+            var pairs = new System.Collections.Generic.List<string>();
+            for (int i = 0; i + 1 < clean.Length; i += 2)
+                pairs.Add(clean.Substring(i, 2));
+            var lines = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < pairs.Count; i += 8)
+                lines.Add(string.Join(":", pairs.GetRange(i, Math.Min(8, pairs.Count - i))));
+            return string.Join("\n", lines);
         }
     }
 }

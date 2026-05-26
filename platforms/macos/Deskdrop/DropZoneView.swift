@@ -37,7 +37,7 @@ struct DropZoneView: View {
                         .foregroundColor(.white)
                         .contentTransition(.interpolate)
                     
-                    Text("Sends to all connected devices")
+                    Text(store.defaultTargetDevice != nil ? "Sends to \(store.defaultTargetDevice!.name)" : "Sends to all connected devices")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Color.white.opacity(0.6))
                 }
@@ -75,13 +75,13 @@ struct DropZoneView: View {
                        let urlString = String(data: data, encoding: .utf8),
                        let url = URL(string: urlString) {
                         DispatchQueue.main.async {
-                            self.store.sendFiles(urls: [url])
+                            self.store.sendFiles(urls: [url], to: self.store.defaultTargetDevice)
                             // Force hide drop zone when a file is successfully dropped
                             GlobalDragMonitor.shared.isDraggingFile = false
                         }
                     } else if let url = item as? URL {
                         DispatchQueue.main.async {
-                            self.store.sendFiles(urls: [url])
+                            self.store.sendFiles(urls: [url], to: self.store.defaultTargetDevice)
                             GlobalDragMonitor.shared.isDraggingFile = false
                         }
                     }

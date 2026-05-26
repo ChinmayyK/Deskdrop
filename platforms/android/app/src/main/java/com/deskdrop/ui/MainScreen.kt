@@ -97,6 +97,7 @@ fun MainScreen(
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit = {},
     onResendActivity: (ActivityEntry) -> Unit = {}
 ) {
@@ -169,7 +170,8 @@ fun MainScreen(
                                 onActionPauseSync = onActionPauseSync,
                                 onActionDisconnectAll = onActionDisconnectAll,
                                 onActionStopService = onActionStopService,
-                                onOpenSettings = onOpenSettings
+                                onOpenSettings = onOpenSettings,
+                                onOpenDiagnostics = onOpenDiagnostics
                             )
                         }
                     }
@@ -411,7 +413,7 @@ fun HomeTab(
             onViewAll = { onTabSelected(AppTab.Activity) }
         )
         
-        Spacer(modifier = Modifier.height(100.dp)) // Space for dock
+        Spacer(modifier = Modifier.height(160.dp)) // Space for dock
     }
 }
 
@@ -747,16 +749,34 @@ fun ActivityTimelineSection(
                 style = CRTypography.label, // Medium/Semibold
                 color = CRTheme.textHigh(isDark)
             )
-            if (filteredFeed.size > 4) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val context = androidx.compose.ui.platform.LocalContext.current
                 Row(
                     modifier = Modifier
                         .crPressScale(0.95f)
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { onViewAll() }
+                        .clickable { 
+                            context.startActivity(android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            }) 
+                        }
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("View All", style = CRTypography.caption, color = CRTheme.brandElectric)
+                    Text("Downloads", style = CRTypography.caption, color = CRTheme.textHigh(isDark))
+                }
+                
+                if (filteredFeed.size > 4) {
+                    Row(
+                        modifier = Modifier
+                            .crPressScale(0.95f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onViewAll() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("View All", style = CRTypography.caption, color = CRTheme.brandElectric)
+                    }
                 }
             }
         }
@@ -1343,7 +1363,8 @@ fun SettingsTab(
     onActionPauseSync: () -> Unit,
     onActionDisconnectAll: () -> Unit,
     onActionStopService: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenDiagnostics: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -1372,6 +1393,7 @@ fun SettingsTab(
             item { SettingsActionTile(isDark = isDark, icon = Icons.Default.LinkOff, label = "Disconnect All", color = CRTheme.brandPink, onClick = onActionDisconnectAll) }
             item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Stop, label = "Stop Service", color = CRTheme.accentRed, onClick = onActionStopService) }
             item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Settings, label = "Advanced Settings", color = CRTheme.textMedium(isDark), onClick = onOpenSettings) }
+            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Info, label = "Diagnostics", color = CRTheme.brandElectric, onClick = onOpenDiagnostics) }
         }
     }
 }

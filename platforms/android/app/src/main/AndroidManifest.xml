@@ -81,6 +81,12 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- ── Diagnostics ───────────────────────────────────────────── -->
+        <activity
+            android:name=".DiagnosticsActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- ── Camera Stream ─────────────────────────────────────────── -->
         <activity
             android:name=".CameraStreamActivity"

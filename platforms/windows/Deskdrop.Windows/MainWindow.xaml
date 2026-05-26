@@ -263,7 +263,8 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="10,0" WindowChrome.IsHitTestVisibleInChrome="True">
-                        <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavSettings_Checked"/>
+                        <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavSettings_Click"/>
+                        <Button Content="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavDevices_Click"/>
                         <Button Content="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnMinimize_Click"/>
                         <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnClose_Click"/>
                     </StackPanel>
@@ -272,76 +273,43 @@
                 <!-- Views Container -->
                 <Grid Margin="0,40,0,0">
                     
-                    <!-- Home View -->
+                    <!-- Home/Timeline Combined View -->
                     <Grid x:Name="HomeView" Visibility="Visible">
-                        <StackPanel Margin="48,24,48,48">
-                            <TextBlock Text="Actions" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,8"/>
-                            <TextBlock Text="Quick tools for your ecosystem" FontSize="16" Foreground="{StaticResource InkSoft}" Margin="0,0,0,32"/>
-                            
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="180"/>
-                                    <RowDefinition Height="180"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                
-                                <!-- Push Clipboard Card -->
-                                <Border Style="{StaticResource AnimatedCardStyle}" Grid.Row="0" Grid.Column="0" Background="#111111" CornerRadius="20" Padding="24" Margin="0,0,12,12" MouseLeftButtonDown="BorderPushClipboard_Click" Cursor="Hand" BorderThickness="1" BorderBrush="#222222">
-                                    <StackPanel Background="Transparent">
-                                        <Border Width="48" Height="48" CornerRadius="24" Background="#1C1C1E" HorizontalAlignment="Left" Margin="0,0,0,16">
-                                            <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <TextBlock Text="Clipboard Sync" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,4"/>
-                                        <TextBlock Text="Send copied text &amp; images" Foreground="{StaticResource InkSoft}" FontSize="14" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </Border>
-                                
-                                <!-- Send Files Card -->
-                                <Border Style="{StaticResource AnimatedCardStyle}" Grid.Row="0" Grid.Column="1" Background="#111111" CornerRadius="20" Padding="24" Margin="12,0,0,12" MouseLeftButtonDown="BorderSendFiles_Click" Cursor="Hand" BorderThickness="1" BorderBrush="#222222">
-                                    <StackPanel Background="Transparent">
-                                        <Border Width="48" Height="48" CornerRadius="24" Background="#1C1C1E" HorizontalAlignment="Left" Margin="0,0,0,16">
-                                            <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandViolet}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <TextBlock Text="Files" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,4"/>
-                                        <TextBlock Text="Share files across devices" Foreground="{StaticResource InkSoft}" FontSize="14" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </Border>
-                                
-                                <!-- Stream Camera Card -->
-                                <Border Style="{StaticResource AnimatedCardStyle}" Grid.Row="1" Grid.Column="0" Background="#111111" CornerRadius="20" Padding="24" Margin="0,12,12,0" MouseLeftButtonDown="BorderStreamCamera_Click" Cursor="Hand" BorderThickness="1" BorderBrush="#222222">
-                                    <StackPanel Background="Transparent">
-                                        <Border Width="48" Height="48" CornerRadius="24" Background="#1C1C1E" HorizontalAlignment="Left" Margin="0,0,0,16">
-                                            <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandCyan}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <TextBlock Text="Stream Camera" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,4"/>
-                                        <TextBlock Text="View connected camera feed" Foreground="{StaticResource InkSoft}" FontSize="14" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Broadcast Camera Card -->
-                                <Border Style="{StaticResource AnimatedCardStyle}" Grid.Row="1" Grid.Column="1" Background="#111111" CornerRadius="20" Padding="24" Margin="12,12,0,0" MouseLeftButtonDown="BorderBroadcastCamera_Click" Cursor="Hand" x:Name="BorderBroadcastCamera" BorderThickness="1" BorderBrush="#222222">
-                                    <StackPanel Background="Transparent">
-                                        <Border Width="48" Height="48" CornerRadius="24" Background="#1C1C1E" HorizontalAlignment="Left" Margin="0,0,0,16">
-                                            <TextBlock Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#FF3B30" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <TextBlock x:Name="TxtBroadcastTitle" Text="Broadcast Camera" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,4"/>
-                                        <TextBlock x:Name="TxtBroadcastDesc" Text="Push local webcam to peers" Foreground="{StaticResource InkSoft}" FontSize="14" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Timeline View -->
-                    <Grid x:Name="TimelineView" Visibility="Collapsed">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <StackPanel Margin="48,24,48,24">
+                        <StackPanel Margin="48,24,48,24" Grid.Row="0">
+                            <!-- Quick Actions Ribbon -->
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,32">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderPushClipboard_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Sync Clipboard" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderSendFiles_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandViolet}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Send Files" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderStreamCamera_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandCyan}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Stream Camera" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource ModernButton}" Background="#111111" BorderBrush="#38383A" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderBroadcastCamera_Click" x:Name="BorderBroadcastCameraBtn">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#FF3B30" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtBroadcastTitle" Text="Broadcast Camera" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </ScrollViewer>
+                            
                             <TextBlock Text="Activity" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                             <TextBlock Text="Your clipboard history" FontSize="16" Foreground="{StaticResource InkSoft}" Margin="0,8,0,0"/>
                         </StackPanel>
@@ -374,9 +342,12 @@
                     </Grid>
 
                     <!-- Devices View -->
-                    <Grid x:Name="DevicesView" Visibility="Collapsed">
+                    <Grid x:Name="DevicesView" Visibility="Collapsed" Background="{StaticResource AppBackground}">
                         <StackPanel Margin="48,24,48,48">
-                            <TextBlock Text="Ecosystem" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,32">
+                                <Button Content="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="{StaticResource Ink}" BorderThickness="0" Padding="0,0,16,0" Click="BtnBack_Click"/>
+                                <TextBlock Text="Ecosystem" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                            </StackPanel>
                             <TextBlock Text="Nearby devices" FontSize="16" Foreground="{StaticResource InkSoft}" Margin="0,8,0,32"/>
                             
                             <ItemsControl x:Name="DevicesList" Margin="0,0,0,32">
@@ -418,11 +389,13 @@
                     </Grid>
 
                     <!-- Settings View -->
-                    <Grid x:Name="SettingsView" Visibility="Collapsed">
+                    <Grid x:Name="SettingsView" Visibility="Collapsed" Background="{StaticResource AppBackground}">
                         <ScrollViewer>
                             <StackPanel Margin="48,24,48,48">
-                                <TextBlock Text="Settings" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
-                                <TextBlock Text="Deskdrop Preferences" FontSize="16" Foreground="{StaticResource InkSoft}" Margin="0,8,0,32"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,32">
+                                    <Button Content="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="{StaticResource Ink}" BorderThickness="0" Padding="0,0,16,0" Click="BtnBack_Click"/>
+                                    <TextBlock Text="Settings" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                                </StackPanel>
                                 
                                 <!-- General -->
                                 <TextBlock Text="General" Foreground="{StaticResource BrandElectric}" FontSize="14" FontWeight="Bold" Margin="0,0,0,16"/>
@@ -463,35 +436,61 @@
                     </Grid>
                 </Grid>
                 
-                <!-- Floating Navigation Bar -->
-                <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,32" CornerRadius="24" Background="#1C1C1E" BorderThickness="1" Padding="8" Panel.ZIndex="20">
-                    <Border.BorderBrush>
-                        <SolidColorBrush Color="#38383A"/>
-                    </Border.BorderBrush>
+                <!-- Inline Notification Toast Overlay -->
+                <Border x:Name="NotificationToast" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="0,16,0,0" Padding="16,12" HorizontalAlignment="Center" VerticalAlignment="Top" Visibility="Collapsed" Panel.ZIndex="50" MinWidth="300">
                     <Border.Effect>
-                        <DropShadowEffect Color="Black" Opacity="0.50" BlurRadius="32" ShadowDepth="16" Direction="270"/>
+                        <DropShadowEffect Color="Black" Opacity="0.5" BlurRadius="20" ShadowDepth="4"/>
                     </Border.Effect>
-                    <StackPanel Orientation="Horizontal">
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavbarButtonStyle}" IsChecked="True" Checked="NavHome_Checked">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE80F;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Home" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavbarButtonStyle}" Checked="NavTimeline_Checked">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Activity" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavbarButtonStyle}" Checked="NavDevices_Checked">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Ecosystem" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
-                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="NotificationIcon" Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{StaticResource BrandElectric}" Margin="0,0,12,0" VerticalAlignment="Center" Grid.Column="0"/>
+                        <TextBlock x:Name="NotificationMessage" Text="Settings saved." Foreground="{StaticResource Ink}" FontSize="14" VerticalAlignment="Center" Grid.Column="1" TextWrapping="Wrap"/>
+                    </Grid>
                 </Border>
+
+                <!-- Tofu Prompt Overlay -->
+                <Grid x:Name="TofuPromptOverlay" Visibility="Collapsed" Panel.ZIndex="100">
+                    <Border Background="#99000000" />
+                    <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="32" MaxWidth="500">
+                        <Border.Effect>
+                            <DropShadowEffect Color="Black" Opacity="0.6" BlurRadius="40" ShadowDepth="10" Direction="270"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="Trust new device?" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
+                            <TextBlock Text="A new device wants to sync your clipboard." Foreground="{StaticResource InkSoft}" FontSize="16" Margin="0,0,0,24"/>
+                            
+                            <Grid Margin="0,0,0,24">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="48" Height="48" CornerRadius="24" Background="#2C2C2E" Margin="0,0,16,0" Grid.Column="0">
+                                    <TextBlock Text="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtTofuDeviceName" Text="DeviceName" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Fingerprint:" Foreground="{StaticResource InkSubtle}" FontSize="14" Margin="0,0,0,8"/>
+                            <TextBox x:Name="TxtTofuFingerprint" Style="{StaticResource ModernTextBox}" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="80" MaxHeight="120" Margin="0,0,0,24"/>
+
+                            <TextBlock Text="&#xE783; Only trust devices you own or control." FontFamily="Segoe MDL2 Assets" Foreground="DarkOrange" FontSize="14" Margin="0,0,0,24" TextWrapping="Wrap"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="&#xE8FB; Trust" FontFamily="Segoe MDL2 Assets" Style="{StaticResource ModernButton}" Margin="0,0,8,0" Click="BtnTofuTrust_Click"/>
+                                <Button Grid.Column="1" Content="&#xE711; Reject" FontFamily="Segoe MDL2 Assets" Style="{StaticResource ModernButton}" Background="#2C1A1A" Foreground="#FF3B30" Margin="8,0,0,0" Click="BtnTofuReject_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
                 
             </Grid>
         </Grid>

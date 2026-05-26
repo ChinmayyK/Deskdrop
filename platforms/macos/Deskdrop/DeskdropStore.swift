@@ -61,6 +61,8 @@ final class DeskdropStore: ObservableObject {
     private var ipcFailureCount: Int = 0
     private var isCameraPolling = false
 
+    @AppStorage("lastUsedDeviceId") private var lastUsedDeviceId: String = ""
+
     init(ipc: DeskdropIPCClient = .shared) {
         self.ipc = ipc
         startPolling()
@@ -72,6 +74,14 @@ final class DeskdropStore: ObservableObject {
     var devices: [ManagedDevice] { peers.map(ManagedDevice.init) }
     var connectedDevices: [ManagedDevice] { devices.filter(\.isConnected) }
     var status: StatusSnapshot? { dashboardStatus }
+
+    var defaultTargetDevice: ManagedDevice? {
+        let connected = connectedDevices
+        if !lastUsedDeviceId.isEmpty, let last = connected.first(where: { $0.id == lastUsedDeviceId }) {
+            return last
+        }
+        return connected.first
+    }
 
     var timeline: [TimelineItem] {
         activityFeed.prefix(80).map { TimelineItem(entry: $0, pinned: pinnedItemIds.contains($0.id)) }
@@ -444,6 +454,9 @@ final class DeskdropStore: ObservableObject {
     }
 
     func sendFiles(urls: [URL], to device: ManagedDevice?) {
+        if let device = device {
+            lastUsedDeviceId = device.id
+        }
         Task {
             for url in urls {
                 _ = try? await ipc.sendFile(url: url, targetDeviceId: device?.id)
@@ -451,6 +464,9 @@ final class DeskdropStore: ObservableObject {
         }
     }
     func sendFiles(urls: [URL], toPeer deviceId: String? = nil) {
+        if let id = deviceId {
+            lastUsedDeviceId = id
+        }
         Task {
             for url in urls {
                 _ = try? await ipc.sendFile(url: url, targetDeviceId: deviceId)
@@ -577,6 +593,9 @@ final class DeskdropStore: ObservableObject {
 
     /// Send the current local clipboard to all (or one) connected peer.
     func sendCurrentClipboard(to device: ManagedDevice?) {
+        if let device = device {
+            lastUsedDeviceId = device.id
+        }
         Task {
             try? await ipc.sendClipboardCurrent(targetDeviceId: device?.id)
             let target = device?.name ?? "all devices"

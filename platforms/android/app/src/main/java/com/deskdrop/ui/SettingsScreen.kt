@@ -62,12 +62,14 @@ fun SettingsScreen(
     syncText: Boolean,
     syncImages: Boolean,
     syncFiles: Boolean,
+    callContinuityEnabled: Boolean,
     isDarkMode: Boolean,
     peers: List<com.deskdrop.PeerSnapshot>,
     onSyncEnabledChange: (Boolean) -> Unit,
     onSyncTextChange: (Boolean) -> Unit,
     onSyncImagesChange: (Boolean) -> Unit,
     onSyncFilesChange: (Boolean) -> Unit,
+    onCallContinuityChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     onRenameClicked: () -> Unit,
     onBatterySettingsClicked: () -> Unit,
@@ -273,6 +275,24 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                item {
+                    SettingsSection(
+                        isDark = isDarkMode,
+                        title = "Features",
+                        accentColor = CRTheme.statusAmber,
+                        icon = Icons.Rounded.Star
+                    ) {
+                        SettingsSwitchRow(
+                            isDark = isDarkMode,
+                            icon = Icons.Rounded.Phone,
+                            title = "Call Continuity",
+                            subtitle = "Requires Phone, Contacts, and Call Log permissions",
+                            checked = callContinuityEnabled,
+                            onCheckedChange = onCallContinuityChange
+                        )
                     }
                 }
 

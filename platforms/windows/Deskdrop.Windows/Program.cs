@@ -525,40 +525,11 @@ namespace Deskdrop.Windows
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                string fp = FormatFingerprint(fingerprint);
-                var form = new Form
+                OpenDashboard();
+                if (_mainWindow != null)
                 {
-                    Text = "Trust new device?", ClientSize = new Size(430, 330),
-                    FormBorderStyle = FormBorderStyle.FixedDialog,
-                    StartPosition = FormStartPosition.CenterScreen,
-                    MaximizeBox = false, MinimizeBox = false, TopMost = true,
-                };
-                var lbl = new Label
-                {
-                    Text = $"A new device wants to sync your clipboard.\n\n" +
-                           $"Device: {deviceName}\n\nFingerprint:",
-                    Left = 16, Top = 16, Width = 398, Height = 70,
-                };
-                var fpBox = new TextBox
-                {
-                    Text = fp, Left = 16, Top = 90, Width = 398, Height = 110,
-                    Multiline = true, ReadOnly = true, Font = new Font("Consolas", 9f),
-                    BackColor = SystemColors.Window, BorderStyle = BorderStyle.FixedSingle,
-                };
-                var warn = new Label
-                {
-                    Text = "⚠️  Only trust devices you own or control.",
-                    Left = 16, Top = 208, Width = 398, Height = 24, ForeColor = Color.DarkOrange,
-                };
-                var btnOk  = new Button { Text = "✅ Trust",  Left = 224, Top = 254, Width = 90, Height = 32, DialogResult = DialogResult.Yes };
-                var btnNo  = new Button { Text = "❌ Reject", Left = 322, Top = 254, Width = 90, Height = 32, DialogResult = DialogResult.No  };
-                form.Controls.AddRange(new Control[] { lbl, fpBox, warn, btnOk, btnNo });
-                form.AcceptButton = btnOk; form.CancelButton = btnNo;
-
-                bool approved = form.ShowDialog() == DialogResult.Yes;
-                _mgr.RespondToTrust(deviceName, approved);
-                if (approved)
-                    _tray.ShowBalloonTip(2000, "Deskdrop", $"{deviceName} trusted.", ToolTipIcon.Info);
+                    _mainWindow.ShowTofuPrompt(deviceName, fingerprint);
+                }
             });
         }
 
@@ -589,27 +560,9 @@ namespace Deskdrop.Windows
 
         private void OnManualConnect(object? s, EventArgs e)
         {
-            string? addr = ShowInputDialog(
-                "Connect to Device",
-                "IP address or hostname (optionally :port):",
-                "192.168.1.x:47823");
-            if (string.IsNullOrWhiteSpace(addr)) return;
-
-            Task.Run(() =>
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                var parts = addr.Split(':', 2, StringSplitOptions.RemoveEmptyEntries);
-                object cmd = parts.Length == 2 && ushort.TryParse(parts[1], out var p)
-                    ? new { cmd = "connect_manual", host = parts[0], port = (int)p }
-                    : (object)new { cmd = "connect_manual", host = addr };
-                var resp = DaemonClient.Send(cmd);
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                {
-                    if (resp != null)
-                        _tray.ShowBalloonTip(2000, "Deskdrop", $"Connecting to {addr}…", ToolTipIcon.Info);
-                    else
-                        System.Windows.Forms.MessageBox.Show($"Could not reach daemon.\nMake sure Deskdrop is running.",
-                            "Connection failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                });
+                OpenDashboard();
             });
         }
 
@@ -693,24 +646,7 @@ namespace Deskdrop.Windows
             return string.Join("\n", lines);
         }
 
-        private static string? ShowInputDialog(string title, string prompt, string placeholder)
-        {
-            var form = new Form
-            {
-                Text = title, ClientSize = new Size(380, 120),
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                StartPosition = FormStartPosition.CenterScreen,
-                MaximizeBox = false, MinimizeBox = false,
-            };
-            var lbl  = new Label  { Text = prompt, Left = 12, Top = 14, Width = 356, Height = 34 };
-            var txt  = new TextBox { Left = 12, Top = 52, Width = 260, PlaceholderText = placeholder };
-            var btn  = new Button  { Text = "Connect", Left = 280, Top = 50, Width = 88, Height = 26,
-                                     DialogResult = DialogResult.OK };
-            form.Controls.AddRange(new Control[] { lbl, txt, btn });
-            form.AcceptButton = btn;
-            return form.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(txt.Text)
-                ? txt.Text.Trim() : null;
-        }
+        // Removed ShowInputDialog as we're migrating away from WinForms Dialogs
 
         protected override void Dispose(bool disposing)
         {

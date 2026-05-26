@@ -25,7 +25,7 @@ struct DashboardRootView: View {
                 .padding(.bottom, 32)
                 .zIndex(50)
         }
-        .background(CRFluidBackgroundView())
+        .background(CRTheme.surfaceElevated.ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
         .overlay(alignment: .bottomTrailing) {
             if !pendingContinuityItems.isEmpty {
@@ -1170,9 +1170,20 @@ private struct CompactDeviceCard: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandViolet], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 48, height: 48)
-                Image(systemName: device.name.lowercased().contains("mac") ? "laptopcomputer" : "iphone")
-                    .font(.system(size: 20))
-                    .foregroundStyle(.white)
+                if device.name.lowercased().contains("mac") {
+                    Image(systemName: "laptopcomputer")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white)
+                } else if let imgPath = Bundle.main.path(forResource: "AndroidLogo", ofType: "png"), let nsImg = NSImage(contentsOfFile: imgPath) {
+                    Image(nsImage: nsImg)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                } else {
+                    Image(systemName: "smartphone")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white)
+                }
             }
             
             // Text
@@ -1200,9 +1211,13 @@ private struct CompactDeviceCard: View {
             // Actions
             HStack(spacing: 8) {
                 Button(action: onSendFiles) {
-                    Image(systemName: "folder")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(CRTheme.ink)
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Files")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(CRTheme.ink)
                 }
                 .buttonStyle(CRSecondaryButtonStyle())
                 .help("Send Files")
@@ -1210,7 +1225,7 @@ private struct CompactDeviceCard: View {
                 Button(action: { store.disconnect(device) }) {
                     Image(systemName: "link.badge.minus")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(CRTheme.ink)
+                        .foregroundStyle(CRTheme.accentRed)
                 }
                 .buttonStyle(CRSecondaryButtonStyle())
                 .help("Disconnect")
@@ -1501,8 +1516,18 @@ struct DeviceIdentityCard: View {
                     .foregroundStyle(isOnline ? CRTheme.ink : CRTheme.inkSoft)
                 
                 HStack(spacing: 6) {
-                    Image(systemName: device.name.lowercased().contains("mac") ? "macbook.and.iphone" : "iphone")
-                        .font(.system(size: 11))
+                    if device.name.lowercased().contains("mac") {
+                        Image(systemName: "macbook.and.iphone")
+                            .font(.system(size: 11))
+                    } else if let imgPath = Bundle.main.path(forResource: "AndroidLogo", ofType: "png"), let nsImg = NSImage(contentsOfFile: imgPath) {
+                        Image(nsImage: nsImg)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: "smartphone")
+                            .font(.system(size: 11))
+                    }
                     
                     Text(isOnline ? "Active · 23ms" : "Offline") // Mock ping
                         .font(.system(size: 11, weight: .semibold))
@@ -1734,7 +1759,7 @@ struct DeviceListRow: View {
     var body: some View {
         HStack(spacing: 16) {
             // Leading: Device type icon
-            Image(systemName: device.name.lowercased().contains("mac") ? "laptopcomputer" : "iphone")
+            Image(systemName: device.name.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
                 .font(.system(size: 18, weight: .regular))
                 .foregroundStyle(CRTheme.brandElectric)
                 .frame(width: 24, alignment: .center)

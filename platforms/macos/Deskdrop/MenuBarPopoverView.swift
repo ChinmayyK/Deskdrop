@@ -7,6 +7,7 @@ enum MenuBarPopoverAction {
     case pushClipboard
     case sendFile
     case scan
+    case diagnostics
     case quit
 }
 
@@ -48,6 +49,16 @@ struct MenuBarPopoverView: View {
                 
                 Spacer()
                 
+                Button(action: { onAction(.diagnostics) }) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.secondary.opacity(0.7))
+                        .frame(width: 28, height: 28)
+                        .background(Color.primary.opacity(0.05), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .crHoverScale()
+
                 Button(action: { onAction(.quit) }) {
                     Image(systemName: "power")
                         .font(.system(size: 14, weight: .semibold))
@@ -118,7 +129,7 @@ struct MenuBarPopoverView: View {
             .overlay(Rectangle().frame(height: 1).opacity(0.05), alignment: .top)
         }
         .frame(width: 320)
-        .background(CRVisualEffect(material: .popover))
+        .background(CRVisualEffect(material: .menu))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)

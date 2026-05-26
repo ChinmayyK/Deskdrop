@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private let store = DeskdropStore()
     private var statusItem: NSStatusItem!
     private var menuBarDropView: MenuBarDropView?
+    private var quickAccessWindow: NSWindow?
+    private var diagnosticsWindow: NSWindow?
     private var previousConnectedCount = 0
     private var menuPanel: NSPanel!
     private var localEventMonitor: Any?
@@ -168,6 +170,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+    private func openDiagnostics() {
+        if diagnosticsWindow == nil {
+            let win = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 400, height: 350),
+                styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered, defer: false
+            )
+            win.titleVisibility = .hidden
+            win.titlebarAppearsTransparent = true
+            win.isMovableByWindowBackground = true
+            win.center()
+            win.contentViewController = NSHostingController(rootView: DiagnosticsView(store: store))
+            win.level = .floating
+            win.isReleasedWhenClosed = false
+            diagnosticsWindow = win
+        }
+        diagnosticsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     // MARK: - Single instance guard
 
     private func ensureSingleRunningInstance() -> Bool {
@@ -234,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         case .pushClipboard: forcePushClipboard()
         case .sendFile: sendFileFromMenu()
         case .scan: scanDevices()
+        case .diagnostics: openDiagnostics()
         case .quit: quitApp()
         }
     }
@@ -482,6 +505,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 primaryAction: ToastAction(title: "Reveal in Finder", role: .primary) {
                     let url = URL(fileURLWithPath: destPath)
                     NSWorkspace.shared.activateFileViewerSelecting([url])
+                },
+                secondaryAction: ToastAction(title: "Copy", role: .secondary) {
+                    let url = URL(fileURLWithPath: destPath)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.writeObjects([url as NSPasteboardWriting])
                 }
             )
             
@@ -632,7 +660,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         Task {
             do {
-                try await DeskdropIPCClient.shared.sendClipboardCurrent(targetDeviceId: nil)
+                try await DeskdropIPCClient.shared.sendClipboardCurrent(targetDeviceId: store.defaultTargetDevice?.id)
                 store.showToast(
                     title: "Clipboard Synced",
                     body: "Pushed to all connected devices.",
@@ -743,7 +771,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         panel.prompt                  = "Send"
         panel.message                 = "Choose files to send to connected devices"
         if panel.runModal() == .OK, !panel.urls.isEmpty {
-            store.sendFiles(urls: panel.urls, toPeer: nil)
+            store.sendFiles(urls: panel.urls, toPeer: store.defaultTargetDevice?.id)
         }
     }
 
@@ -816,7 +844,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         Task {
             do {
-                try await DeskdropIPCClient.shared.sendClipboardCurrent(targetDeviceId: nil)
+                try await DeskdropIPCClient.shared.sendClipboardCurrent(targetDeviceId: store.defaultTargetDevice?.id)
                 store.showToast(
                     title: "URL Sent",
                     body: url,
@@ -948,8 +976,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 // MARK: - MenuBarDropViewDelegate
 
 extension AppDelegate: MenuBarDropViewDelegate {
+    func application(_ sender: NSApplication, openFiles filenames: [String]) {
+        let urls = filenames.map { URL(fileURLWithPath: $0) }
+        store.sendFiles(urls: urls, toPeer: store.defaultTargetDevice?.id)
+    }
+
     func menuBarDropView(_ view: MenuBarDropView, didReceiveFiles urls: [URL]) {
-        store.sendFiles(urls: urls, toPeer: nil)
+        store.sendFiles(urls: urls, toPeer: store.defaultTargetDevice?.id)
         // Brief visual feedback
         store.showToast(
             title: "Sending \(urls.count) file\(urls.count == 1 ? "" : "s")",

@@ -215,7 +215,10 @@ class DeskdropShareTarget : ComponentActivity() {
                             ArrayList(stagedUris)
                         )
                         sharedName?.let { putExtra(DeskdropService.EXTRA_SHARED_NAME, it) }
-                        targetId?.let { putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, it) }
+                        targetId?.let { 
+                            putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, it)
+                            getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putString("last_used_device_id", it).apply()
+                        }
                     }
                     runCatching { ContextCompat.startForegroundService(this@DeskdropShareTarget, svc) }
                     Toast.makeText(this@DeskdropShareTarget, "Sending to Deskdrop", Toast.LENGTH_SHORT).show()
@@ -267,7 +270,16 @@ fun ShareTargetUI(
     onCancel: () -> Unit,
     onSend: (String?) -> Unit
 ) {
-    var selectedDevice by remember { mutableStateOf<String?>(if (peers.size == 1) peers.first().id else null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = context.getSharedPreferences(com.deskdrop.DeskdropService.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+    val lastUsedId = prefs.getString("last_used_device_id", null)
+    
+    var selectedDevice by remember { 
+        mutableStateOf<String?>(
+            if (peers.size == 1) peers.first().id 
+            else peers.find { it.id == lastUsedId }?.id
+        ) 
+    }
     var isSending by remember { mutableStateOf(false) }
 
     val sheetBg = if (isDark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)

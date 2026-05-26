@@ -81,6 +81,9 @@ swiftc \
 
 cp "${MACOS_DIR}/${SOURCE_DIR_NAME}/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
 cp "${STATUS_ICON_SRC}" "${APP_BUNDLE}/Contents/Resources/StatusBarIcon.png"
+if [[ -f "${MACOS_DIR}/${SOURCE_DIR_NAME}/Resources/AndroidLogo.png" ]]; then
+    cp "${MACOS_DIR}/${SOURCE_DIR_NAME}/Resources/AndroidLogo.png" "${APP_BUNDLE}/Contents/Resources/AndroidLogo.png"
+fi
 
 # Generate AppIcon.icns from the bundled source PNG.
 if [[ -f "${ICON_SRC}" ]]; then

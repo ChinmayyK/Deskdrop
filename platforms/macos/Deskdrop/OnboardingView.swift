@@ -9,7 +9,7 @@ struct RootContainerView: View {
             if hasCompletedOnboarding {
                 DashboardRootView(store: store)
             } else {
-                OnboardingView(onComplete: {
+                OnboardingView(store: store, onComplete: {
                     hasCompletedOnboarding = true
                 })
             }
@@ -17,20 +17,22 @@ struct RootContainerView: View {
         .frame(minWidth: 1020, minHeight: 700)
     }
 }
+
 struct OnboardingView: View {
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @ObservedObject var store: DeskdropStore
     @State private var currentStep = 0
+    @State private var selectedPeer: PeerViewModel?
+    
     let onComplete: () -> Void
 
     var body: some View {
         ZStack {
-            CRFluidBackgroundView()
-                .ignoresSafeArea()
+            CRFluidBackgroundView().ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Header (Pagination)
                 HStack(spacing: 8) {
-                    ForEach(0..<3) { step in
+                    ForEach(0..<4) { step in
                         Circle()
                             .fill(step == currentStep ? CRTheme.brandElectric : CRTheme.strokeSoft)
                             .frame(width: 8, height: 8)
@@ -42,23 +44,22 @@ struct OnboardingView: View {
                 
                 Spacer()
 
-                // Carousel Content
                 ZStack {
                     if currentStep == 0 {
-                        StepOne()
+                        StepOneFindDevice(store: store, selectedPeer: $selectedPeer, onNext: { withAnimation { currentStep = 1 } })
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     } else if currentStep == 1 {
-                        StepTwo()
+                        StepTwoVerify(store: store, selectedPeer: selectedPeer, onNext: { withAnimation { currentStep = 2 } })
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     } else if currentStep == 2 {
-                        StepThree(onComplete: {
-                            hasCompletedOnboarding = true
-                        })
-                        .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                        StepThreeSendSample(store: store, selectedPeer: selectedPeer, onNext: { withAnimation { currentStep = 3 } })
+                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                    } else if currentStep == 3 {
+                        StepFourCompletion(onComplete: onComplete)
+                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     }
                 }
                 .animation(.crSpring, value: currentStep)
-                .animation(.easeInOut, value: currentStep)
                 
                 Spacer()
                 
@@ -70,19 +71,19 @@ struct OnboardingView: View {
                         }
                         .buttonStyle(CRSecondaryButtonStyle())
                     } else {
-                        Spacer().frame(width: 80) // Placeholder for alignment
+                        Spacer().frame(width: 80)
                     }
                     
                     Spacer()
                     
-                    if currentStep < 2 {
+                    if currentStep < 3 {
                         Button("Next") {
                             withAnimation(.crSpring) { currentStep += 1 }
                         }
                         .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                     } else {
                         Button("Get Started") {
-                            finishOnboarding()
+                            onComplete()
                         }
                         .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                     }
@@ -93,117 +94,133 @@ struct OnboardingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
-    private func finishOnboarding() {
-        hasCompletedOnboarding = true
-        onComplete()
-    }
 }
 
-private struct StepOne: View {
+private struct StepOneFindDevice: View {
+    @ObservedObject var store: DeskdropStore
+    @Binding var selectedPeer: PeerViewModel?
+    var onNext: () -> Void
+    
     var body: some View {
         VStack(spacing: 24) {
-            ZStack {
-                Circle().fill(CRTheme.brandElectric.opacity(0.1))
-                    .frame(width: 120, height: 120)
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 50))
-                    .foregroundStyle(CRTheme.brandElectric)
-            }
-            
-            VStack(spacing: 12) {
-                Text("Welcome to Deskdrop")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(CRTheme.ink)
-                
-                Text("Beam files, text, and links instantly across\nmacOS, Windows, Linux, and Android.")
-                    .font(.system(size: 16))
-                    .foregroundStyle(CRTheme.inkSoft)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-            }
-        }
-    }
-}
-
-private struct StepTwo: View {
-    var body: some View {
-        VStack(spacing: 30) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(CRTheme.surfaceElevated)
-                    .frame(width: 540, height: 200)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(CRTheme.stroke, lineWidth: 1)
-                    )
-                
-                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 24) {
-                    FeatureRow(icon: "doc.on.clipboard", text: "Universal Clipboard")
-                    FeatureRow(icon: "menubar.rectangle", text: "Menu Bar Drag & Drop")
-                    FeatureRow(icon: "command", text: "Cmd+K Command Palette")
-                    FeatureRow(icon: "clock.arrow.circlepath", text: "Cmd+Shift+V History")
-                    FeatureRow(icon: "lock.shield", text: "E2E Encrypted (Noise)")
-                    FeatureRow(icon: "eye.slash.fill", text: "Ignores Passwords & OTPs")
-                }
-                .padding(.horizontal, 40)
-            }
-            
-            VStack(spacing: 12) {
-                Text("Packed with Power")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(CRTheme.ink)
-                
-                Text("Deskdrop lives in your menu bar.\nNo accounts, no cloud servers, no limits.")
-                    .font(.system(size: 16))
-                    .foregroundStyle(CRTheme.inkSoft)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-            }
-        }
-    }
-}
-
-private struct FeatureRow: View {
-    let icon: String
-    let text: String
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
+            Text("Step 1: Find a device")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+            Text("Make sure Deskdrop is running on your phone or another computer.")
                 .foregroundStyle(CRTheme.inkSoft)
-                .frame(width: 24)
-            Text(text)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(CRTheme.ink)
+            
+            ScrollView {
+                VStack(spacing: 8) {
+                    if store.peers.isEmpty {
+                        Text("Searching for nearby devices...").foregroundStyle(CRTheme.inkSoft).padding()
+                    } else {
+                        ForEach(store.peers) { peer in
+                            Button {
+                                selectedPeer = peer
+                                onNext()
+                            } label: {
+                                HStack {
+                                    Image(systemName: peer.displayName.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
+                                    Text(peer.displayName).font(.system(size: 16, weight: .semibold))
+                                    Spacer()
+                                }
+                                .padding()
+                                .background(selectedPeer?.id == peer.id ? CRTheme.brandElectric.opacity(0.1) : CRTheme.surfaceElevated)
+                                .cornerRadius(12)
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selectedPeer?.id == peer.id ? CRTheme.brandElectric : CRTheme.stroke, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .frame(width: 400, height: 250)
         }
     }
 }
 
-private struct StepThree: View {
-    let onComplete: () -> Void
+private struct StepTwoVerify: View {
+    @ObservedObject var store: DeskdropStore
+    var selectedPeer: PeerViewModel?
+    var onNext: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Text("Step 2: Verify & Trust")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+            
+            if let peer = selectedPeer {
+                Text("Ensure this matches the code on \(peer.displayName):")
+                    .foregroundStyle(CRTheme.inkSoft)
+                
+                // Using ID as a fallback for short code in this view
+                Text(String(peer.id.prefix(6).uppercased()))
+                    .font(.system(size: 32, weight: .black, design: .monospaced))
+                    .tracking(8)
+                    .padding()
+                    .background(CRTheme.surfaceElevated)
+                    .cornerRadius(12)
+                
+                Button("Trust Device") {
+                    store.trust(ManagedDevice(peer: peer))
+                    onNext()
+                }
+                .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
+            } else {
+                Text("No device selected.")
+            }
+        }
+    }
+}
+
+private struct StepThreeSendSample: View {
+    @ObservedObject var store: DeskdropStore
+    var selectedPeer: PeerViewModel?
+    var onNext: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Text("Step 3: Send Sample Text")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+            
+            Text("Let's make sure it works. Click the button below to send 'Hello from Mac' to your device.")
+                .foregroundStyle(CRTheme.inkSoft)
+                .multilineTextAlignment(.center)
+                .frame(width: 400)
+            
+            Button("Send 'Hello from Mac'") {
+                if let peer = selectedPeer {
+                    store.applyClipboardLocally(text: "Hello from Mac")
+                    // Note: sending directly to peer would require IPC method
+                    store.sendCurrentClipboard(to: ManagedDevice(peer: peer))
+                }
+                onNext()
+            }
+            .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+        }
+    }
+}
+
+private struct StepFourCompletion: View {
+    var onComplete: () -> Void
     
     var body: some View {
         VStack(spacing: 24) {
             ZStack {
-                Circle().fill(Color.orange.opacity(0.1))
-                    .frame(width: 120, height: 120)
-                Image(systemName: "wifi")
-                    .font(.system(size: 50))
-                    .foregroundStyle(Color.orange)
+                Circle().fill(CRTheme.accentGreen.opacity(0.1))
+                    .frame(width: 100, height: 100)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundStyle(CRTheme.accentGreen)
             }
             
-            VStack(spacing: 12) {
-                Text("100% Offline & Secure")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(CRTheme.ink)
-                
-                Text("Deskdrop needs Local Network permission to discover\ndevices on your WiFi or Mobile Hotspot. It works\nentirely offline, without an active internet connection.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(CRTheme.inkSoft)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-            }
+            Text("You're all set!")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+            
+            Text("Received files will automatically land in your Downloads folder.\nClipboard text will be instantly available to paste.")
+                .foregroundStyle(CRTheme.inkSoft)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
         }
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.deskdrop.ui.MainScreen
+import com.deskdrop.ui.OnboardingScreen
 import com.deskdrop.ui.theme.AppTheme
 import com.deskdrop.ui.theme.CRTheme
 
@@ -48,6 +49,7 @@ class MainActivity : ComponentActivity() {
     private val feed = mutableStateOf<List<ActivityEntry>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
     private val isDarkMode = mutableStateOf(false)
+    private val hasCompletedOnboarding = mutableStateOf(false)
     private val toastMessage = mutableStateOf("")
 
     private var targetDeviceIdForNextSend: String? = null
@@ -114,14 +116,40 @@ class MainActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
-        requestBatteryOptimizationExemption()
 
         setContent {
             val activeTransfers by DeskdropService.activeTransfersFlow.collectAsState()
 
             AppTheme(useDarkTheme = isDarkMode.value) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    MainScreen(
+                    if (!hasCompletedOnboarding.value) {
+                        OnboardingScreen(
+                            isDark = isDarkMode.value,
+                            peers = peers.value,
+                            onTrustPeer = { peer ->
+                                ContextCompat.startForegroundService(this@MainActivity,
+                                    Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                        action = DeskdropService.ACTION_TRUST_PEER
+                                        putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                                    }
+                                )
+                                showSnack("Trusted ${peer.name}")
+                            },
+                            onSendSampleText = { peer ->
+                                val svc = Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                    action = DeskdropService.ACTION_APPLY_CLIPBOARD
+                                    putExtra(DeskdropService.EXTRA_CLIPBOARD_TEXT, "Hello from Android")
+                                }
+                                ContextCompat.startForegroundService(this@MainActivity, svc)
+                                showSnack("Sample sent to ${peer.name}")
+                            },
+                            onComplete = {
+                                getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putBoolean("has_completed_onboarding", true).apply()
+                                hasCompletedOnboarding.value = true
+                            }
+                        )
+                    } else {
+                        MainScreen(
                         isDark = isDarkMode.value,
                         isServiceRunning = isServiceRunning.value,
                         isSyncEnabled = isSyncEnabled.value,
@@ -251,8 +279,12 @@ class MainActivity : ComponentActivity() {
                     },
                     onOpenSettings = {
                         startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                    },
+                    onOpenDiagnostics = {
+                        startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java))
                     }
                 )
+                }
                 
                 // Custom Toast Overlay
                 AnimatedVisibility(
@@ -310,6 +342,7 @@ class MainActivity : ComponentActivity() {
         isServiceRunning.value = prefs.getBoolean(DeskdropService.PREF_SERVICE_RUNNING, false)
         isSyncEnabled.value = prefs.getBoolean("sync_enabled", true)
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
+        hasCompletedOnboarding.value = prefs.getBoolean("has_completed_onboarding", false)
         
         val allPeers = prefs.peerSnapshots()
         peers.value = allPeers
@@ -352,27 +385,6 @@ class MainActivity : ComponentActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED) {
             needed += Manifest.permission.POST_NOTIFICATIONS
-        }
-
-        if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            needed += Manifest.permission.READ_PHONE_STATE
-        }
-
-        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            needed += Manifest.permission.READ_CONTACTS
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            needed += Manifest.permission.ANSWER_PHONE_CALLS
-        }
-
-        if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            needed += Manifest.permission.READ_CALL_LOG
         }
 
         if (needed.isNotEmpty()) {

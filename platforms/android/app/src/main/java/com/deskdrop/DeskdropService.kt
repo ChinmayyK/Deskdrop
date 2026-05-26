@@ -1586,7 +1586,13 @@ class DeskdropService : Service() {
                     TAG,
                     "Queued shared URI ${staged.displayName} (${staged.localFile.length()} bytes) for target=${targetDeviceId ?: "all"}"
                 )
-                val targetName = if (targetDeviceId != null) connectedPeerIds[targetDeviceId] ?: "Device" else "All devices"
+                val targetName = if (targetDeviceId != null) {
+                    connectedPeerIds[targetDeviceId] ?: "Device"
+                } else if (connectedPeerIds.size == 1) {
+                    connectedPeerIds.values.first()
+                } else {
+                    "All devices"
+                }
                 addToFeed(
                     ActivityEntry(
                         deviceName = targetName,
