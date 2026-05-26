@@ -192,6 +192,10 @@ private struct ContinuityHeaderView: View {
         HStack(spacing: 24) {
             // Left Context
             HStack(spacing: 8) {
+                if !isSidebarVisible {
+                    Spacer().frame(width: 64) // Clear the traffic lights
+                }
+                
                 Button(action: {
                     withAnimation(.crSpring) { isSidebarVisible.toggle() }
                 }) {
@@ -209,7 +213,7 @@ private struct ContinuityHeaderView: View {
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(CRTheme.inkSoft)
             }
-            .frame(width: 200, alignment: .leading) // Match new sidebar width approx
+            .frame(width: isSidebarVisible ? 200 : 264, alignment: .leading) // Expand width to accommodate the spacer
 
             Spacer()
             
