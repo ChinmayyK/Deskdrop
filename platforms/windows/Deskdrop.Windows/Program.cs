@@ -492,8 +492,8 @@ namespace Deskdrop.Windows
 
         private void OnStatusChanged(string msg)
         {
-            if (_tray.IsDisposed) return;
-            _tray.BeginInvoke(() =>
+            if (_tray == null) return;
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 _statusItem.Text = msg.Length > 63 ? msg[..60] + "…" : msg;
                 bool connected = _mgr.IsConnected();

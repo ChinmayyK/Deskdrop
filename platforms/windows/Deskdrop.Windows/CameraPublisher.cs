@@ -144,11 +144,11 @@ namespace Deskdrop.Windows
                 }
 
                 // Encode to JPEG
-                using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+                using var stream = new global::Windows.Storage.Streams.InMemoryRandomAccessStream();
                 var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, stream);
                 // Set quality to 60% to keep size small
-                var propertySet = new Windows.Foundation.Collections.PropertySet();
-                var qualityValue = new BitmapTypedValue(0.6, Windows.Foundation.PropertyType.Single);
+                var propertySet = new global::Windows.Foundation.Collections.PropertySet();
+                var qualityValue = new BitmapTypedValue(0.6, global::Windows.Foundation.PropertyType.Single);
                 propertySet.Add("ImageQuality", qualityValue);
                 
                 encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, stream, propertySet);

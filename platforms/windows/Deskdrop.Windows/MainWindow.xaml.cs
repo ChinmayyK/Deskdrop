@@ -106,7 +106,7 @@ namespace Deskdrop.Windows
             {
                 try
                 {
-                    var state = DaemonClient.GetState();
+                    var state = DaemonClient.Status();
                     if (state != null && state.RootElement.TryGetProperty("peers", out var peersElem))
                     {
                         var peers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText());
@@ -122,7 +122,7 @@ namespace Deskdrop.Windows
 
         private void BtnDisconnectDevice_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is string deviceId)
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
             {
                 System.Threading.Tasks.Task.Run(() =>
                 {
