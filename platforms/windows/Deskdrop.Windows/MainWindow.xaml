@@ -94,6 +94,145 @@
                 </EventTrigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" Background="Transparent" Cursor="Hand">
+                            <Border x:Name="border" Width="44" Height="24" CornerRadius="12" Background="#3A3A3C" Padding="2" VerticalAlignment="Center">
+                                <Ellipse x:Name="thumb" Width="20" Height="20" Fill="White" HorizontalAlignment="Left">
+                                    <Ellipse.RenderTransform>
+                                        <TranslateTransform X="0"/>
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
+                            </Border>
+                            <ContentPresenter Margin="12,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource BrandElectric}"/>
+                            </Trigger>
+                            <EventTrigger RoutedEvent="Checked">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="thumb" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="20" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="Unchecked">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="thumb" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="#1AFFFFFF"/>
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Stroke}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BrandElectric}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="8" Cursor="Hand">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#3377FF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{TemplateBinding Background}">
+                            <Track x:Name="PART_Track" IsDirectionReversed="true">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border CornerRadius="3" Background="#44FFFFFF" Margin="2,0"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" CanContentScroll="{TemplateBinding CanContentScroll}"/>
+                            <ScrollBar x:Name="PART_VerticalScrollBar" Style="{StaticResource ModernScrollBar}" HorizontalAlignment="Right" Minimum="0" Maximum="{TemplateBinding ScrollableHeight}" Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}" ViewportSize="{TemplateBinding ViewportHeight}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="border" CornerRadius="8" Background="Transparent" Margin="0,0,0,8" Padding="16,12">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#0AFFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <!-- Main Container -->
@@ -302,7 +441,7 @@
                                                     <TextBlock Text="{Binding friendly_name}" FontWeight="Medium" Foreground="{StaticResource Ink}"/>
                                                     <TextBlock Text="{Binding status}" Foreground="{StaticResource InkSoft}" FontSize="12"/>
                                                 </StackPanel>
-                                                <Button Grid.Column="2" Content="Disconnect" Background="{StaticResource SurfaceSoft}" Foreground="{StaticResource Ink}" Padding="12,6" BorderThickness="0" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
+                                                <Button Grid.Column="2" Style="{StaticResource ModernButton}" Content="Disconnect" Background="#2AFFFFFF" Foreground="{StaticResource Ink}" Padding="12,6" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -316,9 +455,9 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBox x:Name="TxtConnectAddress" Grid.Column="0" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource Ink}" Padding="12,8" BorderThickness="0" Margin="0,0,12,0" Text="192.168.1.x:47823"/>
-                                <Button Content="Connect" Grid.Column="1" Background="{StaticResource BrandElectric}" Foreground="White" Padding="24,8" BorderThickness="0" Click="BtnConnect_Click" Margin="0,0,12,0"/>
-                                <Button Content="Show QR Code" Grid.Column="2" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource Ink}" Padding="24,8" BorderThickness="0" Click="BtnShowQR_Click"/>
+                                <TextBox x:Name="TxtConnectAddress" Style="{StaticResource ModernTextBox}" Grid.Column="0" Margin="0,0,12,0" Text="192.168.1.x:47823"/>
+                                <Button Content="Connect" Style="{StaticResource ModernButton}" Grid.Column="1" Click="BtnConnect_Click" Margin="0,0,12,0"/>
+                                <Button Content="Show QR Code" Style="{StaticResource ModernButton}" Grid.Column="2" Background="#2AFFFFFF" Click="BtnShowQR_Click"/>
                             </Grid>
                         </StackPanel>
                     </Grid>
@@ -332,15 +471,15 @@
                                 
                                 <!-- General -->
                                 <TextBlock Text="General" Foreground="{StaticResource BrandElectric}" FontWeight="SemiBold" Margin="0,0,0,16"/>
-                                <CheckBox x:Name="ChkSyncEnabled" Content="Enable clipboard syncing" Foreground="{StaticResource Ink}" Margin="0,0,0,12"/>
-                                <CheckBox x:Name="ChkSyncText" Content="Sync text" Foreground="{StaticResource InkSoft}" Margin="24,0,0,8"/>
-                                <CheckBox x:Name="ChkSyncImages" Content="Sync images" Foreground="{StaticResource InkSoft}" Margin="24,0,0,8"/>
-                                <CheckBox x:Name="ChkSyncFiles" Content="Sync files" Foreground="{StaticResource InkSoft}" Margin="24,0,0,32"/>
+                                <CheckBox x:Name="ChkSyncEnabled" Style="{StaticResource ToggleSwitchStyle}" Content="Enable clipboard syncing" Margin="0,0,0,12"/>
+                                <CheckBox x:Name="ChkSyncText" Style="{StaticResource ToggleSwitchStyle}" Content="Sync text" Margin="24,0,0,12"/>
+                                <CheckBox x:Name="ChkSyncImages" Style="{StaticResource ToggleSwitchStyle}" Content="Sync images" Margin="24,0,0,12"/>
+                                <CheckBox x:Name="ChkSyncFiles" Style="{StaticResource ToggleSwitchStyle}" Content="Sync files" Margin="24,0,0,32"/>
                                 
                                 <!-- Privacy -->
                                 <TextBlock Text="Privacy &amp; Security" Foreground="{StaticResource BrandElectric}" FontWeight="SemiBold" Margin="0,0,0,16"/>
-                                <CheckBox x:Name="ChkShowNotifications" Content="Show notifications on receive" Foreground="{StaticResource Ink}" Margin="0,0,0,12"/>
-                                <CheckBox x:Name="ChkRequireTofu" Content="Require confirmation for new devices" Foreground="{StaticResource Ink}" Margin="0,0,0,32"/>
+                                <CheckBox x:Name="ChkShowNotifications" Style="{StaticResource ToggleSwitchStyle}" Content="Show notifications on receive" Margin="0,0,0,12"/>
+                                <CheckBox x:Name="ChkRequireTofu" Style="{StaticResource ToggleSwitchStyle}" Content="Require confirmation for new devices" Margin="0,0,0,32"/>
                                 
                                 <!-- Network -->
                                 <TextBlock Text="Network" Foreground="{StaticResource BrandElectric}" FontWeight="SemiBold" Margin="0,0,0,16"/>
@@ -350,10 +489,10 @@
                                         <ColumnDefinition Width="200"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Device Name:" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
-                                    <TextBox x:Name="TxtDeviceName" Grid.Column="1" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource Ink}" Padding="8,4" BorderThickness="0"/>
+                                    <TextBox x:Name="TxtDeviceName" Style="{StaticResource ModernTextBox}" Grid.Column="1"/>
                                 </Grid>
                                 
-                                <Button Content="Save Settings" Background="{StaticResource BrandElectric}" Foreground="White" Padding="16,8" HorizontalAlignment="Left" BorderThickness="0" Margin="0,24,0,0" Click="BtnSaveSettings_Click"/>
+                                <Button Content="Save Settings" Style="{StaticResource ModernButton}" HorizontalAlignment="Left" Margin="0,24,0,0" Click="BtnSaveSettings_Click"/>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>
