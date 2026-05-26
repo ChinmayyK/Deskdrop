@@ -44,7 +44,13 @@ namespace Deskdrop.Windows
 
         private void BtnClose_Click(object sender, RoutedEventArgs e)
         {
+            Hide();
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
             // Instead of closing the application, we just hide the window to keep it running in the tray.
+            e.Cancel = true;
             Hide();
         }
 

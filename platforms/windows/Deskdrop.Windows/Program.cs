@@ -621,6 +621,8 @@ namespace Deskdrop.Windows
         {
             if (_mainWindow != null && _mainWindow.IsLoaded)
             {
+                if (_mainWindow.Visibility != System.Windows.Visibility.Visible)
+                    _mainWindow.Show();
                 if (_mainWindow.WindowState == System.Windows.WindowState.Minimized)
                     _mainWindow.WindowState = System.Windows.WindowState.Normal;
                 _mainWindow.Activate();
