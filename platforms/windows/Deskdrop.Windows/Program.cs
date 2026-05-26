@@ -475,9 +475,13 @@ namespace Deskdrop.Windows
 
             _mgr.StatusChanged       += OnStatusChanged;
             _mgr.TofuPromptRequested += OnTofuPrompt;
-            _mgr.ClipboardReceived   += OnClipboardReceived;
             _mgr.HistoryItemAdded    += item => {
-                // If dashboard is open, it handles history updates internally (TODO).
+                if (!LoadSettings().ShowNotifications) return;
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    string title = item.Source == "local" ? "Sent Clipboard" : $"Received from {item.Source}";
+                    _tray.ShowBalloonTip(2000, title, $"{item.TypeIcon} {item.Summary}", ToolTipIcon.Info);
+                });
             };
 
             var s = LoadSettings();

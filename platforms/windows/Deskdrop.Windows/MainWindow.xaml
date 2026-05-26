@@ -267,8 +267,8 @@
 
                     <!-- App Icon / Title -->
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="24,40,24,32" WindowChrome.IsHitTestVisibleInChrome="True">
-                        <!-- Custom Icon via Segoe MDL2 -->
-                        <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource BrandElectric}" FontSize="20" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                        <!-- Custom Icon via Image -->
+                        <Image Source="pack://application:,,,/Assets/logo.png" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center"/>
                         <TextBlock Text="Deskdrop" Foreground="{StaticResource Ink}" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
                     </StackPanel>
 
