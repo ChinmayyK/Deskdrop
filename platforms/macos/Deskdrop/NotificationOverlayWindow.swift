@@ -203,7 +203,7 @@ private struct ToastOverlayCard: View {
                 .shadow(color: Color.black.opacity(0.4), radius: 20, x: 0, y: 10)
         }
         .scaleEffect(hovered ? 1.01 : 1.0)
-        .onHover { withAnimation(.easeOut(duration: 0.15)) { hovered = $0 } }
+        .onHover { isHovering in withAnimation(.easeOut(duration: 0.15)) { hovered = isHovering } }
     }
 }
 
@@ -229,7 +229,7 @@ private struct ToastOverlayButton: View {
         }
         .buttonStyle(.plain)
         .scaleEffect(isHovered ? 1.05 : 1.0)
-        .onHover { withAnimation(.easeOut(duration: 0.15)) { isHovered = $0 } }
+        .onHover { isHovering in withAnimation(.easeOut(duration: 0.15)) { isHovered = isHovering } }
     }
     
     private func toastTintOrAccent() -> Color {
