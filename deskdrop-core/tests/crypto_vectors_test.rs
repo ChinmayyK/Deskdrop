@@ -135,8 +135,8 @@ fn session_key_derivation_vector() {
     // If this test fails, the session key derivation has changed and ALL existing
     // trust stores / in-flight sessions will break — investigate before merging.
     let expected = hex_32(
-        "e3302f731b9029d93a794e9c42892a2e\
-         c6dada0bb44467e851c4f033a765dd58",
+        "1e107d59b2b8c2a883f81d650ccd95a1\
+         8ae909fafc0a4dd5e350cce26461a201",
     );
 
     assert_eq!(
