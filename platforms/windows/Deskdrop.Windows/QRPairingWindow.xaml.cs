@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using QRCoder;
 
@@ -66,6 +67,17 @@ namespace Deskdrop.Windows
                     Dispatcher.Invoke(() => System.Windows.MessageBox.Show("Could not generate QR Code: " + ex.Message));
                 }
             });
+        }
+
+        private void Window_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Left)
+                this.DragMove();
+        }
+
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
         }
 
         private static string GetLocalIPAddress()

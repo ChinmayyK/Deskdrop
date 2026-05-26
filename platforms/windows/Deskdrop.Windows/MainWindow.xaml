@@ -17,13 +17,19 @@
         <SolidColorBrush x:Key="BrandElectric" Color="#0055CC"/>
         <SolidColorBrush x:Key="BrandViolet" Color="#5E5CE6"/>
         <SolidColorBrush x:Key="BrandCyan" Color="#32ADE6"/>
-        <SolidColorBrush x:Key="SurfaceElevated" Color="#202020"/>
-        <SolidColorBrush x:Key="SurfaceStrong" Color="#151515"/>
-        <SolidColorBrush x:Key="Surface" Color="#0A0A0A"/>
+        <SolidColorBrush x:Key="SurfaceElevated" Color="#251b3d"/>
+        <SolidColorBrush x:Key="SurfaceStrong" Color="#10ffffff"/>
+        <SolidColorBrush x:Key="Surface" Color="#0b0812"/>
         <SolidColorBrush x:Key="Ink" Color="#FFFFFFFF"/>
         <SolidColorBrush x:Key="InkSoft" Color="#B0B0B0"/>
         <SolidColorBrush x:Key="InkSubtle" Color="#707070"/>
-        <SolidColorBrush x:Key="Stroke" Color="#303030"/>
+        <SolidColorBrush x:Key="Stroke" Color="#20FFFFFF"/>
+
+        <LinearGradientBrush x:Key="AppBackground" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#0b0812" Offset="0"/>
+            <GradientStop Color="#1a1130" Offset="0.5"/>
+            <GradientStop Color="#0b0812" Offset="1"/>
+        </LinearGradientBrush>
 
         <!-- Styles -->
         <Style x:Key="SidebarButton" TargetType="RadioButton">
@@ -45,19 +51,75 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="AnimatedCardStyle" TargetType="Border">
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="MouseEnter">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.02" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction>
+                                    <QuadraticEase EasingMode="EaseOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.02" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction>
+                                    <QuadraticEase EasingMode="EaseOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+                <EventTrigger RoutedEvent="MouseLeave">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.0" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction>
+                                    <QuadraticEase EasingMode="EaseOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.0" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction>
+                                    <QuadraticEase EasingMode="EaseOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <!-- Main Container -->
-    <Border Background="{StaticResource Surface}" CornerRadius="12" BorderBrush="{StaticResource Stroke}" BorderThickness="1" ClipToBounds="True">
+    <Border Background="{StaticResource AppBackground}" CornerRadius="12" BorderBrush="{StaticResource Stroke}" BorderThickness="1" ClipToBounds="True">
         <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220"/>
-                <ColumnDefinition Width="1"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+            <!-- Glowing Blobs for Glassmorphism -->
+            <Ellipse Width="450" Height="450" Fill="#225E5CE6" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-100,-100,0,0">
+                <Ellipse.Effect>
+                    <BlurEffect Radius="150"/>
+                </Ellipse.Effect>
+            </Ellipse>
+            <Ellipse Width="400" Height="400" Fill="#1A32ADE6" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-50,-50">
+                <Ellipse.Effect>
+                    <BlurEffect Radius="120"/>
+                </Ellipse.Effect>
+            </Ellipse>
 
-            <!-- Sidebar -->
-            <Border Grid.Column="0" Background="{StaticResource SurfaceStrong}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="220"/>
+                    <ColumnDefinition Width="1"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Sidebar -->
+                <Border Grid.Column="0" Background="{StaticResource SurfaceStrong}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -117,9 +179,12 @@
                                 </Grid.ColumnDefinitions>
                                 
                                 <!-- Push Clipboard Card -->
-                                <Border Grid.Row="0" Grid.Column="0" Background="#110055CC" CornerRadius="16" Padding="20" Margin="0,0,4,4" MouseLeftButtonDown="BorderPushClipboard_Click" Cursor="Hand">
+                                <Border Style="{StaticResource AnimatedCardStyle}" Grid.Row="0" Grid.Column="0" Background="#110055CC" CornerRadius="16" Padding="20" Margin="0,0,8,8" MouseLeftButtonDown="BorderPushClipboard_Click" Cursor="Hand">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Opacity="0.2" BlurRadius="10" ShadowDepth="4"/>
+                                    </Border.Effect>
                                     <Border.BorderBrush>
-                                        <SolidColorBrush Color="#0055CC" Opacity="0.3"/>
+                                        <SolidColorBrush Color="#0055CC" Opacity="0.5"/>
                                     </Border.BorderBrush>
                                     <Border.BorderThickness>1</Border.BorderThickness>
                                     <StackPanel Background="Transparent">
@@ -130,9 +195,12 @@
                                 </Border>
                                 
                                 <!-- Send Files Card -->
-                                <Border Grid.Row="0" Grid.Column="1" Background="#115E5CE6" CornerRadius="16" Padding="20" Margin="4,0,0,4" MouseLeftButtonDown="BorderSendFiles_Click" Cursor="Hand">
+                                <Border Style="{StaticResource AnimatedCardStyle}" Grid.Row="0" Grid.Column="1" Background="#115E5CE6" CornerRadius="16" Padding="20" Margin="8,0,0,8" MouseLeftButtonDown="BorderSendFiles_Click" Cursor="Hand">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Opacity="0.2" BlurRadius="10" ShadowDepth="4"/>
+                                    </Border.Effect>
                                     <Border.BorderBrush>
-                                        <SolidColorBrush Color="#5E5CE6" Opacity="0.3"/>
+                                        <SolidColorBrush Color="#5E5CE6" Opacity="0.5"/>
                                     </Border.BorderBrush>
                                     <Border.BorderThickness>1</Border.BorderThickness>
                                     <StackPanel Background="Transparent">
@@ -143,9 +211,12 @@
                                 </Border>
                                 
                                 <!-- Stream Camera Card -->
-                                <Border Grid.Row="1" Grid.Column="0" Background="#1132ADE6" CornerRadius="16" Padding="20" Margin="0,4,4,0" MouseLeftButtonDown="BorderStreamCamera_Click" Cursor="Hand">
+                                <Border Style="{StaticResource AnimatedCardStyle}" Grid.Row="1" Grid.Column="0" Background="#1132ADE6" CornerRadius="16" Padding="20" Margin="0,8,8,0" MouseLeftButtonDown="BorderStreamCamera_Click" Cursor="Hand">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Opacity="0.2" BlurRadius="10" ShadowDepth="4"/>
+                                    </Border.Effect>
                                     <Border.BorderBrush>
-                                        <SolidColorBrush Color="#32ADE6" Opacity="0.3"/>
+                                        <SolidColorBrush Color="#32ADE6" Opacity="0.5"/>
                                     </Border.BorderBrush>
                                     <Border.BorderThickness>1</Border.BorderThickness>
                                     <StackPanel Background="Transparent">
@@ -156,9 +227,12 @@
                                 </Border>
 
                                 <!-- Broadcast Camera Card -->
-                                <Border Grid.Row="1" Grid.Column="1" Background="#11FF3B30" CornerRadius="16" Padding="20" Margin="4,4,0,0" MouseLeftButtonDown="BorderBroadcastCamera_Click" Cursor="Hand" x:Name="BorderBroadcastCamera">
+                                <Border Style="{StaticResource AnimatedCardStyle}" Grid.Row="1" Grid.Column="1" Background="#11FF3B30" CornerRadius="16" Padding="20" Margin="8,8,0,0" MouseLeftButtonDown="BorderBroadcastCamera_Click" Cursor="Hand" x:Name="BorderBroadcastCamera">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Opacity="0.2" BlurRadius="10" ShadowDepth="4"/>
+                                    </Border.Effect>
                                     <Border.BorderBrush>
-                                        <SolidColorBrush Color="#FF3B30" Opacity="0.3"/>
+                                        <SolidColorBrush Color="#FF3B30" Opacity="0.5"/>
                                     </Border.BorderBrush>
                                     <Border.BorderThickness>1</Border.BorderThickness>
                                     <StackPanel Background="Transparent">

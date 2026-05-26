@@ -3,10 +3,32 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Continuity Camera Preview" Height="480" Width="640"
         WindowStartupLocation="CenterScreen"
-        Background="#0A0A0A"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
         Closing="Window_Closing">
-    <Grid>
-        <Image x:Name="CameraImage" Stretch="Uniform" />
-        <TextBlock x:Name="StatusText" Text="Waiting for stream..." Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="18" />
-    </Grid>
+
+    <Window.Resources>
+        <LinearGradientBrush x:Key="AppBackground" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#0b0812" Offset="0"/>
+            <GradientStop Color="#1a1130" Offset="0.5"/>
+            <GradientStop Color="#0b0812" Offset="1"/>
+        </LinearGradientBrush>
+    </Window.Resources>
+
+    <Border Background="{StaticResource AppBackground}" CornerRadius="16" BorderBrush="#20FFFFFF" BorderThickness="1" ClipToBounds="True">
+        <Grid>
+            <!-- Title Bar for Dragging -->
+            <Grid Height="40" VerticalAlignment="Top" Background="Transparent" MouseLeftButtonDown="Window_MouseDown" Panel.ZIndex="10">
+                <Button Content="✕" Width="30" Height="30" HorizontalAlignment="Right" Margin="0,0,10,0" Background="Transparent" Foreground="#B0B0B0" BorderThickness="0" Click="BtnClose_Click"/>
+            </Grid>
+
+            <Grid Margin="12,40,12,12">
+                <Border CornerRadius="8" ClipToBounds="True" Background="Black">
+                    <Image x:Name="CameraImage" Stretch="Uniform" />
+                </Border>
+                <TextBlock x:Name="StatusText" Text="Waiting for stream..." Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="18" />
+            </Grid>
+        </Grid>
+    </Border>
 </Window>
