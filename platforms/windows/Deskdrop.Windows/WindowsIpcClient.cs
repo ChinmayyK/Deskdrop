@@ -98,6 +98,8 @@ namespace Deskdrop.Windows
         public static JsonDocument? SaveSettings(object patch) =>
             Send(new { cmd = "save_settings" }); // caller passes full anon object
 
+        public static JsonDocument? LatestCameraFrame() => Send(new { cmd = "latest_camera_frame" });
+
         // ── Private transport ─────────────────────────────────────────────────
 
         private static NamedPipeClientStream? OpenPipe(int timeoutMs)

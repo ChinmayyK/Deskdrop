@@ -56,6 +56,10 @@ namespace Deskdrop.Windows
             byte[] data, UIntPtr len);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_push_camera_frame(
+            IntPtr handle, byte[] data, UIntPtr len);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_poll_event(IntPtr handle);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
@@ -227,6 +231,25 @@ namespace Deskdrop.Windows
             catch { /* clipboard is inherently racy on Windows */ }
         }
 
+        public void PushFile(string path)
+        {
+            if (_handle == IntPtr.Zero || !File.Exists(path)) return;
+            var bytes = File.ReadAllBytes(path);
+            var name  = Path.GetFileName(path);
+            NativeCore.deskdrop_push_file(_handle, name, bytes, (UIntPtr)bytes.Length);
+            AddHistory(new HistoryItem
+            {
+                Summary = name, Source = "local",
+                Time = DateTime.Now, TypeIcon = "📎",
+            });
+        }
+
+        public void PushCameraFrame(byte[] jpegBytes)
+        {
+            if (_handle == IntPtr.Zero) return;
+            NativeCore.deskdrop_push_camera_frame(_handle, jpegBytes, (UIntPtr)jpegBytes.Length);
+        }
+
         // ── Incoming: drain Rust event queue ─────────────────────────────────
 
         private void DrainEvents()
@@ -378,7 +401,7 @@ namespace Deskdrop.Windows
         private readonly ToolStripMenuItem _sendItem;
         private readonly ToolStripMenuItem _syncToggleItem;
 
-        private ClipboardHistoryPanel? _historyPanel;
+        private MainWindow?            _mainWindow;
         private bool                   _syncEnabled  = true;
         private DateTime               _lastBalloonAt = DateTime.MinValue;
 
@@ -392,8 +415,8 @@ namespace Deskdrop.Windows
             _syncToggleItem = new ToolStripMenuItem("Pause Sync");
             _syncToggleItem.Click += OnToggleSync;
 
-            var historyItem = new ToolStripMenuItem("Clipboard History…");
-            historyItem.Click += (_, _) => OpenHistoryPanel();
+            var historyItem = new ToolStripMenuItem("Open Dashboard…");
+            historyItem.Click += (_, _) => OpenDashboard();
 
             var scanItem = new ToolStripMenuItem("Scan for Devices");
             scanItem.Click += OnScanDevices;
@@ -402,10 +425,16 @@ namespace Deskdrop.Windows
             connectItem.Click += OnManualConnect;
 
             var prefsItem = new ToolStripMenuItem("Preferences…");
-            prefsItem.Click += (_, _) => { using var f = new PreferencesForm(); f.ShowDialog(); };
+            prefsItem.Click += (_, _) => OpenDashboard();
 
             var quitItem = new ToolStripMenuItem("Quit Deskdrop");
-            quitItem.Click += (_, _) => { _mgr.Stop(); Application.Exit(); };
+            quitItem.Click += (_, _) => { 
+                _mgr.Stop(); 
+                if (System.Windows.Application.Current != null)
+                    System.Windows.Application.Current.Shutdown();
+                else
+                    Application.Exit(); 
+            };
 
             _menu.Items.AddRange(new ToolStripItem[]
             {
@@ -430,13 +459,14 @@ namespace Deskdrop.Windows
                 ContextMenuStrip = _menu,
                 Visible          = true,
             };
-            _tray.DoubleClick += (_, _) => OpenHistoryPanel();
+            _tray.DoubleClick += (_, _) => OpenDashboard();
 
             _mgr.StatusChanged       += OnStatusChanged;
             _mgr.TofuPromptRequested += OnTofuPrompt;
             _mgr.ClipboardReceived   += OnClipboardReceived;
-            _mgr.HistoryItemAdded    += item =>
-                _historyPanel?.BeginInvoke(() => _historyPanel?.AddItem(item));
+            _mgr.HistoryItemAdded    += item => {
+                // If dashboard is open, it handles history updates internally (TODO).
+            };
 
             var s = LoadSettings();
             _syncEnabled = s.SyncEnabled;
@@ -573,37 +603,20 @@ namespace Deskdrop.Windows
             _tray.ShowBalloonTip(1500, "Deskdrop", "Scanning for nearby devices…", ToolTipIcon.Info);
         }
 
-        // ── History panel ─────────────────────────────────────────────────────
+        // ── Dashboard panel ─────────────────────────────────────────────────────
 
-        private void OpenHistoryPanel()
+        private void OpenDashboard()
         {
-            if (_historyPanel != null && !_historyPanel.IsDisposed)
+            if (_mainWindow != null && _mainWindow.IsLoaded)
             {
-                _historyPanel.BringToFront(); _historyPanel.Focus(); return;
+                if (_mainWindow.WindowState == System.Windows.WindowState.Minimized)
+                    _mainWindow.WindowState = System.Windows.WindowState.Normal;
+                _mainWindow.Activate();
+                return;
             }
 
-            _historyPanel = new ClipboardHistoryPanel();
-
-            // Pre-populate with everything collected since startup.
-            foreach (var item in _mgr.GetHistory())
-                _historyPanel.AddItem(item);
-
-            _historyPanel.RepushRequested += item =>
-            {
-                if (item.FullText != null)
-                {
-                    // Write to local clipboard then push via daemon pipe.
-                    var t = new Thread(() => { try { Clipboard.SetText(item.FullText); } catch { } });
-                    t.SetApartmentState(ApartmentState.STA); t.IsBackground = true; t.Start();
-                    Task.Run(() => DaemonClient.Send(new { cmd = "push_clipboard" }));
-                }
-            };
-
-            var wa = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
-            _historyPanel.Show();
-            _historyPanel.Location = new Point(
-                wa.Right  - _historyPanel.Width  - 12,
-                wa.Bottom - _historyPanel.Height - 12);
+            _mainWindow = new MainWindow(_mgr);
+            _mainWindow.Show();
         }
 
         // ── Settings ──────────────────────────────────────────────────────────
@@ -720,7 +733,14 @@ namespace Deskdrop.Windows
             AppDomain.CurrentDomain.UnhandledException += (_, e) =>
                 LogError((Exception)e.ExceptionObject);
 
-            Application.Run(new TrayApp());
+            var wpfApp = new System.Windows.Application();
+            wpfApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            
+            var trayApp = new TrayApp();
+            
+            // Run WinForms loop so NotifyIcon works naturally, 
+            // WPF elements will piggyback via WindowsFormsSynchronizationContext
+            Application.Run(trayApp);
         }
 
         private static void LogError(Exception ex)

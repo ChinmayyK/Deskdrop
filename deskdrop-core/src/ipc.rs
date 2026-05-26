@@ -556,6 +556,8 @@ pub mod client {
                             "active_call": active_call,
                             "peer_batteries": peer_batteries,
                             "active_transfers": active_transfers,
+                            "bind_ip": snap.bind_address.ip().to_string(),
+                            "bind_port": snap.bind_address.port(),
                         }))
                     }
                     IpcRequest::RescanPeers => {

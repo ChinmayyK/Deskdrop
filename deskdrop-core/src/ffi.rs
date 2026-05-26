@@ -66,7 +66,18 @@ pub unsafe extern "C" fn deskdrop_start(
     let (event_tx, event_rx) = mpsc::channel(256);
 
     match runtime().block_on(Engine::start(config, event_tx)) {
-        Ok(engine) => Box::into_raw(Box::new(DeskdropHandle { engine, event_rx })),
+        Ok(engine) => {
+            #[cfg(windows)]
+            {
+                let e_clone = std::sync::Arc::new(engine.clone());
+                runtime().spawn(async move {
+                    if let Err(e) = crate::ipc_windows::spawn_with_engine(e_clone).await {
+                        eprintln!("Windows IPC server failed to start: {}", e);
+                    }
+                });
+            }
+            Box::into_raw(Box::new(DeskdropHandle { engine, event_rx }))
+        }
         Err(e) => {
             eprintln!("deskdrop_start error: {:#}", e);
             std::ptr::null_mut()

@@ -1,0 +1,12 @@
+<Window x:Class="Deskdrop.Windows.CameraPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Continuity Camera Preview" Height="480" Width="640"
+        WindowStartupLocation="CenterScreen"
+        Background="#0A0A0A"
+        Closing="Window_Closing">
+    <Grid>
+        <Image x:Name="CameraImage" Stretch="Uniform" />
+        <TextBlock x:Name="StatusText" Text="Waiting for stream..." Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="18" />
+    </Grid>
+</Window>

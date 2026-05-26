@@ -69,8 +69,8 @@ jobs:
       - name: Build C# app
         run: |
           Copy-Item target\release\deskdrop_core.dll `
-                    platforms\windows\ProxiBoard.Windows\
-          dotnet publish platforms\windows\ProxiBoard.Windows\ProxiBoard.Windows.csproj `
+                    platforms\windows\Deskdrop.Windows\
+          dotnet publish platforms\windows\Deskdrop.Windows\Deskdrop.Windows.csproj `
             -c Release -r win-x64 --self-contained false `
             -o publish\windows
 

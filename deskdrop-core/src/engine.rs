@@ -377,6 +377,7 @@ struct EngineShared {
     peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
 }
 
+#[derive(Clone)]
 pub struct Engine {
     shared: EngineShared,
     seq: Arc<Mutex<u64>>,
