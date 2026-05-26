@@ -141,13 +141,13 @@ private struct ToastOverlayCard: View {
                 HStack(spacing: 6) {
                     Text(toast.title)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Color.primary)
                         .lineLimit(1)
                     
                     if let detail = toast.detail, !detail.isEmpty {
                         Text("• " + detail)
                             .font(.system(size: 11, weight: .medium, design: .default))
-                            .foregroundStyle(Color.white.opacity(0.5))
+                            .foregroundStyle(Color.primary.opacity(0.5))
                             .lineLimit(1)
                     }
                 }
@@ -155,7 +155,7 @@ private struct ToastOverlayCard: View {
                 if !toast.body.isEmpty {
                     Text(toast.body)
                         .font(.system(size: 12, weight: .medium, design: .default))
-                        .foregroundStyle(Color.white.opacity(0.7))
+                        .foregroundStyle(Color.primary.opacity(0.7))
                         .lineLimit(2)
                 }
 
@@ -184,7 +184,7 @@ private struct ToastOverlayCard: View {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.4))
+                        .foregroundStyle(Color.primary.opacity(0.4))
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity)
@@ -195,12 +195,12 @@ private struct ToastOverlayCard: View {
         .frame(minWidth: 260, maxWidth: 360, alignment: .leading)
         .background {
             Capsule(style: .continuous)
-                .fill(Color.black.opacity(0.85))
+                .fill(CRTheme.surface.opacity(0.85))
                 .overlay(
                     Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
                 )
-                .shadow(color: Color.black.opacity(0.4), radius: 20, x: 0, y: 10)
+                .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
         }
         .scaleEffect(hovered ? 1.01 : 1.0)
         .onHover { isHovering in withAnimation(.easeOut(duration: 0.15)) { hovered = isHovering } }
@@ -210,19 +210,20 @@ private struct ToastOverlayCard: View {
 private struct ToastOverlayButton: View {
     let action: ToastAction
     @State private var isHovered = false
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         Button(action: action.handler) {
             Text(action.title)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(action.role == .secondary ? Color.white.opacity(0.8) : Color.black)
+                .foregroundStyle(action.role == .secondary ? Color.primary.opacity(0.8) : (colorScheme == .dark ? Color.black : Color.white))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
                 .background {
                     Capsule()
                         .fill(
                             action.role == .secondary
-                            ? Color.white.opacity(isHovered ? 0.2 : 0.1)
+                            ? Color.primary.opacity(isHovered ? 0.2 : 0.1)
                             : toastTintOrAccent()
                         )
                 }
@@ -234,7 +235,6 @@ private struct ToastOverlayButton: View {
     
     private func toastTintOrAccent() -> Color {
         if action.role == .destructive { return .red }
-        return .white
+        return colorScheme == .dark ? .white : .black
     }
 }
-
