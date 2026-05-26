@@ -228,7 +228,7 @@
                                                     <TextBlock Text="{Binding friendly_name}" FontWeight="Medium" Foreground="{StaticResource Ink}"/>
                                                     <TextBlock Text="{Binding status}" Foreground="{StaticResource InkSoft}" FontSize="12"/>
                                                 </StackPanel>
-                                                <Button Grid.Column="2" Content="Disconnect" Background="{StaticResource SurfaceSoft}" Foreground="{StaticResource Ink}" Padding="12,6" CornerRadius="6" BorderThickness="0" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
+                                                <Button Grid.Column="2" Content="Disconnect" Background="{StaticResource SurfaceSoft}" Foreground="{StaticResource Ink}" Padding="12,6" BorderThickness="0" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -242,9 +242,9 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBox x:Name="TxtConnectAddress" Grid.Column="0" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource Ink}" Padding="12,8" BorderThickness="0" CornerRadius="8" Margin="0,0,12,0" Text="192.168.1.x:47823"/>
-                                <Button Content="Connect" Grid.Column="1" Background="{StaticResource BrandElectric}" Foreground="White" Padding="24,8" CornerRadius="8" BorderThickness="0" Click="BtnConnect_Click" Margin="0,0,12,0"/>
-                                <Button Content="Show QR Code" Grid.Column="2" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource Ink}" Padding="24,8" CornerRadius="8" BorderThickness="0" Click="BtnShowQR_Click"/>
+                                <TextBox x:Name="TxtConnectAddress" Grid.Column="0" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource Ink}" Padding="12,8" BorderThickness="0" Margin="0,0,12,0" Text="192.168.1.x:47823"/>
+                                <Button Content="Connect" Grid.Column="1" Background="{StaticResource BrandElectric}" Foreground="White" Padding="24,8" BorderThickness="0" Click="BtnConnect_Click" Margin="0,0,12,0"/>
+                                <Button Content="Show QR Code" Grid.Column="2" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource Ink}" Padding="24,8" BorderThickness="0" Click="BtnShowQR_Click"/>
                             </Grid>
                         </StackPanel>
                     </Grid>
@@ -279,7 +279,7 @@
                                     <TextBox x:Name="TxtDeviceName" Grid.Column="1" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource Ink}" Padding="8,4" BorderThickness="0"/>
                                 </Grid>
                                 
-                                <Button Content="Save Settings" Background="{StaticResource BrandElectric}" Foreground="White" Padding="16,8" CornerRadius="8" HorizontalAlignment="Left" BorderThickness="0" Margin="0,24,0,0" Click="BtnSaveSettings_Click"/>
+                                <Button Content="Save Settings" Background="{StaticResource BrandElectric}" Foreground="White" Padding="16,8" HorizontalAlignment="Left" BorderThickness="0" Margin="0,24,0,0" Click="BtnSaveSettings_Click"/>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>
