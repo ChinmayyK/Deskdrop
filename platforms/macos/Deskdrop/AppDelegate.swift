@@ -10,10 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private let store = DeskdropStore()
     private var statusItem: NSStatusItem!
     private var menuBarDropView: MenuBarDropView?
-    private var statusBarMenu: NSMenu!  // stored separately — NOT assigned to statusItem.menu
-    private var previousConnectedCount = 0
-    private let statusMenuItem  = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
-    private let lastSyncMenuItem = NSMenuItem(title: "Last sync: —", action: nil, keyEquivalent: "")
+    private var menuPopover: NSPopover!
     private var dashboardController:      NSWindowController?
     private var quickAccessController:    NSWindowController?
     private var commandPaletteController: NSWindowController?
@@ -208,53 +205,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             button.toolTip  = "Deskdrop — Drag files here to send to your device"
         }
 
-        let menu = NSMenu()
-        statusMenuItem.isEnabled   = false
-        lastSyncMenuItem.isEnabled = false
-        menu.addItem(statusMenuItem)
-        menu.addItem(lastSyncMenuItem)
-        menu.addItem(.separator())
+        let popover = NSPopover()
+        popover.contentSize = NSSize(width: 320, height: 350)
+        popover.behavior = .transient
+        popover.contentViewController = NSHostingController(rootView: MenuBarPopoverView(store: store, onAction: { [weak self] action in
+            self?.handlePopoverAction(action)
+        }))
+        menuPopover = popover
+    }
 
-        // ── Core navigation items ───────────────────────────────────────────────
-        let dashItem  = NSMenuItem(title: "Open Dashboard",   action: #selector(openDashboard),      keyEquivalent: "0")
-        let quickItem = NSMenuItem(title: "Quick Access",     action: #selector(openQuickAccess),    keyEquivalent: "v")
-        let cmdItem   = NSMenuItem(title: "Command Palette",  action: #selector(openCommandPalette), keyEquivalent: "k")
-        dashItem.keyEquivalentModifierMask  = [.command, .shift]
-        quickItem.keyEquivalentModifierMask = [.command, .shift]
-        cmdItem.keyEquivalentModifierMask   = [.command]
-        menu.addItem(dashItem)
-        menu.addItem(quickItem)
-        menu.addItem(cmdItem)
-        menu.addItem(.separator())
-
-        // ── Send files ─────────────────────────────────────────────────────────
-        let sendFileItem = NSMenuItem(title: "Send File to Device…", action: #selector(sendFileFromMenu), keyEquivalent: "")
-        menu.addItem(sendFileItem)
-
-        // ── F24: Push clipboard on demand ─────────────────────────────────────
-        let pushClipItem = NSMenuItem(title: "Push Clipboard Now", action: #selector(pushClipboardFromMenu), keyEquivalent: "c")
-        pushClipItem.keyEquivalentModifierMask = [.command, .shift]
-        menu.addItem(pushClipItem)
-
-        // ── F22: Send URL from frontmost browser ──────────────────────────────
-        let sendUrlItem = NSMenuItem(title: "Send Browser URL to Device", action: #selector(sendBrowserUrlToDevice), keyEquivalent: "")
-        menu.addItem(sendUrlItem)
-
-        // ── Connect manually ───────────────────────────────────────────────────
-        let connectItem = NSMenuItem(title: "Connect to IP…", action: #selector(connectManually), keyEquivalent: "")
-        menu.addItem(connectItem)
-
-        // ── Scan / Rescan ──────────────────────────────────────────────────────
-        let scanItem = NSMenuItem(title: "Scan for Devices", action: #selector(scanDevices), keyEquivalent: "")
-        menu.addItem(scanItem)
-
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Deskdrop", action: #selector(quitApp), keyEquivalent: "q"))
-        // IMPORTANT: Do NOT set statusItem.menu — that would cause macOS
-        // to intercept all mouse events (including drags) to show the menu,
-        // which prevents drag-and-drop from working on the menu bar icon.
-        // Instead, store the menu and show it programmatically on click.
-        statusBarMenu = menu
+    private func handlePopoverAction(_ action: MenuBarPopoverAction) {
+        menuPopover.performClose(nil)
+        switch action {
+        case .dashboard: openDashboard()
+        case .quickAccess: openQuickAccess()
+        case .commandPalette: openCommandPalette()
+        case .pushClipboard: forcePushClipboard()
+        case .sendFile: sendFileFromMenu()
+        case .scan: scanDevices()
+        case .quit: quitApp()
+        }
     }
 
     private func statusBarImage() -> NSImage? {
@@ -322,19 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         store.$statusLine
             .receive(on: RunLoop.main)
             .sink { [weak self] banner in
-                self?.statusMenuItem.title = banner
                 self?.statusItem.button?.toolTip = "Deskdrop • \(banner)"
-            }
-            .store(in: &cancellables)
-
-        store.$dashboardStatus
-            .receive(on: RunLoop.main)
-            .sink { [weak self] status in
-                if let lastSync = status?.lastSyncAt {
-                    self?.lastSyncMenuItem.title = "Last sync: \(lastSync.relativeTimeString())"
-                } else {
-                    self?.lastSyncMenuItem.title = "Last sync: —"
-                }
             }
             .store(in: &cancellables)
 
@@ -991,10 +949,13 @@ extension AppDelegate: MenuBarDropViewDelegate {
     }
 
     @objc private func menuBarClicked() {
-        // Show the menu programmatically — we don't set statusItem.menu
-        // so that drag-and-drop events aren't intercepted by the menu system.
         guard let button = statusItem.button else { return }
-        statusBarMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
+        if menuPopover.isShown {
+            menuPopover.performClose(nil)
+        } else {
+            menuPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     func menuBarDropViewDidEnterDrag(_ view: MenuBarDropView) {
