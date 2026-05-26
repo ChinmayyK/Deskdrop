@@ -33,24 +33,17 @@ jobs:
       - name: Build x86_64
         run: cargo build --release --target x86_64-apple-darwin -p deskdrop-core
 
-      - name: Create universal dylib
-        run: |
-          lipo -create \
-            target/aarch64-apple-darwin/release/libdeskdrop_core.dylib \
-            target/x86_64-apple-darwin/release/libdeskdrop_core.dylib \
-            -output libdeskdrop_core.dylib
+      - name: Install create-dmg
+        run: brew install create-dmg
 
-      - name: Build Swift app (Release)
-        run: |
-          mkdir -p platforms/macos/ProxiBoard/build
-          # Full Xcode build would go here; CI produces a zip of the dylib for now.
-          zip -j deskdrop-macos.zip libdeskdrop_core.dylib
+      - name: Build macOS App & DMG
+        run: bash scripts/build-macos.sh --release
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-macos
-          path: deskdrop-macos.zip
+          path: platforms/macos/build/Deskdrop.dmg
 
   # ── Windows x64 installer ─────────────────────────────────────────────────
   release-windows:
@@ -71,24 +64,15 @@ jobs:
           Copy-Item target\release\deskdrop_core.dll `
                     platforms\windows\Deskdrop.Windows\
           dotnet publish platforms\windows\Deskdrop.Windows\Deskdrop.Windows.csproj `
-            -c Release -r win-x64 --self-contained false `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             -o publish\windows
-
-      - name: Install WiX
-        run: dotnet tool install -g wix
-
-      - name: Build MSI installer
-        run: |
-          Copy-Item publish\windows\*.* platforms\windows\installer\bin\ -Force -ErrorAction SilentlyContinue
-          # wix build platforms\windows\installer\Deskdrop.wxs -o publish\Deskdrop.msi
-          # (WiX build stubbed pending full icon + binary paths)
-          Compress-Archive -Path publish\windows\* -DestinationPath deskdrop-windows.zip
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-windows
-          path: deskdrop-windows.zip
+          path: publish\windows\Deskdrop.exe
 
   # ── Android APK ───────────────────────────────────────────────────────────
   release-android:
@@ -196,15 +180,16 @@ jobs:
             ### Downloads
             | Platform | File |
             |---|---|
-            | macOS (Universal) | `deskdrop-macos.zip` |
-            | Windows 10/11 x64 | `deskdrop-windows.zip` |
-            | Android 8.0+      | `deskdrop-*.apk` |
+            | macOS (Apple Silicon) | `Deskdrop.dmg` |
+            | Windows 10/11 x64 | `Deskdrop.exe` |
+            | Android 8.0+      | `app-release.apk` |
             | Linux x86_64      | `deskdrop-linux-x86_64.tar.gz` |
 
             ### What's new
             See [CHANGELOG.md](CHANGELOG.md).
           files: |
-            release-artifacts/**/*.zip
+            release-artifacts/**/*.dmg
+            release-artifacts/**/*.exe
             release-artifacts/**/*.apk
             release-artifacts/**/*.tar.gz
           draft: false
