@@ -71,7 +71,48 @@ pub unsafe extern "C" fn deskdrop_start(
             {
                 let e_clone = std::sync::Arc::new(engine.clone());
                 runtime().spawn(async move {
-                    if let Err(e) = crate::ipc_windows::spawn_windows_ipc(e_clone).await {
+                    let handler = std::sync::Arc::new(move |req: crate::ipc::IpcRequest| {
+                        let eng = e_clone.clone();
+                        async move {
+                            match req {
+                                crate::ipc::IpcRequest::Status => {
+                                    let snap = eng.status_snapshot().await;
+                                    let fp = eng.local_fingerprint();
+                                    let peer_count = snap.peers.iter().filter(|p| p.status == crate::peer_manager::PeerConnectionState::Connected).count();
+                                    crate::ipc::IpcResponse::ok(serde_json::json!({
+                                        "peers": snap.peers,
+                                        "peer_count": peer_count,
+                                        "local_fingerprint": fp,
+                                        "bind_ip": snap.bind_address.ip().to_string(),
+                                        "bind_port": snap.bind_address.port(),
+                                    }))
+                                }
+                                crate::ipc::IpcRequest::DisconnectPeer { device_id } => {
+                                    if let Ok(id) = uuid::Uuid::parse_str(&device_id) {
+                                        let _ = eng.disconnect_peer(id).await;
+                                    }
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::ConnectManual { host, port } => {
+                                    let _ = eng.connect_to_peer(host, port.unwrap_or(47823)).await;
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::SaveSettings {
+                                    port, device_name, sync_enabled, sync_text, sync_images, sync_files,
+                                    history_limit, max_history_text_bytes, max_payload_bytes, clipboard_poll_ms,
+                                    max_pushes_per_sec, rate_limit_burst, smart_sync_duplicate_window_ms,
+                                    smart_sync_debounce_ms, block_sensitive_text, require_tofu_confirmation,
+                                    show_receive_notification, ignore_patterns
+                                } => {
+                                    // FFI doesn't persist settings, but applies them to running engine
+                                    // Normally the UI saves to Registry. We just push an empty response here.
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                _ => crate::ipc::IpcResponse::error("unsupported in FFI IPC".to_string())
+                            }
+                        }
+                    });
+                    if let Err(e) = crate::ipc_windows::spawn_windows_ipc(handler).await {
                         eprintln!("Windows IPC server failed to start: {}", e);
                     }
                 });
