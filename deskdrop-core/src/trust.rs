@@ -203,6 +203,11 @@ impl TrustStore {
 
     pub fn trust_peer(&mut self, device_id: Uuid) -> Result<Option<TrustRecord>> {
         let now = now_secs();
+        if let Some(record) = self.data.devices.get(&device_id) {
+            if record.public_key == [0; 32] || record.key_fingerprint == [0; 32] {
+                anyhow::bail!("cannot trust peer without valid public key");
+            }
+        }
         let snapshot = self.data.devices.get_mut(&device_id).map(|record| {
             record.state = TrustState::Trusted;
             if record.trusted_since.is_none() {

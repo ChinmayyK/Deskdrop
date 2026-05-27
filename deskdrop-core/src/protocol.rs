@@ -233,7 +233,7 @@ pub struct HelloAckFrame {
 pub enum AppMessage {
     ClipboardPush {
         seq: u64,
-        content: ClipboardContent,
+        content: std::sync::Arc<ClipboardContent>,
         origin_device: Uuid,
         /// Friendly name of the originating device for UI display.
         /// Never a raw UUID.

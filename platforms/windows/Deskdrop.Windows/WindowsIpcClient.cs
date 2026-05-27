@@ -77,26 +77,18 @@ namespace Deskdrop.Windows
         public static JsonDocument? Ping()       => Send(new { cmd = "ping" });
         public static JsonDocument? Status()     => Send(new { cmd = "status" });
         public static JsonDocument? Peers()      => Send(new { cmd = "peers" });
-        public static JsonDocument? RescanPeers() => Send(new { cmd = "rescan_peers" });
-
         public static JsonDocument? ConnectManual(string host, int? port = null)
         {
             object cmd = port.HasValue
-                ? new { cmd = "connect_manual", host, port = port.Value }
-                : (object)new { cmd = "connect_manual", host };
+                ? new { cmd = "connect_peer", ip = host, port = port.Value }
+                : (object)new { cmd = "connect_peer", ip = host, port = 47823 };
             return Send(cmd);
         }
 
-        public static JsonDocument? PushClipboard(string? targetDeviceId = null)
+        public static JsonDocument? PatchSettings(object patch)
         {
-            object cmd = targetDeviceId != null
-                ? new { cmd = "push_clipboard", target_device_id = targetDeviceId }
-                : (object)new { cmd = "push_clipboard" };
-            return Send(cmd);
+            return Send(new { cmd = "patch_settings", patch = JsonSerializer.Serialize(patch) });
         }
-
-        public static JsonDocument? SaveSettings(object patch) =>
-            Send(new { cmd = "save_settings" }); // caller passes full anon object
 
         public static JsonDocument? LatestCameraFrame() => Send(new { cmd = "latest_camera_frame" });
 

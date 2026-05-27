@@ -122,6 +122,7 @@ pub struct OutboundTransfer {
     pub last_acked_chunk: u32,
     pub status: TransferStatus,
     pub created_at: Instant,
+    pub last_active_at: Instant,
     pub target_device: Option<Uuid>,
     pub paused: bool,
 }
@@ -143,6 +144,7 @@ impl OutboundTransfer {
             last_acked_chunk: 0,
             status: TransferStatus::Pending,
             created_at: Instant::now(),
+            last_active_at: Instant::now(),
             target_device,
             paused: false,
         }
@@ -163,6 +165,7 @@ impl OutboundTransfer {
             last_acked_chunk: 0,
             status: TransferStatus::Pending,
             created_at: Instant::now(),
+            last_active_at: Instant::now(),
             target_device,
             paused: false,
         })
@@ -170,6 +173,7 @@ impl OutboundTransfer {
 
     /// Get next chunk message to send. Returns None when all sent.
     pub fn next_chunk_message(&mut self) -> Result<Option<FileTransferMessage>> {
+        self.last_active_at = Instant::now();
         if self.paused {
             return Ok(None);
         }
@@ -203,6 +207,7 @@ impl OutboundTransfer {
 
     /// Called when receiver acks chunks up to `last_confirmed`.
     pub fn on_chunk_ack(&mut self, last_confirmed: u32) {
+        self.last_active_at = Instant::now();
         self.last_acked_chunk = last_confirmed;
     }
 
@@ -229,6 +234,7 @@ pub struct InboundTransfer {
     pub status: TransferStatus,
     pub created_at: Instant,
     pub started_at: Option<Instant>,
+    pub last_active_at: Instant,
     pub bytes_received: u64,
     /// Temp file path for streaming writes.
     pub tmp_path: Option<PathBuf>,
@@ -255,6 +261,7 @@ impl InboundTransfer {
             status: TransferStatus::Pending,
             created_at: Instant::now(),
             started_at: None,
+            last_active_at: Instant::now(),
             bytes_received: 0,
             tmp_path: None,
             file_handle: None,
@@ -298,6 +305,11 @@ impl InboundTransfer {
 
     /// Feed a chunk into the transfer. Returns progress info.
     pub fn receive_chunk(&mut self, chunk_index: u32, data: Vec<u8>) -> Result<TransferProgress> {
+        self.last_active_at = Instant::now();
+        anyhow::ensure!(self.status == TransferStatus::Transferring, "transfer is not active");
+        anyhow::ensure!(!self.paused, "transfer is paused");
+        anyhow::ensure!(data.len() <= 4 * 1024 * 1024, "chunk size exceeds limit");
+
         anyhow::ensure!(
             chunk_index < self.total_chunks,
             "chunk {} out of range (total {})",
@@ -366,7 +378,7 @@ impl InboundTransfer {
 
     /// Should we send a chunk ack now?
     pub fn should_ack(&self) -> bool {
-        self.last_confirmed_chunk > 0 && self.last_confirmed_chunk % FILE_ACK_EVERY_N_CHUNKS == 0
+        self.received_chunk_count > 0 && self.received_chunk_count % FILE_ACK_EVERY_N_CHUNKS == 0
     }
 
     fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
@@ -507,17 +519,25 @@ impl FileTransferManager {
         meta: FileTransferMetadata,
         from_device: Uuid,
         from_device_name: String,
-    ) -> &mut InboundTransfer {
+    ) -> Result<&mut InboundTransfer> {
+        if self.inbound.len() >= 10 {
+            anyhow::bail!("too many active transfers");
+        }
+        let count_from_peer = self.inbound.values().filter(|t| t.from_device == from_device).count();
+        if count_from_peer >= 5 {
+            anyhow::bail!("too many active transfers from this peer");
+        }
+        
         let tid = meta.transfer_id;
         match self.inbound.entry(tid) {
             std::collections::hash_map::Entry::Occupied(entry) => {
                 let transfer = entry.into_mut();
                 transfer.from_device = from_device;
                 transfer.from_device_name = from_device_name;
-                transfer
+                Ok(transfer)
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(InboundTransfer::new(meta, from_device, from_device_name))
+                Ok(entry.insert(InboundTransfer::new(meta, from_device, from_device_name)))
             }
         }
     }
@@ -574,6 +594,45 @@ impl FileTransferManager {
     pub fn cancel_outbound(&mut self, tid: &TransferId) {
         if let Some(mut t) = self.outbound.remove(tid) {
             t.status = TransferStatus::Cancelled;
+        }
+    }
+
+    pub fn cancel_all_for_device(&mut self, peer_id: Uuid) {
+        let inbound_tids: Vec<_> = self.inbound.values()
+            .filter(|t| t.from_device == peer_id)
+            .map(|t| t.transfer_id)
+            .collect();
+        for tid in inbound_tids {
+            self.cancel_inbound(&tid, "peer disconnected");
+        }
+
+        let outbound_tids: Vec<_> = self.outbound.values()
+            .filter(|t| t.target_device == Some(peer_id))
+            .map(|t| t.transfer_id)
+            .collect();
+        for tid in outbound_tids {
+            self.cancel_outbound(&tid);
+        }
+    }
+
+    pub fn prune_stale_transfers(&mut self) {
+        let now = Instant::now();
+        let timeout = std::time::Duration::from_secs(300); // 5 minutes
+
+        let stale_inbound: Vec<_> = self.inbound.iter()
+            .filter(|(_, t)| now.duration_since(t.last_active_at) > timeout)
+            .map(|(tid, _)| *tid)
+            .collect();
+        for tid in stale_inbound {
+            self.cancel_inbound(&tid, "transfer timed out (zombie)");
+        }
+
+        let stale_outbound: Vec<_> = self.outbound.iter()
+            .filter(|(_, t)| now.duration_since(t.last_active_at) > timeout)
+            .map(|(tid, _)| *tid)
+            .collect();
+        for tid in stale_outbound {
+            self.cancel_outbound(&tid);
         }
     }
 
@@ -646,7 +705,7 @@ impl FileTransferManager {
             }));
         }
         for t in self.outbound.values() {
-            let bytes_sent = (t.last_acked_chunk as u64) * 65536; // roughly
+            let bytes_sent = (t.last_acked_chunk as u64) * (FILE_CHUNK_SIZE as u64);
             let percent = if t.meta.size_bytes > 0 {
                 (bytes_sent as f64 / t.meta.size_bytes as f64 * 100.0) as u8
             } else {

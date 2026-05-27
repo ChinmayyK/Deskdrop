@@ -93,19 +93,89 @@ pub unsafe extern "C" fn deskdrop_start(
                                     }
                                     crate::ipc::IpcResponse::ok_empty()
                                 }
-                                crate::ipc::IpcRequest::ConnectManual { host, port } => {
-                                    let _ = eng.connect_to_peer(host, port.unwrap_or(47823)).await;
+                                crate::ipc::IpcRequest::ConnectPeer { ip, port } => {
+                                    let _ = eng.connect_to_peer(ip, port).await;
                                     crate::ipc::IpcResponse::ok_empty()
                                 }
-                                crate::ipc::IpcRequest::SaveSettings {
-                                    port, device_name, sync_enabled, sync_text, sync_images, sync_files,
-                                    history_limit, max_history_text_bytes, max_payload_bytes, clipboard_poll_ms,
-                                    max_pushes_per_sec, rate_limit_burst, smart_sync_duplicate_window_ms,
-                                    smart_sync_debounce_ms, block_sensitive_text, require_tofu_confirmation,
-                                    show_receive_notification, ignore_patterns
-                                } => {
-                                    // FFI doesn't persist settings, but applies them to running engine
-                                    // Normally the UI saves to Registry. We just push an empty response here.
+                                crate::ipc::IpcRequest::RescanPeers => {
+                                    eng.rescan_peers().await;
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::ConnectManual { host, port } => {
+                                    let p = port.unwrap_or(47823);
+                                    match eng.connect_to_peer(host, p).await {
+                                        Ok(()) => crate::ipc::IpcResponse::ok_empty(),
+                                        Err(e) => crate::ipc::IpcResponse::error(e.to_string()),
+                                    }
+                                }
+                                crate::ipc::IpcRequest::SaveSettings { port, device_name, sync_enabled, sync_text, sync_images, sync_files, history_limit, max_history_text_bytes, max_payload_bytes, clipboard_poll_ms, max_pushes_per_sec, rate_limit_burst, smart_sync_duplicate_window_ms, smart_sync_debounce_ms, block_sensitive_text, require_tofu_confirmation, show_receive_notification, ignore_patterns } => {
+                                    let patch = serde_json::json!({
+                                        "port": port,
+                                        "device_name": device_name,
+                                        "sync_enabled": sync_enabled,
+                                        "sync_text": sync_text,
+                                        "sync_images": sync_images,
+                                        "sync_files": sync_files,
+                                        "history_limit": history_limit,
+                                        "max_history_text_bytes": max_history_text_bytes,
+                                        "max_payload_bytes": max_payload_bytes,
+                                        "clipboard_poll_ms": clipboard_poll_ms,
+                                        "max_pushes_per_sec": max_pushes_per_sec,
+                                        "rate_limit_burst": rate_limit_burst,
+                                        "smart_sync_duplicate_window_ms": smart_sync_duplicate_window_ms,
+                                        "smart_sync_debounce_ms": smart_sync_debounce_ms,
+                                        "block_sensitive_text": block_sensitive_text,
+                                        "require_tofu_confirmation": require_tofu_confirmation,
+                                        "show_receive_notification": show_receive_notification,
+                                        "ignore_patterns": ignore_patterns,
+                                    });
+                                    let _ = eng.patch_settings(patch.to_string()).await;
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::PatchSettings { patch } => {
+                                    let _ = eng.patch_settings(patch).await;
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::TrustPeer { device_id } => {
+                                    if let Ok(id) = uuid::Uuid::parse_str(&device_id) {
+                                        let _ = eng.trust_peer(id).await;
+                                    }
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::RejectPeer { device_id } => {
+                                    if let Ok(id) = uuid::Uuid::parse_str(&device_id) {
+                                        let _ = eng.reject_peer(id).await;
+                                    }
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::SendPairingRequest { device_id } => {
+                                    if let Ok(id) = uuid::Uuid::parse_str(&device_id) {
+                                        let _ = eng.send_pairing_request(id).await;
+                                    }
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::RespondToPairing { device_id, accepted } => {
+                                    if let Ok(id) = uuid::Uuid::parse_str(&device_id) {
+                                        let _ = eng.respond_to_pairing(id, accepted).await;
+                                    }
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::PauseSyncPeer { device_id } => {
+                                    if let Ok(id) = uuid::Uuid::parse_str(&device_id) {
+                                        let _ = eng.pause_sync_peer(id).await;
+                                    }
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::ResumeSyncPeer { device_id } => {
+                                    if let Ok(id) = uuid::Uuid::parse_str(&device_id) {
+                                        let _ = eng.resume_sync_peer(id).await;
+                                    }
+                                    crate::ipc::IpcResponse::ok_empty()
+                                }
+                                crate::ipc::IpcRequest::ForgetDevice { device_id } => {
+                                    if let Ok(id) = uuid::Uuid::parse_str(&device_id) {
+                                        let _ = eng.forget_device(id).await;
+                                    }
                                     crate::ipc::IpcResponse::ok_empty()
                                 }
                                 _ => crate::ipc::IpcResponse::error("unsupported in FFI IPC".to_string())
@@ -203,6 +273,32 @@ pub unsafe extern "C" fn deskdrop_push_file(
     ) as c_int
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_send_file_path(
+    handle: *mut DeskdropHandle,
+    target_device_ptr: *const c_char,
+    path_ptr: *const c_char,
+    file_name_ptr: *const c_char,
+    mime_type_ptr: *const c_char,
+) -> c_int {
+    if handle.is_null() || path_ptr.is_null() || file_name_ptr.is_null() || mime_type_ptr.is_null() {
+        return -1;
+    }
+    
+    let target_device = if !target_device_ptr.is_null() {
+        let s = CStr::from_ptr(target_device_ptr).to_string_lossy();
+        if s.is_empty() { None } else { uuid::Uuid::parse_str(&s).ok() }
+    } else { None };
+
+    let path = std::path::PathBuf::from(CStr::from_ptr(path_ptr).to_string_lossy().into_owned());
+    let file_name = CStr::from_ptr(file_name_ptr).to_string_lossy().into_owned();
+    let mime_type = CStr::from_ptr(mime_type_ptr).to_string_lossy().into_owned();
+
+    let h = &*handle;
+    let res = runtime().block_on(h.engine.send_file_path(path, file_name, mime_type, target_device));
+    if res.is_ok() { 0 } else { -1 }
+}
+
 // ── Poll for events ───────────────────────────────────────────────────────────
 
 /// Event type codes returned by `deskdrop_poll_event`.
@@ -280,7 +376,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
             ..
         } => {
             if *auto_applied {
-                match content {
+                match &**content {
                     ClipboardContent::Text(_) => PB_EVENT_CLIPBOARD_TEXT,
                     ClipboardContent::Image { .. } => PB_EVENT_CLIPBOARD_IMAGE,
                     ClipboardContent::File { .. } => PB_EVENT_CLIPBOARD_FILE,
@@ -326,16 +422,17 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
 pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
     if let EngineEvent::ClipboardReceived {
-        content: ClipboardContent::Text(ref s),
+        content,
         ..
-    } = e.inner
+    } = &e.inner
     {
-        let cs = CString::new(s.as_bytes()).unwrap_or_default();
-        e.cached_str = Some(cs);
-        e.cached_str.as_ref().unwrap().as_ptr()
-    } else {
-        std::ptr::null()
+        if let ClipboardContent::Text(ref s) = **content {
+            let cs = CString::new(s.as_bytes()).unwrap_or_default();
+            e.cached_str = Some(cs);
+            return e.cached_str.as_ref().unwrap().as_ptr();
+        }
     }
+    std::ptr::null()
 }
 
 /// Get the device name associated with the event.
@@ -494,6 +591,19 @@ pub unsafe extern "C" fn deskdrop_event_fingerprint(event: *mut PbEvent) -> *con
         let cs = CString::new(pin.as_bytes()).unwrap_or_default();
         e.cached_mime = Some(cs);
         e.cached_mime.as_ref().unwrap().as_ptr()
+    } else {
+        std::ptr::null()
+    }
+}
+
+/// Get the device ID string for TOFU_PROMPT events.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const c_char {
+    let e = &mut *event;
+    if let EngineEvent::PairingRequested { device_id, .. } = &e.inner {
+        let cs = CString::new(device_id.to_string()).unwrap_or_default();
+        e.cached_str = Some(cs);
+        e.cached_str.as_ref().unwrap().as_ptr()
     } else {
         std::ptr::null()
     }
@@ -676,23 +786,43 @@ pub unsafe extern "C" fn deskdrop_free_event(event: *mut PbEvent) {
 
 /// Get the data buffer for a PB_EVENT_CAMERA_FRAME event.
 #[no_mangle]
-pub unsafe extern "C" fn deskdrop_event_camera_frame_data(event: *mut PbEvent) -> *const u8 {
-    let e = &mut *event;
-    if let EngineEvent::CameraFrameReceived { data, .. } = &e.inner {
-        data.as_ptr()
-    } else {
-        std::ptr::null()
-    }
+pub unsafe extern "C" fn deskdrop_event_camera_frame_data(_event: *mut PbEvent) -> *const u8 {
+    // Camera frames are no longer sent via event bus to avoid OOM.
+    // They must be fetched directly from the engine state via deskdrop_engine_get_camera_frame.
+    std::ptr::null()
 }
 
 /// Get the data length for a PB_EVENT_CAMERA_FRAME event.
 #[no_mangle]
-pub unsafe extern "C" fn deskdrop_event_camera_frame_len(event: *const PbEvent) -> usize {
-    if let EngineEvent::CameraFrameReceived { data, .. } = &(*event).inner {
-        data.len()
-    } else {
-        0
+pub unsafe extern "C" fn deskdrop_event_camera_frame_len(_event: *const PbEvent) -> usize {
+    0
+}
+
+/// Fetch the latest camera frame for a specific peer directly from the engine.
+/// Copies up to `max_len` bytes into `out_buffer`. Returns actual length, or 0 if none/error.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_engine_get_camera_frame(
+    engine: *mut crate::engine::Engine,
+    peer_id_bytes: *const u8,
+    out_buffer: *mut u8,
+    max_len: usize,
+) -> usize {
+    if engine.is_null() || peer_id_bytes.is_null() || out_buffer.is_null() {
+        return 0;
     }
+    let engine = &*engine;
+    let peer_id = match uuid::Uuid::from_slice(std::slice::from_raw_parts(peer_id_bytes, 16)) {
+        Ok(id) => id,
+        Err(_) => return 0,
+    };
+    
+    // Fetch frame from engine using public method
+    if let Some(frame_data) = engine.get_latest_camera_frame(peer_id) {
+        let len = std::cmp::min(frame_data.len(), max_len);
+        std::ptr::copy_nonoverlapping(frame_data.as_ptr(), out_buffer, len);
+        return len;
+    }
+    0
 }
 
 /// Push a camera frame to all peers.
@@ -717,35 +847,32 @@ pub unsafe extern "C" fn deskdrop_push_video_frame(
 /// Returns 0 on success.
 ///
 /// # Safety
-/// `handle` and `device_name_ptr` must be valid.
+/// `handle` and `device_id_ptr` must be valid.
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_trust_peer(
     handle: *mut DeskdropHandle,
-    device_name_ptr: *const std::ffi::c_char,
+    device_id_ptr: *const std::ffi::c_char,
     trust: std::ffi::c_int,
 ) -> std::ffi::c_int {
-    if handle.is_null() || device_name_ptr.is_null() {
+    if handle.is_null() || device_id_ptr.is_null() {
         return -1;
     }
-    let name = match std::ffi::CStr::from_ptr(device_name_ptr).to_str() {
+    let id_str = match std::ffi::CStr::from_ptr(device_id_ptr).to_str() {
         Ok(s) => s.to_string(),
+        Err(_) => return -1,
+    };
+    let device_id = match uuid::Uuid::parse_str(&id_str) {
+        Ok(id) => id,
         Err(_) => return -1,
     };
     let h = &*handle;
     if trust != 0 {
-        // Resolve the device ID from the TOFU store by name, then trust it.
         runtime().block_on(async {
-            let trusted = h.engine.trusted_devices().await;
-            if let Some(peer) = trusted.iter().find(|p| p.device_name == name) {
-                let _ = h.engine.trust_peer(peer.device_id).await;
-            }
+            let _ = h.engine.trust_peer(device_id).await;
         });
     } else {
         runtime().block_on(async {
-            let trusted = h.engine.trusted_devices().await;
-            if let Some(peer) = trusted.iter().find(|p| p.device_name == name) {
-                let _ = h.engine.reject_peer(peer.device_id).await;
-            }
+            let _ = h.engine.reject_peer(device_id).await;
         });
     }
     0

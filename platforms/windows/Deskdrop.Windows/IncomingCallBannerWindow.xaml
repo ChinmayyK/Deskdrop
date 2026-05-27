@@ -1,0 +1,91 @@
+<Window x:Class="Deskdrop.Windows.IncomingCallBannerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Incoming Call" Height="100" Width="380"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" WindowStartupLocation="Manual">
+    <Window.Resources>
+        <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever">
+            <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="Opacity" From="0.8" To="0" Duration="0:0:1.5" />
+            <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" From="1" To="1.5" Duration="0:0:1.5" />
+            <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" From="1" To="1.5" Duration="0:0:1.5" />
+        </Storyboard>
+        <Storyboard x:Key="SlideInAnimation">
+            <ThicknessAnimation Storyboard.TargetProperty="Margin" From="0,-20,0,20" To="0" Duration="0:0:0.4">
+                <ThicknessAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </ThicknessAnimation.EasingFunction>
+            </ThicknessAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4" />
+        </Storyboard>
+    </Window.Resources>
+    <Window.Triggers>
+        <EventTrigger RoutedEvent="Window.Loaded">
+            <BeginStoryboard Storyboard="{StaticResource PulseAnimation}" />
+            <BeginStoryboard Storyboard="{StaticResource SlideInAnimation}" />
+        </EventTrigger>
+    </Window.Triggers>
+    <Grid Margin="12">
+        <Border CornerRadius="38" Background="#F2FFFFFF" BorderThickness="1" BorderBrush="#E5E5EA">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="20" Opacity="0.5" ShadowDepth="8"/>
+            </Border.Effect>
+            <Grid Margin="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Avatar -->
+                <Grid Grid.Column="0" Width="52" Height="52" VerticalAlignment="Center">
+                    <Ellipse x:Name="PulseRing" Fill="#32ADE6" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+                    <Ellipse Fill="#32ADE6" Width="52" Height="52" />
+                    <TextBlock x:Name="TxtInitials" Text="D" Foreground="White" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Grid>
+                
+                <!-- Caller Info -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <TextBlock x:Name="TxtCallerName" Text="Incoming Call..." Foreground="#1C1C1E" FontSize="16" FontWeight="Bold"/>
+                    <TextBlock Text="Camera stream" Foreground="#8E8E93" FontSize="13" Margin="0,2,0,0"/>
+                </StackPanel>
+                
+                <!-- Action Buttons -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Width="44" Height="44" Background="#FF3B30" BorderThickness="0" Margin="0,0,12,0" Click="BtnDecline_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="bg" CornerRadius="22" Background="{TemplateBinding Background}" Cursor="Hand">
+                                    <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" Foreground="White" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bg" Property="Opacity" Value="0.8"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button Width="44" Height="44" Background="#34C759" BorderThickness="0" Click="BtnAccept_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="bg" CornerRadius="22" Background="{TemplateBinding Background}" Cursor="Hand">
+                                    <TextBlock Text="&#xE8FB;" FontFamily="Segoe MDL2 Assets" Foreground="White" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bg" Property="Opacity" Value="0.8"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

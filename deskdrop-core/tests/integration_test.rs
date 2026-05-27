@@ -101,12 +101,13 @@ async fn two_engines_exchange_text() {
             .expect("channel closed");
 
         match event {
-            EngineEvent::ClipboardReceived {
-                content: ClipboardContent::Text(t),
-                ..
-            } => {
-                assert_eq!(t, "hello from device 1");
-                break;
+            EngineEvent::ClipboardReceived { content, .. } => {
+                if let ClipboardContent::Text(t) = &*content {
+                    assert_eq!(t, "hello from device 1");
+                    break;
+                } else {
+                    panic!("expected Text clipboard content");
+                }
             }
             EngineEvent::PeerConnected { .. } | EngineEvent::ClipboardSynced { .. } => {}
             other => panic!("unexpected event: {:?}", other),

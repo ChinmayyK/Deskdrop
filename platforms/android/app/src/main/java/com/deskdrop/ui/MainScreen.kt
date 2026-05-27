@@ -88,6 +88,7 @@ fun MainScreen(
     onScanNow: () -> Unit,
     onActionPushClipboard: () -> Unit,
     onActionPairMagicLink: () -> Unit,
+    onManualIp: () -> Unit,
     onActionPauseSync: () -> Unit,
     onActionDisconnectAll: () -> Unit,
     onActionStopService: () -> Unit,
@@ -147,6 +148,7 @@ fun MainScreen(
                                 },
                                 quickContextText = DeskdropService.quickSendContextFlow.collectAsState().value,
                                 onActionPairMagicLink = onActionPairMagicLink,
+                                onManualIp = onManualIp,
                                 onActionSendFiles = onActionSendFiles,
                                 onActionStreamCamera = onActionStreamCamera,
                                 onApplyClipboard = onApplyClipboard,
@@ -306,6 +308,7 @@ fun HomeTab(
     onActionSendQuickContext: () -> Unit,
     quickContextText: String?,
     onActionPairMagicLink: () -> Unit,
+    onManualIp: () -> Unit,
     onActionSendFiles: (String?) -> Unit,
     onActionStreamCamera: () -> Unit,
     onApplyClipboard: (ActivityEntry) -> Unit,
@@ -436,6 +439,22 @@ fun HomeTab(
                         Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Add", style = CRTypography.caption, color = CRTheme.blueSoft)
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Manual IP Action
+                    Row(
+                        modifier = Modifier
+                            .crPressScale(0.95f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onManualIp() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.Language, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("IP", style = CRTypography.caption, color = CRTheme.blueSoft)
                     }
                 }
             }

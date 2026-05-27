@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Deskdrop Contributors"]
 description = "Proximity-Based Shared Clipboard — core engine"
-license = "MIT"
+license = "AGPL-3.0-only"
 
 [lib]
 name = "deskdrop_core"
@@ -19,7 +19,7 @@ path = "src/bin/daemon.rs"
 tokio = { version = "1", features = ["full"] }
 
 # Serialization
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 bincode = "1"
 
@@ -57,6 +57,7 @@ dirs = "5"
 # Error handling
 thiserror = "1"
 anyhow = "1"
+default-net = "0.22.0"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 mdns-sd = "0.10"

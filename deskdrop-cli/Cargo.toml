@@ -3,7 +3,7 @@ name = "deskdrop-cli"
 version = "0.1.0"
 edition = "2021"
 description = "Deskdrop command-line management tool"
-license = "MIT"
+license = "AGPL-3.0-only"
 
 [[bin]]
 name = "deskdrop-cli"

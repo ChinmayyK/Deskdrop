@@ -10,4 +10,4 @@ resolver = "2"
 version = "0.4.2"
 edition = "2021"
 authors = ["Deskdrop Contributors"]
-license = "MIT"
+license = "AGPL-3.0-only"

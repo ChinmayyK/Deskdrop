@@ -63,6 +63,10 @@ class CameraStreamActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
+        val handle = DeskdropService.activeEngineHandle
+        if (handle != 0L) {
+            DeskdropJni.stopCameraStream(handle)
+        }
     }
 
     fun getExecutor(): ExecutorService = cameraExecutor

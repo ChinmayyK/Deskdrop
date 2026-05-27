@@ -219,6 +219,22 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushVideoFrame(
     0
 }
 
+// ── stopCameraStream ──────────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_stopCameraStream(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.stop_camera_stream());
+    0
+}
+
 // ── pollEvent ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]

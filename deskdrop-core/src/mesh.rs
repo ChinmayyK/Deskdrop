@@ -264,7 +264,7 @@ pub struct ClipboardApplyPolicy {
     pub auto_apply_allowed: Vec<Uuid>,
     /// Debounce: don't apply if last auto-apply was within this window.
     pub debounce: Duration,
-    last_auto_apply: Option<Instant>,
+    last_auto_apply: HashMap<Uuid, Instant>,
 }
 
 impl ClipboardApplyPolicy {
@@ -279,7 +279,7 @@ impl ClipboardApplyPolicy {
             auto_apply,
             auto_apply_allowed: allowed,
             debounce: Duration::from_millis(debounce_ms),
-            last_auto_apply: None,
+            last_auto_apply: HashMap::new(),
         }
     }
 
@@ -294,13 +294,13 @@ impl ClipboardApplyPolicy {
         if !self.auto_apply_allowed.is_empty() && !self.auto_apply_allowed.contains(&from_device) {
             return false;
         }
-        // Debounce rapid updates.
-        if let Some(last) = self.last_auto_apply {
+        // Debounce rapid updates per-peer to prevent one peer from starving others.
+        if let Some(last) = self.last_auto_apply.get(&from_device) {
             if last.elapsed() < self.debounce {
                 return false;
             }
         }
-        self.last_auto_apply = Some(Instant::now());
+        self.last_auto_apply.insert(from_device, Instant::now());
         true
     }
 

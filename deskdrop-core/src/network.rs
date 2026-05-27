@@ -135,7 +135,7 @@ async fn send_frame<T: Serialize>(stream: &mut TcpStream, value: &T) -> Result<(
     Ok(())
 }
 
-async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream) -> Result<T> {
+async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream, max_size: u32) -> Result<T> {
     let mut len_buf = [0u8; 4];
     stream
         .read_exact(&mut len_buf)
@@ -144,10 +144,10 @@ async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream) -> Result<T> {
     let len = u32::from_le_bytes(len_buf);
 
     anyhow::ensure!(
-        len <= MAX_FRAME_SIZE,
+        len <= max_size,
         "frame size {} exceeds limit {}",
         len,
-        MAX_FRAME_SIZE
+        max_size
     );
 
     let mut buf = vec![0u8; len as usize];
@@ -246,7 +246,10 @@ pub async fn handshake_initiator(
 
     send_frame(stream, &hello).await.context("sending Hello")?;
 
-    let ack: HelloAckFrame = recv_frame(stream).await.context("receiving HelloAck")?;
+    let ack: HelloAckFrame = tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
+        .await
+        .context("timeout waiting for HelloAck")?
+        .context("receiving HelloAck")?;
 
     anyhow::ensure!(
         ack.version == PROTOCOL_VERSION,
@@ -294,14 +297,21 @@ pub async fn handshake_initiator(
 }
 
 /// Responder side (we accepted the connection).
-pub async fn handshake_responder(
+pub async fn handshake_responder<F, Fut>(
     stream: &mut TcpStream,
     my_device_id: Uuid,
     my_device_name: &str,
     my_identity_pubkey: [u8; 32],
-    peer_is_trusted: bool,
-) -> Result<HandshakeResult> {
-    let hello: HelloFrame = recv_frame(stream).await.context("receiving Hello")?;
+    check_trust: F,
+) -> Result<HandshakeResult>
+where
+    F: FnOnce(Uuid, [u8; 32]) -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    let hello: HelloFrame = tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
+        .await
+        .context("timeout waiting for Hello")?
+        .context("receiving Hello")?;
 
     anyhow::ensure!(
         hello.version == PROTOCOL_VERSION,
@@ -317,10 +327,17 @@ pub async fn handshake_responder(
     // and verifies that nonce_response == XOR(their_nonce, recovered_nonce).
     let nonce_response = xor_nonces(&hello.nonce, &my_nonce);
 
+    let peer_is_trusted = check_trust(hello.device_id, hello.identity_pubkey).await;
+    let name_to_send = if peer_is_trusted {
+        my_device_name.to_string()
+    } else {
+        "Deskdrop Device".to_string()
+    };
+
     let ack = HelloAckFrame {
         version: PROTOCOL_VERSION,
         device_id: my_device_id,
-        device_name: my_device_name.to_string(),
+        device_name: name_to_send,
         identity_pubkey: my_identity_pubkey,
         ecdh_pubkey: ephemeral.public_bytes,
         nonce_response,
@@ -427,7 +444,7 @@ mod tests {
         });
 
         let (mut server_stream, _) = listener.accept().await.unwrap();
-        let received: String = recv_frame(&mut server_stream).await.unwrap();
+        let received: String = recv_frame(&mut server_stream, MAX_FRAME_SIZE).await.unwrap();
         assert_eq!(received, "hello Deskdrop v3");
         send_handle.await.unwrap();
     }
@@ -446,7 +463,7 @@ mod tests {
         });
 
         let (mut server_stream, _) = listener.accept().await.unwrap();
-        let result = recv_frame::<String>(&mut server_stream).await;
+        let result = recv_frame::<String>(&mut server_stream, MAX_FRAME_SIZE).await;
         assert!(result.is_err(), "oversized frame must be rejected");
     }
 
@@ -518,7 +535,7 @@ mod tests {
 
         let server_handle = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
-            handshake_responder(&mut stream, id_b, "PeerB", pub_b, false)
+            handshake_responder(&mut stream, id_b, "PeerB", pub_b, |_, _| async { true })
                 .await
                 .unwrap()
         });

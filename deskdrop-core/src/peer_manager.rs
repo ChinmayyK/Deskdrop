@@ -46,6 +46,7 @@ pub enum PeerConnectionState {
 pub enum DiscoverySource {
     Mdns,
     Manual,
+    UdpBeacon,
     #[default]
     Unknown,
 }
@@ -190,13 +191,24 @@ impl PeerManager {
     }
 
     pub fn save(&self) -> Result<()> {
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent).context("creating peer dir")?;
-        }
-        let tmp = self.path.with_extension("tmp");
+        let path = self.path.clone();
         let bytes = serde_json::to_vec_pretty(&*self.store.read().unwrap())?;
-        std::fs::write(&tmp, bytes).context("writing peer store")?;
-        std::fs::rename(&tmp, &self.path).context("renaming peer store")?;
+        
+        let save_fn = move || {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let tmp = path.with_extension("tmp");
+            if std::fs::write(&tmp, &bytes).is_ok() {
+                let _ = std::fs::rename(&tmp, &path);
+            }
+        };
+
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::task::spawn_blocking(save_fn);
+        } else {
+            save_fn();
+        }
         Ok(())
     }
 
@@ -228,6 +240,12 @@ impl PeerManager {
         discovery: DiscoverySource,
         platform: Option<String>,
     ) -> Result<PeerRecord> {
+        if self.store.read().unwrap().peers.len() > 1000 {
+            self.prune_stale_peers();
+            if self.store.read().unwrap().peers.len() > 1000 {
+                return Err(anyhow::anyhow!("Peer limit reached"));
+            }
+        }
         let now = now_secs();
         let record = {
             let mut store = self.store.write().unwrap();

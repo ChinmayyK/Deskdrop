@@ -133,6 +133,36 @@ class MainActivity : ComponentActivity() {
             val activeTransfers by DeskdropService.activeTransfersFlow.collectAsState()
 
             AppTheme(useDarkTheme = isDarkMode.value) {
+                var showManualIpDialog by remember { mutableStateOf(false) }
+                if (showManualIpDialog) {
+                    var ipInput by remember { mutableStateOf("") }
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showManualIpDialog = false },
+                        title = { Text("Enter Device IP") },
+                        text = {
+                            androidx.compose.material3.OutlinedTextField(
+                                value = ipInput,
+                                onValueChange = { ipInput = it },
+                                label = { Text("e.g. 192.168.1.50") },
+                                singleLine = true
+                            )
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                if (handlePairingInput(ipInput)) {
+                                    showSnack("Connecting...")
+                                } else {
+                                    showSnack("Invalid IP format")
+                                }
+                                showManualIpDialog = false
+                            }) { Text("Connect") }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { showManualIpDialog = false }) { Text("Cancel") }
+                        }
+                    )
+                }
+
                 Box(modifier = Modifier.fillMaxSize()) {
                     if (!hasCompletedOnboarding.value) {
                         OnboardingScreen(
@@ -156,6 +186,12 @@ class MainActivity : ComponentActivity() {
                                 }
                                 ContextCompat.startForegroundService(this@MainActivity, svc)
                                 showSnack("Sample sent to ${peer.name}")
+                            },
+                            onScanQr = {
+                                startQrScanner()
+                            },
+                            onManualIp = {
+                                showManualIpDialog = true
                             },
                             onComplete = {
                                 getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putBoolean("has_completed_onboarding", true).apply()
@@ -188,6 +224,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onActionPairMagicLink = { showMagicLinkPairingDialog() },
+                    onManualIp = { showManualIpDialog = true },
                     onActionPauseSync = {
                         sendAction(DeskdropService.ACTION_PAUSE_SYNC)
                         refreshDashboardState()

@@ -366,7 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     // Fire immediately — no delay
                     self.store.showToast(
                         title: "\(device.name) connected",
-                        body: "Clipboard, file sync & call continuity are live.",
+                        body: "Ready to sync.",
                         tint: CRTheme.accentGreen,
                         systemImage: "link.badge.plus",
                         ttl: 4.0
@@ -468,8 +468,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 title = "Clipboard Received"
                 body = "Copied from \(entry.device_name)"
             } else {
-                title = "Clipboard Available"
-                body = "From \(entry.device_name) — click to apply"
+                title = "Clipboard Received"
+                body = "From \(entry.device_name) (Click to apply)"
             }
 
             

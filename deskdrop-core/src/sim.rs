@@ -60,7 +60,7 @@ impl SimNode {
         let seq = self.seq.fetch_add(1, Ordering::Relaxed);
         let msg = AppMessage::ClipboardPush {
             seq,
-            content,
+            content: std::sync::Arc::new(content),
             origin_device: self.device_id,
             origin_device_name: self.device_name.clone(),
             relay_path: Vec::new(),
@@ -91,7 +91,7 @@ impl SimNode {
                 }
                 let hash = hash_content(&content);
                 if self.dedup.should_apply(origin_device, hash) {
-                    Some(content)
+                    Some((*content).clone())
                 } else {
                     None
                 }

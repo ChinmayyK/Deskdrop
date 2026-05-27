@@ -31,7 +31,24 @@ final class ClipboardWatcher {
 
     /// Incremented by the caller before setting the clipboard programmatically.
     /// The watcher skips that many change events to prevent echo.
-    var suppressCount = 0
+    private var _suppressCount = 0
+    private let lock = NSLock()
+
+    func incrementSuppressCount() {
+        lock.lock()
+        defer { lock.unlock() }
+        _suppressCount += 1
+    }
+
+    func tryConsumeSuppress() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if _suppressCount > 0 {
+            _suppressCount -= 1
+            return true
+        }
+        return false
+    }
 
     // ── Callbacks ─────────────────────────────────────────────────────────────
 
@@ -66,8 +83,7 @@ final class ClipboardWatcher {
                 lastChangeCount = currentCount
                 consecutiveNoChange = 0
 
-                if suppressCount > 0 {
-                    suppressCount -= 1
+                if tryConsumeSuppress() {
                     sleep(intervalMs: activeIntervalMs)
                     continue
                 }
@@ -162,14 +178,14 @@ final class ClipboardSetter {
     }
 
     func setText(_ text: String) {
-        watcher?.suppressCount += 1
+        watcher?.incrementSuppressCount()
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
     }
 
     func setImage(_ data: Data, mimeType: String) {
-        watcher?.suppressCount += 1
+        watcher?.incrementSuppressCount()
         let pb = NSPasteboard.general
         pb.clearContents()
         let type: NSPasteboard.PasteboardType = mimeType.contains("png") ? .png : .tiff
@@ -177,7 +193,7 @@ final class ClipboardSetter {
     }
 
     func setFileURL(_ url: URL) {
-        watcher?.suppressCount += 1
+        watcher?.incrementSuppressCount()
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.writeObjects([url as NSURL])

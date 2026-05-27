@@ -62,7 +62,7 @@ struct OnboardingView: View {
                         StepOneFindDevice(store: store, selectedPeerId: $selectedPeerId)
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     } else if currentStep == 1 {
-                        StepTwoVerify(store: store, selectedPeer: selectedPeer)
+                        StepTwoVerify(store: store, selectedPeer: selectedPeer, onCancel: { selectedPeerId = nil })
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     } else if currentStep == 2 {
                         StepThreeSendSample(store: store, selectedPeer: selectedPeer)
@@ -112,6 +112,7 @@ struct OnboardingView: View {
 private struct StepOneFindDevice: View {
     @ObservedObject var store: DeskdropStore
     @Binding var selectedPeerId: String?
+    @State private var showingQR = false
     
     var body: some View {
         VStack(spacing: 24) {
@@ -119,6 +120,14 @@ private struct StepOneFindDevice: View {
                 .font(.system(size: 28, weight: .bold, design: .rounded))
             Text("Make sure Deskdrop is running on your phone or another computer.")
                 .foregroundStyle(CRTheme.inkSoft)
+            
+            Button("Show QR Code") {
+                showingQR = true
+            }
+            .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
+            .sheet(isPresented: $showingQR) {
+                QRCodePairingSheet(store: store)
+            }
             
             ScrollView {
                 VStack(spacing: 8) {
@@ -154,6 +163,9 @@ private struct StepOneFindDevice: View {
 private struct StepTwoVerify: View {
     @ObservedObject var store: DeskdropStore
     var selectedPeer: PeerViewModel?
+    var onCancel: () -> Void
+    
+    @State private var hasTimedOut = false
     
     var body: some View {
         VStack(spacing: 24) {
@@ -185,6 +197,14 @@ private struct StepTwoVerify: View {
                             .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
                         }
                     }
+                } else if hasTimedOut {
+                    Text("Connection failed or timed out.")
+                        .foregroundStyle(CRTheme.accentRed)
+                    
+                    Button("Try Again") {
+                        onCancel()
+                    }
+                    .buttonStyle(CRSecondaryButtonStyle())
                 } else {
                     Text("Connecting to \(peer.displayName)...")
                         .foregroundStyle(CRTheme.inkSoft)
@@ -193,6 +213,16 @@ private struct StepTwoVerify: View {
             } else {
                 Text("No device selected.")
             }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+                if selectedPeer?.pairingPin == nil {
+                    hasTimedOut = true
+                }
+            }
+        }
+        .onChange(of: selectedPeer?.pairingPin) { _ in
+            hasTimedOut = false
         }
     }
 }

@@ -85,7 +85,7 @@ pub enum EngineEvent {
     ClipboardReceived {
         from_device: Uuid,
         from_name: String,
-        content: ClipboardContent,
+        content: std::sync::Arc<ClipboardContent>,
         /// True when the engine auto-applied it to the local clipboard.
         /// False when timeline-first mode is active (user must apply manually).
         auto_applied: bool,
@@ -231,7 +231,6 @@ pub enum EngineEvent {
     /// A raw video frame was received for the virtual camera stream.
     CameraFrameReceived {
         from_device: Uuid,
-        data: Vec<u8>,
     },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
@@ -407,6 +406,12 @@ struct EngineShared {
     active_call: Arc<Mutex<Option<ActiveCallState>>>,
     /// Per-peer battery levels (F20). Keyed by device UUID.
     peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
+    /// Per-peer latest camera frame (to prevent MPSC channel OOM).
+    pub camera_frames: Arc<Mutex<std::collections::HashMap<uuid::Uuid, Vec<u8>>>>,
+    /// Rate limit for pairing UI spam from untrusted peers.
+    pub last_pairing_prompt: Arc<Mutex<Option<std::time::Instant>>>,
+    /// Throttle for inbound clipboard pushes.
+    pub throttle: crate::throttle::Throttle,
 }
 
 #[derive(Clone)]
@@ -488,6 +493,9 @@ impl Engine {
             feedback: Arc::new(Mutex::new(crate::engine_support::FeedbackLog::new(200))),
             active_call: Arc::new(Mutex::new(None)),
             peer_batteries: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            camera_frames: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            last_pairing_prompt: Arc::new(Mutex::new(None)),
+            throttle: crate::throttle::Throttle::default_rate(),
         };
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
@@ -522,7 +530,122 @@ impl Engine {
         engine.spawn_peer_pruner();
         engine.spawn_sensitive_history_pruner();
         engine.spawn_auto_reconnector();
+        
+        // Spawn UDP broadcast beacon and listener for resilient discovery
+        engine.spawn_udp_beacon();
+        engine.spawn_udp_listener();
+
         Ok(engine)
+    }
+
+    fn spawn_udp_beacon(&self) {
+        let shared = self.shared.clone();
+        tokio::spawn(async move {
+            let socket = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
+                Ok(s) => s,
+                Err(err) => {
+                    tracing::warn!(error = %err, "failed to bind UDP beacon socket");
+                    return;
+                }
+            };
+            if let Err(err) = socket.set_broadcast(true) {
+                tracing::warn!(error = %err, "failed to set broadcast flag on UDP beacon socket");
+            }
+            
+            let device_id_str = shared.config.device_id.to_string();
+            // Payload format: DESKDROP_BEACON:<uuid>:<name>:<tcp_port>
+            let mut payload = format!("DESKDROP_BEACON:{}:{}:{}", device_id_str, shared.config.device_name, shared.config.port).into_bytes();
+            if payload.len() > 512 { payload.truncate(512); }
+            
+            let broadcast_addr: SocketAddr = "255.255.255.255:47824".parse().unwrap();
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
+            loop {
+                interval.tick().await;
+                if let Err(err) = socket.send_to(&payload, broadcast_addr).await {
+                    tracing::trace!(error = %err, "failed to send UDP beacon");
+                }
+            }
+        });
+    }
+
+    fn spawn_udp_listener(&self) {
+        let shared = self.shared.clone();
+        tokio::spawn(async move {
+            let socket = match tokio::net::UdpSocket::bind("0.0.0.0:47824").await {
+                Ok(s) => s,
+                Err(err) => {
+                    tracing::warn!(error = %err, "failed to bind UDP listener socket");
+                    return;
+                }
+            };
+            let mut buf = vec![0u8; 1024];
+            loop {
+                match socket.recv_from(&mut buf).await {
+                    Ok((len, addr)) => {
+                        let text = String::from_utf8_lossy(&buf[..len]);
+                        if text.starts_with("DESKDROP_BEACON:") {
+                            let parts: Vec<&str> = text.splitn(4, ':').collect();
+                            if parts.len() == 4 {
+                                if let Ok(peer_id) = uuid::Uuid::parse_str(parts[1]) {
+                                    if peer_id != shared.config.device_id {
+                                        let peer_name = parts[2].to_string();
+                                        if let Ok(peer_port) = parts[3].parse::<u16>() {
+                                            let peer_addr = SocketAddr::new(addr.ip(), peer_port);
+                                            
+                                            let trusted = {
+                                                let trust_guard = shared.trust.lock().await;
+                                                trust_guard.is_trusted(peer_id)
+                                            };
+                                            
+                                            if let Err(err) = shared.peer_manager.upsert_peer(
+                                                peer_id,
+                                                peer_name.clone(),
+                                                peer_addr,
+                                                trusted,
+                                                DiscoverySource::UdpBeacon,
+                                            ) {
+                                                tracing::warn!(error = %err, "failed to upsert UDP beacon peer");
+                                            } else {
+                                                if !should_initiate_session(&shared, peer_id, DiscoverySource::UdpBeacon) {
+                                                    continue;
+                                                }
+                                                if shared.peer_manager.live_endpoint(peer_id) == Some(peer_addr) {
+                                                    continue;
+                                                }
+                                                if matches!(
+                                                    shared.peer_manager.get(peer_id),
+                                                    Some(record) if record.status == PeerConnectionState::Connecting && record.socket_addr() == Some(peer_addr)
+                                                ) {
+                                                    continue;
+                                                }
+                                                
+                                                tracing::info!("UDP Beacon discovered peer {} at {}", peer_id, peer_addr);
+                                                let shared_clone = shared.clone();
+                                                tokio::spawn(async move {
+                                                    if let Err(err) = connect_loop(
+                                                        shared_clone,
+                                                        peer_addr,
+                                                        Some(peer_id),
+                                                        DiscoverySource::UdpBeacon,
+                                                    )
+                                                    .await {
+                                                        tracing::warn!(peer_id = %peer_id, error = %err, "UDP beacon peer connection failed");
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!(error = %err, "UDP listener recv_from failed");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    }
+                }
+            }
+        });
     }
 
     // ── Call Continuity ───────────────────────────────────────────────────────
@@ -660,6 +783,22 @@ impl Engine {
         }
     }
 
+    pub async fn stop_camera_stream(&self) {
+        let msg = AppMessage::CameraStreamStop {
+            origin_device: self.shared.config.device_id,
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        for (peer_id, tx) in peers {
+            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
+                continue;
+            };
+            if !peer.trusted {
+                continue;
+            }
+            let _ = tx.send(msg.clone()).await;
+        }
+    }
+
     /// Get battery states for all peers that have reported their level.
     pub async fn peer_batteries(&self) -> Vec<PeerBatteryState> {
         self.shared
@@ -736,16 +875,18 @@ impl Engine {
         // Re-hash after potential compression so the wire message is consistent.
         let hash = hash_content(&content);
 
+        let shared_content = std::sync::Arc::new(content);
+
         let relay_path = vec![self.shared.config.device_name.clone()];
         let msg = AppMessage::ClipboardPush {
             seq,
-            content: content.clone(),
+            content: std::sync::Arc::clone(&shared_content),
             origin_device: self.shared.config.device_id,
             origin_device_name: self.shared.config.device_name.clone(),
             relay_path: relay_path.clone(),
         };
         let metadata =
-            HistoryMetadata::from_content(&content, self.shared.config.device_name.clone(), false);
+            HistoryMetadata::from_content(&shared_content, self.shared.config.device_name.clone(), false);
 
         let peers = self.shared.peer_manager.active_senders();
         let mut report = SyncDispatchReport {
@@ -926,7 +1067,7 @@ impl Engine {
             .send(EngineEvent::ClipboardReceived {
                 from_device,
                 from_name,
-                content: ClipboardContent::Text(text),
+                content: std::sync::Arc::new(ClipboardContent::Text(text)),
                 auto_applied: true,
                 relay_path: entry.relay_path,
                 activity_id: entry.id,
@@ -1954,6 +2095,10 @@ impl Engine {
         self.shared.file_transfers.lock().await.active_transfers()
     }
 
+    pub async fn camera_frames(&self) -> tokio::sync::MutexGuard<'_, std::collections::HashMap<Uuid, Vec<u8>>> {
+        self.shared.camera_frames.lock().await
+    }
+
     /// Spawn a background task that periodically prunes transient, untrusted
     /// peer records to prevent unbounded memory/disk growth (MED-05).
     fn spawn_peer_pruner(&self) {
@@ -2063,6 +2208,11 @@ impl Engine {
         });
 
         Ok(())
+    }
+
+    /// Retrieve the latest camera frame for a specific peer.
+    pub fn get_latest_camera_frame(&self, peer_id: uuid::Uuid) -> Option<Vec<u8>> {
+        self.shared.camera_frames.blocking_lock().get(&peer_id).cloned()
     }
 }
 
@@ -2533,12 +2683,24 @@ async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
 
 async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<()> {
     network::optimize_stream(&stream, "incoming engine stream");
+    let shared_clone = shared.clone();
     let hs = network::handshake_responder(
         &mut stream,
         shared.config.device_id,
         &shared.config.device_name,
         shared.identity_pubkey,
-        false,
+        |peer_id, peer_identity| async move {
+            let store = shared_clone.trust.lock().await;
+            if store.is_trusted(peer_id) {
+                return true;
+            }
+            if let Some(record) = store.get(peer_id) {
+                if record.key_fingerprint == peer_identity {
+                    return true;
+                }
+            }
+            false
+        },
     )
     .await?;
 
@@ -2659,10 +2821,17 @@ async fn connect_once(
         .with_context(|| format!("connecting to {endpoint}"))?;
     network::optimize_stream(&stream, "outgoing engine stream");
 
+    let mut name_to_send = "Deskdrop Device";
+    if let Some(id) = expected_device_id {
+        if shared.trust.lock().await.is_trusted(id) {
+            name_to_send = &shared.config.device_name;
+        }
+    }
+
     let hs = network::handshake_initiator(
         &mut stream,
         shared.config.device_id,
-        &shared.config.device_name,
+        name_to_send,
         shared.identity_pubkey,
     )
     .await?;
@@ -2750,54 +2919,28 @@ async fn observe_trust(
             anyhow::bail!("peer {} is not trusted ({:?})", device_id, record.state);
         }
         TrustState::Untrusted => {
-            // ── Auto-trust upgrade ───────────────────────────────────────
-            // When a new device ID arrives that is untrusted, check if a
-            // previously-trusted peer exists with the same friendly name
-            // AND the same IP address.  This covers the extremely common
-            // case of Android debug builds regenerating identity keys on
-            // each deploy, which creates a fresh device UUID every time.
-            //
-            // The check is conservative: both name AND IP must match to
-            // minimise the risk of trusting a rogue device.
-            let peer_ip = shared.peer_manager.get(device_id).and_then(|p| p.ip);
-            let should_auto_trust = shared
-                .peer_manager
-                .list()
-                .iter()
-                .any(|existing| {
-                    existing.id != device_id
-                        && existing.trusted
-                        && existing.friendly_name == device_name
-                        && existing.ip.is_some()
-                        && existing.ip == peer_ip
-                });
-
-            if should_auto_trust {
-                tracing::info!(
-                    peer_id = %device_id,
-                    peer_name = %device_name,
-                    "auto-trusting device — matches a previously-trusted peer with same name and IP"
-                );
-                {
-                    let mut trust = shared.trust.lock().await;
-                    trust.observe_peer(device_id, device_name.clone(), &identity_pubkey)?;
-                    trust.trust_peer(device_id)?;
+            shared.peer_manager.update_trust(device_id, false)?;
+            
+            // Rate-limit pairing prompts to max 1 per 5 seconds to prevent UI spam attacks.
+            let now = std::time::Instant::now();
+            let mut last_prompt = shared.last_pairing_prompt.lock().await;
+            if let Some(last) = *last_prompt {
+                if now.duration_since(last).as_secs() < 5 {
+                    return Ok(false);
                 }
-                shared.peer_manager.update_trust(device_id, true)?;
-                Ok(true)
-            } else {
-                shared.peer_manager.update_trust(device_id, false)?;
-                let _ = shared.peer_manager.set_pairing_pin(device_id, Some(pin.display()));
-                let _ = shared
-                    .event_tx
-                    .send(EngineEvent::PairingRequested {
-                        device_id,
-                        device_name,
-                        pin: pin.display(),
-                    })
-                    .await;
-                Ok(false)
             }
+            *last_prompt = Some(now);
+
+            let _ = shared.peer_manager.set_pairing_pin(device_id, Some(pin.display()));
+            let _ = shared
+                .event_tx
+                .send(EngineEvent::PairingRequested {
+                    device_id,
+                    device_name,
+                    pin: pin.display(),
+                })
+                .await;
+            Ok(false)
         }
     }
 }
@@ -2919,6 +3062,7 @@ fn register_session(
                     if last_seen.elapsed() > shared.config.heartbeat_timeout {
                         break "heartbeat timeout".to_string();
                     }
+                    shared.file_transfers.lock().await.prune_stale_transfers();
                     // Use probe::make_ping() which embeds a high-resolution
                     // timestamp, and record the send instant for RTT calc (HIGH-03).
                     let ping = probe::make_ping();
@@ -2952,6 +3096,38 @@ fn register_session(
                                     origin_device_name.clone()
                                 };
 
+                                // --- Clipboard Security & Throttling ---
+                                let payload_size = match &*content {
+                                    ClipboardContent::Text(t) => t.len(),
+                                    ClipboardContent::Image { data, .. } => data.len(),
+                                    ClipboardContent::File { data, .. } => data.len(),
+                                };
+                                
+                                // Limit sizes to prevent OOM
+                                const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
+                                const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
+                                
+                                let allowed = match &*content {
+                                    ClipboardContent::Text(t) => t.len() <= MAX_TEXT_BYTES,
+                                    ClipboardContent::Image { data, .. } => data.len() <= MAX_IMAGE_BYTES,
+                                    ClipboardContent::File { data, .. } => data.len() <= MAX_IMAGE_BYTES,
+                                };
+                                
+                                if !allowed {
+                                    tracing::warn!(peer_id = %peer_id, size = payload_size, "dropped oversized clipboard payload");
+                                    continue;
+                                }
+
+                                // Run inbound payload through the FilterChain (e.g. executable blocking, etc.)
+                                let filter_chain = crate::filter::FilterChain::from_settings(&*shared.settings.lock().await);
+                                if let crate::filter::Verdict::Deny { reason } = filter_chain.run(&content) {
+                                    tracing::warn!(peer_id = %peer_id, reason, "inbound clipboard payload denied by filter");
+                                    continue;
+                                }
+                                
+                                // Apply TokenBucket throttling for large payloads
+                                shared.throttle.acquire(payload_size).await;
+
                                 // ── Timeline-first clipboard UX ───────────────
                                 let hash = hash_content(&content);
                                 let hash_hex = hex::encode(hash);
@@ -2960,7 +3136,7 @@ fn register_session(
 
                                 // Record in activity feed.
                                 let activity_id = {
-                                    if let ClipboardContent::Text(ref text) = content {
+                                    if let ClipboardContent::Text(ref text) = *content {
                                         shared
                                             .clipboard_store
                                             .lock()
@@ -2968,7 +3144,7 @@ fn register_session(
                                             .insert(hash_hex.clone(), text.clone());
                                     }
                                     let mut feed = shared.activity.lock().await;
-                                    match &content {
+                                    match &*content {
                                         ClipboardContent::Text(ref text) => {
                                             feed.record_remote_clipboard_text(
                                                 origin_device,
@@ -3010,12 +3186,11 @@ fn register_session(
                                 // Wrap content in Arc here so all downstream users — the
                                 // EngineEvent and every relay-fanout hop — share one heap
                                 // allocation instead of N independent clones (MED-01).
-                                let shared_content = std::sync::Arc::new(content);
-
+                                // (content is already Arc<ClipboardContent>)
                                 let _ = shared.event_tx.send(EngineEvent::ClipboardReceived {
                                     from_device: origin_device,
                                     from_name: display_name.clone(),
-                                    content: (*shared_content).clone(),
+                                    content: content.clone(),
                                     auto_applied: auto_apply,
                                     relay_path: relay_path.clone(),
                                     activity_id,
@@ -3027,7 +3202,7 @@ fn register_session(
                                     let max_bytes = shared.settings.lock().await.max_history_text_bytes;
                                     let source = display_name.clone();
                                     let _ = shared.history.lock().await
-                                        .push_with_options(&(*shared_content), source, max_bytes);
+                                        .push_with_options(&content, source, max_bytes);
                                 }
 
                                 // ── Mesh fanout relay ──────────────────────────
@@ -3050,7 +3225,7 @@ fn register_session(
                                     extended_path.push(shared.config.device_name.clone());
                                     let _ = fp_tx.try_send(AppMessage::ClipboardPush {
                                         seq,
-                                        content: (*shared_content).clone(),
+                                        content: content.clone(),
                                         origin_device,
                                         origin_device_name: display_name.clone(),
                                         relay_path: extended_path,
@@ -3078,8 +3253,14 @@ fn register_session(
                             let mime_type = meta.mime_type.clone();
 
                             // Register inbound transfer.
-                            shared.file_transfers.lock().await
-                                .register_inbound(meta, peer_id, peer_name.clone());
+                            let reg_result = shared.file_transfers.lock().await
+                                .register_inbound(meta, peer_id, peer_name.clone())
+                                .map(|_| ());
+                            if let Err(e) = reg_result {
+                                tracing::warn!(error = %e, "rejected file transfer announce");
+                                let _ = sess.send(&AppMessage::FileTransferCancel { transfer_id, reason: e.to_string() }).await;
+                                continue;
+                            }
 
                             // Check auto-accept policy.
                             let settings = shared.settings.lock().await.clone();
@@ -3196,9 +3377,15 @@ fn register_session(
                         }
                         Ok(AppMessage::FileChunk { transfer_id, chunk_index, total_chunks: _, data }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             let (progress, should_ack) = {
                                 let mut mgr = shared.file_transfers.lock().await;
                                 if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
+                                    if transfer.from_device != peer_id {
+                                        continue;
+                                    }
                                     let prog = transfer.receive_chunk(chunk_index, data).ok();
                                     let ack = transfer.should_ack();
                                     (prog, ack)
@@ -3236,21 +3423,33 @@ fn register_session(
                         }
                         Ok(AppMessage::FileChunkAck { transfer_id, last_confirmed_chunk }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             if let Some(transfer) = shared.file_transfers.lock().await.get_outbound_mut(&transfer_id) {
-                                transfer.on_chunk_ack(last_confirmed_chunk);
+                                if transfer.target_device == Some(peer_id) || transfer.target_device.is_none() {
+                                    transfer.on_chunk_ack(last_confirmed_chunk);
+                                }
                             }
                         }
                         Ok(AppMessage::FileTransferComplete { transfer_id }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             // Finalize: verify SHA-256 and write to disk.
                             let result = {
                                 let mut mgr = shared.file_transfers.lock().await;
                                 if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
-                                    let file_name = transfer.meta.file_name.clone();
-                                    let file_bytes = transfer.meta.size_bytes;
-                                    match transfer.finalize() {
-                                        Ok(dest) => Ok((dest, file_name, file_bytes)),
-                                        Err(e) => Err(e.to_string()),
+                                    if transfer.from_device != peer_id {
+                                        Err("transfer not from this peer".into())
+                                    } else {
+                                        let file_name = transfer.meta.file_name.clone();
+                                        let file_bytes = transfer.meta.size_bytes;
+                                        match transfer.finalize() {
+                                            Ok(dest) => Ok((dest, file_name, file_bytes)),
+                                            Err(e) => Err(e.to_string()),
+                                        }
                                     }
                                 } else {
                                     Err("transfer not found".into())
@@ -3298,14 +3497,28 @@ fn register_session(
                         }
                         Ok(AppMessage::FileTransferCompleteAck { transfer_id, success: _, error: _ }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             shared.file_transfers.lock().await.remove_outbound(&transfer_id);
                         }
                         Ok(AppMessage::FileTransferCancel { transfer_id, reason }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             {
                                 let mut mgr = shared.file_transfers.lock().await;
-                                mgr.cancel_inbound(&transfer_id, &reason);
-                                mgr.cancel_outbound(&transfer_id);
+                                if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                    if t.from_device == peer_id {
+                                        mgr.cancel_inbound(&transfer_id, &reason);
+                                    }
+                                }
+                                if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                                    if t.target_device == Some(peer_id) || t.target_device.is_none() {
+                                        mgr.cancel_outbound(&transfer_id);
+                                    }
+                                }
                             }
                             let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
                                 transfer_id,
@@ -3315,12 +3528,19 @@ fn register_session(
                         }
                         Ok(AppMessage::FileTransferPause { transfer_id }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             {
                                 let mut mgr = shared.file_transfers.lock().await;
                                 if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-                                    t.paused = true;
+                                    if t.target_device == Some(peer_id) || t.target_device.is_none() {
+                                        t.paused = true;
+                                    }
                                 } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                    t.paused = true;
+                                    if t.from_device == peer_id {
+                                        t.paused = true;
+                                    }
                                 }
                             }
                             let _ = shared.event_tx.send(EngineEvent::FileTransferPaused {
@@ -3329,14 +3549,21 @@ fn register_session(
                         }
                         Ok(AppMessage::FileTransferResume { transfer_id }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             let mut was_outbound = false;
                             {
                                 let mut mgr = shared.file_transfers.lock().await;
                                 if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-                                    t.paused = false;
-                                    was_outbound = true;
+                                    if t.target_device == Some(peer_id) || t.target_device.is_none() {
+                                        t.paused = false;
+                                        was_outbound = true;
+                                    }
                                 } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                    t.paused = false;
+                                    if t.from_device == peer_id {
+                                        t.paused = false;
+                                    }
                                 }
                             }
                             let _ = shared.event_tx.send(EngineEvent::FileTransferResumed {
@@ -3562,6 +3789,9 @@ fn register_session(
                         }
                         Ok(AppMessage::CameraStreamAccept { origin_device, accepted }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             let _ = shared.event_tx.send(EngineEvent::CameraStreamAccept {
                                 from_device: origin_device,
                                 accepted,
@@ -3569,15 +3799,22 @@ fn register_session(
                         }
                         Ok(AppMessage::CameraStreamStop { origin_device }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
+                            shared.camera_frames.lock().await.remove(&origin_device);
                             let _ = shared.event_tx.send(EngineEvent::CameraStreamStop {
                                 from_device: origin_device,
                             }).await;
                         }
                         Ok(AppMessage::CameraFrame { origin_device, data }) => {
                             last_seen = Instant::now();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
+                            shared.camera_frames.lock().await.insert(origin_device, data);
                             let _ = shared.event_tx.send(EngineEvent::CameraFrameReceived {
                                 from_device: origin_device,
-                                data,
                             }).await;
                         }
                         Err(err) => {
@@ -3607,6 +3844,9 @@ fn register_session(
                         reason: reason.clone(),
                     })
                     .await;
+
+                shared.file_transfers.lock().await.cancel_all_for_device(peer_id);
+                shared.camera_frames.lock().await.remove(&peer_id);
 
                 // Record in activity feed.
                 let feed = shared.activity.clone();
@@ -3663,7 +3903,12 @@ fn should_initiate_session(
     }
     match discovery {
         DiscoverySource::Manual => true,
-        DiscoverySource::Mdns | DiscoverySource::Unknown => {
+        DiscoverySource::Mdns | DiscoverySource::Unknown | DiscoverySource::UdpBeacon => {
+            // Prevent SSRF: only auto-connect to trusted peers. Untrusted peers
+            // must be manually connected via the UI by the user.
+            if !shared.trust.blocking_lock().is_trusted(peer_id) {
+                return false;
+            }
             shared.config.device_id.as_bytes() < peer_id.as_bytes()
         }
     }

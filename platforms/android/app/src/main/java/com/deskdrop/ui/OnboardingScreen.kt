@@ -31,6 +31,8 @@ fun OnboardingScreen(
     peers: List<PeerSnapshot>,
     onConnectPeer: (PeerSnapshot) -> Unit,
     onSendSampleText: (PeerSnapshot) -> Unit,
+    onScanQr: () -> Unit,
+    onManualIp: () -> Unit,
     onComplete: () -> Unit
 ) {
     var selectedPeerId by remember { mutableStateOf<String?>(null) }
@@ -71,11 +73,11 @@ fun OnboardingScreen(
             Box(modifier = Modifier.weight(1f)) {
                 AnimatedContent(targetState = currentStep, label = "step") { step ->
                     when (step) {
-                        0 -> StepOneFindDevice(isDark, peers, selectedPeer, onPeerSelect = {
+                        0 -> StepOneFindDevice(isDark, peers, selectedPeer, onScanQr = onScanQr, onManualIp = onManualIp, onPeerSelect = {
                             selectedPeerId = it.id
                             onConnectPeer(it)
                         })
-                        1 -> StepTwoPairing(isDark, selectedPeer)
+                        1 -> StepTwoPairing(isDark, selectedPeer, onCancel = { selectedPeerId = null })
                         2 -> StepThreeSendSample(isDark, selectedPeer, onSend = {
                             if (it != null) onSendSampleText(it)
                             forceCompletion = true
@@ -117,13 +119,31 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, selected: PeerSnapshot?, onPeerSelect: (PeerSnapshot) -> Unit) {
+private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, selected: PeerSnapshot?, onScanQr: () -> Unit, onManualIp: () -> Unit, onPeerSelect: (PeerSnapshot) -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("Step 1: Find a device", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
         Text("Make sure Deskdrop is running on your Mac or PC.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Button(
+            onClick = onScanQr,
+            colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft),
+            modifier = Modifier.fillMaxWidth(0.7f)
+        ) {
+            Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp), tint = CRTheme.bg(isDark))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("SCAN QR CODE", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextButton(onClick = onManualIp) {
+            Text("Enter IP Manually", color = CRTheme.textMedium(isDark))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
         
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (peers.isEmpty()) {
@@ -157,19 +177,37 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
 }
 
 @Composable
-private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?) {
+private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCancel: () -> Unit) {
+    var hasTimedOut by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedPeer?.id, selectedPeer?.pairingRequested) {
+        hasTimedOut = false
+        if (selectedPeer != null && !selectedPeer.pairingRequested) {
+            kotlinx.coroutines.delay(10000) // 10 second timeout
+            hasTimedOut = true
+        }
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("Step 2: Connect & Pair", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Connecting to ${selectedPeer?.name ?: "the device"}...", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
         
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        CircularProgressIndicator(color = CRTheme.blueSoft)
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Text("A pairing prompt with a secure PIN will appear shortly.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+        if (hasTimedOut) {
+            Text("Connection failed or timed out.", style = CRTypography.bodyMedium, color = CRTheme.accentRed, textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft)
+            ) {
+                Text("TRY AGAIN", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Text("Connecting to ${selectedPeer?.name ?: "the device"}...", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(32.dp))
+            CircularProgressIndicator(color = CRTheme.blueSoft)
+            Spacer(modifier = Modifier.height(32.dp))
+            Text("A pairing prompt with a secure PIN will appear shortly.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+        }
     }
 }
 

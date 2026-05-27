@@ -43,7 +43,6 @@ struct DaemonState {
     feedback: Arc<Mutex<VecDeque<FeedbackEvent>>>,
     incoming_clipboards: Arc<Mutex<HashMap<u64, serde_json::Value>>>,
     incoming_order: Arc<Mutex<VecDeque<u64>>>,
-    latest_camera_frame: Arc<Mutex<Option<Vec<u8>>>>,
     started_at: Instant,
     shutdown: Arc<Notify>,
 }
@@ -89,7 +88,6 @@ async fn run() -> Result<()> {
         feedback: Arc::new(Mutex::new(VecDeque::new())),
         incoming_clipboards: Arc::new(Mutex::new(HashMap::new())),
         incoming_order: Arc::new(Mutex::new(VecDeque::new())),
-        latest_camera_frame: Arc::new(Mutex::new(None)),
         started_at: Instant::now(),
         shutdown: Arc::new(Notify::new()),
     };
@@ -388,11 +386,11 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             )
             .await;
         }
-        EngineEvent::CameraFrameReceived { data, .. } => {
-            *state.latest_camera_frame.lock().await = Some(data);
+        EngineEvent::CameraFrameReceived { .. } => {
+            // Handled inside EngineShared to avoid MPSC channel OOM
         }
         EngineEvent::CameraStreamStop { .. } => {
-            *state.latest_camera_frame.lock().await = None;
+            // Handled inside EngineShared
         }
         EngineEvent::FileTransferIncoming {
             transfer_id: _,
@@ -770,7 +768,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok(payload))
         }
         IpcRequest::LatestCameraFrame => {
-            let frame = state.latest_camera_frame.lock().await.clone();
+            let frame = state.engine.camera_frames().await.values().next().cloned();
             if let Some(bytes) = frame {
                 let base64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                 Ok(IpcResponse::ok(json!({ "frame_base64": base64 })))

@@ -32,6 +32,7 @@ namespace Deskdrop.Windows
         public const int PB_EVENT_PEER_CONNECTED      = 5;
         public const int PB_EVENT_PEER_DISCONNECTED   = 6;
         public const int PB_EVENT_WARNING             = 7;
+        public const int PB_EVENT_INCOMING_CALL       = 8;
         public const int PB_EVENT_CLIPBOARD_AVAILABLE = 11; // timeline-first
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
@@ -73,6 +74,9 @@ namespace Deskdrop.Windows
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_event_fingerprint(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_device_id(IntPtr ev);
 
         /// Respond to a TOFU prompt. trust=1 to accept, trust=0 to reject.
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
@@ -132,10 +136,11 @@ namespace Deskdrop.Windows
         // ── Events ────────────────────────────────────────────────────────────
 
         public event Action<string>?       StatusChanged;           // status line text
-        public event Action<string,string>? TofuPromptRequested;    // (name, fingerprint)
+        public event Action<string,string,string>? TofuPromptRequested;    // (id, name, fingerprint)
         public event Action<string,string>? ClipboardReceived;      // (text, fromDevice)
         public event Action<HistoryItem>?  HistoryItemAdded;
         public event Action<string?>?      QuickContextUpdated;     // (text or null)
+        public event Action<string>?       IncomingCallRequested;   // (callerName)
 
         private string? _quickContextText;
         public string? QuickContextText => _quickContextText;
@@ -151,6 +156,25 @@ namespace Deskdrop.Windows
                     "❌ Engine failed to start — deskdrop_core.dll missing or incompatible");
                 return;
             }
+
+            // Push persisted settings to engine immediately
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Deskdrop");
+                if (key != null)
+                {
+                    DaemonClient.Send(new
+                    {
+                        cmd = "save_settings",
+                        sync_enabled = (int?)key.GetValue("SyncEnabled", 1) == 1,
+                        sync_text = (int?)key.GetValue("SyncText", 1) == 1,
+                        sync_images = (int?)key.GetValue("SyncImages", 1) == 1,
+                        sync_files = (int?)key.GetValue("SyncFiles", 1) == 1,
+                        require_tofu_confirmation = (int?)key.GetValue("RequireTofu", 1) == 1,
+                        show_receive_notification = (int?)key.GetValue("ShowNotifications", 1) == 1,
+                    });
+                }
+            });
 
             RefreshStatus();
             _pollTimer  = new System.Threading.Timer(_ => DrainEvents(),    null, 0,   20);
@@ -168,10 +192,10 @@ namespace Deskdrop.Windows
         public void Dispose() => Stop();
 
         /// Call after the user responds Yes/No to a TOFU dialog.
-        public void RespondToTrust(string deviceName, bool trust)
+        public void RespondToTrust(string deviceId, bool trust)
         {
             if (_handle != IntPtr.Zero)
-                NativeCore.deskdrop_trust_peer(_handle, deviceName, trust ? 1 : 0);
+                NativeCore.deskdrop_trust_peer(_handle, deviceId, trust ? 1 : 0);
             RefreshStatus();
         }
 
@@ -220,9 +244,48 @@ namespace Deskdrop.Windows
             thread.SetApartmentState(ApartmentState.STA);
             thread.IsBackground = true;
             thread.Start();
+
+            // Sync Win+V history
+            Task.Run(SyncWinVHistory);
         }
 
-        private void PushLocalClipboard()
+        private async Task SyncWinVHistory()
+        {
+            try
+            {
+                var history = await global::Windows.ApplicationModel.DataTransfer.Clipboard.GetHistoryItemsAsync();
+                if (history.Status == global::Windows.ApplicationModel.DataTransfer.ClipboardHistoryItemsResultStatus.Success)
+                {
+                    foreach (var item in history.Items)
+                    {
+                        if (item.Content.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+                        {
+                            var text = await item.Content.GetTextAsync();
+                            if (!string.IsNullOrEmpty(text))
+                            {
+                                bool exists = false;
+                                lock (_histLock)
+                                {
+                                    exists = _history.Any(h => h.FullText == text);
+                                }
+                                if (!exists)
+                                {
+                                    AddHistory(new HistoryItem
+                                    {
+                                        Summary = text.Length > 80 ? text[..77] + "…" : text,
+                                        FullText = text, Source = "Win+V",
+                                        Time = item.Timestamp.DateTime, TypeIcon = "📄",
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { /* Ignore if UWP APIs fail or history is disabled */ }
+        }
+
+        public void PushLocalClipboard()
         {
             if (_handle == IntPtr.Zero) return;
             NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
@@ -367,9 +430,10 @@ namespace Deskdrop.Windows
                 // New device wants to pair.
                 case NativeCore.PB_EVENT_TOFU_PROMPT:
                 {
+                    var id   = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? "Unknown";
                     var name = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
                     var fp   = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_fingerprint(ev)) ?? "";
-                    TofuPromptRequested?.Invoke(name, fp);
+                    TofuPromptRequested?.Invoke(id, name, fp);
                     break;
                 }
 
@@ -397,6 +461,13 @@ namespace Deskdrop.Windows
                 {
                     var msg = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev));
                     if (msg != null) StatusChanged?.Invoke($"⚠️ {msg}");
+                    break;
+                }
+
+                case NativeCore.PB_EVENT_INCOMING_CALL:
+                {
+                    var caller = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                    IncomingCallRequested?.Invoke(caller);
                     break;
                 }
             }
@@ -468,6 +539,7 @@ namespace Deskdrop.Windows
 
         private readonly ToolStripMenuItem _statusItem;
         private readonly ToolStripMenuItem _sendItem;
+        private readonly ToolStripMenuItem _sendFileItem;
         private readonly ToolStripMenuItem _syncToggleItem;
 
         private MainWindow?            _mainWindow;
@@ -480,6 +552,9 @@ namespace Deskdrop.Windows
 
             _sendItem = new ToolStripMenuItem("Send Clipboard to Devices") { Enabled = false };
             _sendItem.Click += OnSendClipboard;
+
+            _sendFileItem = new ToolStripMenuItem("Send File to Devices…") { Enabled = false };
+            _sendFileItem.Click += OnSendFile;
 
             _syncToggleItem = new ToolStripMenuItem("Pause Sync");
             _syncToggleItem.Click += OnToggleSync;
@@ -510,6 +585,7 @@ namespace Deskdrop.Windows
                 _statusItem,
                 new ToolStripSeparator(),
                 _sendItem,
+                _sendFileItem,
                 historyItem,
                 new ToolStripSeparator(),
                 _syncToggleItem,
@@ -541,6 +617,14 @@ namespace Deskdrop.Windows
                 });
             };
 
+            _mgr.IncomingCallRequested += caller => {
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var banner = new IncomingCallBannerWindow(caller);
+                    banner.Show();
+                });
+            };
+
             var s = LoadSettings();
             _syncEnabled = s.SyncEnabled;
             _syncToggleItem.Text = _syncEnabled ? "Pause Sync" : "Resume Sync";
@@ -561,6 +645,7 @@ namespace Deskdrop.Windows
                 _tray.Icon = BuildTrayIcon(connected);
                 _tray.Text = connected ? "Deskdrop — syncing" : "Deskdrop — idle";
                 _sendItem.Enabled = connected;
+                _sendFileItem.Enabled = connected;
             });
         }
 
@@ -578,14 +663,14 @@ namespace Deskdrop.Windows
 
         // ── TOFU ─────────────────────────────────────────────────────────────
 
-        private void OnTofuPrompt(string deviceName, string fingerprint)
+        private void OnTofuPrompt(string deviceId, string deviceName, string fingerprint)
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 OpenDashboard();
                 if (_mainWindow != null)
                 {
-                    _mainWindow.ShowTofuPrompt(deviceName, fingerprint);
+                    _mainWindow.ShowTofuPrompt(deviceId, deviceName, fingerprint);
                 }
             });
         }
@@ -594,14 +679,33 @@ namespace Deskdrop.Windows
 
         private void OnSendClipboard(object? s, EventArgs e)
         {
-            // Use named pipe to tell the running daemon to push its current clipboard.
             Task.Run(() =>
             {
-                bool ok = DaemonClient.Send(new { cmd = "push_clipboard" }) != null;
-                if (ok)
+                if (Clipboard.ContainsText() || Clipboard.ContainsImage() || Clipboard.ContainsFileDropList())
+                {
+                    _mgr.PushLocalClipboard();
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         _tray.ShowBalloonTip(1500, "Deskdrop", "Clipboard sent.", ToolTipIcon.Info));
+                }
             });
+        }
+
+        private void OnSendFile(object? s, EventArgs e)
+        {
+            var ofd = new System.Windows.Forms.OpenFileDialog { Title = "Select file to send via Deskdrop" };
+            if (ofd.ShowDialog() == DialogResult.OK)
+            {
+                Task.Run(() => {
+                    try {
+                        _mgr.PushFile(ofd.FileName);
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                            _tray.ShowBalloonTip(1500, "Deskdrop", $"Sending {Path.GetFileName(ofd.FileName)}...", ToolTipIcon.Info));
+                    } catch (Exception ex) {
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                            _tray.ShowBalloonTip(3000, "Deskdrop", $"Failed to send file: {ex.Message}", ToolTipIcon.Error));
+                    }
+                });
+            }
         }
 
         private void OnToggleSync(object? s, EventArgs e)
@@ -631,7 +735,7 @@ namespace Deskdrop.Windows
 
         // ── Dashboard panel ─────────────────────────────────────────────────────
 
-        private void OpenDashboard()
+        public void OpenDashboard()
         {
             if (_mainWindow != null && _mainWindow.IsLoaded)
             {
@@ -738,7 +842,7 @@ namespace Deskdrop.Windows
     internal static class Program
     {
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             // Single-instance guard.
             using var mutex = new Mutex(true, "Deskdrop_SingleInstance_v1", out bool isNew);
@@ -770,6 +874,13 @@ namespace Deskdrop.Windows
             // Run WPF message loop instead of WinForms loop.
             // NotifyIcon just needs any standard message loop to function,
             // but WPF requires its own Application.Run() to properly render windows.
+            
+            bool hidden = args.Length > 0 && args[0] == "--hidden";
+            if (!hidden)
+            {
+                trayApp.OpenDashboard();
+            }
+            
             wpfApp.Run();
         }
 

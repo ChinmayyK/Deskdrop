@@ -161,7 +161,7 @@ final class DeskdropStore: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             _ = try? await self.ipc.send(cmd: [
-                "cmd":      "push_clipboard_image",
+                "cmd":      "push_image",
                 "mime":     mimeType,
                 "data_b64": data.base64EncodedString(),
             ])
@@ -534,7 +534,7 @@ final class DeskdropStore: ObservableObject {
                 try? await ipc.rejectTrust(deviceId: device.id)
             }
             await refresh()
-            showToast(title: "Rejected \(untrusted.count)", body: "All pending requests dismissed", tint: CRTheme.accentRed)
+            showToast(title: "Requests Dismissed", body: "Rejected \(untrusted.count) pending devices", tint: CRTheme.accentRed)
         }
     }
 

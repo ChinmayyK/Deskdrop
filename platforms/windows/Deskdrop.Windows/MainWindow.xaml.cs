@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Linq;
 
 namespace Deskdrop.Windows
 {
@@ -20,6 +21,55 @@ namespace Deskdrop.Windows
             _clipboardManager.HistoryItemAdded += OnHistoryItemAdded;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             LoadHomeView();
+        }
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+        const int DWMWA_USE_MICA = 1029; 
+        const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            try {
+                IntPtr hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                int trueValue = 1;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_MICA, ref trueValue, System.Runtime.InteropServices.Marshal.SizeOf(trueValue));
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref trueValue, System.Runtime.InteropServices.Marshal.SizeOf(trueValue));
+            } catch { /* Ignore on older OS */ }
+        }
+
+        private void AnimateView(FrameworkElement view)
+        {
+            if (view == null) return;
+            view.Visibility = Visibility.Visible;
+            if (FindResource("FadeInTransition") is System.Windows.Media.Animation.Storyboard sb)
+            {
+                sb.Begin(view);
+            }
+        }
+
+        private void LoadTransfersView()
+        {
+            HideAllViews();
+            if (TransfersView != null) AnimateView(TransfersView);
+            
+            // Populate history
+            if (TransfersHistoryList != null)
+            {
+                TransfersHistoryList.ItemsSource = _clipboardManager.GetHistory()
+                    .Where(h => h.TypeIcon == "📎" || h.Summary.Contains("File"))
+                    .ToList();
+            }
+        }
+
+        private void HideAllViews()
+        {
+            if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
+            if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
+            if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
+            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
+            if (TransfersView != null) TransfersView.Visibility = Visibility.Collapsed;
         }
 
         private void OnQuickContextUpdated(string? text)
@@ -77,6 +127,11 @@ namespace Deskdrop.Windows
             LoadDevicesView();
         }
 
+        private void NavTransfers_Click(object sender, RoutedEventArgs e)
+        {
+            LoadTransfersView();
+        }
+
         private void NavSettings_Click(object sender, RoutedEventArgs e)
         {
             LoadSettingsView();
@@ -89,10 +144,8 @@ namespace Deskdrop.Windows
 
         private void LoadDiagnosticsView()
         {
-            if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
-            if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
-            if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
-            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Visible;
+            HideAllViews();
+            if (DiagnosticsView != null) AnimateView(DiagnosticsView);
             
             RefreshDiagnosticsState();
         }
@@ -138,17 +191,14 @@ namespace Deskdrop.Windows
 
         private void BtnRestartConnection_Click(object sender, RoutedEventArgs e)
         {
-            System.Windows.MessageBox.Show("Please restart the Deskdrop Tray Application to restart the daemon.", "Restart Required", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Diagnostics.Process.Start(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            System.Windows.Application.Current.Shutdown();
         }
 
         private void BtnScanAgain_Click(object sender, RoutedEventArgs e)
         {
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                DaemonClient.RescanPeers();
-                System.Threading.Thread.Sleep(1000);
-                RefreshDiagnosticsState();
-            });
+            DaemonClient.Send(new { cmd = "rescan_peers" });
+            RefreshDiagnosticsState();
         }
 
         private void BtnPinItem_Click(object sender, RoutedEventArgs e)
@@ -166,12 +216,12 @@ namespace Deskdrop.Windows
             {
                 System.Threading.Tasks.Task.Run(() =>
                 {
-                    DaemonClient.PushClipboard();
+                    DaemonClient.Send(new { cmd = "push_clipboard" });
                 });
                 
                 // Hide the strip after sending
                 QuickContextStrip.Visibility = Visibility.Collapsed;
-                ShowToast("Quick Context sent.");
+                ShowToast("Pushed to devices");
             }
         }
 
@@ -185,6 +235,11 @@ namespace Deskdrop.Windows
         }
 
         private void BtnBack_Click(object sender, RoutedEventArgs e)
+        {
+            LoadHomeView();
+        }
+
+        private void NavHome_Click(object sender, RoutedEventArgs e)
         {
             LoadHomeView();
         }
@@ -206,21 +261,34 @@ namespace Deskdrop.Windows
                 }
                 
                 NotificationToast.Visibility = Visibility.Visible;
+                if (FindResource("ToastSlideIn") is System.Windows.Media.Animation.Storyboard slideIn)
+                {
+                    slideIn.Begin(NotificationToast);
+                }
                 
                 // Auto-hide after 3 seconds
                 System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ => 
                 {
-                    Dispatcher.Invoke(() => NotificationToast.Visibility = Visibility.Collapsed);
+                    Dispatcher.Invoke(() => 
+                    {
+                        if (FindResource("ToastSlideOut") is System.Windows.Media.Animation.Storyboard slideOut)
+                        {
+                            slideOut.Completed += (s, ev) => NotificationToast.Visibility = Visibility.Collapsed;
+                            slideOut.Begin(NotificationToast);
+                        }
+                        else
+                        {
+                            NotificationToast.Visibility = Visibility.Collapsed;
+                        }
+                    });
                 });
             });
         }
 
         private void LoadHomeView()
         {
-            if (HomeView != null) HomeView.Visibility = Visibility.Visible;
-            if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
-            if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
-            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
+            HideAllViews();
+            if (HomeView != null) AnimateView(HomeView);
             
             _hasCompletedOnboarding = TrayApp.LoadSettings().HasCompletedOnboarding;
             UpdateOnboardingVisibility();
@@ -257,10 +325,8 @@ namespace Deskdrop.Windows
 
         private void LoadDevicesView()
         {
-            if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
-            if (DevicesView != null) DevicesView.Visibility = Visibility.Visible;
-            if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
-            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
+            HideAllViews();
+            if (DevicesView != null) AnimateView(DevicesView);
             
             RefreshDevicesList();
         }
@@ -272,17 +338,20 @@ namespace Deskdrop.Windows
                 try
                 {
                     var state = DaemonClient.Status();
-                    if (state != null && state.RootElement.TryGetProperty("peers", out var peersElem))
+                    if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
                     {
-                        var peers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText());
-                        Dispatcher.Invoke(() =>
+                        if (dataElem.TryGetProperty("peers", out var peersElem))
                         {
-                            if (DevicesList != null) DevicesList.ItemsSource = peers;
-                            if (!_hasCompletedOnboarding && peers != null)
+                            var peers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText());
+                            Dispatcher.Invoke(() =>
                             {
-                                UpdateOnboardingStatus(peers);
-                            }
-                        });
+                                if (DevicesList != null) DevicesList.ItemsSource = peers;
+                                if (!_hasCompletedOnboarding && peers != null)
+                                {
+                                    UpdateOnboardingStatus(peers);
+                                }
+                            });
+                        }
                     }
                 }
                 catch { /* ignored */ }
@@ -346,16 +415,21 @@ namespace Deskdrop.Windows
 
         private void LoadSettingsView()
         {
-            if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
-            if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
-            if (SettingsView != null) SettingsView.Visibility = Visibility.Visible;
-            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
+            HideAllViews();
+            if (SettingsView != null) AnimateView(SettingsView);
             
             LoadSettings();
         }
 
         private void LoadSettings()
         {
+            using var runKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", false);
+            if (runKey != null)
+            {
+                var val = runKey.GetValue("Deskdrop");
+                ChkLaunchOnStartup.IsChecked = val != null;
+            }
+
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Deskdrop");
             if (key == null) return;
 
@@ -379,6 +453,27 @@ namespace Deskdrop.Windows
             key.SetValue("RequireTofu", ChkRequireTofu.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
             key.SetValue("DeviceName", TxtDeviceName.Text, Microsoft.Win32.RegistryValueKind.String);
 
+            try
+            {
+                using var runKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+                if (runKey != null)
+                {
+                    if (ChkLaunchOnStartup.IsChecked == true)
+                    {
+                        var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                        if (!string.IsNullOrEmpty(exePath))
+                        {
+                            runKey.SetValue("Deskdrop", $"\"{exePath}\" --hidden");
+                        }
+                    }
+                    else
+                    {
+                        runKey.DeleteValue("Deskdrop", false);
+                    }
+                }
+            }
+            catch { /* Ignore */ }
+
             // Trigger update in daemon
             System.Threading.Tasks.Task.Run(() =>
             {
@@ -395,18 +490,14 @@ namespace Deskdrop.Windows
                 });
             });
             
-            ShowToast("Settings saved and applied.");
+            ShowToast("Settings saved");
         }
 
         private void BorderPushClipboard_Click(object sender, RoutedEventArgs e)
         {
             System.Threading.Tasks.Task.Run(() =>
             {
-                bool ok = DaemonClient.Send(new { cmd = "push_clipboard" }) != null;
-                if (ok)
-                {
-                    ShowToast("Clipboard sent to connected devices.");
-                }
+                DaemonClient.Send(new { cmd = "push_clipboard" });
             });
         }
 
@@ -419,7 +510,7 @@ namespace Deskdrop.Windows
             {
                 var file = dlg.FileName;
                 _clipboardManager?.PushFile(file);
-                ShowToast($"Sending file: {System.IO.Path.GetFileName(file)}");
+                ShowToast($"Sending file: {System.IO.Path.GetFileName(file)}...");
             }
         }
 
@@ -446,7 +537,7 @@ namespace Deskdrop.Windows
                 {
                     if (resp == null)
                     {
-                        ShowToast("Could not reach daemon. Make sure Deskdrop is running.", true);
+                        ShowToast("Deskdrop engine is unreachable.", true);
                     }
                     else
                     {
@@ -491,7 +582,7 @@ namespace Deskdrop.Windows
                     _cameraPublisher = null;
                     
                     TxtBroadcastTitle.Text = "Broadcast Camera";
-                    ShowToast($"Failed to start camera: {ex.Message}", true);
+                    ShowToast($"Camera error: {ex.Message}", true);
                 }
             }
         }
@@ -503,13 +594,13 @@ namespace Deskdrop.Windows
             qrWindow.ShowDialog();
         }
 
-        private string? _currentTofuDevice;
+        private string? _currentTofuDeviceId;
 
-        public void ShowTofuPrompt(string deviceName, string fingerprint)
+        public void ShowTofuPrompt(string deviceId, string deviceName, string fingerprint)
         {
             Dispatcher.Invoke(() =>
             {
-                _currentTofuDevice = deviceName;
+                _currentTofuDeviceId = deviceId;
                 TxtTofuDeviceName.Text = deviceName;
                 TxtTofuFingerprint.Text = FormatFingerprint(fingerprint);
                 TofuPromptOverlay.Visibility = Visibility.Visible;
@@ -518,21 +609,21 @@ namespace Deskdrop.Windows
 
         private void BtnTofuTrust_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentTofuDevice != null)
+            if (_currentTofuDeviceId != null)
             {
-                _clipboardManager?.RespondToTrust(_currentTofuDevice, true);
-                ShowToast($"{_currentTofuDevice} trusted.");
-                _currentTofuDevice = null;
+                _clipboardManager?.RespondToTrust(_currentTofuDeviceId, true);
+                ShowToast($"Trusted {TxtTofuDeviceName.Text}");
+                _currentTofuDeviceId = null;
             }
             TofuPromptOverlay.Visibility = Visibility.Collapsed;
         }
 
         private void BtnTofuReject_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentTofuDevice != null)
+            if (_currentTofuDeviceId != null)
             {
-                _clipboardManager?.RespondToTrust(_currentTofuDevice, false);
-                _currentTofuDevice = null;
+                _clipboardManager?.RespondToTrust(_currentTofuDeviceId, false);
+                _currentTofuDeviceId = null;
             }
             TofuPromptOverlay.Visibility = Visibility.Collapsed;
         }
@@ -547,6 +638,43 @@ namespace Deskdrop.Windows
             for (int i = 0; i < pairs.Count; i += 8)
                 lines.Add(string.Join(":", pairs.GetRange(i, Math.Min(8, pairs.Count - i))));
             return string.Join("\n", lines);
+        }
+
+        private void Grid_DragEnter(object sender, System.Windows.DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
+            {
+                DropZoneOverlay.Visibility = Visibility.Visible;
+                e.Effects = System.Windows.DragDropEffects.Copy;
+            }
+            else
+            {
+                e.Effects = System.Windows.DragDropEffects.None;
+            }
+        }
+
+        private void Grid_DragLeave(object sender, System.Windows.DragEventArgs e)
+        {
+            DropZoneOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void Grid_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            DropZoneOverlay.Visibility = Visibility.Collapsed;
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
+                foreach (var file in files)
+                {
+                    _clipboardManager.PushFile(file);
+                }
+                ShowToast($"Sending {files.Length} file(s)...");
+            }
+        }
+        
+        private void TransferHistoryItem_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Placeholder for clicking a transfer history item
         }
     }
 }

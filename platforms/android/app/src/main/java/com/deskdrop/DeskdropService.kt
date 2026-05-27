@@ -82,7 +82,7 @@ object DeskdropJni {
     @JvmStatic external fun pushFile(handle: Long, name: String, data: ByteArray): Int
     @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
     @JvmStatic external fun pushVideoFrame(handle: Long, data: ByteArray): Int
-
+    @JvmStatic external fun stopCameraStream(handle: Long): Int
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
     @JvmStatic external fun eventType(event: Long): Int
@@ -696,6 +696,8 @@ class DeskdropService : Service() {
                     return START_NOT_STICKY
                 }
 
+                applySettingsToEngine()
+
                 activeEngineHandle = engineHandle
                 Log.i(TAG, "Engine started — $deviceName")
                 scheduleEventDrain()
@@ -879,6 +881,13 @@ class DeskdropService : Service() {
     private fun disconnectAllPeers() {
         val h = engineHandle
         if (h != 0L) {
+            // Cancel all active transfers before disconnecting
+            activeTransfers.values.forEach { transfer ->
+                DeskdropJni.cancelFileTransfer(h, transfer.id)
+            }
+            activeTransfers.clear()
+            activeTransfersFlow.value = emptyList()
+
             currentPeerSnapshots()
                 .filter { it.isConnected }
                 .forEach { peer -> DeskdropJni.disconnectPeer(h, peer.id) }
@@ -1083,14 +1092,14 @@ class DeskdropService : Service() {
                 val destPath = DeskdropJni.eventTransferDestPath(ev) ?: ""
                 
                 // Copy the file from private app storage to public Downloads!
-                val publicFile = if (destPath.isNotEmpty()) {
+                val publicUriStr = if (destPath.isNotEmpty()) {
                     saveFileToPublicDownloads(File(destPath))
                 } else null
                 
-                val finalPath = publicFile?.absolutePath ?: destPath
+                val finalPath = publicUriStr ?: destPath
                 updateActivityTransferComplete(tid, finalPath)
                 cancelFileTransferNotification(tid)
-                showFileTransferCompleteNotification(from, fileName, destPath)
+                showFileTransferCompleteNotification(from, fileName, publicUriStr)
                 activeTransfers.remove(tid)
                 publishActiveTransfers()
             }
@@ -1332,7 +1341,7 @@ class DeskdropService : Service() {
 
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(android.R.drawable.ic_menu_edit)
-            .setContentTitle("$from → clipboard")
+            .setContentTitle("Clipboard from $from")
             .setContentText(preview)
             .setStyle(
                 NotificationCompat.BigTextStyle()
@@ -1370,7 +1379,7 @@ class DeskdropService : Service() {
 
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("$from wants to send a file")
+            .setContentTitle("Incoming file from $from")
             .setContentText("$fileName ($sizeStr)")
             .addAction(0, "Accept", acceptPi)
             .addAction(0, "Reject", rejectPi)
@@ -1415,20 +1424,17 @@ class DeskdropService : Service() {
         notificationManager.notify(transferNotifId(tid), builder.build())
     }
 
-    private fun showFileTransferCompleteNotification(from: String, fileName: String, destPath: String) {
-        val openIntent = if (destPath.isNotEmpty()) {
-            val uri = androidx.core.content.FileProvider.getUriForFile(
-                this, "$packageName.fileprovider",
-                java.io.File(destPath)
-            )
+    private fun showFileTransferCompleteNotification(from: String, fileName: String, publicUriStr: String?) {
+        val openIntent = if (!publicUriStr.isNullOrEmpty()) {
+            val uri = android.net.Uri.parse(publicUriStr)
             Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, contentResolver.getType(uri))
+                setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         } else null
 
         val openPi = openIntent?.let {
-            PendingIntent.getActivity(this, destPath.hashCode(), it,
+            PendingIntent.getActivity(this, (publicUriStr ?: fileName).hashCode(), it,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
 
@@ -1439,9 +1445,9 @@ class DeskdropService : Service() {
             .setAutoCancel(true)
         if (openPi != null) builder.setContentIntent(openPi)
         
-        // Use a dynamic notification ID unique to the file (destPath.hashCode() and 0xFFF)
+        // Use a dynamic notification ID unique to the file
         // so multiple files don't overwrite each other!
-        val notifId = NOTIF_ID_FILE_BASE + (destPath.hashCode() and 0xFFF)
+        val notifId = NOTIF_ID_FILE_BASE + ((publicUriStr ?: fileName).hashCode() and 0xFFF)
         notificationManager.notify(notifId, builder.build())
     }
 
@@ -1513,6 +1519,10 @@ class DeskdropService : Service() {
 
         val text = item.text?.toString()?.trim()
         if (!text.isNullOrEmpty()) {
+            if (text.length > 5_000_000) {
+                Log.w(TAG, "Clipboard text too large to sync (${text.length} chars)")
+                return
+            }
             val sig = "text:${text.hashCode()}"
             if (sig != lastClipboardSignature) {
                 lastClipboardSignature = sig
@@ -1664,11 +1674,10 @@ class DeskdropService : Service() {
         val file = writeBinaryFile(name, data, mime, saveDir)
 
         // Copy file to public Downloads if it is a file
-        val finalFile = if (isFile) {
-            saveFileToPublicDownloads(file) ?: file
-        } else {
-            file
+        if (isFile) {
+            saveFileToPublicDownloads(file)
         }
+        val finalFile = file
 
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file) // use secure private file for URI
         suppressNext = true
@@ -1699,7 +1708,7 @@ class DeskdropService : Service() {
         return File(base, "Deskdrop").also { it.mkdirs() }
     }
 
-    private fun saveFileToPublicDownloads(sourceFile: File): File? {
+    private fun saveFileToPublicDownloads(sourceFile: File): String? {
         if (!sourceFile.exists()) return null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = contentResolver
@@ -1715,7 +1724,7 @@ class DeskdropService : Service() {
                         inStream.copyTo(outStream)
                     }
                 }
-                return File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), sourceFile.name)
+                return uri.toString()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to copy file to public Downloads using MediaStore", e)
                 return null
@@ -1731,7 +1740,11 @@ class DeskdropService : Service() {
                         inStream.copyTo(outStream)
                     }
                 }
-                return destFile
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    this, "$packageName.fileprovider",
+                    destFile
+                )
+                return uri.toString()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to copy file to public Downloads using file APIs", e)
                 return null
@@ -2613,8 +2626,8 @@ class DeskdropService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHAN_SERVICE)
-            .setContentTitle(if (syncEnabled) "Deskdrop is Active" else "Deskdrop is Paused")
-            .setContentText(if (connectedPeerIds.isNotEmpty()) "Secure connection established" else "Scanning for devices on LAN")
+            .setContentTitle(if (syncEnabled) "Deskdrop (Connected)" else "Deskdrop (Paused)")
+            .setContentText(if (connectedPeerIds.isNotEmpty()) "Syncing with devices" else "Scanning for devices on LAN")
             .setSmallIcon(android.R.drawable.ic_menu_share)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -2698,7 +2711,7 @@ class DeskdropService : Service() {
         )
 
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
-            .setContentTitle("Deskdrop connection issue")
+            .setContentTitle("Deskdrop Connection Error")
             .setContentText(message.take(80))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_LOW)
