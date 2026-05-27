@@ -516,6 +516,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             let pending_count = state.engine.pending_remote_clipboards().await.len();
             let fingerprint = state.engine.local_fingerprint();
             let active_call = state.engine.active_call().await;
+            let active_transfers = state.engine.active_transfers().await;
             Ok(IpcResponse::ok(json!({
                 "device_name":           settings.resolved_device_name(),
                 "port":                  settings.port,
@@ -526,6 +527,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "pending_clipboard_count": pending_count,
                 "local_fingerprint":     fingerprint,
                 "active_call":           active_call,
+                "active_transfers":      active_transfers,
             })))
         }
         // Re-trigger mDNS discovery — called by the Mac "Scan" button and

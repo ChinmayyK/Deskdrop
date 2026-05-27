@@ -201,7 +201,9 @@ class SettingsActivity : ComponentActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1002) {
             // Notify the service to try starting the call monitor again
-            sendBroadcast(Intent(DeskdropService.ACTION_SETTINGS_CHANGED).setPackage(packageName))
+            ContextCompat.startForegroundService(this, Intent(this, DeskdropService::class.java).apply {
+                action = DeskdropService.ACTION_SETTINGS_CHANGED
+            })
         }
     }
 }
