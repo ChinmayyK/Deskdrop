@@ -489,8 +489,8 @@
                                     <TextBlock Text="Diagnostics" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                                 </StackPanel>
 
-                                <StackPanel Spacing="16">
-                                    <Border CornerRadius="12" Background="#1C1C1E" Padding="20" BorderThickness="1" BorderBrush="#38383A">
+                                <StackPanel>
+                                    <Border CornerRadius="12" Background="#1C1C1E" Padding="20" BorderThickness="1" BorderBrush="#38383A" Margin="0,0,0,16">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="40"/>
