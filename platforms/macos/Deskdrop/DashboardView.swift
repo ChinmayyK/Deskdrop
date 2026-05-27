@@ -847,7 +847,8 @@ struct TimelineCard: View {
                                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
                                 store.copyTimelineItem(item)
                             }
-                                .buttonStyle(CRPrimaryButtonStyle())
+                            .buttonStyle(CRPrimaryButtonStyle())
+                            .help("Copy to clipboard")
                         }
                         Menu {
                             Button("Send to all devices") { store.sendTimelineItem(item, to: nil) }
@@ -860,11 +861,13 @@ struct TimelineCard: View {
                                 .font(.system(size: 12, weight: .medium))
                         }
                         .buttonStyle(CRSecondaryButtonStyle()).menuIndicator(.hidden)
+                        .help("Send to device")
 
                         Button(item.pinned ? "Unpin" : "Pin") {
                             store.pinTimelineItem(item, pinned: !item.pinned)
                         }
                         .buttonStyle(CRSecondaryButtonStyle())
+                        .help(item.pinned ? "Unpin item" : "Pin item")
 
                         Spacer()
 
@@ -872,6 +875,7 @@ struct TimelineCard: View {
                             Image(systemName: "trash").font(.system(size: 11.5, weight: .medium))
                         }
                         .buttonStyle(CRDestructiveButtonStyle())
+                        .help("Delete item")
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }

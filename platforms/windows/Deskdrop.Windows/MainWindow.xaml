@@ -263,10 +263,10 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="10,0" WindowChrome.IsHitTestVisibleInChrome="True">
-                        <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavSettings_Click"/>
-                        <Button Content="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavDevices_Click"/>
-                        <Button Content="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnMinimize_Click"/>
-                        <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnClose_Click"/>
+                        <Button AutomationProperties.Name="Settings" Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavSettings_Click"/>
+                        <Button AutomationProperties.Name="Devices" Content="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavDevices_Click"/>
+                        <Button AutomationProperties.Name="Minimize window" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnMinimize_Click"/>
+                        <Button AutomationProperties.Name="Close window" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnClose_Click"/>
                     </StackPanel>
                 </Grid>
 
