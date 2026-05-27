@@ -10,10 +10,12 @@
 //!  • Hash-based dedup — no full-text clone in memory for every tick.
 //!  • Image clipboard applied via arboard (PNG).
 
+#[cfg(target_os = "linux")]
 use deskdrop_core::{
     engine::{Engine, EngineConfig, EngineEvent},
     protocol::ClipboardContent,
 };
+#[cfg(target_os = "linux")]
 use std::{
     hash::{Hash, Hasher},
     sync::{
@@ -22,19 +24,23 @@ use std::{
     },
     time::{Duration, Instant},
 };
+#[cfg(target_os = "linux")]
 use tokio::sync::mpsc;
 
 // ── Suppress counter ──────────────────────────────────────────────────────────
 //
 // Incremented before we write to the clipboard ourselves.
 // The watcher checks and decrements it, skipping the push for that tick.
+#[cfg(target_os = "linux")]
 static SUPPRESS_COUNT: AtomicU32 = AtomicU32::new(0);
 
+#[cfg(target_os = "linux")]
 fn suppress_next() {
     SUPPRESS_COUNT.fetch_add(1, Ordering::SeqCst);
 }
 
 /// Returns true and decrements the counter if suppression is active.
+#[cfg(target_os = "linux")]
 fn should_suppress() -> bool {
     SUPPRESS_COUNT
         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
@@ -49,6 +55,12 @@ fn should_suppress() -> bool {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+#[cfg(not(target_os = "linux"))]
+fn main() {
+    println!("deskdrop-linux is only supported on Linux");
+}
+
+#[cfg(target_os = "linux")]
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -168,6 +180,7 @@ fn main() {
 
 // ── Event handler ─────────────────────────────────────────────────────────────
 
+#[cfg(target_os = "linux")]
 async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &mut Instant) {
     match event {
         EngineEvent::ClipboardReceived {
@@ -266,6 +279,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
 // (On desktop Linux the engine can't touch the clipboard directly since it runs
 // as a library; the binary is responsible for calling arboard.)
 
+#[cfg(target_os = "linux")]
 pub fn apply_clipboard_content(content: &ClipboardContent) -> anyhow::Result<()> {
     match content {
         ClipboardContent::Text(text) => {
@@ -300,6 +314,7 @@ pub fn apply_clipboard_content(content: &ClipboardContent) -> anyhow::Result<()>
 // ── Notification helpers ──────────────────────────────────────────────────────
 
 /// At most one notification every 2 seconds.
+#[cfg(target_os = "linux")]
 fn rate_limited_notify(last: &mut Instant, summary: &str, body: &str) {
     if last.elapsed() < Duration::from_secs(2) {
         return;
@@ -308,6 +323,7 @@ fn rate_limited_notify(last: &mut Instant, summary: &str, body: &str) {
     notify(summary, body);
 }
 
+#[cfg(target_os = "linux")]
 fn notify(summary: &str, body: &str) {
     let _ = std::process::Command::new("notify-send")
         .args([
