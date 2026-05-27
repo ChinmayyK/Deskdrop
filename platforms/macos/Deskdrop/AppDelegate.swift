@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard ensureSingleRunningInstance() else { return }
         NSApp.setActivationPolicy(.accessory)
         // Restore user's theme preference (defaults to system)
-        let savedTheme = UserDefaults.standard.string(forKey: "cr_app_theme") ?? "system"
+        let savedTheme = UserDefaults.standard.string(forKey: "cr_app_theme") ?? "light"
         switch savedTheme {
         case "dark":   NSApp.appearance = NSAppearance(named: .darkAqua)
         case "light":  NSApp.appearance = NSAppearance(named: .aqua)

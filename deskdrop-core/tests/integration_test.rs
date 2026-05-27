@@ -80,7 +80,18 @@ async fn two_engines_exchange_text() {
     let engine1 = Engine::start(cfg1, tx1).await.expect("engine1 start");
     let _engine2 = Engine::start(cfg2, tx2).await.expect("engine2 start");
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // Wait for engine2 to start listening
+    let mut ready = false;
+    for _ in 0..50 {
+        if let Ok(stream) = tokio::net::TcpStream::connect("127.0.0.1:47901").await {
+            drop(stream);
+            ready = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(ready, "engine2 did not start listening in time");
+
     engine1
         .connect_to_peer("127.0.0.1".into(), 47901)
         .await
