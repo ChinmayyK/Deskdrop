@@ -97,6 +97,9 @@ namespace Deskdrop.Windows
 
     public class HistoryItem
     {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public bool IsPinned { get; set; } = false;
+        public string PinColor => IsPinned ? "#32ADE6" : "#8E8E93";
         public string TypeIcon { get; set; } = "📝";
         public string Summary { get; set; } = "";
         public string FullText { get; set; } = "";
@@ -170,7 +173,30 @@ namespace Deskdrop.Windows
 
         public List<HistoryItem> GetHistory()
         {
-            lock (_histLock) return new List<HistoryItem>(_history);
+            lock (_histLock)
+            {
+                return _history.OrderByDescending(x => x.IsPinned).ThenByDescending(x => x.Time).ToList();
+            }
+        }
+
+        public void DeleteHistory(string id)
+        {
+            lock (_histLock)
+            {
+                _history.RemoveAll(x => x.Id == id);
+            }
+        }
+
+        public void TogglePinHistory(string id)
+        {
+            lock (_histLock)
+            {
+                var item = _history.FirstOrDefault(x => x.Id == id);
+                if (item != null)
+                {
+                    item.IsPinned = !item.IsPinned;
+                }
+            }
         }
 
         // ── Outgoing: watch local clipboard ──────────────────────────────────

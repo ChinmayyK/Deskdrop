@@ -134,6 +134,24 @@ namespace Deskdrop.Windows
             });
         }
 
+        private void BtnPinItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is HistoryItem item)
+            {
+                _clipboardManager.TogglePinHistory(item.Id);
+                TimelineList.ItemsSource = _clipboardManager.GetHistory();
+            }
+        }
+
+        private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is HistoryItem item)
+            {
+                _clipboardManager.DeleteHistory(item.Id);
+                TimelineList.ItemsSource = _clipboardManager.GetHistory();
+            }
+        }
+
         private void BtnBack_Click(object sender, RoutedEventArgs e)
         {
             LoadHomeView();

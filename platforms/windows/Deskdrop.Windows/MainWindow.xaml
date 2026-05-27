@@ -356,13 +356,17 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Border Width="44" Height="44" CornerRadius="22" Background="#2C2C2E" Margin="0,0,16,0" Grid.Column="0">
-                                                    <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding TypeIcon}" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Border>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding Summary}" Foreground="{StaticResource Ink}" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                                     <TextBlock Text="{Binding Source}" Foreground="{StaticResource InkSoft}" FontSize="14" Margin="0,4,0,0"/>
                                                 </StackPanel>
-                                                <TextBlock Grid.Column="2" Text="{Binding RelativeTime}" Foreground="{StaticResource InkSubtle}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Top"/>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding RelativeTime}" Foreground="{StaticResource InkSubtle}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                                                    <Button Content="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="{Binding PinColor}" BorderThickness="0" Margin="0,0,8,0" Cursor="Hand" Click="BtnPinItem_Click" ToolTip="Pin to top"/>
+                                                    <Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="#FF3B30" BorderThickness="0" Cursor="Hand" Click="BtnDeleteItem_Click" ToolTip="Delete"/>
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
