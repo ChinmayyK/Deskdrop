@@ -606,7 +606,7 @@ impl Engine {
                                             ) {
                                                 tracing::warn!(error = %err, "failed to upsert UDP beacon peer");
                                             } else {
-                                                if !should_initiate_session(&shared, peer_id, DiscoverySource::UdpBeacon) {
+                                                if !should_initiate_session(&shared, peer_id, DiscoverySource::UdpBeacon).await {
                                                     continue;
                                                 }
                                                 if shared.peer_manager.live_endpoint(peer_id) == Some(peer_addr) {
@@ -2488,7 +2488,7 @@ async fn reconnect_known_peers(shared: EngineShared) {
         }
 
         if let Some(endpoint) = peer.socket_addr() {
-            if !should_initiate_session(&shared, peer.id, peer.discovery) {
+            if !should_initiate_session(&shared, peer.id, peer.discovery).await {
                 continue;
             }
 
@@ -2647,7 +2647,7 @@ async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
         DiscoverySource::Mdns,
     )?;
 
-    if !should_initiate_session(&shared, peer.device_id, DiscoverySource::Mdns) {
+    if !should_initiate_session(&shared, peer.device_id, DiscoverySource::Mdns).await {
         return Ok(());
     }
 
@@ -3386,7 +3386,7 @@ fn register_session(
                                     if transfer.from_device != peer_id {
                                         continue;
                                     }
-                                    let prog = transfer.receive_chunk(chunk_index, data).ok();
+                                    let prog = match transfer.receive_chunk(chunk_index, data) { Ok(p) => Some(p), Err(e) => { tracing::error!("Failed to receive chunk: {:?}", e); None } };
                                     let ack = transfer.should_ack();
                                     (prog, ack)
                                 } else {
@@ -3893,7 +3893,7 @@ fn register_session(
     Ok(())
 }
 
-fn should_initiate_session(
+async fn should_initiate_session(
     shared: &EngineShared,
     peer_id: Uuid,
     discovery: DiscoverySource,
@@ -3906,7 +3906,7 @@ fn should_initiate_session(
         DiscoverySource::Mdns | DiscoverySource::Unknown | DiscoverySource::UdpBeacon => {
             // Prevent SSRF: only auto-connect to trusted peers. Untrusted peers
             // must be manually connected via the UI by the user.
-            if !shared.trust.blocking_lock().is_trusted(peer_id) {
+            if !shared.trust.lock().await.is_trusted(peer_id) {
                 return false;
             }
             shared.config.device_id.as_bytes() < peer_id.as_bytes()
