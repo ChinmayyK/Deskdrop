@@ -61,6 +61,20 @@ namespace Deskdrop.Windows
             IntPtr handle, byte[] data, UIntPtr len);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_send_file_path(
+            IntPtr handle,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? targetDevice,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string fileName,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string mimeType);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_send_call_action(
+            IntPtr handle,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string action,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string targetDevice);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_poll_event(IntPtr handle);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
@@ -140,7 +154,7 @@ namespace Deskdrop.Windows
         public event Action<string,string>? ClipboardReceived;      // (text, fromDevice)
         public event Action<HistoryItem>?  HistoryItemAdded;
         public event Action<string?>?      QuickContextUpdated;     // (text or null)
-        public event Action<string>?       IncomingCallRequested;   // (callerName)
+        public event Action<string,string>? IncomingCallRequested;   // (callerName, deviceId)
 
         private string? _quickContextText;
         public string? QuickContextText => _quickContextText;
@@ -345,15 +359,15 @@ namespace Deskdrop.Windows
             }
         }
 
-        public void PushFile(string path)
+        public void PushFile(string path, string? targetDevice = null)
         {
             if (_handle == IntPtr.Zero || !File.Exists(path)) return;
             NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
             try
             {
-                var bytes = File.ReadAllBytes(path);
-                var name  = Path.GetFileName(path);
-                NativeCore.deskdrop_push_file(_handle, name, bytes, (UIntPtr)bytes.Length);
+                var name = Path.GetFileName(path);
+                // Currently setting mimeType to application/octet-stream as default for fallback
+                NativeCore.deskdrop_send_file_path(_handle, targetDevice, path, name, "application/octet-stream");
                 AddHistory(new HistoryItem
                 {
                     Summary = name, Source = "local",
@@ -467,9 +481,18 @@ namespace Deskdrop.Windows
                 case NativeCore.PB_EVENT_INCOMING_CALL:
                 {
                     var caller = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                    IncomingCallRequested?.Invoke(caller);
+                    var deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? "Unknown";
+                    IncomingCallRequested?.Invoke(caller, deviceId);
                     break;
                 }
+            }
+        }
+
+        public void SendCallAction(string action, string deviceId)
+        {
+            if (_handle != IntPtr.Zero)
+            {
+                NativeCore.deskdrop_send_call_action(_handle, action, deviceId);
             }
         }
 
@@ -617,10 +640,12 @@ namespace Deskdrop.Windows
                 });
             };
 
-            _mgr.IncomingCallRequested += caller => {
+            _mgr.IncomingCallRequested += (caller, deviceId) => {
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     var banner = new IncomingCallBannerWindow(caller);
+                    banner.CallAccepted += (s, e) => _mgr.SendCallAction("accept", deviceId);
+                    banner.CallDeclined += (s, e) => _mgr.SendCallAction("decline", deviceId);
                     banner.Show();
                 });
             };

@@ -603,12 +603,17 @@ pub unsafe extern "C" fn deskdrop_event_fingerprint(event: *mut PbEvent) -> *con
     }
 }
 
-/// Get the device ID string for TOFU_PROMPT events.
+/// Get the device ID string for TOFU_PROMPT and CALL_STATE_CHANGED events.
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    if let EngineEvent::PairingRequested { device_id, .. } = &e.inner {
-        let cs = CString::new(device_id.to_string()).unwrap_or_default();
+    let id_str = match &e.inner {
+        EngineEvent::PairingRequested { device_id, .. } => Some(device_id.to_string()),
+        EngineEvent::CallStateChanged { from_device, .. } => Some(from_device.to_string()),
+        _ => None,
+    };
+    if let Some(s) = id_str {
+        let cs = CString::new(s).unwrap_or_default();
         e.cached_str = Some(cs);
         e.cached_str.as_ref().unwrap().as_ptr()
     } else {
@@ -895,4 +900,41 @@ pub unsafe extern "C" fn deskdrop_apply_by_hash(
     hash_ptr: *const std::ffi::c_char,
 ) -> std::ffi::c_int {
     deskdrop_apply_clipboard(handle, hash_ptr)
+}
+
+/// Send a call action to a peer.
+///
+/// # Safety
+/// `handle`, `action_ptr` and `target_device_ptr` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_send_call_action(
+    handle: *mut DeskdropHandle,
+    action_ptr: *const std::ffi::c_char,
+    target_device_ptr: *const std::ffi::c_char,
+) -> std::ffi::c_int {
+    if handle.is_null() || action_ptr.is_null() || target_device_ptr.is_null() {
+        return -1;
+    }
+
+    let action = match std::ffi::CStr::from_ptr(action_ptr).to_str() {
+        Ok(s) => s.to_string(),
+        Err(_) => return -1,
+    };
+
+    let id_str = match std::ffi::CStr::from_ptr(target_device_ptr).to_str() {
+        Ok(s) => s.to_string(),
+        Err(_) => return -1,
+    };
+
+    let device_id = match uuid::Uuid::parse_str(&id_str) {
+        Ok(id) => id,
+        Err(_) => return -1,
+    };
+
+    let h = &*handle;
+    runtime().block_on(async {
+        h.engine.send_call_action(action, device_id).await;
+    });
+
+    0
 }

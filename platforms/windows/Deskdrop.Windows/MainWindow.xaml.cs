@@ -664,10 +664,13 @@ namespace Deskdrop.Windows
             if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
             {
                 string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
-                foreach (var file in files)
+                System.Threading.Tasks.Task.Run(() =>
                 {
-                    _clipboardManager.PushFile(file);
-                }
+                    foreach (var file in files)
+                    {
+                        _clipboardManager.PushFile(file);
+                    }
+                });
                 ShowToast($"Sending {files.Length} file(s)...");
             }
         }
