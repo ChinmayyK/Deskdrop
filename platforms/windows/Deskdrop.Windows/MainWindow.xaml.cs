@@ -12,7 +12,9 @@ namespace Deskdrop.Windows
         private readonly ClipboardManager _clipboardManager;
         private CameraPublisher? _cameraPublisher;
         private bool _isBroadcasting;
-        private bool _hasCompletedOnboarding;
+        private bool _hasCompletedOnboarding = false;
+        private string _activeCallDeviceId = "";
+        private System.Windows.Threading.DispatcherTimer? _pollTimer;
 
         public MainWindow(ClipboardManager clipboardManager)
         {
@@ -21,6 +23,7 @@ namespace Deskdrop.Windows
             _clipboardManager.HistoryItemAdded += OnHistoryItemAdded;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             LoadHomeView();
+            SetupPollTimer();
         }
 
         [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
@@ -105,6 +108,176 @@ namespace Deskdrop.Windows
             DragMove();
         }
 
+        protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            
+            // Toggle Command Palette on Ctrl+K
+            if (e.Key == Key.K && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                ToggleCommandPalette();
+                e.Handled = true;
+                return;
+            }
+
+            // If Command Palette is open, handle navigation and enter/escape
+            if (CommandPaletteOverlay.Visibility == Visibility.Visible)
+            {
+                if (e.Key == Key.Escape)
+                {
+                    CommandPaletteOverlay.Visibility = Visibility.Collapsed;
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Down)
+                {
+                    if (CommandList.SelectedIndex < CommandList.Items.Count - 1)
+                        CommandList.SelectedIndex++;
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Up)
+                {
+                    if (CommandList.SelectedIndex > 0)
+                        CommandList.SelectedIndex--;
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Enter)
+                {
+                    ExecuteSelectedCommand();
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void ToggleCommandPalette()
+        {
+            if (CommandPaletteOverlay.Visibility == Visibility.Visible)
+            {
+                CommandPaletteOverlay.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                CommandPaletteOverlay.Visibility = Visibility.Visible;
+                TxtCommandInput.Text = "";
+                RefreshCommandList();
+                TxtCommandInput.Focus();
+            }
+        }
+
+        private void TxtCommandInput_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            RefreshCommandList();
+        }
+
+        private void RefreshCommandList()
+        {
+            var query = TxtCommandInput.Text.ToLowerInvariant();
+            var allCommands = new System.Collections.Generic.List<PaletteCommand>
+            {
+                new PaletteCommand { Title = "Send a File", Icon = "📎", Action = "SendFile" },
+                new PaletteCommand { Title = "Show Magic Link (QR)", Icon = "📱", Action = "ShowQR" },
+                new PaletteCommand { Title = "View Diagnostics", Icon = "🔧", Action = "Diagnostics" },
+                new PaletteCommand { Title = "Settings", Icon = "⚙", Action = "Settings" },
+                new PaletteCommand { Title = "Quit Deskdrop", Icon = "🛑", Action = "Quit" }
+            };
+
+            var filtered = string.IsNullOrWhiteSpace(query)
+                ? allCommands
+                : allCommands.Where(c => c.Title.ToLowerInvariant().Contains(query)).ToList();
+
+            CommandList.ItemsSource = filtered;
+            if (filtered.Count > 0)
+                CommandList.SelectedIndex = 0;
+        }
+
+        private void ExecuteSelectedCommand()
+        {
+            if (CommandList.SelectedItem is PaletteCommand cmd)
+            {
+                CommandPaletteOverlay.Visibility = Visibility.Collapsed;
+                switch (cmd.Action)
+                {
+                    case "SendFile":
+                        var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true };
+                        if (dlg.ShowDialog() == true)
+                        {
+                            System.Threading.Tasks.Task.Run(() =>
+                            {
+                                foreach (var file in dlg.FileNames)
+                                    _clipboardManager.PushFile(file);
+                            });
+                            ShowToast($"Sending {dlg.FileNames.Length} file(s)...");
+                        }
+                        break;
+                    case "ShowQR":
+                        new QRCodeWindow(GetLocalIPAddress(), "000000").Show();
+                        break;
+                    case "Diagnostics":
+                        LoadDiagnosticsView();
+                        break;
+                    case "Settings":
+                        LoadSettingsView();
+                        break;
+                    case "Quit":
+                        System.Windows.Application.Current.Shutdown();
+                        break;
+                }
+            }
+        }
+
+        private void CommandList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            ExecuteSelectedCommand();
+        }
+
+        private void SetupPollTimer()
+        {
+            _pollTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _pollTimer.Tick += (s, e) =>
+            {
+                if (Visibility == Visibility.Visible)
+                {
+                    System.Threading.Tasks.Task.Run(() =>
+                    {
+                        try
+                        {
+                            var state = DaemonClient.Status();
+                            if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
+                            {
+                                Dispatcher.Invoke(() =>
+                                {
+                                    if (TransfersView != null && TransfersView.Visibility == Visibility.Visible)
+                                    {
+                                        if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
+                                        {
+                                            var transfers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<FileTransferState>>(transfersElem.GetRawText());
+                                            ActiveTransfersList.ItemsSource = transfers;
+                                        }
+                                        else
+                                        {
+                                            ActiveTransfersList.ItemsSource = null;
+                                        }
+                                    }
+                                    if (DevicesView != null && DevicesView.Visibility == Visibility.Visible)
+                                    {
+                                        if (dataElem.TryGetProperty("peers", out var peersElem))
+                                        {
+                                            var peers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText());
+                                            DevicesList.ItemsSource = peers;
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        catch { }
+                    });
+                }
+            };
+            _pollTimer.Start();
+        }
+
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
         {
             WindowState = WindowState.Minimized;
@@ -179,12 +352,12 @@ namespace Deskdrop.Windows
                         BtnRestartConnection.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
                     }
 
-                    if (TxtDiagNetworkStatus != null)
-                    {
-                        TxtDiagNetworkStatus.Text = peerCount > 0 ? $"Connected to {peerCount} peers" : "Looking for peers";
-                        TxtDiagNetworkSuggestion.Visibility = peerCount > 0 ? Visibility.Collapsed : Visibility.Visible;
-                        BtnScanAgain.Visibility = peerCount > 0 ? Visibility.Collapsed : Visibility.Visible;
-                    }
+                    // if (TxtDiagNetworkStatus != null)
+                    // {
+                    //     TxtDiagNetworkStatus.Text = peerCount > 0 ? $"Connected to {peerCount} peers" : "Looking for peers";
+                    //     TxtDiagNetworkSuggestion.Visibility = peerCount > 0 ? Visibility.Collapsed : Visibility.Visible;
+                    //     BtnScanAgain.Visibility = peerCount > 0 ? Visibility.Collapsed : Visibility.Visible;
+                    // }
                 });
             });
         }
@@ -246,43 +419,43 @@ namespace Deskdrop.Windows
 
         public void ShowToast(string message, bool isError = false)
         {
-            Dispatcher.Invoke(() =>
-            {
-                NotificationMessage.Text = message;
-                if (isError)
-                {
-                    NotificationIcon.Text = "\xE783"; // Warning icon
-                    NotificationIcon.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 59, 48)); // Red
-                }
-                else
-                {
-                    NotificationIcon.Text = "\xE946"; // Info icon
-                    NotificationIcon.Foreground = (SolidColorBrush)FindResource("BrandElectric");
-                }
-                
-                NotificationToast.Visibility = Visibility.Visible;
-                if (FindResource("ToastSlideIn") is System.Windows.Media.Animation.Storyboard slideIn)
-                {
-                    slideIn.Begin(NotificationToast);
-                }
-                
-                // Auto-hide after 3 seconds
-                System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ => 
-                {
-                    Dispatcher.Invoke(() => 
-                    {
-                        if (FindResource("ToastSlideOut") is System.Windows.Media.Animation.Storyboard slideOut)
-                        {
-                            slideOut.Completed += (s, ev) => NotificationToast.Visibility = Visibility.Collapsed;
-                            slideOut.Begin(NotificationToast);
-                        }
-                        else
-                        {
-                            NotificationToast.Visibility = Visibility.Collapsed;
-                        }
-                    });
-                });
-            });
+            // Dispatcher.Invoke(() =>
+            // {
+            //     NotificationMessage.Text = message;
+            //     if (isError)
+            //     {
+            //         NotificationIcon.Text = "\xE783"; // Warning icon
+            //         NotificationIcon.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 59, 48)); // Red
+            //     }
+            //     else
+            //     {
+            //         NotificationIcon.Text = "\xE946"; // Info icon
+            //         NotificationIcon.Foreground = (SolidColorBrush)FindResource("BrandElectric");
+            //     }
+            //     
+            //     NotificationToast.Visibility = Visibility.Visible;
+            //     if (FindResource("ToastSlideIn") is System.Windows.Media.Animation.Storyboard slideIn)
+            //     {
+            //         slideIn.Begin(NotificationToast);
+            //     }
+            //     
+            //     // Auto-hide after 3 seconds
+            //     System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ => 
+            //     {
+            //         Dispatcher.Invoke(() => 
+            //         {
+            //             // if (FindResource("ToastSlideOut") is System.Windows.Media.Animation.Storyboard slideOut)
+            //             // {
+            //             //     slideOut.Completed += (s, ev) => NotificationToast.Visibility = Visibility.Collapsed;
+            //             //     slideOut.Begin(NotificationToast);
+            //             // }
+            //             // else
+            //             // {
+            //             //     NotificationToast.Visibility = Visibility.Collapsed;
+            //             // }
+            //         });
+            //     });
+            // });
         }
 
         private void LoadHomeView()
@@ -306,12 +479,12 @@ namespace Deskdrop.Windows
         {
             if (_hasCompletedOnboarding)
             {
-                if (OnboardingGrid != null) OnboardingGrid.Visibility = Visibility.Collapsed;
+                // if (OnboardingGrid != null) OnboardingGrid.Visibility = Visibility.Collapsed;
                 if (QuickActionsRibbon != null) QuickActionsRibbon.Visibility = Visibility.Visible;
             }
             else
             {
-                if (OnboardingGrid != null) OnboardingGrid.Visibility = Visibility.Visible;
+                // if (OnboardingGrid != null) OnboardingGrid.Visibility = Visibility.Visible;
                 if (QuickActionsRibbon != null) QuickActionsRibbon.Visibility = Visibility.Collapsed;
             }
         }
@@ -340,15 +513,56 @@ namespace Deskdrop.Windows
                     var state = DaemonClient.Status();
                     if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
                     {
+                        System.Collections.Generic.List<PeerBatteryState>? batteries = null;
+                        if (dataElem.TryGetProperty("peer_batteries", out var batElem))
+                        {
+                            batteries = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerBatteryState>>(batElem.GetRawText());
+                        }
+
+                        ActiveCallState? activeCall = null;
+                        if (dataElem.TryGetProperty("active_call", out var callElem) && callElem.ValueKind != System.Text.Json.JsonValueKind.Null)
+                        {
+                            activeCall = System.Text.Json.JsonSerializer.Deserialize<ActiveCallState>(callElem.GetRawText());
+                        }
+
                         if (dataElem.TryGetProperty("peers", out var peersElem))
                         {
                             var peers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText());
+                            if (peers != null && batteries != null)
+                            {
+                                foreach (var peer in peers)
+                                {
+                                    var bat = batteries.Find(b => b.device_id == peer.device_id);
+                                    if (bat != null)
+                                    {
+                                        peer.BatteryLevel = bat.level;
+                                        peer.BatteryCharging = bat.charging;
+                                    }
+                                }
+                            }
+
                             Dispatcher.Invoke(() =>
                             {
                                 if (DevicesList != null) DevicesList.ItemsSource = peers;
                                 if (!_hasCompletedOnboarding && peers != null)
                                 {
                                     UpdateOnboardingStatus(peers);
+                                }
+
+                                if (activeCall != null && activeCall.state == "incoming" && IncomingCallBanner != null)
+                                {
+                                    _activeCallDeviceId = activeCall.device_id;
+                                    TxtCallTitle.Text = string.IsNullOrEmpty(activeCall.contact_name) ? $"Incoming call from {activeCall.number}" : $"Incoming call from {activeCall.contact_name}";
+                                    if (string.IsNullOrEmpty(activeCall.number) && string.IsNullOrEmpty(activeCall.contact_name))
+                                    {
+                                        TxtCallTitle.Text = "Incoming Camera Stream";
+                                    }
+                                    TxtCallSubtitle.Text = $"Via {activeCall.device_name}";
+                                    IncomingCallBanner.Visibility = Visibility.Visible;
+                                }
+                                else if (IncomingCallBanner != null)
+                                {
+                                    IncomingCallBanner.Visibility = Visibility.Collapsed;
                                 }
                             });
                         }
@@ -363,31 +577,31 @@ namespace Deskdrop.Windows
             if (_hasCompletedOnboarding) return;
             
             bool foundDevice = peers.Count > 0;
-            bool pairedDevice = peers.Exists(p => p.Trusted);
+            bool pairedDevice = peers.Exists(p => p.is_trusted);
             
-            if (Step1Icon != null)
-            {
-                Step1Icon.Text = foundDevice ? "\uE73E" : "\uE73E"; // Same icon but we can change color
-                Step1Icon.Foreground = new SolidColorBrush(foundDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
-                Step1Text.Foreground = new SolidColorBrush(foundDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
-            }
-            
-            if (Step2Icon != null)
-            {
-                Step2Icon.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
-                Step2Text.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
-            }
-
-            if (Step3Icon != null)
-            {
-                Step3Icon.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
-                Step3Text.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
-            }
-
-            if (pairedDevice && BtnDismissOnboarding != null)
-            {
-                BtnDismissOnboarding.Visibility = Visibility.Visible;
-            }
+            // if (Step1Icon != null)
+            // {
+            //     Step1Icon.Text = foundDevice ? "\uE73E" : "\uE73E"; // Same icon but we can change color
+            //     Step1Icon.Foreground = new SolidColorBrush(foundDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
+            //     Step1Text.Foreground = new SolidColorBrush(foundDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
+            // }
+            // 
+            // if (Step2Icon != null)
+            // {
+            //     Step2Icon.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
+            //     Step2Text.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
+            // }
+            // 
+            // if (Step3Icon != null)
+            // {
+            //     Step3Icon.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
+            //     Step3Text.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
+            // }
+            // 
+            // if (pairedDevice && BtnDismissOnboarding != null)
+            // {
+            //     BtnDismissOnboarding.Visibility = Visibility.Visible;
+            // }
         }
 
         private void BtnDisconnectDevice_Click(object sender, RoutedEventArgs e)
@@ -401,16 +615,100 @@ namespace Deskdrop.Windows
                 });
             }
         }
+
+        private void BtnAcceptCall_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_activeCallDeviceId))
+            {
+                DaemonClient.Send(new { cmd = "call_action", action = "accept", target_device = _activeCallDeviceId });
+                IncomingCallBanner.Visibility = Visibility.Collapsed;
+                
+                // Open CameraPreviewWindow
+                Dispatcher.Invoke(() =>
+                {
+                    var cameraWindow = new CameraPreviewWindow();
+                    cameraWindow.Show();
+                });
+            }
+        }
+
+        private void BtnDeclineCall_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_activeCallDeviceId))
+            {
+                DaemonClient.Send(new { cmd = "call_action", action = "reject", target_device = _activeCallDeviceId });
+                IncomingCallBanner.Visibility = Visibility.Collapsed;
+            }
+        }
         
+        public class PaletteCommand
+        {
+            public string Title { get; set; } = "";
+            public string Icon { get; set; } = "";
+            public string Action { get; set; } = "";
+        }
+
+        public class ActiveCallState
+        {
+            public string device_id { get; set; } = "";
+            public string device_name { get; set; } = "";
+            public string state { get; set; } = "";
+            public string number { get; set; } = "";
+            public string contact_name { get; set; } = "";
+        }
+
+        public class PeerBatteryState
+        {
+            public string device_id { get; set; } = "";
+            public string device_name { get; set; } = "";
+            public int level { get; set; }
+            public bool charging { get; set; }
+        }
+
         public class PeerViewModel
         {
             public string device_id { get; set; } = "";
             public string friendly_name { get; set; } = "";
             public string status { get; set; } = "";
             [System.Text.Json.Serialization.JsonPropertyName("trusted")]
-            public bool Trusted { get; set; }
-            [System.Text.Json.Serialization.JsonPropertyName("connected")]
-            public bool IsConnected { get; set; }
+            public bool is_trusted { get; set; }
+            
+            public string StatusIcon => status == "connected" ? "🟢" : "⚪";
+            public string ConnectActionText => status == "connected" ? "Disconnect" : "Connect";
+
+            public int BatteryLevel { get; set; }
+            public bool BatteryCharging { get; set; }
+            public bool ShowBattery => BatteryLevel > 0;
+            
+            public string BatteryIcon
+            {
+                get
+                {
+                    if (BatteryCharging) return "\uE945"; // Charging icon
+                    if (BatteryLevel > 80) return "\uEBAA"; // Full
+                    if (BatteryLevel > 50) return "\uEBA6"; // Half
+                    if (BatteryLevel > 20) return "\uEBA2"; // Low
+                    return "\uEBA0"; // Empty
+                }
+            }
+            public string BatteryColor => BatteryCharging ? "#34C759" : (BatteryLevel <= 20 ? "#FF3B30" : "#8E8E93");
+        }
+
+        public class FileTransferState
+        {
+            public string transfer_id { get; set; } = "";
+            public string from_device { get; set; } = "";
+            public string file_name { get; set; } = "";
+            public long bytes_total { get; set; }
+            public long bytes_received { get; set; }
+            public int percent { get; set; }
+            public string status { get; set; } = "";
+
+            public string FileName => file_name;
+            public int Percent => percent;
+            public string PercentText => $"{percent}%";
+            public string StatusText => status == "in_progress" ? $"Receiving from {from_device}..." : status;
+            public string ProgressColor => status == "completed" ? "#34C759" : (status == "failed" ? "#FF3B30" : "#007AFF");
         }
 
         private void LoadSettingsView()
@@ -434,11 +732,11 @@ namespace Deskdrop.Windows
             if (key == null) return;
 
             ChkSyncEnabled.IsChecked = (int?)key.GetValue("SyncEnabled", 1) == 1;
-            ChkSyncText.IsChecked = (int?)key.GetValue("SyncText", 1) == 1;
-            ChkSyncImages.IsChecked = (int?)key.GetValue("SyncImages", 1) == 1;
-            ChkSyncFiles.IsChecked = (int?)key.GetValue("SyncFiles", 1) == 1;
+            // ChkSyncText.IsChecked = (int?)key.GetValue("SyncText", 1) == 1;
+            // ChkSyncImages.IsChecked = (int?)key.GetValue("SyncImages", 1) == 1;
+            // ChkSyncFiles.IsChecked = (int?)key.GetValue("SyncFiles", 1) == 1;
             ChkShowNotifications.IsChecked = (int?)key.GetValue("ShowNotifications", 1) == 1;
-            ChkRequireTofu.IsChecked = (int?)key.GetValue("RequireTofu", 1) == 1;
+            // ChkRequireTofu.IsChecked = (int?)key.GetValue("RequireTofu", 1) == 1;
             TxtDeviceName.Text = (string?)key.GetValue("DeviceName", "") ?? "";
         }
 
@@ -446,11 +744,11 @@ namespace Deskdrop.Windows
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Deskdrop");
             key.SetValue("SyncEnabled", ChkSyncEnabled.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            key.SetValue("SyncText", ChkSyncText.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            key.SetValue("SyncImages", ChkSyncImages.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            key.SetValue("SyncFiles", ChkSyncFiles.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            // key.SetValue("SyncText", ChkSyncText.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            // key.SetValue("SyncImages", ChkSyncImages.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            // key.SetValue("SyncFiles", ChkSyncFiles.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
             key.SetValue("ShowNotifications", ChkShowNotifications.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            key.SetValue("RequireTofu", ChkRequireTofu.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            // key.SetValue("RequireTofu", ChkRequireTofu.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
             key.SetValue("DeviceName", TxtDeviceName.Text, Microsoft.Win32.RegistryValueKind.String);
 
             try
@@ -481,11 +779,11 @@ namespace Deskdrop.Windows
                 {
                     cmd = "save_settings",
                     sync_enabled = ChkSyncEnabled.IsChecked == true,
-                    sync_text = ChkSyncText.IsChecked == true,
-                    sync_images = ChkSyncImages.IsChecked == true,
-                    sync_files = ChkSyncFiles.IsChecked == true,
+                    // sync_text = ChkSyncText.IsChecked == true,
+                    // sync_images = ChkSyncImages.IsChecked == true,
+                    // sync_files = ChkSyncFiles.IsChecked == true,
                     device_name = string.IsNullOrWhiteSpace(TxtDeviceName.Text) ? null : TxtDeviceName.Text,
-                    require_tofu_confirmation = ChkRequireTofu.IsChecked == true,
+                    // require_tofu_confirmation = ChkRequireTofu.IsChecked == true,
                     show_receive_notification = ChkShowNotifications.IsChecked == true,
                 });
             });
@@ -554,26 +852,25 @@ namespace Deskdrop.Windows
                 _isBroadcasting = false;
                 if (_cameraPublisher != null)
                 {
-                    _cameraPublisher.StopBroadcasting();
                     _cameraPublisher.Dispose();
                     _cameraPublisher = null;
                 }
                 
-                TxtBroadcastTitle.Text = "Broadcast Camera";
-                BorderBroadcastCameraBtn.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xEB, 0xEC)); // #FFEBEC
+                // TxtBroadcastTitle.Text = "Broadcast Camera";
+                // BorderBroadcastCameraBtn.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xEB, 0xEC)); // #FFEBEC
             }
             else
             {
                 try
                 {
                     _isBroadcasting = true;
-                    TxtBroadcastTitle.Text = "Starting...";
+                    // TxtBroadcastTitle.Text = "Starting...";
                     
                     _cameraPublisher = new CameraPublisher(_clipboardManager);
                     await _cameraPublisher.StartBroadcastingAsync();
                     
-                    TxtBroadcastTitle.Text = "Stop Broadcasting";
-                    BorderBroadcastCameraBtn.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xCD, 0xD2)); // Stronger red tint
+                    // TxtBroadcastTitle.Text = "Stop Broadcasting";
+                    // BorderBroadcastCameraBtn.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0xFF, 0xCD, 0xD2)); // Stronger red tint
                 }
                 catch (Exception ex)
                 {
@@ -581,7 +878,7 @@ namespace Deskdrop.Windows
                     _cameraPublisher?.Dispose();
                     _cameraPublisher = null;
                     
-                    TxtBroadcastTitle.Text = "Broadcast Camera";
+                    // TxtBroadcastTitle.Text = "Broadcast Camera";
                     ShowToast($"Camera error: {ex.Message}", true);
                 }
             }
@@ -601,9 +898,9 @@ namespace Deskdrop.Windows
             Dispatcher.Invoke(() =>
             {
                 _currentTofuDeviceId = deviceId;
-                TxtTofuDeviceName.Text = deviceName;
-                TxtTofuFingerprint.Text = FormatFingerprint(fingerprint);
-                TofuPromptOverlay.Visibility = Visibility.Visible;
+                // TxtTofuDeviceName.Text = deviceName;
+                // TxtTofuFingerprint.Text = FormatFingerprint(fingerprint);
+                // TofuPromptOverlay.Visibility = Visibility.Visible;
             });
         }
 
@@ -612,10 +909,10 @@ namespace Deskdrop.Windows
             if (_currentTofuDeviceId != null)
             {
                 _clipboardManager?.RespondToTrust(_currentTofuDeviceId, true);
-                ShowToast($"Trusted {TxtTofuDeviceName.Text}");
+                ShowToast($"Trusted"); // {TxtTofuDeviceName.Text}");
                 _currentTofuDeviceId = null;
             }
-            TofuPromptOverlay.Visibility = Visibility.Collapsed;
+            // TofuPromptOverlay.Visibility = Visibility.Collapsed;
         }
 
         private void BtnTofuReject_Click(object sender, RoutedEventArgs e)
@@ -625,7 +922,7 @@ namespace Deskdrop.Windows
                 _clipboardManager?.RespondToTrust(_currentTofuDeviceId, false);
                 _currentTofuDeviceId = null;
             }
-            TofuPromptOverlay.Visibility = Visibility.Collapsed;
+            // TofuPromptOverlay.Visibility = Visibility.Collapsed;
         }
 
         private static string FormatFingerprint(string raw)
@@ -636,8 +933,82 @@ namespace Deskdrop.Windows
                 pairs.Add(clean.Substring(i, 2));
             var lines = new System.Collections.Generic.List<string>();
             for (int i = 0; i < pairs.Count; i += 8)
-                lines.Add(string.Join(":", pairs.GetRange(i, Math.Min(8, pairs.Count - i))));
+            {
+                var chunk = pairs.Skip(i).Take(8);
+                lines.Add(string.Join(":", chunk));
+            }
             return string.Join("\n", lines);
+        }
+
+        // --- NEW MISSING METHODS FOR XAML ---
+
+        private string GetLocalIPAddress()
+        {
+            try
+            {
+                var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+                foreach (var ip in host.AddressList)
+                {
+                    if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                    {
+                        return ip.ToString();
+                    }
+                }
+            }
+            catch { }
+            return "127.0.0.1";
+        }
+
+        private void BtnShowQRCode_Click(object sender, RoutedEventArgs e)
+        {
+            new QRCodeWindow(GetLocalIPAddress(), "000000").Show();
+        }
+
+        private void BtnSendFile_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true };
+            if (dlg.ShowDialog() == true)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    foreach (var file in dlg.FileNames)
+                        _clipboardManager.PushFile(file);
+                });
+                ShowToast($"Sending {dlg.FileNames.Length} file(s)...");
+            }
+        }
+
+        private void CommandPaletteBackdrop_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            CommandPaletteOverlay.Visibility = Visibility.Collapsed;
+        }
+
+
+
+        private void TxtCommandInput_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == Key.Down)
+            {
+                if (CommandList.SelectedIndex < CommandList.Items.Count - 1)
+                    CommandList.SelectedIndex++;
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Up)
+            {
+                if (CommandList.SelectedIndex > 0)
+                    CommandList.SelectedIndex--;
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                ExecuteSelectedCommand();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                CommandPaletteOverlay.Visibility = Visibility.Collapsed;
+                e.Handled = true;
+            }
         }
 
         private void Grid_DragEnter(object sender, System.Windows.DragEventArgs e)

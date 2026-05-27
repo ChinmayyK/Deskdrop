@@ -89,8 +89,8 @@ namespace Deskdrop.Windows
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_event_fingerprint(IntPtr ev);
 
-        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr deskdrop_event_device_id(IntPtr ev);
+        // [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        // public static extern IntPtr deskdrop_event_device_id(IntPtr ev);
 
         /// Respond to a TOFU prompt. trust=1 to accept, trust=0 to reject.
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
@@ -441,11 +441,10 @@ namespace Deskdrop.Windows
                     break;
                 }
 
-                // New device wants to pair.
                 case NativeCore.PB_EVENT_TOFU_PROMPT:
                 {
-                    var id   = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? "Unknown";
                     var name = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                    var id   = name; // Pre-compiled DLL lacks deskdrop_event_device_id
                     var fp   = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_fingerprint(ev)) ?? "";
                     TofuPromptRequested?.Invoke(id, name, fp);
                     break;
@@ -481,7 +480,7 @@ namespace Deskdrop.Windows
                 case NativeCore.PB_EVENT_INCOMING_CALL:
                 {
                     var caller = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                    var deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? "Unknown";
+                    var deviceId = caller; // Pre-compiled DLL lacks deskdrop_event_device_id
                     IncomingCallRequested?.Invoke(caller, deviceId);
                     break;
                 }

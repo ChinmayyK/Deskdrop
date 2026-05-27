@@ -1,0 +1,24 @@
+<Window x:Class="Deskdrop.Windows.QRCodeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Magic Link Pairing" Height="420" Width="360"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#F2F2F7" FontFamily="Segoe UI"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType">
+    <Grid Margin="24">
+        <StackPanel>
+            <TextBlock Text="Scan this QR Code from your Deskdrop mobile app to pair instantly." 
+                       TextWrapping="Wrap" TextAlignment="Center" Foreground="#8E8E93" FontSize="13" Margin="0,0,0,24"/>
+            <Border Background="White" Width="200" Height="200" CornerRadius="12" Margin="0,0,0,32">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="12" ShadowDepth="4" Opacity="0.1"/>
+                </Border.Effect>
+                <Image x:Name="ImgQRCode" Margin="12"/>
+            </Border>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="PAIRING PIN: " Foreground="#8E8E93" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,4,8,0"/>
+                <TextBlock x:Name="TxtPin" Text="123456" Foreground="#007AFF" FontSize="32" FontWeight="Bold" FontFamily="Consolas" VerticalAlignment="Center"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

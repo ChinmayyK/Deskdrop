@@ -5,64 +5,230 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Deskdrop" Height="680" Width="420"
+        Title="Deskdrop" Height="720" Width="960"
         WindowStartupLocation="Manual"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         Topmost="True" ShowInTaskbar="False"
-        AllowDrop="True" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave" Drop="Grid_Drop">
+        AllowDrop="True" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave" Drop="Grid_Drop"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        FontFamily="Segoe UI">
 
     <WindowChrome.WindowChrome>
-        <WindowChrome GlassFrameThickness="-1" CaptionHeight="32" CornerRadius="12" />
+        <WindowChrome GlassFrameThickness="-1" CaptionHeight="88" ResizeBorderThickness="24" CornerRadius="12" />
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         
-        <!-- Modern Fluid - Light Mode Colors -->
-        <SolidColorBrush x:Key="BrandElectric" Color="#0055CC"/>
-        <SolidColorBrush x:Key="BrandViolet" Color="#5E5CE6"/>
-        <SolidColorBrush x:Key="BrandCyan" Color="#32ADE6"/>
+        <!-- macOS CRTheme Palette -->
+        <Color x:Key="BrandElectricColor">#007AFF</Color>
+        <SolidColorBrush x:Key="BrandElectric" Color="{StaticResource BrandElectricColor}"/>
+        <SolidColorBrush x:Key="BrandViolet" Color="#5856D6"/>
+        <SolidColorBrush x:Key="BrandCyan" Color="#5AC8FA"/>
+        <SolidColorBrush x:Key="BrandGreen" Color="#34C759"/>
+        <SolidColorBrush x:Key="BrandRed" Color="#FF3B30"/>
+        
         <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceStrong" Color="#F5F5F5"/>
+        <SolidColorBrush x:Key="SurfaceStrong" Color="#F2F2F7"/>
         <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceGlass" Color="#E6FFFFFF"/> <!-- 90% white -->
+        <SolidColorBrush x:Key="SurfaceGlass" Color="#D9FFFFFF"/>
+        
         <SolidColorBrush x:Key="Ink" Color="#1C1C1E"/>
         <SolidColorBrush x:Key="InkSoft" Color="#8E8E93"/>
         <SolidColorBrush x:Key="InkSubtle" Color="#C7C7CC"/>
         <SolidColorBrush x:Key="Stroke" Color="#E5E5EA"/>
         <SolidColorBrush x:Key="StrokeSoft" Color="#F2F2F7"/>
-        
-        <SolidColorBrush x:Key="AppBackground" Color="#F2F2F7"/>
 
-        <!-- Styles -->
-        <Style x:Key="NavbarButtonStyle" TargetType="RadioButton">
+        <!-- macOS Traffic Light Colors -->
+        <SolidColorBrush x:Key="MacRed" Color="#FF5F56"/>
+        <SolidColorBrush x:Key="MacYellow" Color="#FFBD2E"/>
+        <SolidColorBrush x:Key="MacGreen" Color="#27C93F"/>
+        
+        <SolidColorBrush x:Key="MacRedBorder" Color="#E0443E"/>
+        <SolidColorBrush x:Key="MacYellowBorder" Color="#DEA123"/>
+        <SolidColorBrush x:Key="MacGreenBorder" Color="#1AAB29"/>
+
+        <!-- macOS Traffic Light Button Style -->
+        <Style x:Key="TrafficLightButton" TargetType="Button">
+            <Setter Property="Width" Value="12"/>
+            <Setter Property="Height" Value="12"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="border" CornerRadius="16" Padding="16,8" Margin="4,0" Background="Transparent" Cursor="Hand">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0.5" CornerRadius="6">
+                            <TextBlock x:Name="icon" Text="{TemplateBinding Content}" FontSize="8" FontFamily="Segoe UI" FontWeight="Bold" Foreground="#80000000" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0" Margin="0,-1,0,0"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#1A000000"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceElevated}"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Stroke}"/>
-                                <Setter TargetName="border" Property="BorderThickness" Value="1"/>
-                                <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                                <Setter TargetName="icon" Property="Opacity" Value="1"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
         </Style>
 
-        <Style x:Key="AnimatedCardStyle" TargetType="Border">
+        <!-- macOS Deskdrop Floating Navbar Style (Capsule expanding) -->
+        <Style x:Key="CapsuleNavButtonStyle" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="border" Background="Transparent" CornerRadius="16" Padding="14,10" Margin="4,0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="icon" Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center"/>
+                                <!-- The text label will expand when checked -->
+                                <TextBlock x:Name="label" Text="{TemplateBinding Content}" FontSize="13" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#0A000000"/>
+                                <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource BrandElectric}"/>
+                                <Setter TargetName="border" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect Color="#007AFF" Opacity="0.35" BlurRadius="8" ShadowDepth="3"/>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter TargetName="label" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- macOS Style Modern Button -->
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BrandElectric}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.8"/>
+                                <Setter TargetName="border" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98" CenterX="10" CenterY="10"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- macOS Style Search/TextBox with Blue Halo Focus -->
+        <Style x:Key="MacTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource SurfaceStrong}"/>
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Stroke}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#80007AFF"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="3"/>
+                                <Setter TargetName="border" Property="Margin" Value="-2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Standard ScrollViewer -->
+        <Style TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" CanContentScroll="{TemplateBinding CanContentScroll}"/>
+                            <ScrollBar x:Name="PART_VerticalScrollBar" Width="8" Background="Transparent" HorizontalAlignment="Right" Minimum="0" Maximum="{TemplateBinding ScrollableHeight}" Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}" ViewportSize="{TemplateBinding ViewportHeight}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Hover Card Style for Bouncy Depth -->
+        <Style x:Key="HoverCardStyle" TargetType="Border">
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="Black" Opacity="0.05" BlurRadius="4" ShadowDepth="2"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="MouseEnter">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.02" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.02" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)" To="0.15" Duration="0:0:0.15"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.BlurRadius)" To="12" Duration="0:0:0.15"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.ShadowDepth)" To="6" Duration="0:0:0.15"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+                <EventTrigger RoutedEvent="MouseLeave">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.0" Duration="0:0:0.25">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.0" Duration="0:0:0.25">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)" To="0.05" Duration="0:0:0.25"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.BlurRadius)" To="4" Duration="0:0:0.25"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.ShadowDepth)" To="2" Duration="0:0:0.25"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Hover Nav Icon Style -->
+        <Style x:Key="HoverIconStyle" TargetType="Border">
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="RenderTransform">
                 <Setter.Value>
@@ -73,15 +239,11 @@
                 <EventTrigger RoutedEvent="MouseEnter">
                     <BeginStoryboard>
                         <Storyboard>
-                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.02" Duration="0:0:0.15">
-                                <DoubleAnimation.EasingFunction>
-                                    <QuadraticEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.05" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
                             </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.02" Duration="0:0:0.15">
-                                <DoubleAnimation.EasingFunction>
-                                    <QuadraticEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.05" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
                             </DoubleAnimation>
                         </Storyboard>
                     </BeginStoryboard>
@@ -89,15 +251,11 @@
                 <EventTrigger RoutedEvent="MouseLeave">
                     <BeginStoryboard>
                         <Storyboard>
-                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.0" Duration="0:0:0.15">
-                                <DoubleAnimation.EasingFunction>
-                                    <QuadraticEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.0" Duration="0:0:0.25">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
                             </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.0" Duration="0:0:0.15">
-                                <DoubleAnimation.EasingFunction>
-                                    <QuadraticEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.0" Duration="0:0:0.25">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
                             </DoubleAnimation>
                         </Storyboard>
                     </BeginStoryboard>
@@ -105,658 +263,529 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CheckBox">
-                        <StackPanel Orientation="Horizontal" Background="Transparent" Cursor="Hand">
-                            <Border x:Name="border" Width="44" Height="24" CornerRadius="12" Background="{StaticResource Stroke}" Padding="2" VerticalAlignment="Center">
-                                <Ellipse x:Name="thumb" Width="20" Height="20" Fill="White" HorizontalAlignment="Left">
-                                    <Ellipse.Effect>
-                                        <DropShadowEffect Color="Black" Opacity="0.15" BlurRadius="4" ShadowDepth="1"/>
-                                    </Ellipse.Effect>
-                                    <Ellipse.RenderTransform>
-                                        <TranslateTransform X="0"/>
-                                    </Ellipse.RenderTransform>
-                                </Ellipse>
-                            </Border>
-                            <ContentPresenter Margin="12,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource BrandElectric}"/>
-                            </Trigger>
-                            <EventTrigger RoutedEvent="Checked">
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="thumb" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="20" Duration="0:0:0.15">
-                                            <DoubleAnimation.EasingFunction>
-                                                <QuadraticEase EasingMode="EaseOut"/>
-                                            </DoubleAnimation.EasingFunction>
-                                        </DoubleAnimation>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                            <EventTrigger RoutedEvent="Unchecked">
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="thumb" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.15">
-                                            <DoubleAnimation.EasingFunction>
-                                                <QuadraticEase EasingMode="EaseOut"/>
-                                            </DoubleAnimation.EasingFunction>
-                                        </DoubleAnimation>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ModernTextBox" TargetType="TextBox">
-            <Setter Property="Background" Value="{StaticResource SurfaceElevated}"/>
-            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Stroke}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsFocused" Value="True">
-                                <Setter Property="BorderBrush" Value="{StaticResource BrandElectric}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ModernButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource BrandElectric}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="8" Cursor="Hand">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#0055A4"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#004488"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollBar">
-                        <Border Background="{TemplateBinding Background}">
-                            <Track x:Name="PART_Track" IsDirectionReversed="true">
-                                <Track.Thumb>
-                                    <Thumb>
-                                        <Thumb.Template>
-                                            <ControlTemplate TargetType="Thumb">
-                                                <Border CornerRadius="4" Background="#33000000" Margin="2,0"/>
-                                            </ControlTemplate>
-                                        </Thumb.Template>
-                                    </Thumb>
-                                </Track.Thumb>
-                            </Track>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="ScrollViewer">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollViewer">
-                        <Grid>
-                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" CanContentScroll="{TemplateBinding CanContentScroll}"/>
-                            <ScrollBar x:Name="PART_VerticalScrollBar" Style="{StaticResource ModernScrollBar}" HorizontalAlignment="Right" Minimum="0" Maximum="{TemplateBinding ScrollableHeight}" Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}" ViewportSize="{TemplateBinding ViewportHeight}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="ListBoxItem">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="border" CornerRadius="12" Background="{StaticResource SurfaceElevated}" Margin="0,0,0,12" Padding="16,16" BorderThickness="1" BorderBrush="{StaticResource Stroke}">
-                            <ContentPresenter/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Animations -->
-        <Storyboard x:Key="FadeInTransition">
-            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25">
-                <DoubleAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut"/>
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
-            <ThicknessAnimation Storyboard.TargetProperty="Margin" From="0,20,0,-20" To="0" Duration="0:0:0.35">
-                <ThicknessAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut"/>
-                </ThicknessAnimation.EasingFunction>
-            </ThicknessAnimation>
-        </Storyboard>
-
-        <Storyboard x:Key="ToastSlideIn">
-            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.2"/>
-            <ThicknessAnimation Storyboard.TargetProperty="Margin" From="0,-20,0,0" To="0,16,0,0" Duration="0:0:0.3">
-                <ThicknessAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut"/>
-                </ThicknessAnimation.EasingFunction>
-            </ThicknessAnimation>
-        </Storyboard>
-
-        <Storyboard x:Key="ToastSlideOut">
-            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0" Duration="0:0:0.2"/>
-            <ThicknessAnimation Storyboard.TargetProperty="Margin" From="0,16,0,0" To="0,-20,0,0" Duration="0:0:0.2">
-                <ThicknessAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseIn"/>
-                </ThicknessAnimation.EasingFunction>
-            </ThicknessAnimation>
-        </Storyboard>
     </Window.Resources>
 
-    <!-- Main Container -->
-    <Border CornerRadius="16" BorderThickness="1" ClipToBounds="True"
-            BorderBrush="{StaticResource Stroke}"
-            Background="{StaticResource AppBackground}">
+    <Grid Background="Transparent">
+        <Border Margin="24" CornerRadius="12" BorderThickness="1" ClipToBounds="True" BorderBrush="{StaticResource Stroke}" Background="{StaticResource SurfaceStrong}">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="4" Opacity="0.15"/>
+            </Border.Effect>
         <Grid>
-            <!-- Sleek UI Architecture -->
-            <Grid>
-                <!-- Custom Title Bar -->
-                <Grid Height="40" VerticalAlignment="Top" Background="Transparent" Panel.ZIndex="10">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="24,0,0,0" WindowChrome.IsHitTestVisibleInChrome="True">
-                        <Image Source="pack://application:,,,/Assets/logo.png" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Deskdrop" Foreground="{StaticResource Ink}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+            <!-- MAIN CONTENT AREA -->
+            <Grid Margin="0,64,0,0" AllowDrop="True" Drop="Grid_Drop" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave">
+                
+                <!-- HOME VIEW -->
+                <Grid x:Name="HomeView" Visibility="Visible" Margin="48,16,48,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <StackPanel Margin="0,0,0,24" Grid.Row="0">
+                        <TextBlock Text="Recent Activity" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
+                        
+                        <!-- Quick Actions Ribbon -->
+                        <ScrollViewer x:Name="QuickActionsRibbon" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,24">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource BrandElectric}" Margin="0,0,12,0" Click="BorderPushClipboard_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Sync Clipboard" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource BrandViolet}" Margin="0,0,12,0" Click="BorderSendFiles_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Send Files" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource BrandCyan}" Margin="0,0,12,0" Click="BorderStreamCamera_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Stream Camera" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </ScrollViewer>
+                        
+                        <!-- Quick Context Strip -->
+                        <Border x:Name="QuickContextStrip" Visibility="Collapsed" Background="#F0F8FF" CornerRadius="12" Padding="16" Margin="0,0,0,24">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="JUST COPIED" FontSize="11" FontWeight="Bold" Foreground="{StaticResource BrandElectric}" Margin="0,0,0,4"/>
+                                    <TextBlock x:Name="TxtQuickContext" Text="Clipboard text preview" Foreground="{StaticResource Ink}" FontSize="14" FontFamily="Consolas" MaxHeight="60" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Send to All" Style="{StaticResource ModernButton}" Click="BtnSendQuickContext_Click" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="10,0" WindowChrome.IsHitTestVisibleInChrome="True">
-                        <Button AutomationProperties.Name="Diagnostics" Content="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavDiagnostics_Click"/>
-                        <Button AutomationProperties.Name="Minimize window" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnMinimize_Click"/>
-                        <Button AutomationProperties.Name="Close window" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnClose_Click"/>
-                    </StackPanel>
+                    
+                    <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
+                        <ItemsControl x:Name="TimelineList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <!-- Color Accent Line -->
+                                            <Border Width="3" CornerRadius="1.5" Background="{StaticResource BrandElectric}" Margin="0,0,12,0"/>
+                                            
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
+                                                <TextBlock Text="{Binding Summary}" Foreground="{StaticResource Ink}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Source}" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                            
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding RelativeTime}" Foreground="{StaticResource InkSubtle}" FontSize="11" FontWeight="Medium" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                                <Button Content="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="14" Background="Transparent" Foreground="{Binding PinColor}" BorderThickness="0" Margin="0,0,8,0" Cursor="Hand" Click="BtnPinItem_Click" ToolTip="Pin to top"/>
+                                                <Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="14" Background="Transparent" Foreground="{StaticResource BrandRed}" BorderThickness="0" Cursor="Hand" Click="BtnDeleteItem_Click" ToolTip="Delete"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </Grid>
 
-                <!-- Floating Nav Bar -->
-                <Border VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,32" CornerRadius="24" Background="{StaticResource SurfaceGlass}" BorderBrush="{StaticResource StrokeSoft}" BorderThickness="1" Padding="6" Panel.ZIndex="100">
-                    <Border.Effect>
-                        <DropShadowEffect Color="Black" Opacity="0.5" BlurRadius="24" ShadowDepth="12" />
-                    </Border.Effect>
-                    <StackPanel Orientation="Horizontal">
-                        <RadioButton x:Name="NavBtnHome" GroupName="NavGroup" Style="{StaticResource NavbarButtonStyle}" ToolTip="Timeline" IsChecked="True" Click="NavHome_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="Timeline" FontSize="13" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=RadioButton}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton x:Name="NavBtnDevices" GroupName="NavGroup" Style="{StaticResource NavbarButtonStyle}" ToolTip="Ecosystem" Margin="6,0,0,0" Click="NavDevices_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="Ecosystem" FontSize="13" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=RadioButton}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton x:Name="NavBtnTransfers" GroupName="NavGroup" Style="{StaticResource NavbarButtonStyle}" ToolTip="Transfers" Margin="6,0,0,0" Click="NavTransfers_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="Transfers" FontSize="13" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=RadioButton}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton x:Name="NavBtnSettings" GroupName="NavGroup" Style="{StaticResource NavbarButtonStyle}" ToolTip="Settings" Margin="6,0,0,0" Click="NavSettings_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="Settings" FontSize="13" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=RadioButton}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            </StackPanel>
-                        </RadioButton>
+                <!-- TRANSFERS VIEW -->
+                <Grid x:Name="TransfersView" Visibility="Collapsed" Margin="48,16,48,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                        <TextBlock Text="Transfers" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                     </StackPanel>
-</Border>
-
-                <!-- Views Container -->
-                <Grid Margin="0,40,0,0" AllowDrop="True" Drop="Grid_Drop" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave">
                     
-                    <!-- ========================================== -->
-                    <!-- TRANSFERS VIEW                             -->
-                    <!-- ========================================== -->
-                    <Grid x:Name="TransfersView" Visibility="Collapsed" Margin="24,16,24,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        
-                        <StackPanel Grid.Row="0" Margin="0,0,0,24">
-                            <TextBlock Text="Transfers" FontSize="28" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-                            <TextBlock Text="Manage active files and view recent history" FontSize="14" Foreground="{StaticResource InkSoft}" Margin="0,4,0,0"/>
-                        </StackPanel>
-                        
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                            <StackPanel>
-                                <TextBlock Text="ACTIVE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Opacity="0.6" Margin="0,0,0,16"/>
-                                <ItemsControl x:Name="ActiveTransfersList" Margin="0,0,0,32">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border CornerRadius="12" Background="{StaticResource SurfaceElevated}" Margin="0,0,0,12" Padding="16" BorderThickness="1" BorderBrush="{StaticResource StrokeSoft}">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <Border Width="40" Height="40" CornerRadius="20" Background="{StaticResource SurfaceStrong}" Margin="0,0,16,0" Grid.Column="0">
-                                                        <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource InkSoft}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding FileName}" FontSize="14" FontWeight="Medium" Foreground="{StaticResource Ink}"/>
-                                                        <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,4,0,0"/>
-                                                        <ProgressBar Value="{Binding Percent}" Maximum="100" Height="4" Margin="0,8,0,0" Foreground="{Binding ProgressColor}" Background="{StaticResource SurfaceStrong}" BorderThickness="0"/>
-                                                    </StackPanel>
-                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                                                        <Button Content="{Binding ActionIcon1}" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="28" Height="28" Background="{StaticResource SurfaceStrong}" Foreground="{Binding ActionColor1}" BorderThickness="0" Margin="0,0,8,0" Command="{Binding ActionCommand1}"/>
-                                                        <Button Content="{Binding ActionIcon2}" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="28" Height="28" Background="{StaticResource SurfaceStrong}" Foreground="{Binding ActionColor2}" BorderThickness="0" Command="{Binding ActionCommand2}"/>
-                                                    </StackPanel>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                
-                                <TextBlock Text="RECENT HISTORY" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Opacity="0.6" Margin="0,0,0,16"/>
-                                <ItemsControl x:Name="TransfersHistoryList" Margin="0,0,0,32">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,0,0,12" Cursor="Hand" MouseLeftButtonDown="TransferHistoryItem_Click">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,120">
+                        <StackPanel>
+                            <TextBlock Text="ACTIVE" FontSize="12" FontWeight="Bold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,8"/>
+                            <ItemsControl x:Name="ActiveTransfersList" Margin="0,0,0,24">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
+                                            <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{StaticResource InkSoft}" Opacity="0.8" Width="32" VerticalAlignment="Center"/>
+                                                <Border Width="40" Height="40" CornerRadius="6" Background="#E5E5EA" Margin="0,0,12,0" Grid.Column="0">
+                                                    <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding FileName}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                                                    <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
+                                                    <ProgressBar Value="{Binding Percent}" Maximum="100" Height="4" Margin="0,6,0,0" Foreground="{Binding ProgressColor}" Background="#E5E5EA" BorderThickness="0"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                                    <Button Content="{Binding ActionIcon1}" FontFamily="Segoe MDL2 Assets" FontSize="14" Width="32" Height="32" Style="{StaticResource ModernButton}" Background="#E5E5EA" Foreground="{Binding ActionColor1}" Margin="0,0,8,0" Command="{Binding ActionCommand1}"/>
+                                                    <Button Content="{Binding ActionIcon2}" FontFamily="Segoe MDL2 Assets" FontSize="14" Width="32" Height="32" Style="{StaticResource ModernButton}" Background="#FFF0F0" Foreground="#FF3B30" Command="{Binding ActionCommand2}"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            
+                            <TextBlock Text="RECENT HISTORY" FontSize="12" FontWeight="Bold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,8"/>
+                            <ItemsControl x:Name="TransfersHistoryList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,4" Padding="8" Cursor="Hand" MouseLeftButtonDown="TransferHistoryItem_Click">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" Width="28" VerticalAlignment="Center"/>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding Summary}" FontSize="14" FontWeight="Medium" Foreground="{StaticResource Ink}"/>
-                                                    <TextBlock Text="{Binding Source}" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
+                                                    <TextBlock Text="{Binding Source}" Foreground="{StaticResource InkSoft}" FontSize="12"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding RelativeTime}" FontSize="12" Foreground="{StaticResource InkSoft}" Opacity="0.6" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                    <TextBlock Text="&#xE838;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding RelativeTime}" FontSize="12" Foreground="{StaticResource InkSoft}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="&#xE838;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- DEVICES VIEW -->
+                <Grid x:Name="DevicesView" Visibility="Collapsed" Margin="48,16,48,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                        <TextBlock Text="Ecosystem" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                    </StackPanel>
                     
-                    <!-- ========================================== -->
-                    <!-- HOME VIEW                                  -->
-                    <!-- ========================================== -->
-                    <Grid x:Name="HomeView" Visibility="Visible">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <StackPanel Margin="48,24,48,24" Grid.Row="0">
-                            <Grid Margin="0,0,0,32">
-                                <!-- Quick Actions Ribbon -->
-                                <ScrollViewer x:Name="QuickActionsRibbon" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderPushClipboard_Click">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="Sync Clipboard" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </Button>
-                                        <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderSendFiles_Click">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandViolet}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="Send Files" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </Button>
-                                        <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderStreamCamera_Click">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandCyan}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="Stream Camera" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </Button>
-                                        <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="16,12" Margin="0,0,12,0" Click="BorderBroadcastCamera_Click" x:Name="BorderBroadcastCameraBtn">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#FF3B30" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock x:Name="TxtBroadcastTitle" Text="Broadcast Camera" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </Button>
-                                    </StackPanel>
-                                </ScrollViewer>
-                                
-                                <!-- Onboarding Checklist -->
-                                <Border x:Name="OnboardingGrid" Visibility="Collapsed" Background="{StaticResource SurfaceElevated}" CornerRadius="12" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="24">
-                                    <StackPanel>
-                                        <TextBlock Text="Welcome to Deskdrop" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
-                                        
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                            <TextBlock x:Name="Step1Icon" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="Step1Text" Text="Step 1: Find a nearby device" Foreground="{StaticResource Ink}" VerticalAlignment="Center" FontSize="14"/>
-                                        </StackPanel>
-                                        
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                            <TextBlock x:Name="Step2Icon" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource Stroke}" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="Step2Text" Text="Step 2: Connect and trust a device" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" FontSize="14"/>
-                                        </StackPanel>
-                                        
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                                            <TextBlock x:Name="Step3Icon" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource Stroke}" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="Step3Text" Text="Step 3: Ready to use!" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" FontSize="14"/>
-                                        </StackPanel>
-                                        
-                                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                                            <Button x:Name="BtnSkipOnboarding" Content="Skip for now" Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Click="BtnDismissOnboarding_Click" Margin="0,0,12,0"/>
-                                            <Button x:Name="BtnDismissOnboarding" Visibility="Collapsed" Content="Get Started" Style="{StaticResource ModernButton}" Click="BtnDismissOnboarding_Click"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Border>
-                                <!-- Quick Context Strip -->
-                                <Border x:Name="QuickContextStrip" Visibility="Collapsed" Background="{StaticResource AppBackground}" CornerRadius="12" BorderBrush="{StaticResource BrandElectric}" BorderThickness="1" Padding="20" Margin="0,0,0,32">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                            <TextBlock Text="JUST COPIED" FontSize="12" FontWeight="Bold" Foreground="#32ADE6" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                        <TextBlock x:Name="TxtQuickContext" Text="Clipboard text preview" Foreground="{StaticResource Ink}" FontSize="14" FontFamily="Consolas" MaxHeight="60" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,16"/>
-                                        <Button Content="Send to All Devices" Style="{StaticResource ModernButton}" Click="BtnSendQuickContext_Click"/>
-                                    </StackPanel>
-                                </Border>
-
-                            </Grid>
-                            
-                            <TextBlock Text="Activity" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
-                            <TextBlock Text="Your clipboard history" FontSize="16" Foreground="{StaticResource InkSoft}" Margin="0,8,0,0"/>
-                        </StackPanel>
-                        
-                        <ScrollViewer Grid.Row="1" Margin="48,0,48,48">
-                            <ItemsControl x:Name="TimelineList">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border CornerRadius="16" Background="{StaticResource SurfaceElevated}" Margin="0,0,0,16" Padding="20" BorderThickness="1" BorderBrush="{StaticResource StrokeSoft}">
-                                            <Border.Effect>
-                                                <DropShadowEffect Color="Black" Opacity="0.15" BlurRadius="16" ShadowDepth="4"/>
-                                            </Border.Effect>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                
-                                                <!-- Left accent stripe -->
-                                                <Border Width="3" CornerRadius="1.5" Background="{StaticResource BrandElectric}" Margin="-20,-20,16,-20" HorizontalAlignment="Left"/>
-                                                
-                                                <Border Width="44" Height="44" CornerRadius="22" Background="{StaticResource SurfaceStrong}" Margin="12,0,16,0" Grid.Column="0">
-                                                    <TextBlock Text="{Binding TypeIcon}" FontSize="18" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Summary}" Foreground="{StaticResource Ink}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                                    <TextBlock Text="{Binding Source}" Foreground="{StaticResource InkSoft}" FontSize="13" Margin="0,4,0,0"/>
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding RelativeTime}" Foreground="{StaticResource InkSubtle}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0"/>
-                                                    <Button Content="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="{Binding PinColor}" BorderThickness="0" Margin="0,0,8,0" Cursor="Hand" Click="BtnPinItem_Click" ToolTip="Pin to top"/>
-                                                    <Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="#FF3B30" BorderThickness="0" Cursor="Hand" Click="BtnDeleteItem_Click" ToolTip="Delete"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </Grid>
-
-                    <!-- Devices View -->
-                    <Grid x:Name="DevicesView" Visibility="Collapsed" Background="{StaticResource AppBackground}">
-                        <StackPanel Margin="48,24,48,48">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,32">
-                                <Button Content="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="{StaticResource Ink}" BorderThickness="0" Padding="0,0,16,0" Click="BtnBack_Click"/>
-                                <TextBlock Text="Ecosystem" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
-                            </StackPanel>
-                            <TextBlock Text="Nearby devices" FontSize="16" Foreground="{StaticResource InkSoft}" Margin="0,8,0,32"/>
-                            
-                            <ItemsControl x:Name="DevicesList" Margin="0,0,0,32">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border CornerRadius="16" Background="{StaticResource SurfaceElevated}" Margin="0,0,0,16" Padding="20" BorderThickness="1" BorderBrush="{StaticResource StrokeSoft}">
-                                            <Border.Effect>
-                                                <DropShadowEffect Color="Black" Opacity="0.15" BlurRadius="16" ShadowDepth="4"/>
-                                            </Border.Effect>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Width="52" Height="52" CornerRadius="26" Background="{StaticResource BrandElectric}" Opacity="0.1" Margin="0,0,16,0" Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                                <Border Width="52" Height="52" CornerRadius="26" BorderBrush="{StaticResource BrandElectric}" BorderThickness="1" Margin="0,0,16,0" Grid.Column="0">
-                                                    <TextBlock Text="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="24" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding friendly_name}" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-                                                    <TextBlock Text="{Binding status}" Foreground="{StaticResource InkSoft}" FontSize="13" Margin="0,4,0,0"/>
-                                                </StackPanel>
-                                                <Button Grid.Column="2" Style="{StaticResource ModernButton}" Content="Disconnect" Background="#FFF0F0" Foreground="#FF3B30" Padding="20,10" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            
-                            <TextBlock Text="Manual Connect (Magic Link)" FontSize="18" Foreground="{StaticResource Ink}" FontWeight="Bold" Margin="0,0,0,16"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="TxtConnectAddress" Style="{StaticResource ModernTextBox}" Grid.Column="0" Margin="0,0,12,0" Text="192.168.1.x:47823"/>
-                                <Button Content="Connect" Style="{StaticResource ModernButton}" Grid.Column="1" Click="BtnConnect_Click" Margin="0,0,12,0"/>
-                                <Button Content="Show QR Code" Style="{StaticResource ModernButton}" Grid.Column="2" Background="#2C2C2E" Foreground="{StaticResource Ink}" Click="BtnShowQR_Click"/>
-                            </Grid>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Settings View -->
-                    <Grid x:Name="SettingsView" Visibility="Collapsed" Background="{StaticResource AppBackground}">
-                        <ScrollViewer>
-                            <StackPanel Margin="48,24,48,48">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,32">
-                                    <Button Content="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="{StaticResource Ink}" BorderThickness="0" Padding="0,0,16,0" Click="BtnBack_Click"/>
-                                    <TextBlock Text="Settings" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
-                                </StackPanel>
-                                
-                                <!-- General -->
-                                <TextBlock Text="General" Foreground="{StaticResource BrandElectric}" FontSize="14" FontWeight="Bold" Margin="0,0,0,16"/>
-                                <Border Background="{StaticResource SurfaceElevated}" CornerRadius="12" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="20">
-                                    <StackPanel>
-                                        <CheckBox x:Name="ChkLaunchOnStartup" Style="{StaticResource ToggleSwitchStyle}" Content="Launch Deskdrop on Windows startup" Margin="0,0,0,20"/>
-                                        <CheckBox x:Name="ChkSyncEnabled" Style="{StaticResource ToggleSwitchStyle}" Content="Enable clipboard syncing" Margin="0,0,0,20"/>
-                                        <CheckBox x:Name="ChkSyncText" Style="{StaticResource ToggleSwitchStyle}" Content="Sync text" Margin="24,0,0,16"/>
-                                        <CheckBox x:Name="ChkSyncImages" Style="{StaticResource ToggleSwitchStyle}" Content="Sync images" Margin="24,0,0,16"/>
-                                        <CheckBox x:Name="ChkSyncFiles" Style="{StaticResource ToggleSwitchStyle}" Content="Sync files" Margin="24,0,0,0"/>
-                                    </StackPanel>
-                                </Border>
-                                
-                                <!-- Privacy -->
-                                <TextBlock Text="Privacy &amp; Security" Foreground="{StaticResource BrandElectric}" FontSize="14" FontWeight="Bold" Margin="0,32,0,16"/>
-                                <Border Background="{StaticResource SurfaceElevated}" CornerRadius="12" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="20">
-                                    <StackPanel>
-                                        <CheckBox x:Name="ChkShowNotifications" Style="{StaticResource ToggleSwitchStyle}" Content="Show notifications on receive" Margin="0,0,0,20"/>
-                                        <CheckBox x:Name="ChkRequireTofu" Style="{StaticResource ToggleSwitchStyle}" Content="Require confirmation for new devices"/>
-                                    </StackPanel>
-                                </Border>
-                                
-                                <!-- Network -->
-                                <TextBlock Text="Network" Foreground="{StaticResource BrandElectric}" FontSize="14" FontWeight="Bold" Margin="0,32,0,16"/>
-                                <Border Background="{StaticResource SurfaceElevated}" CornerRadius="12" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="20" Margin="0,0,0,24">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="150"/>
-                                            <ColumnDefinition Width="200"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Device Name" FontWeight="SemiBold" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
-                                        <TextBox x:Name="TxtDeviceName" Style="{StaticResource ModernTextBox}" Grid.Column="1"/>
-                                    </Grid>
-                                </Border>
-                                
-                                <Button Content="Save Settings" Style="{StaticResource ModernButton}" HorizontalAlignment="Left" Padding="24,12" Click="BtnSaveSettings_Click"/>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Grid>
-
-                    <!-- Diagnostics View -->
-                    <Grid x:Name="DiagnosticsView" Visibility="Collapsed" Background="{StaticResource AppBackground}">
-                        <ScrollViewer>
-                            <StackPanel Margin="48,24,48,48">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,32">
-                                    <Button Content="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="{StaticResource Ink}" BorderThickness="0" Padding="0,0,16,0" Click="BtnBack_Click"/>
-                                    <TextBlock Text="Diagnostics" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
-                                </StackPanel>
-
-                                <StackPanel>
-                                    <Border CornerRadius="12" Background="{StaticResource SurfaceElevated}" Padding="20" BorderThickness="1" BorderBrush="{StaticResource Stroke}" Margin="0,0,0,16">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="40"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                <TextBlock Text="Daemon Status" FontWeight="SemiBold" Foreground="{StaticResource Ink}" FontSize="16"/>
-                                                <TextBlock x:Name="TxtDiagDaemonStatus" Text="Checking..." Foreground="{StaticResource InkSoft}" Margin="0,4,0,4"/>
-                                                <TextBlock x:Name="TxtDiagDaemonSuggestion" Text="If stopped, please restart the tray app." Foreground="{StaticResource InkSubtle}" FontSize="12" Visibility="Collapsed"/>
-                                            </StackPanel>
-                                            <Button x:Name="BtnRestartConnection" Grid.Column="2" Content="Restart App" Style="{StaticResource ModernButton}" VerticalAlignment="Center" Click="BtnRestartConnection_Click"/>
-                                        </Grid>
-                                    </Border>
-
-                                    <Border CornerRadius="12" Background="{StaticResource SurfaceElevated}" Padding="20" BorderThickness="1" BorderBrush="{StaticResource Stroke}">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="40"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="&#xE124;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                <TextBlock Text="Local Network" FontWeight="SemiBold" Foreground="{StaticResource Ink}" FontSize="16"/>
-                                                <TextBlock x:Name="TxtDiagNetworkStatus" Text="Looking for peers" Foreground="{StaticResource InkSoft}" Margin="0,4,0,4"/>
-                                                <TextBlock x:Name="TxtDiagNetworkSuggestion" Text="Ensure devices are on the same Wi-Fi network." Foreground="{StaticResource InkSubtle}" FontSize="12" Visibility="Collapsed"/>
-                                            </StackPanel>
-                                            <Button x:Name="BtnScanAgain" Grid.Column="2" Content="Scan Again" Style="{StaticResource ModernButton}" VerticalAlignment="Center" Click="BtnScanAgain_Click"/>
-                                        </Grid>
-                                    </Border>
-                                </StackPanel>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Grid>
-                </Grid>
-                
-                <!-- Inline Notification Toast Overlay -->
-                <Border x:Name="NotificationToast" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="0,16,0,0" Padding="16,12" HorizontalAlignment="Center" VerticalAlignment="Top" Visibility="Collapsed" Panel.ZIndex="50" MinWidth="300">
-                    <Border.Effect>
-                        <DropShadowEffect Color="Black" Opacity="0.5" BlurRadius="20" ShadowDepth="4"/>
-                    </Border.Effect>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="NotificationIcon" Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{StaticResource BrandElectric}" Margin="0,0,12,0" VerticalAlignment="Center" Grid.Column="0"/>
-                        <TextBlock x:Name="NotificationMessage" Text="Settings saved." Foreground="{StaticResource Ink}" FontSize="14" VerticalAlignment="Center" Grid.Column="1" TextWrapping="Wrap"/>
-                    </Grid>
-                </Border>
-
-                <!-- Tofu Prompt Overlay -->
-                <Grid x:Name="TofuPromptOverlay" Visibility="Collapsed" Panel.ZIndex="100">
-                    <Border Background="#99000000" />
-                    <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="32" MaxWidth="500">
-                        <Border.Effect>
-                            <DropShadowEffect Color="Black" Opacity="0.6" BlurRadius="40" ShadowDepth="10" Direction="270"/>
-                        </Border.Effect>
+                    <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
                         <StackPanel>
-                            <TextBlock Text="Trust new device?" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
-                            <TextBlock Text="A new device wants to sync your clipboard." Foreground="{StaticResource InkSoft}" FontSize="16" Margin="0,0,0,24"/>
                             
-                            <Grid Margin="0,0,0,24">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Border Width="48" Height="48" CornerRadius="24" Background="#2C2C2E" Margin="0,0,16,0" Grid.Column="0">
-                                    <TextBlock Text="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtTofuDeviceName" Text="DeviceName" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-                                </StackPanel>
-                            </Grid>
+                            <!-- Magic Link Pairing Card -->
+                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="40" Height="40" CornerRadius="20" Background="#E5F9E9" Margin="0,0,16,0" Grid.Column="0">
+                                        <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Magic Link pairing" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                                        <TextBlock Text="Pair a phone or tablet instantly using a QR code" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Style="{StaticResource ModernButton}" Content="Show QR Code" Background="{StaticResource BrandGreen}" Foreground="White" Padding="16,8" Click="BtnShowQRCode_Click"/>
+                                </Grid>
+                            </Border>
 
-                            <TextBlock Text="Fingerprint:" Foreground="{StaticResource InkSubtle}" FontSize="14" Margin="0,0,0,8"/>
-                            <TextBox x:Name="TxtTofuFingerprint" Style="{StaticResource ModernTextBox}" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="80" MaxHeight="120" Margin="0,0,0,24"/>
+                            <!-- Manual Connect Card -->
+                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="40" Height="40" CornerRadius="20" Background="#E5F2FF" Margin="0,0,16,0" Grid.Column="0">
+                                        <TextBlock Text="&#xE8F1;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Manual Connect" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                                        <TextBlock Text="Connect to a specific IP address and port" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Grid.Column="2">
+                                        <TextBox x:Name="TxtConnectAddress" Style="{StaticResource MacTextBox}" Width="160" Margin="0,0,12,0" Text="192.168.1.20:47823"/>
+                                        <Button Style="{StaticResource ModernButton}" Content="Connect" Padding="16,8" Click="BtnConnect_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
 
-                            <TextBlock Text="&#xE783; Only trust devices you own or control." FontFamily="Segoe MDL2 Assets" Foreground="DarkOrange" FontSize="14" Margin="0,0,0,24" TextWrapping="Wrap"/>
+                            <!-- File Share Card -->
+                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,16" Padding="16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="40" Height="40" CornerRadius="20" Background="#E5F2FF" Margin="0,0,16,0" Grid.Column="0">
+                                        <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Send a File" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                                        <TextBlock Text="Push a document, image, or archive to peers" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Style="{StaticResource ModernButton}" Content="Send to all" Background="{StaticResource BrandElectric}" Foreground="White" Padding="16,8" Click="BtnSendFile_Click"/>
+                                </Grid>
+                            </Border>
 
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="&#xE8FB; Trust" FontFamily="Segoe MDL2 Assets" Style="{StaticResource ModernButton}" Margin="0,0,8,0" Click="BtnTofuTrust_Click"/>
-                                <Button Grid.Column="1" Content="&#xE711; Reject" FontFamily="Segoe MDL2 Assets" Style="{StaticResource ModernButton}" Background="#FFF0F0" Foreground="#FF3B30" Margin="8,0,0,0" Click="BtnTofuReject_Click"/>
-                            </Grid>
+                            <ItemsControl x:Name="DevicesList" Margin="0,0,0,24">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="40" Height="40" CornerRadius="20" Background="#E5E5EA" Margin="0,0,16,0" Grid.Column="0">
+                                                    <TextBlock Text="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding friendly_name}" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                        <TextBlock Text="{Binding status}" Foreground="{StaticResource BrandGreen}" FontSize="12" Margin="0,0,8,0"/>
+                                                        <StackPanel Orientation="Horizontal" Visibility="{Binding ShowBattery, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                            <TextBlock Text="{Binding BatteryIcon}" FontFamily="Segoe MDL2 Assets" FontSize="10" Foreground="{Binding BatteryColor}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                            <TextBlock Text="{Binding BatteryLevel, StringFormat={}{0}%}" Foreground="{StaticResource InkSoft}" FontSize="12" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                                <Button Grid.Column="2" Style="{StaticResource ModernButton}" Content="Disconnect" Background="#FFF0F0" Foreground="{StaticResource BrandRed}" Padding="12,6" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
-                    </Border>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- SETTINGS VIEW -->
+                <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="48,16,48,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                        <TextBlock Text="Settings" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                    </StackPanel>
+                    
+                    <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
+                        <StackPanel>
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Device Name" FontWeight="Medium" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtDeviceName" Style="{StaticResource MacTextBox}" Grid.Column="1"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkLaunchOnStartup" Content="Launch at login" Margin="0,0,0,16"/>
+                                    <CheckBox x:Name="ChkSyncEnabled" Content="Sync clipboard automatically" Margin="0,0,0,16"/>
+                                    <CheckBox x:Name="ChkShowNotifications" Content="Show desktop notifications"/>
+                                </StackPanel>
+                            </Border>
+                            
+                            <Button Content="Save Settings" Style="{StaticResource ModernButton}" HorizontalAlignment="Right" Padding="24,8" Click="BtnSaveSettings_Click"/>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
                 
-                <!-- Drop Zone Overlay -->
-                <Grid x:Name="DropZoneOverlay" Visibility="Collapsed" Panel.ZIndex="999" Background="{StaticResource SurfaceGlass}">
-                    <Border CornerRadius="24" BorderBrush="{StaticResource BrandElectric}" BorderThickness="3" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="48" Background="{StaticResource SurfaceElevated}">
-                        <Border.Effect>
-                            <DropShadowEffect Color="{Binding Color, Source={StaticResource BrandElectric}}" BlurRadius="40" Opacity="0.5" ShadowDepth="0"/>
-                        </Border.Effect>
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Grid Width="100" Height="100" Margin="0,0,0,24" HorizontalAlignment="Center">
-                                <Border CornerRadius="50" Background="{StaticResource BrandElectric}" Opacity="0.1"/>
-                                <Rectangle RadiusX="50" RadiusY="50" Stroke="{StaticResource BrandElectric}" StrokeThickness="2" StrokeDashArray="2 2" Fill="Transparent"/>
-                                <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="40" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Grid>
-                            <TextBlock Text="Drop to Send" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                            <TextBlock Text="Sends to all connected devices" FontSize="14" Foreground="{StaticResource InkSubtle}" HorizontalAlignment="Center"/>
+                <!-- DIAGNOSTICS VIEW -->
+                <Grid x:Name="DiagnosticsView" Visibility="Collapsed" Margin="48,16,48,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                        <TextBlock Text="Diagnostics" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                    </StackPanel>
+                    
+                    <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
+                        <StackPanel>
+                            <Border CornerRadius="12" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="48"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="24" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Daemon Status" FontWeight="SemiBold" Foreground="{StaticResource Ink}" FontSize="14"/>
+                                        <TextBlock x:Name="TxtDiagDaemonStatus" Text="Checking..." Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
+                                        <TextBlock x:Name="TxtDiagDaemonSuggestion" Text="If stopped, please restart." Foreground="{StaticResource InkSubtle}" FontSize="11" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                    <Button x:Name="BtnRestartConnection" Grid.Column="2" Content="Restart App" Style="{StaticResource ModernButton}" VerticalAlignment="Center" Click="BtnRestartConnection_Click"/>
+                                </Grid>
+                            </Border>
                         </StackPanel>
-                    </Border>
+                    </ScrollViewer>
                 </Grid>
             </Grid>
+            
+            <!-- TOP CHROME: ContinuityHeaderView -->
+            <Border VerticalAlignment="Top" Height="64" Panel.ZIndex="100" WindowChrome.IsHitTestVisibleInChrome="True">
+                <Border.Background>
+                    <SolidColorBrush Color="#FFFFFF" Opacity="0.95"/>
+                </Border.Background>
+                <Grid>
+                    <!-- Search Bar (Left-aligned to leave room for Windows Buttons on Right) -->
+                    <Border HorizontalAlignment="Left" VerticalAlignment="Center" Margin="16,0,0,0" Width="320" Height="32" Background="{StaticResource SurfaceElevated}" CornerRadius="6" BorderBrush="{StaticResource Stroke}" BorderThickness="1">
+                        <Grid>
+                            <TextBlock Text="&#xE11A;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            <TextBlock Text="Search devices, clipboard..." Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" Margin="36,0,0,0" FontSize="13"/>
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Quick Actions & Status (Center-Right) -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,160,0">
+                        <!-- Status Indicator -->
+                        <Ellipse Width="8" Height="8" Fill="{StaticResource BrandGreen}" Margin="0,0,6,0"/>
+                        <TextBlock Text="Active" Foreground="{StaticResource InkSoft}" FontSize="13" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        
+                        <!-- Quick Actions Capsule -->
+                        <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="4">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Click="NavDiagnostics_Click" ToolTip="Diagnostics">
+                                    <TextBlock Text="&#xE9E9;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                                </Button>
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" ToolTip="Device Manager">
+                                    <TextBlock Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                                </Button>
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="NavSettings_Click" ToolTip="Settings">
+                                    <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    
+                    <!-- Windows Native Caption Buttons (Top Right) -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,16,16,0">
+                        <!-- Minimize -->
+                        <Button Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" Width="46" Height="32" Click="BtnMinimize_Click" WindowChrome.IsHitTestVisibleInChrome="True">
+                            <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Button>
+                        <!-- Close -->
+                        <Button Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" Width="46" Height="32" Click="BtnClose_Click" WindowChrome.IsHitTestVisibleInChrome="True">
+                            <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- BOTTOM CHROME: FloatingNavBar Capsule -->
+            <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,32" CornerRadius="24" Background="{StaticResource SurfaceGlass}" BorderBrush="#30000000" BorderThickness="1" Padding="6" Panel.ZIndex="200" WindowChrome.IsHitTestVisibleInChrome="True">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" Opacity="0.12" BlurRadius="24" ShadowDepth="12"/>
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="NavBtnDevices" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE975;" Content="Ecosystem" Click="NavDevices_Click"/>
+                    <RadioButton x:Name="NavBtnHome" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE81C;" Content="Timeline" IsChecked="True" Click="NavHome_Click"/>
+                    <RadioButton x:Name="NavBtnTransfers" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE8D5;" Content="Transfers" Click="NavTransfers_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- MODULE 4: INCOMING CALL BANNER -->
+            <Border x:Name="IncomingCallBanner" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,32,0,0" Width="400" Background="{StaticResource SurfaceElevated}" CornerRadius="16" Panel.ZIndex="1000" Padding="16">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="8" Opacity="0.15"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    
+                    <StackPanel Orientation="Horizontal" Grid.Row="0">
+                        <Border Width="48" Height="48" CornerRadius="24" Background="#E5E5EA" Margin="0,0,16,0">
+                            <TextBlock Text="&#xE104;" FontFamily="Segoe MDL2 Assets" FontSize="24" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtCallTitle" Text="Incoming Camera Stream" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                            <TextBlock x:Name="TxtCallSubtitle" Text="From Pixel 7 Pro" FontSize="13" Foreground="{StaticResource InkSoft}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <Button Grid.Column="0" Content="Decline" Background="#FFF0F0" Foreground="{StaticResource BrandRed}" FontWeight="SemiBold" Style="{StaticResource ModernButton}" Click="BtnDeclineCall_Click" Padding="0,10"/>
+                        <Button Grid.Column="2" Content="Accept" Background="{StaticResource BrandGreen}" Foreground="White" FontWeight="SemiBold" Style="{StaticResource ModernButton}" Click="BtnAcceptCall_Click" Padding="0,10"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- MODULE 1: DROP ZONE OVERLAY -->
+            <Grid x:Name="DropZoneOverlay" Visibility="Collapsed" Panel.ZIndex="999" Background="#80FFFFFF">
+                <Border Margin="32" BorderBrush="{StaticResource BrandElectric}" BorderThickness="4" CornerRadius="24" Background="#E5F0FAFF">
+                    <Border.Effect>
+                        <DropShadowEffect Color="{StaticResource BrandElectricColor}" BlurRadius="32" ShadowDepth="0" Opacity="0.5"/>
+                    </Border.Effect>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="96" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Drop Files Here" FontSize="32" FontWeight="Bold" Foreground="{StaticResource BrandElectric}" Margin="0,16,0,8" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Instantly beam to all connected devices" FontSize="18" Foreground="{StaticResource InkSoft}" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+            
+            <!-- MODULE 1: COMMAND PALETTE OVERLAY -->
+            <Grid x:Name="CommandPaletteOverlay" Visibility="Collapsed" Panel.ZIndex="1000">
+                <Border Background="#A0000000" MouseLeftButtonDown="CommandPaletteBackdrop_Click"/>
+                
+                <Border Width="600" Height="400" VerticalAlignment="Center" HorizontalAlignment="Center" 
+                        Background="{StaticResource SurfaceElevated}" CornerRadius="12" 
+                        BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="0,-100,0,0">
+                    <Border.Effect>
+                        <DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="16" Opacity="0.3"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="64"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Search Input -->
+                        <Border BorderBrush="{StaticResource Stroke}" BorderThickness="0,0,0,1">
+                            <Grid>
+                                <TextBlock Text="&#xE11A;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                                <TextBox x:Name="TxtCommandInput" Style="{StaticResource MacTextBox}" Margin="54,0,20,0" Height="40" FontSize="18"
+                                         Background="Transparent" BorderThickness="0" TextChanged="TxtCommandInput_TextChanged" PreviewKeyDown="TxtCommandInput_PreviewKeyDown"/>
+                                <!-- Placeholder handled manually or via style -->
+                                <TextBlock x:Name="TxtCommandPlaceholder" Text="Type a command or search..." Foreground="{StaticResource InkSubtle}" FontSize="18" 
+                                           VerticalAlignment="Center" Margin="60,0,0,0" IsHitTestVisible="False"/>
+                            </Grid>
+                        </Border>
+                        
+                        <!-- Results List -->
+                        <ListBox x:Name="CommandList" Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="0,8,0,8" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Padding" Value="16,12"/>
+                                    <Setter Property="Margin" Value="8,2"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Bd" Property="Background" Value="#0F000000"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrandElectric}"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="32"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="14" FontWeight="Medium" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </Grid>
+
         </Grid>
     </Border>
+</Grid>
 </Window>
