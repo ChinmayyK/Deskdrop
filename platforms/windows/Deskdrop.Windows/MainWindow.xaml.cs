@@ -25,7 +25,7 @@ namespace Deskdrop.Windows
         {
             Dispatcher.Invoke(() =>
             {
-                if (TimelineView != null && TimelineView.Visibility == Visibility.Visible)
+                if (HomeView != null && HomeView.Visibility == Visibility.Visible)
                 {
                     TimelineList.ItemsSource = _clipboardManager.GetHistory();
                 }
@@ -78,7 +78,7 @@ namespace Deskdrop.Windows
                 if (isError)
                 {
                     NotificationIcon.Text = "\xE783"; // Warning icon
-                    NotificationIcon.Foreground = new SolidColorBrush(Color.FromRgb(255, 59, 48)); // Red
+                    NotificationIcon.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 59, 48)); // Red
                 }
                 else
                 {
@@ -102,7 +102,7 @@ namespace Deskdrop.Windows
             if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
             
-            _hasCompletedOnboarding = Program.LoadSettings().HasCompletedOnboarding;
+            _hasCompletedOnboarding = TrayApp.LoadSettings().HasCompletedOnboarding;
             UpdateOnboardingVisibility();
             
             if (TimelineList != null)
@@ -126,7 +126,7 @@ namespace Deskdrop.Windows
         private void BtnDismissOnboarding_Click(object sender, RoutedEventArgs e)
         {
             _hasCompletedOnboarding = true;
-            Program.CompleteOnboarding();
+            TrayApp.CompleteOnboarding();
             UpdateOnboardingVisibility();
         }
 
@@ -152,7 +152,7 @@ namespace Deskdrop.Windows
                         Dispatcher.Invoke(() =>
                         {
                             if (DevicesList != null) DevicesList.ItemsSource = peers;
-                            if (!_hasCompletedOnboarding)
+                            if (!_hasCompletedOnboarding && peers != null)
                             {
                                 UpdateOnboardingStatus(peers);
                             }
