@@ -759,12 +759,18 @@ namespace Deskdrop.Windows
 
             var wpfApp = new System.Windows.Application();
             wpfApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            wpfApp.DispatcherUnhandledException += (_, e) => 
+            {
+                LogError(e.Exception);
+                e.Handled = true;
+            };
             
             var trayApp = new TrayApp();
             
-            // Run WinForms loop so NotifyIcon works naturally, 
-            // WPF elements will piggyback via WindowsFormsSynchronizationContext
-            Application.Run(trayApp);
+            // Run WPF message loop instead of WinForms loop.
+            // NotifyIcon just needs any standard message loop to function,
+            // but WPF requires its own Application.Run() to properly render windows.
+            wpfApp.Run();
         }
 
         private static void LogError(Exception ex)
