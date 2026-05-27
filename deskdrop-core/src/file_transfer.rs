@@ -306,7 +306,10 @@ impl InboundTransfer {
     /// Feed a chunk into the transfer. Returns progress info.
     pub fn receive_chunk(&mut self, chunk_index: u32, data: Vec<u8>) -> Result<TransferProgress> {
         self.last_active_at = Instant::now();
-        anyhow::ensure!(self.status == TransferStatus::Transferring, "transfer is not active");
+        anyhow::ensure!(
+            self.status == TransferStatus::Transferring,
+            "transfer is not active"
+        );
         anyhow::ensure!(!self.paused, "transfer is paused");
         anyhow::ensure!(data.len() <= 4 * 1024 * 1024, "chunk size exceeds limit");
 
@@ -523,11 +526,15 @@ impl FileTransferManager {
         if self.inbound.len() >= 10 {
             anyhow::bail!("too many active transfers");
         }
-        let count_from_peer = self.inbound.values().filter(|t| t.from_device == from_device).count();
+        let count_from_peer = self
+            .inbound
+            .values()
+            .filter(|t| t.from_device == from_device)
+            .count();
         if count_from_peer >= 5 {
             anyhow::bail!("too many active transfers from this peer");
         }
-        
+
         let tid = meta.transfer_id;
         match self.inbound.entry(tid) {
             std::collections::hash_map::Entry::Occupied(entry) => {
@@ -598,7 +605,9 @@ impl FileTransferManager {
     }
 
     pub fn cancel_all_for_device(&mut self, peer_id: Uuid) {
-        let inbound_tids: Vec<_> = self.inbound.values()
+        let inbound_tids: Vec<_> = self
+            .inbound
+            .values()
             .filter(|t| t.from_device == peer_id)
             .map(|t| t.transfer_id)
             .collect();
@@ -606,7 +615,9 @@ impl FileTransferManager {
             self.cancel_inbound(&tid, "peer disconnected");
         }
 
-        let outbound_tids: Vec<_> = self.outbound.values()
+        let outbound_tids: Vec<_> = self
+            .outbound
+            .values()
             .filter(|t| t.target_device == Some(peer_id))
             .map(|t| t.transfer_id)
             .collect();
@@ -619,7 +630,9 @@ impl FileTransferManager {
         let now = Instant::now();
         let timeout = std::time::Duration::from_secs(300); // 5 minutes
 
-        let stale_inbound: Vec<_> = self.inbound.iter()
+        let stale_inbound: Vec<_> = self
+            .inbound
+            .iter()
             .filter(|(_, t)| now.duration_since(t.last_active_at) > timeout)
             .map(|(tid, _)| *tid)
             .collect();
@@ -627,7 +640,9 @@ impl FileTransferManager {
             self.cancel_inbound(&tid, "transfer timed out (zombie)");
         }
 
-        let stale_outbound: Vec<_> = self.outbound.iter()
+        let stale_outbound: Vec<_> = self
+            .outbound
+            .iter()
             .filter(|(_, t)| now.duration_since(t.last_active_at) > timeout)
             .map(|(tid, _)| *tid)
             .collect();
@@ -817,8 +832,7 @@ fn now_unix() -> u64 {
 
 /// Default save directory for received files.
 pub fn default_save_dir() -> PathBuf {
-    dirs::download_dir()
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+    dirs::download_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
 }
 
 fn chunk_count(size_bytes: u64) -> Result<u32> {

@@ -193,7 +193,7 @@ impl PeerManager {
     pub fn save(&self) -> Result<()> {
         let path = self.path.clone();
         let bytes = serde_json::to_vec_pretty(&*self.store.read().unwrap())?;
-        
+
         let save_fn = move || {
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);

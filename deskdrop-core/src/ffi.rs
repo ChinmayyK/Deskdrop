@@ -281,22 +281,37 @@ pub unsafe extern "C" fn deskdrop_send_file_path(
     file_name_ptr: *const c_char,
     mime_type_ptr: *const c_char,
 ) -> c_int {
-    if handle.is_null() || path_ptr.is_null() || file_name_ptr.is_null() || mime_type_ptr.is_null() {
+    if handle.is_null() || path_ptr.is_null() || file_name_ptr.is_null() || mime_type_ptr.is_null()
+    {
         return -1;
     }
-    
+
     let target_device = if !target_device_ptr.is_null() {
         let s = CStr::from_ptr(target_device_ptr).to_string_lossy();
-        if s.is_empty() { None } else { uuid::Uuid::parse_str(&s).ok() }
-    } else { None };
+        if s.is_empty() {
+            None
+        } else {
+            uuid::Uuid::parse_str(&s).ok()
+        }
+    } else {
+        None
+    };
 
     let path = std::path::PathBuf::from(CStr::from_ptr(path_ptr).to_string_lossy().into_owned());
     let file_name = CStr::from_ptr(file_name_ptr).to_string_lossy().into_owned();
     let mime_type = CStr::from_ptr(mime_type_ptr).to_string_lossy().into_owned();
 
     let h = &*handle;
-    let res = runtime().block_on(h.engine.send_file_path(path, file_name, mime_type, target_device));
-    if res.is_ok() { 0 } else { -1 }
+    let res =
+        runtime().block_on(
+            h.engine
+                .send_file_path(path, file_name, mime_type, target_device),
+        );
+    if res.is_ok() {
+        0
+    } else {
+        -1
+    }
 }
 
 // ── Poll for events ───────────────────────────────────────────────────────────
@@ -421,11 +436,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    if let EngineEvent::ClipboardReceived {
-        content,
-        ..
-    } = &e.inner
-    {
+    if let EngineEvent::ClipboardReceived { content, .. } = &e.inner {
         if let ClipboardContent::Text(ref s) = **content {
             let cs = CString::new(s.as_bytes()).unwrap_or_default();
             e.cached_str = Some(cs);
@@ -583,11 +594,7 @@ pub unsafe extern "C" fn deskdrop_event_transfer_dest_path(event: *mut PbEvent) 
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_fingerprint(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    if let EngineEvent::PairingRequested {
-        pin,
-        ..
-    } = &e.inner
-    {
+    if let EngineEvent::PairingRequested { pin, .. } = &e.inner {
         let cs = CString::new(pin.as_bytes()).unwrap_or_default();
         e.cached_mime = Some(cs);
         e.cached_mime.as_ref().unwrap().as_ptr()
@@ -815,7 +822,7 @@ pub unsafe extern "C" fn deskdrop_engine_get_camera_frame(
         Ok(id) => id,
         Err(_) => return 0,
     };
-    
+
     // Fetch frame from engine using public method
     if let Some(frame_data) = engine.get_latest_camera_frame(peer_id) {
         let len = std::cmp::min(frame_data.len(), max_len);

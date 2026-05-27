@@ -246,10 +246,11 @@ pub async fn handshake_initiator(
 
     send_frame(stream, &hello).await.context("sending Hello")?;
 
-    let ack: HelloAckFrame = tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
-        .await
-        .context("timeout waiting for HelloAck")?
-        .context("receiving HelloAck")?;
+    let ack: HelloAckFrame =
+        tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
+            .await
+            .context("timeout waiting for HelloAck")?
+            .context("receiving HelloAck")?;
 
     anyhow::ensure!(
         ack.version == PROTOCOL_VERSION,
@@ -444,7 +445,9 @@ mod tests {
         });
 
         let (mut server_stream, _) = listener.accept().await.unwrap();
-        let received: String = recv_frame(&mut server_stream, MAX_FRAME_SIZE).await.unwrap();
+        let received: String = recv_frame(&mut server_stream, MAX_FRAME_SIZE)
+            .await
+            .unwrap();
         assert_eq!(received, "hello Deskdrop v3");
         send_handle.await.unwrap();
     }

@@ -748,7 +748,7 @@
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Grid Width="100" Height="100" Margin="0,0,0,24" HorizontalAlignment="Center">
                                 <Border CornerRadius="50" Background="{StaticResource BrandElectric}" Opacity="0.1"/>
-                                <Border CornerRadius="50" BorderBrush="{StaticResource BrandElectric}" BorderThickness="2" BorderDashArray="2 2"/>
+                                <Rectangle RadiusX="50" RadiusY="50" Stroke="{StaticResource BrandElectric}" StrokeThickness="2" StrokeDashArray="2 2" Fill="Transparent"/>
                                 <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="40" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Grid>
                             <TextBlock Text="Drop to Send" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" HorizontalAlignment="Center" Margin="0,0,0,8"/>

@@ -351,7 +351,10 @@ fn linux_netlink_change_hints(tx: mpsc::Sender<()>) -> Result<()> {
             let recv_len = unsafe { libc::recv(fd, buf.as_mut_ptr() as *mut _, buf.len(), 0) };
             if recv_len < 0 {
                 let err = std::io::Error::last_os_error();
-                if err.kind() == std::io::ErrorKind::WouldBlock || err.raw_os_error() == Some(libc::EAGAIN) || err.raw_os_error() == Some(libc::EWOULDBLOCK) {
+                if err.kind() == std::io::ErrorKind::WouldBlock
+                    || err.raw_os_error() == Some(libc::EAGAIN)
+                    || err.raw_os_error() == Some(libc::EWOULDBLOCK)
+                {
                     continue;
                 }
                 return Err(err).context("reading netlink change event");
@@ -438,8 +441,6 @@ mod tests {
         };
         // Depending on host OS, default_net might return the real default gateway.
         // We assert that it returns *some* valid gateway IP for this interface.
-        assert!(
-            detect_android_hotspot_gateway(&iface).is_some()
-        );
+        assert!(detect_android_hotspot_gateway(&iface).is_some());
     }
 }

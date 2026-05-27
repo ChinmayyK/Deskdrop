@@ -107,7 +107,10 @@ impl EphemeralKeypair {
     }
 
     /// Consume the ephemeral secret, perform ECDH, derive session key and PIN.
-    pub fn derive_session_key(mut self, peer_pubkey_bytes: [u8; 32]) -> Result<(SessionKey, crate::pairing::PairingPin)> {
+    pub fn derive_session_key(
+        mut self,
+        peer_pubkey_bytes: [u8; 32],
+    ) -> Result<(SessionKey, crate::pairing::PairingPin)> {
         let secret = self.secret.take().context("keypair already consumed")?;
         let peer_public = PublicKey::from(peer_pubkey_bytes);
         let shared = secret.diffie_hellman(&peer_public);

@@ -515,7 +515,11 @@ impl Engine {
         send_listener_rebind(&engine.shared, initial_bind).await?;
         let discovery_ip = {
             let state = engine.shared.network_state.lock().await;
-            state.active_interface.as_ref().map(|i| i.ip).unwrap_or(initial_bind.ip())
+            state
+                .active_interface
+                .as_ref()
+                .map(|i| i.ip)
+                .unwrap_or(initial_bind.ip())
         };
         if let Some(discovery_tx) = &engine.shared.discovery_tx {
             let _ = discovery_tx
@@ -530,7 +534,7 @@ impl Engine {
         engine.spawn_peer_pruner();
         engine.spawn_sensitive_history_pruner();
         engine.spawn_auto_reconnector();
-        
+
         // Spawn UDP broadcast beacon and listener for resilient discovery
         engine.spawn_udp_beacon();
         engine.spawn_udp_listener();
@@ -551,12 +555,18 @@ impl Engine {
             if let Err(err) = socket.set_broadcast(true) {
                 tracing::warn!(error = %err, "failed to set broadcast flag on UDP beacon socket");
             }
-            
+
             let device_id_str = shared.config.device_id.to_string();
             // Payload format: DESKDROP_BEACON:<uuid>:<name>:<tcp_port>
-            let mut payload = format!("DESKDROP_BEACON:{}:{}:{}", device_id_str, shared.config.device_name, shared.config.port).into_bytes();
-            if payload.len() > 512 { payload.truncate(512); }
-            
+            let mut payload = format!(
+                "DESKDROP_BEACON:{}:{}:{}",
+                device_id_str, shared.config.device_name, shared.config.port
+            )
+            .into_bytes();
+            if payload.len() > 512 {
+                payload.truncate(512);
+            }
+
             let broadcast_addr: SocketAddr = "255.255.255.255:47824".parse().unwrap();
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
             loop {
@@ -591,12 +601,12 @@ impl Engine {
                                         let peer_name = parts[2].to_string();
                                         if let Ok(peer_port) = parts[3].parse::<u16>() {
                                             let peer_addr = SocketAddr::new(addr.ip(), peer_port);
-                                            
+
                                             let trusted = {
                                                 let trust_guard = shared.trust.lock().await;
                                                 trust_guard.is_trusted(peer_id)
                                             };
-                                            
+
                                             if let Err(err) = shared.peer_manager.upsert_peer(
                                                 peer_id,
                                                 peer_name.clone(),
@@ -606,10 +616,18 @@ impl Engine {
                                             ) {
                                                 tracing::warn!(error = %err, "failed to upsert UDP beacon peer");
                                             } else {
-                                                if !should_initiate_session(&shared, peer_id, DiscoverySource::UdpBeacon).await {
+                                                if !should_initiate_session(
+                                                    &shared,
+                                                    peer_id,
+                                                    DiscoverySource::UdpBeacon,
+                                                )
+                                                .await
+                                                {
                                                     continue;
                                                 }
-                                                if shared.peer_manager.live_endpoint(peer_id) == Some(peer_addr) {
+                                                if shared.peer_manager.live_endpoint(peer_id)
+                                                    == Some(peer_addr)
+                                                {
                                                     continue;
                                                 }
                                                 if matches!(
@@ -618,8 +636,12 @@ impl Engine {
                                                 ) {
                                                     continue;
                                                 }
-                                                
-                                                tracing::info!("UDP Beacon discovered peer {} at {}", peer_id, peer_addr);
+
+                                                tracing::info!(
+                                                    "UDP Beacon discovered peer {} at {}",
+                                                    peer_id,
+                                                    peer_addr
+                                                );
                                                 let shared_clone = shared.clone();
                                                 tokio::spawn(async move {
                                                     if let Err(err) = connect_loop(
@@ -628,7 +650,8 @@ impl Engine {
                                                         Some(peer_id),
                                                         DiscoverySource::UdpBeacon,
                                                     )
-                                                    .await {
+                                                    .await
+                                                    {
                                                         tracing::warn!(peer_id = %peer_id, error = %err, "UDP beacon peer connection failed");
                                                     }
                                                 });
@@ -885,8 +908,11 @@ impl Engine {
             origin_device_name: self.shared.config.device_name.clone(),
             relay_path: relay_path.clone(),
         };
-        let metadata =
-            HistoryMetadata::from_content(&shared_content, self.shared.config.device_name.clone(), false);
+        let metadata = HistoryMetadata::from_content(
+            &shared_content,
+            self.shared.config.device_name.clone(),
+            false,
+        );
 
         let peers = self.shared.peer_manager.active_senders();
         let mut report = SyncDispatchReport {
@@ -2095,7 +2121,9 @@ impl Engine {
         self.shared.file_transfers.lock().await.active_transfers()
     }
 
-    pub async fn camera_frames(&self) -> tokio::sync::MutexGuard<'_, std::collections::HashMap<Uuid, Vec<u8>>> {
+    pub async fn camera_frames(
+        &self,
+    ) -> tokio::sync::MutexGuard<'_, std::collections::HashMap<Uuid, Vec<u8>>> {
         self.shared.camera_frames.lock().await
     }
 
@@ -2212,7 +2240,11 @@ impl Engine {
 
     /// Retrieve the latest camera frame for a specific peer.
     pub fn get_latest_camera_frame(&self, peer_id: uuid::Uuid) -> Option<Vec<u8>> {
-        self.shared.camera_frames.blocking_lock().get(&peer_id).cloned()
+        self.shared
+            .camera_frames
+            .blocking_lock()
+            .get(&peer_id)
+            .cloned()
     }
 }
 
@@ -2432,7 +2464,11 @@ async fn handle_network_change(shared: EngineShared, change: NetworkChangeEvent)
 
     let discovery_ip = {
         let state = shared.network_state.lock().await;
-        state.active_interface.as_ref().map(|i| i.ip).unwrap_or(current_addr.ip())
+        state
+            .active_interface
+            .as_ref()
+            .map(|i| i.ip)
+            .unwrap_or(current_addr.ip())
     };
     if let Some(discovery_tx) = &shared.discovery_tx {
         let _ = discovery_tx
@@ -2920,7 +2956,7 @@ async fn observe_trust(
         }
         TrustState::Untrusted => {
             shared.peer_manager.update_trust(device_id, false)?;
-            
+
             // Rate-limit pairing prompts to max 1 per 5 seconds to prevent UI spam attacks.
             let now = std::time::Instant::now();
             let mut last_prompt = shared.last_pairing_prompt.lock().await;
@@ -2931,7 +2967,9 @@ async fn observe_trust(
             }
             *last_prompt = Some(now);
 
-            let _ = shared.peer_manager.set_pairing_pin(device_id, Some(pin.display()));
+            let _ = shared
+                .peer_manager
+                .set_pairing_pin(device_id, Some(pin.display()));
             let _ = shared
                 .event_tx
                 .send(EngineEvent::PairingRequested {
@@ -3102,17 +3140,17 @@ fn register_session(
                                     ClipboardContent::Image { data, .. } => data.len(),
                                     ClipboardContent::File { data, .. } => data.len(),
                                 };
-                                
+
                                 // Limit sizes to prevent OOM
                                 const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
                                 const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
-                                
+
                                 let allowed = match &*content {
                                     ClipboardContent::Text(t) => t.len() <= MAX_TEXT_BYTES,
                                     ClipboardContent::Image { data, .. } => data.len() <= MAX_IMAGE_BYTES,
                                     ClipboardContent::File { data, .. } => data.len() <= MAX_IMAGE_BYTES,
                                 };
-                                
+
                                 if !allowed {
                                     tracing::warn!(peer_id = %peer_id, size = payload_size, "dropped oversized clipboard payload");
                                     continue;
@@ -3124,7 +3162,7 @@ fn register_session(
                                     tracing::warn!(peer_id = %peer_id, reason, "inbound clipboard payload denied by filter");
                                     continue;
                                 }
-                                
+
                                 // Apply TokenBucket throttling for large payloads
                                 shared.throttle.acquire(payload_size).await;
 
@@ -3845,7 +3883,11 @@ fn register_session(
                     })
                     .await;
 
-                shared.file_transfers.lock().await.cancel_all_for_device(peer_id);
+                shared
+                    .file_transfers
+                    .lock()
+                    .await
+                    .cancel_all_for_device(peer_id);
                 shared.camera_frames.lock().await.remove(&peer_id);
 
                 // Record in activity feed.

@@ -182,7 +182,8 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushFile(
     }
     let data = unsafe { JByteArray::from_raw(data) };
     let size = env.get_array_length(&data).unwrap_or(0) as usize;
-    if size > crate::protocol::MAX_IMAGE_BYTES { // Use same 32MB limit
+    if size > crate::protocol::MAX_IMAGE_BYTES {
+        // Use same 32MB limit
         tracing::warn!("Ignoring clipboard file because it exceeds 32MB limit");
         return -1;
     }
@@ -518,11 +519,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFingerprint(
         return std::ptr::null_mut();
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::PairingRequested {
-        pin,
-        ..
-    } = ev
-    {
+    if let crate::engine::EngineEvent::PairingRequested { pin, .. } = ev {
         env.new_string(pin)
             .ok()
             .map(|s| s.into_raw())

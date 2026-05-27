@@ -304,7 +304,10 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
         EngineEvent::SystemHealthUpdated(state) => {
             tracing::info!("[HEALTH] System state updated: {:?}", state);
         }
-        EngineEvent::ClipboardDeliveryStatus { activity_id, status } => {
+        EngineEvent::ClipboardDeliveryStatus {
+            activity_id,
+            status,
+        } => {
             tracing::info!("[DELIVERY] Activity {} status: {:?}", activity_id, status);
         }
         EngineEvent::PairingRequested {
@@ -456,9 +459,7 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
                 FeedbackEvent {
                     timestamp: now_secs(),
                     kind: "file_transfer_complete".into(),
-                    message: format!(
-                        "Received {file_name} from {from_name} → {dest_str}"
-                    ),
+                    message: format!("Received {file_name} from {from_name} → {dest_str}"),
                     device_id: None,
                     device_name: Some(from_name),
                     clipboard_id: None,
