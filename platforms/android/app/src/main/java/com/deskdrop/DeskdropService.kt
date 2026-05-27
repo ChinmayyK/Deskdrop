@@ -462,6 +462,14 @@ class DeskdropService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        try {
+            if (intent?.action != ACTION_STOP) {
+                startForegroundCompat(buildForegroundNotification())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Early startForegroundCompat failed", e)
+        }
+
         when (intent?.action) {
             ACTION_STOP         -> { shutdownAndStop(); return START_NOT_STICKY }
 

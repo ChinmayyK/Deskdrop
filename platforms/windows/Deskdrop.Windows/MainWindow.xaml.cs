@@ -65,6 +65,75 @@ namespace Deskdrop.Windows
             LoadSettingsView();
         }
 
+        private void NavDiagnostics_Click(object sender, RoutedEventArgs e)
+        {
+            LoadDiagnosticsView();
+        }
+
+        private void LoadDiagnosticsView()
+        {
+            if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
+            if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
+            if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
+            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Visible;
+            
+            RefreshDiagnosticsState();
+        }
+
+        private void RefreshDiagnosticsState()
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                bool isRunning = DaemonClient.IsDaemonRunning();
+                int peerCount = 0;
+
+                if (isRunning)
+                {
+                    try
+                    {
+                        var state = DaemonClient.Status();
+                        if (state != null && state.RootElement.TryGetProperty("data", out var data) && data.TryGetProperty("peer_count", out var pc))
+                        {
+                            peerCount = pc.GetInt32();
+                        }
+                    }
+                    catch { /* ignore */ }
+                }
+
+                Dispatcher.Invoke(() =>
+                {
+                    if (TxtDiagDaemonStatus != null)
+                    {
+                        TxtDiagDaemonStatus.Text = isRunning ? "Running" : "Stopped";
+                        TxtDiagDaemonSuggestion.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
+                        BtnRestartConnection.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
+                    }
+
+                    if (TxtDiagNetworkStatus != null)
+                    {
+                        TxtDiagNetworkStatus.Text = peerCount > 0 ? $"Connected to {peerCount} peers" : "Looking for peers";
+                        TxtDiagNetworkSuggestion.Visibility = peerCount > 0 ? Visibility.Collapsed : Visibility.Visible;
+                        BtnScanAgain.Visibility = peerCount > 0 ? Visibility.Collapsed : Visibility.Visible;
+                    }
+                });
+            });
+        }
+
+        private void BtnRestartConnection_Click(object sender, RoutedEventArgs e)
+        {
+            System.Windows.MessageBox.Show("Please restart the Deskdrop Tray Application to restart the daemon.", "Restart Required", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void BtnScanAgain_Click(object sender, RoutedEventArgs e)
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                DaemonClient.RescanPeers();
+                System.Threading.Thread.Sleep(1000);
+                RefreshDiagnosticsState();
+            });
+        }
+
         private void BtnBack_Click(object sender, RoutedEventArgs e)
         {
             LoadHomeView();
@@ -101,6 +170,7 @@ namespace Deskdrop.Windows
             if (HomeView != null) HomeView.Visibility = Visibility.Visible;
             if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
+            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
             
             _hasCompletedOnboarding = TrayApp.LoadSettings().HasCompletedOnboarding;
             UpdateOnboardingVisibility();
@@ -140,6 +210,7 @@ namespace Deskdrop.Windows
             if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
             if (DevicesView != null) DevicesView.Visibility = Visibility.Visible;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
+            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
             
             RefreshDevicesList();
         }
@@ -228,6 +299,7 @@ namespace Deskdrop.Windows
             if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
             if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Visible;
+            if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
             
             LoadSettings();
         }

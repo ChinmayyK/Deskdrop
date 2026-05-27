@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
+        requestBatteryOptimizationExemption()
 
         setContent {
             val activeTransfers by DeskdropService.activeTransfersFlow.collectAsState()

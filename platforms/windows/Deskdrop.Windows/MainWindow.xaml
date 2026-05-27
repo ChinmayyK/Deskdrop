@@ -263,6 +263,7 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="10,0" WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Button AutomationProperties.Name="Diagnostics" Content="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavDiagnostics_Click"/>
                         <Button AutomationProperties.Name="Settings" Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavSettings_Click"/>
                         <Button AutomationProperties.Name="Devices" Content="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="NavDevices_Click"/>
                         <Button AutomationProperties.Name="Minimize window" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnMinimize_Click"/>
@@ -460,6 +461,54 @@
                                 </Border>
                                 
                                 <Button Content="Save Settings" Style="{StaticResource ModernButton}" HorizontalAlignment="Left" Padding="24,12" Click="BtnSaveSettings_Click"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <!-- Diagnostics View -->
+                    <Grid x:Name="DiagnosticsView" Visibility="Collapsed" Background="{StaticResource AppBackground}">
+                        <ScrollViewer>
+                            <StackPanel Margin="48,24,48,48">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,32">
+                                    <Button Content="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="16" Background="Transparent" Foreground="{StaticResource Ink}" BorderThickness="0" Padding="0,0,16,0" Click="BtnBack_Click"/>
+                                    <TextBlock Text="Diagnostics" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                                </StackPanel>
+
+                                <StackPanel Spacing="16">
+                                    <Border CornerRadius="12" Background="#1C1C1E" Padding="20" BorderThickness="1" BorderBrush="#38383A">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="40"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="Daemon Status" FontWeight="SemiBold" Foreground="{StaticResource Ink}" FontSize="16"/>
+                                                <TextBlock x:Name="TxtDiagDaemonStatus" Text="Checking..." Foreground="{StaticResource InkSoft}" Margin="0,4,0,4"/>
+                                                <TextBlock x:Name="TxtDiagDaemonSuggestion" Text="If stopped, please restart the tray app." Foreground="{StaticResource InkSubtle}" FontSize="12" Visibility="Collapsed"/>
+                                            </StackPanel>
+                                            <Button x:Name="BtnRestartConnection" Grid.Column="2" Content="Restart App" Style="{StaticResource ModernButton}" VerticalAlignment="Center" Click="BtnRestartConnection_Click"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border CornerRadius="12" Background="#1C1C1E" Padding="20" BorderThickness="1" BorderBrush="#38383A">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="40"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="&#xE124;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="Local Network" FontWeight="SemiBold" Foreground="{StaticResource Ink}" FontSize="16"/>
+                                                <TextBlock x:Name="TxtDiagNetworkStatus" Text="Looking for peers" Foreground="{StaticResource InkSoft}" Margin="0,4,0,4"/>
+                                                <TextBlock x:Name="TxtDiagNetworkSuggestion" Text="Ensure devices are on the same Wi-Fi network." Foreground="{StaticResource InkSubtle}" FontSize="12" Visibility="Collapsed"/>
+                                            </StackPanel>
+                                            <Button x:Name="BtnScanAgain" Grid.Column="2" Content="Scan Again" Style="{StaticResource ModernButton}" VerticalAlignment="Center" Click="BtnScanAgain_Click"/>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>
