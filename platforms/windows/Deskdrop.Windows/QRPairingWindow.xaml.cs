@@ -16,10 +16,28 @@ namespace Deskdrop.Windows
 {
     public partial class QRPairingWindow : Window
     {
+        private int _initialPeerCount;
+
         public QRPairingWindow()
         {
             InitializeComponent();
+            _initialPeerCount = DeskdropStore.Shared.Peers.Count;
             Loaded += QRPairingWindow_Loaded;
+            DeskdropStore.Shared.Peers.CollectionChanged += Peers_CollectionChanged;
+        }
+
+        private void Peers_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (DeskdropStore.Shared.Peers.Count > _initialPeerCount)
+            {
+                Dispatcher.Invoke(() => this.Close());
+            }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            DeskdropStore.Shared.Peers.CollectionChanged -= Peers_CollectionChanged;
         }
 
         private async void QRPairingWindow_Loaded(object sender, RoutedEventArgs e)

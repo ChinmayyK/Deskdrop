@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -34,6 +35,9 @@ namespace Deskdrop.Windows
         public const int PB_EVENT_WARNING             = 7;
         public const int PB_EVENT_INCOMING_CALL       = 8;
         public const int PB_EVENT_CLIPBOARD_AVAILABLE = 11; // timeline-first
+        public const int PB_EVENT_FILE_TRANSFER_INCOMING = 12;
+        public const int PB_EVENT_FILE_TRANSFER_COMPLETE = 14;
+        public const int PB_EVENT_ACTIVITY_UPDATED    = 16;
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_start(
@@ -99,6 +103,18 @@ namespace Deskdrop.Windows
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern void deskdrop_free_event(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_accept_file_transfer(IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string transferIdHex);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_transfer_id(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_transfer_file_name(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_transfer_dest_path(IntPtr ev);
 
         public static string? PtrToUtf8String(IntPtr ptr)
         {
@@ -227,6 +243,10 @@ namespace Deskdrop.Windows
             {
                 _history.RemoveAll(x => x.Id == id);
             }
+            System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                var item = DeskdropStore.Shared.History.FirstOrDefault(x => x.Id == id);
+                if (item != null) DeskdropStore.Shared.History.Remove(item);
+            });
         }
 
         public void TogglePinHistory(string id)
@@ -239,6 +259,10 @@ namespace Deskdrop.Windows
                     item.IsPinned = !item.IsPinned;
                 }
             }
+            System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                var item = DeskdropStore.Shared.History.FirstOrDefault(x => x.Id == id);
+                if (item != null) item.IsPinned = !item.IsPinned;
+            });
         }
 
         // ── Outgoing: watch local clipboard ──────────────────────────────────
@@ -359,6 +383,26 @@ namespace Deskdrop.Windows
             }
         }
 
+        public void PushText(string text)
+        {
+            if (_handle == IntPtr.Zero || string.IsNullOrEmpty(text)) return;
+            NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
+            try
+            {
+                NativeCore.deskdrop_push_text(_handle, text);
+                AddHistory(new HistoryItem
+                {
+                    Summary = text.Length > 80 ? text[..77] + "…" : text,
+                    FullText = text, Source = "local",
+                    Time = DateTime.Now, TypeIcon = "📋",
+                });
+            }
+            finally
+            {
+                NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS);
+            }
+        }
+
         public void PushFile(string path, string? targetDevice = null)
         {
             if (_handle == IntPtr.Zero || !File.Exists(path)) return;
@@ -366,8 +410,8 @@ namespace Deskdrop.Windows
             try
             {
                 var name = Path.GetFileName(path);
-                // Currently setting mimeType to application/octet-stream as default for fallback
-                NativeCore.deskdrop_send_file_path(_handle, targetDevice, path, name, "application/octet-stream");
+                var bytes = File.ReadAllBytes(path);
+                NativeCore.deskdrop_push_file(_handle, name, bytes, (UIntPtr)bytes.Length);
                 AddHistory(new HistoryItem
                 {
                     Summary = name, Source = "local",
@@ -441,6 +485,80 @@ namespace Deskdrop.Windows
                     break;
                 }
 
+                case NativeCore.PB_EVENT_CLIPBOARD_IMAGE:
+                {
+                    var path = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev));
+                    var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                    if (path != null)
+                    {
+                        AddHistory(new HistoryItem
+                        {
+                            Summary = $"Image from {from}", FullText = path, Source = from,
+                            Time = DateTime.Now, TypeIcon = "🖼️",
+                        });
+                        StatusChanged?.Invoke($"🖼️ Image received from {from}");
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                            NotificationHelper.ShowToast($"Image from {from}", "Saved to Downloads");
+                        });
+                    }
+                    break;
+                }
+
+                case NativeCore.PB_EVENT_CLIPBOARD_FILE:
+                {
+                    var path = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev));
+                    var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                    if (path != null)
+                    {
+                        var name = System.IO.Path.GetFileName(path);
+                        AddHistory(new HistoryItem
+                        {
+                            Summary = name, FullText = path, Source = from,
+                            Time = DateTime.Now, TypeIcon = "📎",
+                        });
+                        StatusChanged?.Invoke($"📎 File received from {from}");
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                            NotificationHelper.ShowToast($"File from {from}", $"Saved: {name}");
+                        });
+                    }
+                    break;
+                }
+
+                case NativeCore.PB_EVENT_FILE_TRANSFER_INCOMING:
+                {
+                    var tid = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_id(ev));
+                    var name = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "Unknown File";
+                    var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                    
+                    if (tid != null)
+                    {
+                        StatusChanged?.Invoke($"⬇️ Receiving {name} from {from}...");
+                        NativeCore.deskdrop_accept_file_transfer(_handle, tid);
+                    }
+                    break;
+                }
+
+                case NativeCore.PB_EVENT_FILE_TRANSFER_COMPLETE:
+                {
+                    var path = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_dest_path(ev));
+                    var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                    var name = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
+                    
+                    if (path != null)
+                    {
+                        AddHistory(new HistoryItem
+                        {
+                            Summary = name, FullText = path, Source = from,
+                            Time = DateTime.Now, TypeIcon = "📎",
+                        });
+                        StatusChanged?.Invoke($"✅ File transfer complete from {from}");
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                            NotificationHelper.ShowToast($"File from {from}", $"Saved: {name}");
+                        });
+                    }
+                    break;
+                }
+
                 case NativeCore.PB_EVENT_TOFU_PROMPT:
                 {
                     var name = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
@@ -480,8 +598,34 @@ namespace Deskdrop.Windows
                 case NativeCore.PB_EVENT_INCOMING_CALL:
                 {
                     var caller = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                    var deviceId = caller; // Pre-compiled DLL lacks deskdrop_event_device_id
+                    var deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? caller;
                     IncomingCallRequested?.Invoke(caller, deviceId);
+                    break;
+                }
+
+                case NativeCore.PB_EVENT_ACTIVITY_UPDATED:
+                {
+                    var json = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev));
+                    if (json != null)
+                    {
+                        try
+                        {
+                            var activity = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
+                            if (activity.TryGetProperty("kind", out var kindElem) && kindElem.GetString() == "remote_notification")
+                            {
+                                string title = activity.TryGetProperty("notification_title", out var t) ? t.GetString() ?? "Notification" : "Notification";
+                                string body = activity.TryGetProperty("notification_body", out var b) ? b.GetString() ?? "" : "";
+                                string appName = activity.TryGetProperty("app_name", out var a) ? a.GetString() ?? "" : "";
+                                
+                                string source = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Phone";
+                                
+                                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                                    NotificationHelper.ShowToast($"{appName} via {source}", $"{title}\n{body}");
+                                });
+                            }
+                        }
+                        catch { /* ignore invalid JSON */ }
+                    }
                     break;
                 }
             }
@@ -528,6 +672,15 @@ namespace Deskdrop.Windows
                 _history.Insert(0, item);
                 if (_history.Count > 100) _history.RemoveRange(100, _history.Count - 100);
             }
+            
+            System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                var storeHist = DeskdropStore.Shared.History;
+                var existing = storeHist.FirstOrDefault(x => x.FullText != null && x.FullText == item.FullText);
+                if (existing != null) storeHist.Remove(existing);
+                storeHist.Insert(0, item);
+                if (storeHist.Count > 100) storeHist.RemoveAt(100);
+            });
+
             HistoryItemAdded?.Invoke(item);
         }
 
@@ -565,6 +718,7 @@ namespace Deskdrop.Windows
         private readonly ToolStripMenuItem _syncToggleItem;
 
         private MainWindow?            _mainWindow;
+        private QuickAccessWindow?     _quickAccessWindow;
         private bool                   _syncEnabled  = true;
         private DateTime               _lastBalloonAt = DateTime.MinValue;
 
@@ -627,6 +781,68 @@ namespace Deskdrop.Windows
                 Visible          = true,
             };
             _tray.DoubleClick += (_, _) => OpenDashboard();
+            _tray.MouseClick += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    OpenQuickAccess();
+                }
+            };
+
+            // Register Global Hotkeys
+            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.V, () => {
+                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                    OpenQuickAccess();
+                });
+            });
+
+            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control, System.Windows.Input.Key.K, () => {
+                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                    OpenDashboard();
+                    if (_mainWindow != null)
+                    {
+                        // Open Command Palette
+                        _mainWindow.ToggleCommandPaletteGlobal();
+                    }
+                });
+            });
+
+            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.L, () => {
+                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                    System.Threading.Tasks.Task.Run(() => {
+                        var url = BrowserUrlFetcher.GetActiveBrowserUrl();
+                        if (!string.IsNullOrEmpty(url))
+                        {
+                            _mgr.PushText(url);
+                            System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                                NotificationHelper.ShowToast("Deskdrop", $"Pushed URL: {url}");
+                            });
+                        }
+                        else
+                        {
+                            System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                                NotificationHelper.ShowToast("Deskdrop", "Could not detect active browser URL.");
+                            });
+                        }
+                    });
+                });
+            });
+
+            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.D, () => {
+                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                    var dropZone = new DropZoneWindow(_mgr);
+                    dropZone.Show();
+                    dropZone.Activate();
+                });
+            });
+
+            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.C, () => {
+                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                    if (System.Windows.Forms.Clipboard.ContainsText() || System.Windows.Forms.Clipboard.ContainsImage() || System.Windows.Forms.Clipboard.ContainsFileDropList())
+                    {
+                        _mgr.PushLocalClipboard();
+                        NotificationHelper.ShowToast("Deskdrop", "Clipboard sent.");
+                    }
+                });
+            });
 
             _mgr.StatusChanged       += OnStatusChanged;
             _mgr.TofuPromptRequested += OnTofuPrompt;
@@ -635,7 +851,7 @@ namespace Deskdrop.Windows
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     string title = item.Source == "local" ? "Sent Clipboard" : $"Received from {item.Source}";
-                    _tray.ShowBalloonTip(2000, title, $"{item.TypeIcon} {item.Summary}", ToolTipIcon.Info);
+                    NotificationHelper.ShowToast(title, $"{item.TypeIcon} {item.Summary}");
                 });
             };
 
@@ -682,7 +898,7 @@ namespace Deskdrop.Windows
             _lastBalloonAt = DateTime.Now;
             string preview = text.Length > 60 ? text[..57] + "…" : text;
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                _tray.ShowBalloonTip(3000, $"📋 Clipboard from {from}", preview, ToolTipIcon.Info));
+                NotificationHelper.ShowToast($"📋 Clipboard from {from}", preview));
         }
 
         // ── TOFU ─────────────────────────────────────────────────────────────
@@ -709,7 +925,7 @@ namespace Deskdrop.Windows
                 {
                     _mgr.PushLocalClipboard();
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                        _tray.ShowBalloonTip(1500, "Deskdrop", "Clipboard sent.", ToolTipIcon.Info));
+                        NotificationHelper.ShowToast("Deskdrop", "Clipboard sent."));
                 }
             });
         }
@@ -723,10 +939,10 @@ namespace Deskdrop.Windows
                     try {
                         _mgr.PushFile(ofd.FileName);
                         System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                            _tray.ShowBalloonTip(1500, "Deskdrop", $"Sending {Path.GetFileName(ofd.FileName)}...", ToolTipIcon.Info));
+                            NotificationHelper.ShowToast("Deskdrop", $"Sending {Path.GetFileName(ofd.FileName)}..."));
                     } catch (Exception ex) {
                         System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                            _tray.ShowBalloonTip(3000, "Deskdrop", $"Failed to send file: {ex.Message}", ToolTipIcon.Error));
+                            NotificationHelper.ShowToast("Deskdrop Error", $"Failed to send file: {ex.Message}"));
                     }
                 });
             }
@@ -739,8 +955,8 @@ namespace Deskdrop.Windows
             using var k = Registry.CurrentUser.CreateSubKey(@"Software\Deskdrop");
             k.SetValue("SyncEnabled", _syncEnabled ? 1 : 0, RegistryValueKind.DWord);
             Task.Run(() => DaemonClient.Send(new { cmd = "save_settings", sync_enabled = _syncEnabled }));
-            _tray.ShowBalloonTip(1500, "Deskdrop",
-                _syncEnabled ? "Clipboard sync resumed." : "Clipboard sync paused.", ToolTipIcon.Info);
+            NotificationHelper.ShowToast("Deskdrop",
+                _syncEnabled ? "Clipboard sync resumed." : "Clipboard sync paused.");
         }
 
         private void OnManualConnect(object? s, EventArgs e)
@@ -754,13 +970,43 @@ namespace Deskdrop.Windows
         private void OnScanDevices(object? s, EventArgs e)
         {
             Task.Run(() => DaemonClient.Send(new { cmd = "rescan_peers" }));
-            _tray.ShowBalloonTip(1500, "Deskdrop", "Scanning for nearby devices…", ToolTipIcon.Info);
+            NotificationHelper.ShowToast("Deskdrop", "Scanning for nearby devices…");
+        }
+
+        // ── External Actions (from IPC) ─────────────────────────────────────────
+        
+        public void PushFileExternal(string filePath)
+        {
+            try {
+                _mgr.PushFile(filePath);
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    NotificationHelper.ShowToast("Deskdrop", $"Sending {Path.GetFileName(filePath)}..."));
+            } catch (Exception ex) {
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    NotificationHelper.ShowToast("Deskdrop Error", $"Failed to send file: {ex.Message}"));
+            }
+        }
+        
+        public void PushClipboardExternal()
+        {
+            OnSendClipboard(this, EventArgs.Empty);
+        }
+
+        public void OpenSendFileDialog()
+        {
+            OnSendFile(this, EventArgs.Empty);
         }
 
         // ── Dashboard panel ─────────────────────────────────────────────────────
 
         public void OpenDashboard()
         {
+            if (_quickAccessWindow != null)
+            {
+                _quickAccessWindow.Close();
+                _quickAccessWindow = null;
+            }
+
             if (_mainWindow != null && _mainWindow.IsLoaded)
             {
                 if (_mainWindow.Visibility != System.Windows.Visibility.Visible)
@@ -773,6 +1019,20 @@ namespace Deskdrop.Windows
 
             _mainWindow = new MainWindow(_mgr);
             _mainWindow.Show();
+        }
+
+        public void OpenQuickAccess()
+        {
+            if (_quickAccessWindow != null && _quickAccessWindow.IsLoaded)
+            {
+                _quickAccessWindow.Activate();
+                return;
+            }
+
+            _quickAccessWindow = new QuickAccessWindow(_mgr);
+            _quickAccessWindow.DashboardRequested += (s, e) => OpenDashboard();
+            _quickAccessWindow.Show();
+            _quickAccessWindow.Activate();
         }
 
         // ── Settings ──────────────────────────────────────────────────────────
@@ -868,12 +1128,34 @@ namespace Deskdrop.Windows
         [STAThread]
         static void Main(string[] args)
         {
-            // Single-instance guard.
             using var mutex = new Mutex(true, "Deskdrop_SingleInstance_v1", out bool isNew);
             if (!isNew)
             {
-                System.Windows.Forms.MessageBox.Show("Deskdrop is already running in the system tray.",
-                    "Already running", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (args.Length > 0)
+                {
+                    try
+                    {
+                        using var client = new NamedPipeClientStream(".", "DeskdropIPC", PipeDirection.Out);
+                        client.Connect(1000);
+                        using var writer = new StreamWriter(client);
+                        writer.WriteLine(string.Join("|", args));
+                        writer.Flush();
+                    }
+                    catch { }
+                }
+                else
+                {
+                    // No arguments, just bring dashboard to front
+                    try
+                    {
+                        using var client = new NamedPipeClientStream(".", "DeskdropIPC", PipeDirection.Out);
+                        client.Connect(1000);
+                        using var writer = new StreamWriter(client);
+                        writer.WriteLine("--open-dashboard");
+                        writer.Flush();
+                    }
+                    catch { }
+                }
                 return;
             }
 
@@ -892,20 +1174,123 @@ namespace Deskdrop.Windows
                 LogError(e.Exception);
                 e.Handled = true;
             };
+
+            // Setup Taskbar Jump Lists
+            var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrEmpty(exePath))
+            {
+                var jumpList = new System.Windows.Shell.JumpList();
+                
+                var sendFileTask = new System.Windows.Shell.JumpTask
+                {
+                    Title = "Send a File",
+                    Description = "Send a file to connected devices",
+                    ApplicationPath = exePath,
+                    Arguments = "--send-file-dialog",
+                    IconResourcePath = exePath,
+                    CustomCategory = "Quick Actions"
+                };
+
+                var syncClipboardTask = new System.Windows.Shell.JumpTask
+                {
+                    Title = "Sync Clipboard",
+                    Description = "Push current clipboard to devices",
+                    ApplicationPath = exePath,
+                    Arguments = "--sync-clipboard",
+                    IconResourcePath = exePath,
+                    CustomCategory = "Quick Actions"
+                };
+
+                var dashboardTask = new System.Windows.Shell.JumpTask
+                {
+                    Title = "Open Dashboard",
+                    Description = "View transfers and ecosystem",
+                    ApplicationPath = exePath,
+                    Arguments = "--open-dashboard",
+                    IconResourcePath = exePath,
+                    CustomCategory = "Quick Actions"
+                };
+
+                jumpList.JumpItems.Add(sendFileTask);
+                jumpList.JumpItems.Add(syncClipboardTask);
+                jumpList.JumpItems.Add(dashboardTask);
+                jumpList.ShowFrequentCategory = false;
+                jumpList.ShowRecentCategory = false;
+                System.Windows.Shell.JumpList.SetJumpList(wpfApp, jumpList);
+            }
             
             var trayApp = new TrayApp();
             
-            // Run WPF message loop instead of WinForms loop.
-            // NotifyIcon just needs any standard message loop to function,
-            // but WPF requires its own Application.Run() to properly render windows.
-            
-            bool hidden = args.Length > 0 && args[0] == "--hidden";
-            if (!hidden)
+            // Start Named Pipe Server for IPC
+            Task.Run(() => StartIpcServer(trayApp));
+
+            // Handle arguments for this first instance
+            if (args.Length > 0)
+            {
+                HandleCommandLine(args, trayApp);
+            }
+            else
             {
                 trayApp.OpenDashboard();
             }
             
             wpfApp.Run();
+        }
+
+        private static void HandleCommandLine(string[] args, TrayApp app)
+        {
+            if (args.Length >= 2 && args[0] == "--push-file")
+            {
+                var file = args[1];
+                if (File.Exists(file))
+                {
+                    Task.Run(() => {
+                        // We need access to the clipboard manager. We can expose it or a PushFile method on TrayApp.
+                        app.PushFileExternal(file);
+                    });
+                }
+            }
+            else if (args.Length >= 1 && args[0] == "--send-file-dialog")
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() => app.OpenSendFileDialog());
+            }
+            else if (args.Length >= 1 && args[0] == "--open-dashboard")
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() => app.OpenDashboard());
+            }
+            else if (args.Length >= 1 && args[0] == "--sync-clipboard")
+            {
+                Task.Run(() => app.PushClipboardExternal());
+            }
+            else if (args.Length >= 1 && args[0] == "--hidden")
+            {
+                // do nothing, just run in background
+            }
+        }
+
+        private static async Task StartIpcServer(TrayApp app)
+        {
+            while (true)
+            {
+                try
+                {
+                    using var server = new NamedPipeServerStream("DeskdropIPC", PipeDirection.In, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous);
+                    await server.WaitForConnectionAsync();
+                    
+                    using var reader = new StreamReader(server);
+                    var line = await reader.ReadLineAsync();
+                    if (!string.IsNullOrEmpty(line))
+                    {
+                        var parts = line.Split('|');
+                        HandleCommandLine(parts, app);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogError(ex);
+                    await Task.Delay(1000);
+                }
+            }
         }
 
         private static void LogError(Exception ex)

@@ -14,7 +14,6 @@ namespace Deskdrop.Windows
         private bool _isBroadcasting;
         private bool _hasCompletedOnboarding = false;
         private string _activeCallDeviceId = "";
-        private System.Windows.Threading.DispatcherTimer? _pollTimer;
 
         public MainWindow(ClipboardManager clipboardManager)
         {
@@ -22,8 +21,22 @@ namespace Deskdrop.Windows
             _clipboardManager = clipboardManager;
             _clipboardManager.HistoryItemAdded += OnHistoryItemAdded;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
-            LoadHomeView();
-            SetupPollTimer();
+            _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
+            LoadTransfersView();
+            
+            // Bind UI lists to the global store
+            if (ActiveTransfersList != null) ActiveTransfersList.ItemsSource = DeskdropStore.Shared.ActiveTransfers;
+            if (DevicesList != null) DevicesList.ItemsSource = DeskdropStore.Shared.Peers;
+            
+            DeskdropStore.Shared.PropertyChanged += (s, e) => {
+                if (e.PropertyName == nameof(DeskdropStore.IsDaemonRunning) || e.PropertyName == nameof(DeskdropStore.Peers))
+                {
+                    Dispatcher.Invoke(() => {
+                        UpdateOnboardingStatus(DeskdropStore.Shared.Peers.ToList());
+                        RefreshDiagnosticsStateUI();
+                    });
+                }
+            };
         }
 
         [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
@@ -68,7 +81,6 @@ namespace Deskdrop.Windows
 
         private void HideAllViews()
         {
-            if (HomeView != null) HomeView.Visibility = Visibility.Collapsed;
             if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
             if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
@@ -77,29 +89,12 @@ namespace Deskdrop.Windows
 
         private void OnQuickContextUpdated(string? text)
         {
-            Dispatcher.Invoke(() =>
-            {
-                if (string.IsNullOrEmpty(text))
-                {
-                    QuickContextStrip.Visibility = Visibility.Collapsed;
-                }
-                else
-                {
-                    TxtQuickContext.Text = text;
-                    QuickContextStrip.Visibility = Visibility.Visible;
-                }
-            });
+            // Logic moved to QuickAccessWindow
         }
 
         private void OnHistoryItemAdded(HistoryItem obj)
         {
-            Dispatcher.Invoke(() =>
-            {
-                if (HomeView != null && HomeView.Visibility == Visibility.Visible)
-                {
-                    TimelineList.ItemsSource = _clipboardManager.GetHistory();
-                }
-            });
+            // Logic handled by DeskdropStore binding
         }
 
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -146,6 +141,16 @@ namespace Deskdrop.Windows
                     e.Handled = true;
                 }
             }
+        }
+
+        public void ToggleCommandPaletteGlobal()
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                WindowState = WindowState.Normal;
+            }
+            Activate();
+            ToggleCommandPalette();
         }
 
         private void ToggleCommandPalette()
@@ -229,54 +234,7 @@ namespace Deskdrop.Windows
             ExecuteSelectedCommand();
         }
 
-        private void SetupPollTimer()
-        {
-            _pollTimer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            };
-            _pollTimer.Tick += (s, e) =>
-            {
-                if (Visibility == Visibility.Visible)
-                {
-                    System.Threading.Tasks.Task.Run(() =>
-                    {
-                        try
-                        {
-                            var state = DaemonClient.Status();
-                            if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
-                            {
-                                Dispatcher.Invoke(() =>
-                                {
-                                    if (TransfersView != null && TransfersView.Visibility == Visibility.Visible)
-                                    {
-                                        if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
-                                        {
-                                            var transfers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<FileTransferState>>(transfersElem.GetRawText());
-                                            ActiveTransfersList.ItemsSource = transfers;
-                                        }
-                                        else
-                                        {
-                                            ActiveTransfersList.ItemsSource = null;
-                                        }
-                                    }
-                                    if (DevicesView != null && DevicesView.Visibility == Visibility.Visible)
-                                    {
-                                        if (dataElem.TryGetProperty("peers", out var peersElem))
-                                        {
-                                            var peers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText());
-                                            DevicesList.ItemsSource = peers;
-                                        }
-                                    }
-                                });
-                            }
-                        }
-                        catch { }
-                    });
-                }
-            };
-            _pollTimer.Start();
-        }
+        // Polling timer removed. State is now managed by DeskdropStore.
 
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
         {
@@ -320,46 +278,20 @@ namespace Deskdrop.Windows
             HideAllViews();
             if (DiagnosticsView != null) AnimateView(DiagnosticsView);
             
-            RefreshDiagnosticsState();
+            RefreshDiagnosticsStateUI();
         }
 
-        private void RefreshDiagnosticsState()
+        private void RefreshDiagnosticsStateUI()
         {
-            System.Threading.Tasks.Task.Run(() =>
+            bool isRunning = DeskdropStore.Shared.IsDaemonRunning;
+            int peerCount = DeskdropStore.Shared.Peers.Count;
+
+            if (TxtDiagDaemonStatus != null)
             {
-                bool isRunning = DaemonClient.IsDaemonRunning();
-                int peerCount = 0;
-
-                if (isRunning)
-                {
-                    try
-                    {
-                        var state = DaemonClient.Status();
-                        if (state != null && state.RootElement.TryGetProperty("data", out var data) && data.TryGetProperty("peer_count", out var pc))
-                        {
-                            peerCount = pc.GetInt32();
-                        }
-                    }
-                    catch { /* ignore */ }
-                }
-
-                Dispatcher.Invoke(() =>
-                {
-                    if (TxtDiagDaemonStatus != null)
-                    {
-                        TxtDiagDaemonStatus.Text = isRunning ? "Running" : "Stopped";
-                        TxtDiagDaemonSuggestion.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
-                        BtnRestartConnection.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
-                    }
-
-                    // if (TxtDiagNetworkStatus != null)
-                    // {
-                    //     TxtDiagNetworkStatus.Text = peerCount > 0 ? $"Connected to {peerCount} peers" : "Looking for peers";
-                    //     TxtDiagNetworkSuggestion.Visibility = peerCount > 0 ? Visibility.Collapsed : Visibility.Visible;
-                    //     BtnScanAgain.Visibility = peerCount > 0 ? Visibility.Collapsed : Visibility.Visible;
-                    // }
-                });
-            });
+                TxtDiagDaemonStatus.Text = isRunning ? "Running" : "Stopped";
+                TxtDiagDaemonSuggestion.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
+                BtnRestartConnection.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
+            }
         }
 
         private void BtnRestartConnection_Click(object sender, RoutedEventArgs e)
@@ -371,50 +303,7 @@ namespace Deskdrop.Windows
         private void BtnScanAgain_Click(object sender, RoutedEventArgs e)
         {
             DaemonClient.Send(new { cmd = "rescan_peers" });
-            RefreshDiagnosticsState();
-        }
-
-        private void BtnPinItem_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is System.Windows.Controls.Button btn && btn.DataContext is HistoryItem item)
-            {
-                _clipboardManager.TogglePinHistory(item.Id);
-                TimelineList.ItemsSource = _clipboardManager.GetHistory();
-            }
-        }
-
-        private void BtnSendQuickContext_Click(object sender, RoutedEventArgs e)
-        {
-            if (!string.IsNullOrEmpty(_clipboardManager.QuickContextText))
-            {
-                System.Threading.Tasks.Task.Run(() =>
-                {
-                    DaemonClient.Send(new { cmd = "push_clipboard" });
-                });
-                
-                // Hide the strip after sending
-                QuickContextStrip.Visibility = Visibility.Collapsed;
-                ShowToast("Pushed to devices");
-            }
-        }
-
-        private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is System.Windows.Controls.Button btn && btn.DataContext is HistoryItem item)
-            {
-                _clipboardManager.DeleteHistory(item.Id);
-                TimelineList.ItemsSource = _clipboardManager.GetHistory();
-            }
-        }
-
-        private void BtnBack_Click(object sender, RoutedEventArgs e)
-        {
-            LoadHomeView();
-        }
-
-        private void NavHome_Click(object sender, RoutedEventArgs e)
-        {
-            LoadHomeView();
+            RefreshDiagnosticsStateUI();
         }
 
         public void ShowToast(string message, bool isError = false)
@@ -458,35 +347,10 @@ namespace Deskdrop.Windows
             // });
         }
 
-        private void LoadHomeView()
-        {
-            HideAllViews();
-            if (HomeView != null) AnimateView(HomeView);
-            
-            _hasCompletedOnboarding = TrayApp.LoadSettings().HasCompletedOnboarding;
-            UpdateOnboardingVisibility();
-            
-            if (TimelineList != null)
-                TimelineList.ItemsSource = _clipboardManager.GetHistory();
-                
-            if (!_hasCompletedOnboarding)
-            {
-                RefreshDevicesList();
-            }
-        }
 
         private void UpdateOnboardingVisibility()
         {
-            if (_hasCompletedOnboarding)
-            {
-                // if (OnboardingGrid != null) OnboardingGrid.Visibility = Visibility.Collapsed;
-                if (QuickActionsRibbon != null) QuickActionsRibbon.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                // if (OnboardingGrid != null) OnboardingGrid.Visibility = Visibility.Visible;
-                if (QuickActionsRibbon != null) QuickActionsRibbon.Visibility = Visibility.Collapsed;
-            }
+            // Removed Onboarding and QuickActionsRibbon during Dashboard redesign
         }
         
         private void BtnDismissOnboarding_Click(object sender, RoutedEventArgs e)
@@ -501,74 +365,36 @@ namespace Deskdrop.Windows
             HideAllViews();
             if (DevicesView != null) AnimateView(DevicesView);
             
-            RefreshDevicesList();
+            RefreshDevicesListUI();
         }
 
-        private void RefreshDevicesList()
+        private void RefreshDevicesListUI()
         {
-            System.Threading.Tasks.Task.Run(() =>
+            var peers = DeskdropStore.Shared.Peers.ToList();
+            var activeCall = DeskdropStore.Shared.ActiveCall;
+
+            Dispatcher.Invoke(() =>
             {
-                try
+                if (!_hasCompletedOnboarding && peers != null)
                 {
-                    var state = DaemonClient.Status();
-                    if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
-                    {
-                        System.Collections.Generic.List<PeerBatteryState>? batteries = null;
-                        if (dataElem.TryGetProperty("peer_batteries", out var batElem))
-                        {
-                            batteries = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerBatteryState>>(batElem.GetRawText());
-                        }
-
-                        ActiveCallState? activeCall = null;
-                        if (dataElem.TryGetProperty("active_call", out var callElem) && callElem.ValueKind != System.Text.Json.JsonValueKind.Null)
-                        {
-                            activeCall = System.Text.Json.JsonSerializer.Deserialize<ActiveCallState>(callElem.GetRawText());
-                        }
-
-                        if (dataElem.TryGetProperty("peers", out var peersElem))
-                        {
-                            var peers = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText());
-                            if (peers != null && batteries != null)
-                            {
-                                foreach (var peer in peers)
-                                {
-                                    var bat = batteries.Find(b => b.device_id == peer.device_id);
-                                    if (bat != null)
-                                    {
-                                        peer.BatteryLevel = bat.level;
-                                        peer.BatteryCharging = bat.charging;
-                                    }
-                                }
-                            }
-
-                            Dispatcher.Invoke(() =>
-                            {
-                                if (DevicesList != null) DevicesList.ItemsSource = peers;
-                                if (!_hasCompletedOnboarding && peers != null)
-                                {
-                                    UpdateOnboardingStatus(peers);
-                                }
-
-                                if (activeCall != null && activeCall.state == "incoming" && IncomingCallBanner != null)
-                                {
-                                    _activeCallDeviceId = activeCall.device_id;
-                                    TxtCallTitle.Text = string.IsNullOrEmpty(activeCall.contact_name) ? $"Incoming call from {activeCall.number}" : $"Incoming call from {activeCall.contact_name}";
-                                    if (string.IsNullOrEmpty(activeCall.number) && string.IsNullOrEmpty(activeCall.contact_name))
-                                    {
-                                        TxtCallTitle.Text = "Incoming Camera Stream";
-                                    }
-                                    TxtCallSubtitle.Text = $"Via {activeCall.device_name}";
-                                    IncomingCallBanner.Visibility = Visibility.Visible;
-                                }
-                                else if (IncomingCallBanner != null)
-                                {
-                                    IncomingCallBanner.Visibility = Visibility.Collapsed;
-                                }
-                            });
-                        }
-                    }
+                    UpdateOnboardingStatus(peers);
                 }
-                catch { /* ignored */ }
+
+                if (activeCall != null && activeCall.state == "incoming" && IncomingCallBanner != null)
+                {
+                    _activeCallDeviceId = activeCall.device_id;
+                    TxtCallTitle.Text = string.IsNullOrEmpty(activeCall.contact_name) ? $"Incoming call from {activeCall.number}" : $"Incoming call from {activeCall.contact_name}";
+                    if (string.IsNullOrEmpty(activeCall.number) && string.IsNullOrEmpty(activeCall.contact_name))
+                    {
+                        TxtCallTitle.Text = "Incoming Camera Stream";
+                    }
+                    TxtCallSubtitle.Text = $"Via {activeCall.device_name}";
+                    IncomingCallBanner.Visibility = Visibility.Visible;
+                }
+                else if (IncomingCallBanner != null)
+                {
+                    IncomingCallBanner.Visibility = Visibility.Collapsed;
+                }
             });
         }
 
@@ -611,7 +437,7 @@ namespace Deskdrop.Windows
                 System.Threading.Tasks.Task.Run(() =>
                 {
                     DaemonClient.Send(new { cmd = "disconnect_peer", device_id = deviceId });
-                    RefreshDevicesList();
+                    RefreshDevicesListUI();
                 });
             }
         }
@@ -791,6 +617,33 @@ namespace Deskdrop.Windows
             ShowToast("Settings saved");
         }
 
+        private void BtnInstallContextMenu_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (string.IsNullOrEmpty(exePath)) return;
+
+                // Add to HKEY_CLASSES_ROOT\*\shell\Deskdrop
+                using var key = Microsoft.Win32.Registry.ClassesRoot.CreateSubKey(@"*\shell\Deskdrop");
+                key.SetValue("", "Send via Deskdrop");
+                key.SetValue("Icon", $"\"{exePath}\",0");
+
+                using var commandKey = key.CreateSubKey("command");
+                commandKey.SetValue("", $"\"{exePath}\" --push-file \"%1\"");
+
+                ShowToast("Context menu installed successfully!");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                System.Windows.MessageBox.Show("Please run Deskdrop as Administrator to install the Context Menu.", "Permission Denied", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                ShowToast($"Failed to install context menu: {ex.Message}", true);
+            }
+        }
+
         private void BorderPushClipboard_Click(object sender, RoutedEventArgs e)
         {
             System.Threading.Tasks.Task.Run(() =>
@@ -961,7 +814,9 @@ namespace Deskdrop.Windows
 
         private void BtnShowQRCode_Click(object sender, RoutedEventArgs e)
         {
-            new QRCodeWindow(GetLocalIPAddress(), "000000").Show();
+            var qrWindow = new QRPairingWindow();
+            qrWindow.Owner = this;
+            qrWindow.ShowDialog();
         }
 
         private void BtnSendFile_Click(object sender, RoutedEventArgs e)

@@ -275,87 +275,7 @@
             <Grid Margin="0,64,0,0" AllowDrop="True" Drop="Grid_Drop" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave">
                 
                 <!-- HOME VIEW -->
-                <Grid x:Name="HomeView" Visibility="Visible" Margin="48,16,48,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    
-                    <StackPanel Margin="0,0,0,24" Grid.Row="0">
-                        <TextBlock Text="Recent Activity" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
-                        
-                        <!-- Quick Actions Ribbon -->
-                        <ScrollViewer x:Name="QuickActionsRibbon" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,24">
-                            <StackPanel Orientation="Horizontal">
-                                <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource BrandElectric}" Margin="0,0,12,0" Click="BorderPushClipboard_Click">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Sync Clipboard" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource BrandViolet}" Margin="0,0,12,0" Click="BorderSendFiles_Click">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Send Files" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceStrong}" Foreground="{StaticResource BrandCyan}" Margin="0,0,12,0" Click="BorderStreamCamera_Click">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Stream Camera" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </ScrollViewer>
-                        
-                        <!-- Quick Context Strip -->
-                        <Border x:Name="QuickContextStrip" Visibility="Collapsed" Background="#F0F8FF" CornerRadius="12" Padding="16" Margin="0,0,0,24">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="JUST COPIED" FontSize="11" FontWeight="Bold" Foreground="{StaticResource BrandElectric}" Margin="0,0,0,4"/>
-                                    <TextBlock x:Name="TxtQuickContext" Text="Clipboard text preview" Foreground="{StaticResource Ink}" FontSize="14" FontFamily="Consolas" MaxHeight="60" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="Send to All" Style="{StaticResource ModernButton}" Click="BtnSendQuickContext_Click" VerticalAlignment="Center" Margin="16,0,0,0"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                    
-                    <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
-                        <ItemsControl x:Name="TimelineList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="12">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            
-                                            <!-- Color Accent Line -->
-                                            <Border Width="3" CornerRadius="1.5" Background="{StaticResource BrandElectric}" Margin="0,0,12,0"/>
-                                            
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
-                                                <TextBlock Text="{Binding Summary}" Foreground="{StaticResource Ink}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding Source}" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
-                                            </StackPanel>
-                                            
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding RelativeTime}" Foreground="{StaticResource InkSubtle}" FontSize="11" FontWeight="Medium" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                                                <Button Content="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="14" Background="Transparent" Foreground="{Binding PinColor}" BorderThickness="0" Margin="0,0,8,0" Cursor="Hand" Click="BtnPinItem_Click" ToolTip="Pin to top"/>
-                                                <Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="14" Background="Transparent" Foreground="{StaticResource BrandRed}" BorderThickness="0" Cursor="Hand" Click="BtnDeleteItem_Click" ToolTip="Delete"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Grid>
+                <!-- HOME VIEW MOVED TO QUICK ACCESS WINDOW -->
 
                 <!-- TRANSFERS VIEW -->
                 <Grid x:Name="TransfersView" Visibility="Collapsed" Margin="48,16,48,0">
@@ -563,6 +483,20 @@
                                     <CheckBox x:Name="ChkShowNotifications" Content="Show desktop notifications"/>
                                 </StackPanel>
                             </Border>
+
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="File Explorer Integration" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                                        <TextBlock Text="Adds 'Send via Deskdrop' to the right-click menu for all files." Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Install" Style="{StaticResource ModernButton}" Click="BtnInstallContextMenu_Click" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
                             
                             <Button Content="Save Settings" Style="{StaticResource ModernButton}" HorizontalAlignment="Right" Padding="24,8" Click="BtnSaveSettings_Click"/>
                         </StackPanel>
@@ -659,7 +593,6 @@
                 </Border.Effect>
                 <StackPanel Orientation="Horizontal">
                     <RadioButton x:Name="NavBtnDevices" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE975;" Content="Ecosystem" Click="NavDevices_Click"/>
-                    <RadioButton x:Name="NavBtnHome" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE81C;" Content="Timeline" IsChecked="True" Click="NavHome_Click"/>
                     <RadioButton x:Name="NavBtnTransfers" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE8D5;" Content="Transfers" Click="NavTransfers_Click"/>
                 </StackPanel>
             </Border>
