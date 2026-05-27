@@ -326,12 +326,35 @@ fn linux_netlink_change_hints(tx: mpsc::Sender<()>) -> Result<()> {
             return Err(std::io::Error::last_os_error()).context("binding netlink socket");
         }
 
+        let timeout = libc::timeval {
+            tv_sec: 1,
+            tv_usec: 0,
+        };
+        let setopt_rc = unsafe {
+            libc::setsockopt(
+                fd,
+                libc::SOL_SOCKET,
+                libc::SO_RCVTIMEO,
+                &timeout as *const _ as *const libc::c_void,
+                mem::size_of::<libc::timeval>() as libc::socklen_t,
+            )
+        };
+        if setopt_rc < 0 {
+            return Err(std::io::Error::last_os_error()).context("setting SO_RCVTIMEO");
+        }
+
         let mut buf = [0u8; 4096];
         loop {
+            if tx.is_closed() {
+                break;
+            }
             let recv_len = unsafe { libc::recv(fd, buf.as_mut_ptr() as *mut _, buf.len(), 0) };
             if recv_len < 0 {
-                return Err(std::io::Error::last_os_error())
-                    .context("reading netlink change event");
+                let err = std::io::Error::last_os_error();
+                if err.kind() == std::io::ErrorKind::WouldBlock || err.raw_os_error() == Some(libc::EAGAIN) || err.raw_os_error() == Some(libc::EWOULDBLOCK) {
+                    continue;
+                }
+                return Err(err).context("reading netlink change event");
             }
             if recv_len == 0 {
                 continue;

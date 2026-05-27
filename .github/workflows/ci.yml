@@ -126,7 +126,7 @@ jobs:
 
       - name: Build for ${{ matrix.target }}
         run: |
-          cargo ndk -p 26 -t ${{ matrix.target }} build --lib --release -p deskdrop-core
+          cargo ndk -t ${{ matrix.target }} build --lib --release -p deskdrop-core
         env:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
 
@@ -171,7 +171,7 @@ jobs:
                     platforms\windows\Deskdrop.Windows\deskdrop_core.dll `
                     -ErrorAction SilentlyContinue
           dotnet build platforms\windows\Deskdrop.Windows\Deskdrop.Windows.csproj `
-            -c Release --no-restore
+            -c Release
 
   # ── Security audit ────────────────────────────────────────────────────────
   audit:

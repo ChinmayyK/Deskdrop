@@ -201,7 +201,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushFile(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushVideoFrame(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     handle: jlong,
     data: jbyteArray,
@@ -348,7 +348,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -398,7 +398,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventBinaryData(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -427,7 +427,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -462,7 +462,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventMimeType(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -486,7 +486,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventMimeType(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFileName(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -510,7 +510,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFileName(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFingerprint(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -582,7 +582,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventActivityId(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferId(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -620,7 +620,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferId(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferFileName(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -746,7 +746,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferTotalBytes(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferDestPath(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
@@ -1219,7 +1219,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_applySyncSettings(
 /// Returns null (0) if the handle is invalid.
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_getDeviceId(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     handle: jlong,
 ) -> jstring {
@@ -1236,7 +1236,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_getDeviceId(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_peersJson(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     handle: jlong,
 ) -> jstring {
@@ -1285,7 +1285,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushCallState(
 
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventCallState(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     event: jlong,
 ) -> jstring {
