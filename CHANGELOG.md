@@ -8,6 +8,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (v4)
+- **Android:** Added "Finish Onboarding" re-entry flow to empty dashboard.
+- **Android:** Added OEM-specific battery restriction diagnostics (Xiaomi, Samsung) to help prevent background service termination.
+- **macOS:** Implemented `ProcessInfo.beginActivity` to prevent App Nap from throttling the background daemon.
+- **Windows:** Implemented `SetThreadExecutionState` to prevent Modern Standby sleep during active file transfers.
+- **Core:** Received files are now saved directly to the root `Downloads` directory across all platforms.
+
 ### Added (v3)
 - `ClipboardContent::is_empty()` — single guard method, eliminating per-call-site duplication (#16)
 - `CompressionStats: Display` — consistent log format, usable in IPC responses (#12)

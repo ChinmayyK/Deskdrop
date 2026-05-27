@@ -135,6 +135,10 @@ namespace Deskdrop.Windows
         public event Action<string,string>? TofuPromptRequested;    // (name, fingerprint)
         public event Action<string,string>? ClipboardReceived;      // (text, fromDevice)
         public event Action<HistoryItem>?  HistoryItemAdded;
+        public event Action<string?>?      QuickContextUpdated;     // (text or null)
+
+        private string? _quickContextText;
+        public string? QuickContextText => _quickContextText;
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -221,12 +225,17 @@ namespace Deskdrop.Windows
         private void PushLocalClipboard()
         {
             if (_handle == IntPtr.Zero) return;
+            NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
             try
             {
                 if (Clipboard.ContainsText())
                 {
                     var text = Clipboard.GetText();
                     if (string.IsNullOrEmpty(text)) return;
+                    
+                    _quickContextText = text;
+                    QuickContextUpdated?.Invoke(text);
+                    
                     NativeCore.deskdrop_push_text(_handle, text);
                     AddHistory(new HistoryItem
                     {
@@ -267,25 +276,45 @@ namespace Deskdrop.Windows
                 }
             }
             catch { /* clipboard is inherently racy on Windows */ }
+            finally
+            {
+                NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS);
+            }
         }
 
         public void PushFile(string path)
         {
             if (_handle == IntPtr.Zero || !File.Exists(path)) return;
-            var bytes = File.ReadAllBytes(path);
-            var name  = Path.GetFileName(path);
-            NativeCore.deskdrop_push_file(_handle, name, bytes, (UIntPtr)bytes.Length);
-            AddHistory(new HistoryItem
+            NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
+            try
             {
-                Summary = name, Source = "local",
-                Time = DateTime.Now, TypeIcon = "📎",
-            });
+                var bytes = File.ReadAllBytes(path);
+                var name  = Path.GetFileName(path);
+                NativeCore.deskdrop_push_file(_handle, name, bytes, (UIntPtr)bytes.Length);
+                AddHistory(new HistoryItem
+                {
+                    Summary = name, Source = "local",
+                    Time = DateTime.Now, TypeIcon = "📎",
+                });
+            }
+            finally
+            {
+                NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS);
+            }
         }
 
         public void PushCameraFrame(byte[] jpegBytes)
         {
             if (_handle == IntPtr.Zero) return;
-            NativeCore.deskdrop_push_camera_frame(_handle, jpegBytes, (UIntPtr)jpegBytes.Length);
+            NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
+            try
+            {
+                NativeCore.deskdrop_push_camera_frame(_handle, jpegBytes, (UIntPtr)jpegBytes.Length);
+            }
+            finally
+            {
+                NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS);
+            }
         }
 
         // ── Incoming: drain Rust event queue ─────────────────────────────────
@@ -375,6 +404,7 @@ namespace Deskdrop.Windows
 
         private void ApplyText(string text, string fromDevice)
         {
+            NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
             // Suppress watcher: we're writing to the clipboard ourselves.
             Interlocked.Increment(ref _suppressCount);
             var thread = new Thread(() =>
@@ -394,6 +424,7 @@ namespace Deskdrop.Windows
                 Time = DateTime.Now, TypeIcon = "📋",
             });
             StatusChanged?.Invoke($"📋 Clipboard from {fromDevice}");
+            NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS);
         }
 
         private void AddHistory(HistoryItem item)
@@ -694,6 +725,12 @@ namespace Deskdrop.Windows
     {
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool DestroyIcon(IntPtr hIcon);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern uint SetThreadExecutionState(uint esFlags);
+
+        public const uint ES_CONTINUOUS = 0x80000000;
+        public const uint ES_SYSTEM_REQUIRED = 0x00000001;
     }
 
     // ── Entry point ───────────────────────────────────────────────────────────

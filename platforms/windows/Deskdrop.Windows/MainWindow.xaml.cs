@@ -18,7 +18,24 @@ namespace Deskdrop.Windows
             InitializeComponent();
             _clipboardManager = clipboardManager;
             _clipboardManager.HistoryItemAdded += OnHistoryItemAdded;
+            _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             LoadHomeView();
+        }
+
+        private void OnQuickContextUpdated(string? text)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (string.IsNullOrEmpty(text))
+                {
+                    QuickContextStrip.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    TxtQuickContext.Text = text;
+                    QuickContextStrip.Visibility = Visibility.Visible;
+                }
+            });
         }
 
         private void OnHistoryItemAdded(HistoryItem obj)
@@ -140,6 +157,21 @@ namespace Deskdrop.Windows
             {
                 _clipboardManager.TogglePinHistory(item.Id);
                 TimelineList.ItemsSource = _clipboardManager.GetHistory();
+            }
+        }
+
+        private void BtnSendQuickContext_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_clipboardManager.QuickContextText))
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    DaemonClient.PushClipboard();
+                });
+                
+                // Hide the strip after sending
+                QuickContextStrip.Visibility = Visibility.Collapsed;
+                ShowNotification("Quick Context sent.");
             }
         }
 

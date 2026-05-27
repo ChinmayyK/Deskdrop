@@ -34,10 +34,12 @@ fun OnboardingScreen(
     onComplete: () -> Unit
 ) {
     var selectedPeerId by remember { mutableStateOf<String?>(null) }
+    var forceCompletion by remember { mutableStateOf(false) }
     val sessionStartTimeSecs = remember { System.currentTimeMillis() / 1000 }
     val selectedPeer = peers.find { it.id == selectedPeerId }
 
     val currentStep = when {
+        forceCompletion -> 3
         selectedPeer == null -> 0
         !selectedPeer.trusted -> 1
         selectedPeer.lastSyncSecs != null && selectedPeer.lastSyncSecs > sessionStartTimeSecs -> 3
@@ -76,6 +78,7 @@ fun OnboardingScreen(
                         1 -> StepTwoPairing(isDark, selectedPeer)
                         2 -> StepThreeSendSample(isDark, selectedPeer, onSend = {
                             if (it != null) onSendSampleText(it)
+                            forceCompletion = true
                         })
                         3 -> StepFourCompletion(isDark)
                     }

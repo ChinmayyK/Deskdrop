@@ -280,6 +280,7 @@ class DeskdropService : Service() {
 
         // Flow to expose active transfers to UI
         val activeTransfersFlow = kotlinx.coroutines.flow.MutableStateFlow<List<TransferProgress>>(emptyList())
+        val quickSendContextFlow = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
         // Notification channels
         private const val CHAN_SERVICE = "cr_service"   // IMPORTANCE_MIN — silent persistent
@@ -503,6 +504,8 @@ class DeskdropService : Service() {
                             ))
                             broadcastActivityUpdated()
                         }
+                        // Hide quick context once sent
+                        quickSendContextFlow.value = null
                     } else {
                         Log.w(TAG, "PUSH_CLIPBOARD: clipboard is empty")
                     }

@@ -112,6 +112,38 @@ class DiagnosticsActivity : ComponentActivity() {
                                 finish()
                             }
                         )
+                        
+                        val manufacturer = android.os.Build.MANUFACTURER.lowercase()
+                        val isAggressiveOem = manufacturer in listOf("xiaomi", "samsung", "oppo", "vivo", "oneplus", "huawei")
+                        
+                        if (isAggressiveOem) {
+                            DiagnosticItem(
+                                isDark = isDark,
+                                icon = Icons.Default.Bolt,
+                                title = "OEM Battery Restrictions",
+                                status = "${manufacturer.replaceFirstChar { it.uppercase() }} may kill background sync",
+                                isOk = false,
+                                suggestion = "Manually enable 'AutoStart' or remove background restrictions in system settings.",
+                                actionLabel = "Open Settings",
+                                onAction = {
+                                    try {
+                                        val intent = android.content.Intent()
+                                        when (manufacturer) {
+                                            "xiaomi" -> intent.component = android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")
+                                            "samsung" -> intent.component = android.content.ComponentName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity")
+                                            else -> intent.action = android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                                        }
+                                        startActivity(intent)
+                                    } catch (e: Exception) {
+                                        try {
+                                            startActivity(android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                        } catch (e2: Exception) {
+                                            startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS))
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }

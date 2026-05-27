@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var daemonProcess: Process?
     private var dropCanvasWindow: NSPanel?
     private var dropZoneController: NSWindowController?
+    private var activityToken: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ensureSingleRunningInstance() else { return }
@@ -49,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         store.start()
+        
+        // Prevent App Nap to ensure background daemon and network sync stay responsive
+        activityToken = ProcessInfo.processInfo.beginActivity(options: [.userInitiated], reason: "Deskdrop Background Sync")
 
         // Initialize Drop Zone feature
         GlobalDragMonitor.shared.startMonitoring()
@@ -84,6 +88,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let token = activityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            activityToken = nil
+        }
         store.stop()
         daemonProcess?.terminate()
     }

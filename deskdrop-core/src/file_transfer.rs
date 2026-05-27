@@ -760,7 +760,6 @@ fn now_unix() -> u64 {
 pub fn default_save_dir() -> PathBuf {
     dirs::download_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
-        .join("Deskdrop")
 }
 
 fn chunk_count(size_bytes: u64) -> Result<u32> {

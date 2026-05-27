@@ -75,6 +75,9 @@ dependencies {
     // Google Play Services Code Scanner (no camera permission required)
     implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
 
+    // ZXing for QR Code Generation
+    implementation 'com.google.zxing:core:3.5.3'
+
     // Lifecycle (needed for LifecycleService if used in future)
     implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'

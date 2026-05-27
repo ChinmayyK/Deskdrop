@@ -44,6 +44,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.asImageBitmap
+import com.deskdrop.DeskdropService
+import com.deskdrop.ui.getLocalIpAddress
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -100,7 +105,8 @@ fun MainScreen(
     onOpenSettings: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit = {},
-    onResendActivity: (ActivityEntry) -> Unit = {}
+    onResendActivity: (ActivityEntry) -> Unit = {},
+    onReplayOnboarding: () -> Unit = {}
 ) {
     var currentTab by remember { mutableStateOf(AppTab.Home) }
     val hasConnectedDevices = peers.any { it.isConnected }
@@ -136,6 +142,10 @@ fun MainScreen(
                                 feed = feed,
                                 activeTransfers = activeTransfers,
                                 onActionPushClipboard = onActionPushClipboard,
+                                onActionSendQuickContext = {
+                                    onActionPushClipboard()
+                                },
+                                quickContextText = DeskdropService.quickSendContextFlow.collectAsState().value,
                                 onActionPairMagicLink = onActionPairMagicLink,
                                 onActionSendFiles = onActionSendFiles,
                                 onActionStreamCamera = onActionStreamCamera,
@@ -146,6 +156,7 @@ fun MainScreen(
                                 onForgetPeer = onForgetPeer,
                                 onDeleteActivity = onDeleteActivity,
                                 onResendActivity = onResendActivity,
+                                onReplayOnboarding = onReplayOnboarding,
                                 onTabSelected = { currentTab = it }
                             )
                             AppTab.Activity -> ActivityTab(
@@ -292,6 +303,8 @@ fun HomeTab(
     feed: List<ActivityEntry>,
     activeTransfers: List<TransferProgress>,
     onActionPushClipboard: () -> Unit,
+    onActionSendQuickContext: () -> Unit,
+    quickContextText: String?,
     onActionPairMagicLink: () -> Unit,
     onActionSendFiles: (String?) -> Unit,
     onActionStreamCamera: () -> Unit,
@@ -302,6 +315,7 @@ fun HomeTab(
     onForgetPeer: (PeerSnapshot) -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit,
     onResendActivity: (ActivityEntry) -> Unit,
+    onReplayOnboarding: () -> Unit,
     onTabSelected: (AppTab) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -335,7 +349,7 @@ fun HomeTab(
         }
 
         if (peers.isEmpty()) {
-            EmptyStateEcosystem(isDark = isDark, onPair = onActionPairMagicLink)
+            EmptyStateEcosystem(isDark = isDark, onReplayOnboarding = onReplayOnboarding)
         } else {
             Row(
                 modifier = Modifier
@@ -349,24 +363,103 @@ fun HomeTab(
                     style = CRTypography.h2,
                     color = CRTheme.textHigh(isDark)
                 )
-                // Inline Add Action
-                Row(
-                    modifier = Modifier
-                        .crPressScale(0.95f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onActionPairMagicLink() }
-                        .background(CRTheme.blueSoft.copy(alpha = 0.15f))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add", style = CRTypography.caption, color = CRTheme.blueSoft)
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    var showQrDialog by remember { mutableStateOf(false) }
+
+                    // Show QR Code Action
+                    Row(
+                        modifier = Modifier
+                            .crPressScale(0.95f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showQrDialog = true }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.QrCode, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Show QR", style = CRTypography.caption, color = CRTheme.blueSoft)
+                    }
+
+                    if (showQrDialog) {
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { showQrDialog = false },
+                            title = { Text("Scan to Pair") },
+                            text = {
+                                Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
+                                    val ip = getLocalIpAddress()
+                                    val uri = "deskdrop://$ip:47823"
+                                    val bitmap = remember(uri) {
+                                        try {
+                                            val writer = com.google.zxing.qrcode.QRCodeWriter()
+                                            val bitMatrix = writer.encode(uri, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512)
+                                            val width = bitMatrix.width
+                                            val height = bitMatrix.height
+                                            val bmp = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.RGB_565)
+                                            for (x in 0 until width) {
+                                                for (y in 0 until height) {
+                                                    bmp.setPixel(x, y, if (bitMatrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                                                }
+                                            }
+                                            bmp
+                                        } catch (e: Exception) { null }
+                                    }
+                                    if (bitmap != null) {
+                                        androidx.compose.foundation.Image(
+                                            bitmap = bitmap.asImageBitmap(),
+                                            contentDescription = "QR Code",
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Text("Failed to generate QR Code")
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showQrDialog = false }) { Text("Close") }
+                            }
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Inline Add Action
+                    Row(
+                        modifier = Modifier
+                            .crPressScale(0.95f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onActionPairMagicLink() }
+                            .background(CRTheme.blueSoft.copy(alpha = 0.15f))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add", style = CRTypography.caption, color = CRTheme.blueSoft)
+                    }
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(12.dp)) // Related gap
-            
+
+            if (!quickContextText.isNullOrBlank()) {
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = CRTheme.surfaceElevated(isDark))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("JUST COPIED", style = CRTypography.caption, color = CRTheme.blueSoft)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(quickContextText, maxLines = 2, overflow = TextOverflow.Ellipsis, color = CRTheme.textHigh(isDark))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.material3.Button(onClick = onActionSendQuickContext, modifier = Modifier.fillMaxWidth()) {
+                            Text("Send to Ecosystem")
+                        }
+                    }
+                }
+            }
+
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -421,7 +514,7 @@ fun HomeTab(
 }
 
 @Composable
-fun EmptyStateEcosystem(isDark: Boolean, onPair: () -> Unit) {
+fun EmptyStateEcosystem(isDark: Boolean, onReplayOnboarding: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     Column(
         modifier = Modifier
@@ -429,7 +522,7 @@ fun EmptyStateEcosystem(isDark: Boolean, onPair: () -> Unit) {
             .padding(horizontal = 24.dp)
             .crGlassCard(isDark = isDark, cornerRadius = 24.dp, dashed = true, onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onPair()
+                onReplayOnboarding()
             })
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -443,13 +536,13 @@ fun EmptyStateEcosystem(isDark: Boolean, onPair: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "No devices connected",
+            text = "Finish Onboarding",
             style = CRTypography.label,
             color = CRTheme.textHigh(isDark)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Tap to pair a new device to your ecosystem.",
+            text = "Tap to pair your first device and complete setup.",
             style = CRTypography.caption,
             color = CRTheme.textMedium(isDark)
         )

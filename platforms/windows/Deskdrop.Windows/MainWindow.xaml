@@ -338,6 +338,17 @@
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
+                                <!-- Quick Context Strip -->
+                                <Border x:Name="QuickContextStrip" Visibility="Collapsed" Background="#112233" CornerRadius="12" BorderBrush="#114466" BorderThickness="1" Padding="20" Margin="0,0,0,32">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                            <TextBlock Text="JUST COPIED" FontSize="12" FontWeight="Bold" Foreground="#32ADE6" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="TxtQuickContext" Text="Clipboard text preview" Foreground="{StaticResource Ink}" FontSize="14" FontFamily="Consolas" MaxHeight="60" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,16"/>
+                                        <Button Content="Send to All Devices" Style="{StaticResource ModernButton}" Click="BtnSendQuickContext_Click"/>
+                                    </StackPanel>
+                                </Border>
+
                             </Grid>
                             
                             <TextBlock Text="Activity" FontSize="32" FontWeight="Bold" Foreground="{StaticResource Ink}"/>

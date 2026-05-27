@@ -86,6 +86,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            val cm = getSystemService(android.content.ClipboardManager::class.java)
+            val clip = cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()
+            if (!clip.isNullOrBlank()) {
+                DeskdropService.quickSendContextFlow.value = clip
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
@@ -285,6 +296,10 @@ class MainActivity : ComponentActivity() {
                     },
                     onOpenDiagnostics = {
                         startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java))
+                    },
+                    onReplayOnboarding = {
+                        getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putBoolean("has_completed_onboarding", false).apply()
+                        hasCompletedOnboarding.value = false
                     }
                 )
                 }
