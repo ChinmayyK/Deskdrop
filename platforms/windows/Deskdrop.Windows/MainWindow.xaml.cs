@@ -153,7 +153,7 @@ namespace Deskdrop.Windows
 
         private void BtnPinItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is HistoryItem item)
+            if (sender is System.Windows.Controls.Button btn && btn.DataContext is HistoryItem item)
             {
                 _clipboardManager.TogglePinHistory(item.Id);
                 TimelineList.ItemsSource = _clipboardManager.GetHistory();
@@ -171,13 +171,13 @@ namespace Deskdrop.Windows
                 
                 // Hide the strip after sending
                 QuickContextStrip.Visibility = Visibility.Collapsed;
-                ShowNotification("Quick Context sent.");
+                ShowToast("Quick Context sent.");
             }
         }
 
         private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is HistoryItem item)
+            if (sender is System.Windows.Controls.Button btn && btn.DataContext is HistoryItem item)
             {
                 _clipboardManager.DeleteHistory(item.Id);
                 TimelineList.ItemsSource = _clipboardManager.GetHistory();
