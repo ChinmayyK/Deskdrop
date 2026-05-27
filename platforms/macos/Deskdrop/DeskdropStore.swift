@@ -122,7 +122,9 @@ final class DeskdropStore: ObservableObject {
     
     func enableAutoApply() {
         if !clipboardPolicy.autoApply {
-            toggleSync()
+            Task {
+                await setAutoApplyClipboard(enabled: true)
+            }
         }
     }
 
@@ -623,6 +625,17 @@ final class DeskdropStore: ObservableObject {
             try? await ipc.sendClipboardCurrent(targetDeviceId: device?.id)
             let target = device?.name ?? "all devices"
             showToast(title: "Sent", body: "Clipboard sent to \(target)", tint: CRTheme.accentBlue)
+        }
+    }
+
+    func sendPushText(_ text: String, to device: ManagedDevice?) {
+        if let device = device {
+            lastUsedDeviceId = device.id
+        }
+        Task {
+            try? await ipc.sendPushText(text, targetDeviceId: device?.id)
+            let target = device?.name ?? "all devices"
+            showToast(title: "Sent", body: "Text sent to \(target)", tint: CRTheme.accentBlue)
         }
     }
 

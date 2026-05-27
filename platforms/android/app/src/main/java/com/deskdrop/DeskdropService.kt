@@ -481,7 +481,8 @@ class DeskdropService : Service() {
                         return START_STICKY
                     }
                     val cm   = getSystemService(ClipboardManager::class.java)
-                    val text = cm.primaryClip?.getItemAt(0)
+                    val explicitText = intent.getStringExtra(EXTRA_CLIPBOARD_TEXT)
+                    val text = explicitText ?: cm.primaryClip?.getItemAt(0)
                         ?.coerceToText(this)?.toString()
                     if (!text.isNullOrBlank()) {
                         val result = DeskdropJni.pushText(h, text)
@@ -2647,44 +2648,7 @@ class DeskdropService : Service() {
     // Only fired for: trust request, file received, critical failure.
     // NEVER fired for: clipboard text/image sync.
 
-    private fun showPairingPrompt(deviceId: String, deviceName: String, fingerprint: String) {
-        val pairingIntent = Intent(this, PairingActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
-            putExtra(PairingActivity.EXTRA_DEVICE_NAME, deviceName)
-            putExtra(PairingActivity.EXTRA_FINGERPRINT, fingerprint)
-            putExtra(PairingActivity.EXTRA_PIN, pairingPin(fingerprint))
-        }
-        val launchPi = PendingIntent.getActivity(
-            this, deviceId.hashCode(),
-            pairingIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
 
-        runCatching { startActivity(pairingIntent) }
-
-        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
-            .setContentTitle("$deviceName wants to connect")
-            .setContentText("Fingerprint: ${fingerprint.take(23)}…")
-            .setStyle(NotificationCompat.BigTextStyle()
-                .bigText("Tap to trust or deny this device.\n\nFingerprint: $fingerprint"))
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setAutoCancel(true)
-            .setContentIntent(launchPi)
-            .build()
-
-        getSystemService(NotificationManager::class.java).notify(NOTIF_ID_TOFU, notif)
-    }
-
-    private fun pairingPin(fingerprint: String): String {
-        val digits = fingerprint
-            .filter { it.isDigit() }
-            .take(6)
-            .padEnd(6, '0')
-        return digits.ifBlank { "000000" }
-    }
 
     private fun showFileReceivedNotification(fromDevice: String, fileName: String, uri: Uri?) {
         val openPi = uri?.let {

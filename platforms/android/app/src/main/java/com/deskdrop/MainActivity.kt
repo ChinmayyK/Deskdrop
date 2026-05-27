@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
                             peers = peers.value,
                             onConnectPeer = { peer ->
                                 val ip = peer.ip ?: return@OnboardingScreen
-                                val port = 8244 // Default port
+                                val port = 47823 // Default port
                                 ContextCompat.startForegroundService(this@MainActivity,
                                     Intent(this@MainActivity, DeskdropService::class.java).apply {
                                         action = DeskdropService.ACTION_CONNECT_MANUAL
@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onSendSampleText = { peer ->
                                 val svc = Intent(this@MainActivity, DeskdropService::class.java).apply {
-                                    action = DeskdropService.ACTION_APPLY_CLIPBOARD
+                                    action = DeskdropService.ACTION_PUSH_CLIPBOARD
                                     putExtra(DeskdropService.EXTRA_CLIPBOARD_TEXT, "Hello from Android")
                                 }
                                 ContextCompat.startForegroundService(this@MainActivity, svc)
@@ -471,14 +471,7 @@ class MainActivity : ComponentActivity() {
                         putExtra("port", port)
                     }
                 )
-                if (fingerprint.isNotBlank()) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        autoTrustNewPeer(ip, peerName)
-                    }, 2000)
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        autoTrustNewPeer(ip, peerName)
-                    }, 4000)
-                }
+
                 showSnack("Connecting to $peerName ($ip)...")
                 return true
             }
@@ -501,21 +494,7 @@ class MainActivity : ComponentActivity() {
         return false
     }
 
-    private fun autoTrustNewPeer(ip: String, peerName: String) {
-        val prefs = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
-        val peers = prefs.peerSnapshots()
-        val untrustedConnected = peers.firstOrNull { it.isConnected && !it.trusted }
-        if (untrustedConnected != null) {
-            ContextCompat.startForegroundService(this,
-                Intent(this, DeskdropService::class.java).apply {
-                    action = DeskdropService.ACTION_TRUST_PEER
-                    putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, untrustedConnected.id)
-                }
-            )
-            showSnack("Paired with $peerName — syncing!")
-            refreshDashboardState()
-        }
-    }
+
 }
 
 @Composable

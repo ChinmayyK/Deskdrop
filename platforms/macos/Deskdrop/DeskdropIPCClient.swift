@@ -353,6 +353,16 @@ extension DeskdropIPCClient {
         _ = try await send(cmd: cmd)
     }
 
+    /// Push arbitrary text to connected peers without reading the OS clipboard.
+    func sendPushText(_ text: String, targetDeviceId: String?) async throws {
+        var cmd: [String: Any] = ["cmd": "push_text", "text": text]
+        if let id = targetDeviceId {
+            cmd["cmd"] = "push_text_to"
+            cmd["target"] = id
+        }
+        _ = try await send(cmd: cmd)
+    }
+
     /// Persist settings changes to the daemon — partial patch, only set fields are applied.
     func saveSettings(_ snapshot: DeskdropSettingsSnapshot) async throws {
         let cmd: [String: Any] = [

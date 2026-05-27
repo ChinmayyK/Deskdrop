@@ -78,7 +78,12 @@ struct OnboardingView: View {
                 
                 // Footer Navigation
                 HStack {
-                    if currentStep > 0 {
+                    if currentStep == 0 {
+                        Button("Skip for now") {
+                            onComplete()
+                        }
+                        .buttonStyle(CRSecondaryButtonStyle())
+                    } else if currentStep > 0 {
                         Button("Cancel") {
                             withAnimation(.crSpring) { selectedPeerId = nil }
                         }
@@ -208,8 +213,7 @@ private struct StepThreeSendSample: View {
             
             Button("Send 'Hello from Mac'") {
                 if let peer = selectedPeer {
-                    store.applyClipboardLocally(text: "Hello from Mac")
-                    store.sendCurrentClipboard(to: ManagedDevice(peer: peer))
+                    store.sendPushText("Hello from Mac", to: ManagedDevice(peer: peer))
                 }
             }
             .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))

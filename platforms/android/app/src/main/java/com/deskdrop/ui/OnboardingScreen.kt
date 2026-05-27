@@ -77,7 +77,7 @@ fun OnboardingScreen(
                         2 -> StepThreeSendSample(isDark, selectedPeer, onSend = {
                             if (it != null) onSendSampleText(it)
                         })
-                        3 -> StepFourCompletion(isDark, onComplete = onComplete)
+                        3 -> StepFourCompletion(isDark)
                     }
                 }
             }
@@ -88,7 +88,11 @@ fun OnboardingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (currentStep > 0 && currentStep < 3) {
+                if (currentStep == 0) {
+                    TextButton(onClick = onComplete) {
+                        Text("SKIP FOR NOW", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
+                    }
+                } else if (currentStep > 0 && currentStep < 3) {
                     TextButton(onClick = { selectedPeerId = null }) {
                         Text("CANCEL", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
                     }
@@ -185,7 +189,7 @@ private fun StepThreeSendSample(isDark: Boolean, selectedPeer: PeerSnapshot?, on
 }
 
 @Composable
-private fun StepFourCompletion(isDark: Boolean, onComplete: () -> Unit) {
+private fun StepFourCompletion(isDark: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier

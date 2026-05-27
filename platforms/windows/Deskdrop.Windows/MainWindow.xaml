@@ -331,7 +331,10 @@
                                             <TextBlock x:Name="Step3Text" Text="Step 3: Ready to use!" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" FontSize="14"/>
                                         </StackPanel>
                                         
-                                        <Button x:Name="BtnDismissOnboarding" Visibility="Collapsed" Content="Get Started" Style="{StaticResource ModernButton}" HorizontalAlignment="Left" Click="BtnDismissOnboarding_Click"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                            <Button x:Name="BtnSkipOnboarding" Content="Skip for now" Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Click="BtnDismissOnboarding_Click" Margin="0,0,12,0"/>
+                                            <Button x:Name="BtnDismissOnboarding" Visibility="Collapsed" Content="Get Started" Style="{StaticResource ModernButton}" Click="BtnDismissOnboarding_Click"/>
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
                             </Grid>

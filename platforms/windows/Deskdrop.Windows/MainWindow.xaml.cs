@@ -107,6 +107,11 @@ namespace Deskdrop.Windows
             
             if (TimelineList != null)
                 TimelineList.ItemsSource = _clipboardManager.GetHistory();
+                
+            if (!_hasCompletedOnboarding)
+            {
+                RefreshDevicesList();
+            }
         }
 
         private void UpdateOnboardingVisibility()
