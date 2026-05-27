@@ -302,7 +302,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
             content,
             auto_applied,
             ..
-        } => match content {
+        } => match &**content {
             ClipboardContent::Text(_) => {
                 if *auto_applied {
                     1
@@ -356,17 +356,15 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
         return std::ptr::null_mut();
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::ClipboardReceived {
-        content: ClipboardContent::Text(ref t),
-        ..
-    } = ev
-    {
-        env.new_string(t)
-            .map(|s| s.into_raw())
-            .unwrap_or(std::ptr::null_mut())
-    } else {
-        std::ptr::null_mut()
+    if let crate::engine::EngineEvent::ClipboardReceived { content, .. } = ev {
+        if let ClipboardContent::Text(ref t) = &**content {
+            return env
+                .new_string(t)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
     }
+    std::ptr::null_mut()
 }
 
 // ── eventBinaryData ───────────────────────────────────────────────────────────
@@ -382,14 +380,11 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventBinaryData(
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     let bytes = match ev {
-        crate::engine::EngineEvent::ClipboardReceived {
-            content: ClipboardContent::Image { data, .. },
-            ..
-        } => Some(data.as_slice()),
-        crate::engine::EngineEvent::ClipboardReceived {
-            content: ClipboardContent::File { data, .. },
-            ..
-        } => Some(data.as_slice()),
+        crate::engine::EngineEvent::ClipboardReceived { content, .. } => match &**content {
+            ClipboardContent::Image { data, .. } => Some(data.as_slice()),
+            ClipboardContent::File { data, .. } => Some(data.as_slice()),
+            _ => None,
+        },
         _ => None,
     };
 
@@ -475,18 +470,16 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventMimeType(
         return std::ptr::null_mut();
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::ClipboardReceived {
-        content: ClipboardContent::Image { mime, .. },
-        ..
-    } = ev
-    {
-        env.new_string(mime)
-            .ok()
-            .map(|value| value.into_raw())
-            .unwrap_or(std::ptr::null_mut())
-    } else {
-        std::ptr::null_mut()
+    if let crate::engine::EngineEvent::ClipboardReceived { content, .. } = ev {
+        if let ClipboardContent::Image { mime, .. } = &**content {
+            return env
+                .new_string(mime)
+                .ok()
+                .map(|value| value.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
     }
+    std::ptr::null_mut()
 }
 
 // ── eventFileName ─────────────────────────────────────────────────────────────
@@ -501,18 +494,16 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFileName(
         return std::ptr::null_mut();
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::ClipboardReceived {
-        content: ClipboardContent::File { name, .. },
-        ..
-    } = ev
-    {
-        env.new_string(name)
-            .ok()
-            .map(|value| value.into_raw())
-            .unwrap_or(std::ptr::null_mut())
-    } else {
-        std::ptr::null_mut()
+    if let crate::engine::EngineEvent::ClipboardReceived { content, .. } = ev {
+        if let ClipboardContent::File { name, .. } = &**content {
+            return env
+                .new_string(name)
+                .ok()
+                .map(|value| value.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
     }
+    std::ptr::null_mut()
 }
 
 // ── eventFingerprint ──────────────────────────────────────────────────────────
