@@ -381,7 +381,7 @@ impl InboundTransfer {
 
     /// Should we send a chunk ack now?
     pub fn should_ack(&self) -> bool {
-        self.received_chunk_count > 0 && self.received_chunk_count % FILE_ACK_EVERY_N_CHUNKS == 0
+        self.received_chunk_count > 0 && self.received_chunk_count.is_multiple_of(FILE_ACK_EVERY_N_CHUNKS)
     }
 
     fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
@@ -855,11 +855,11 @@ fn read_file_chunk_from_file(
         .context("chunk size exceeds addressable memory")?;
 
     file.seek(SeekFrom::Start(offset))
-        .with_context(|| format!("seeking outbound file"))?;
+        .with_context(|| "seeking outbound file".to_string())?;
 
     let mut buf = vec![0u8; to_read];
     file.read_exact(&mut buf)
-        .with_context(|| format!("reading outbound file chunk"))?;
+        .with_context(|| "reading outbound file chunk".to_string())?;
     Ok(buf)
 }
 
@@ -930,7 +930,7 @@ mod tests {
         let meta = make_meta(&data);
         let tid = meta.transfer_id;
         let mut mgr = FileTransferManager::new(tmp.path().to_path_buf());
-        mgr.register_inbound(meta, Uuid::new_v4(), "Phone".into());
+        let _ = mgr.register_inbound(meta, Uuid::new_v4(), "Phone".into());
         mgr.accept_inbound(&tid).unwrap();
 
         // Feed chunks directly from the data slice.
@@ -952,7 +952,7 @@ mod tests {
         let meta = make_meta(&data);
         let tid = meta.transfer_id;
         let mut mgr = FileTransferManager::new(tmp.path().to_path_buf());
-        mgr.register_inbound(meta, Uuid::new_v4(), "Laptop".into());
+        let _ = mgr.register_inbound(meta, Uuid::new_v4(), "Laptop".into());
         mgr.accept_inbound(&tid).unwrap();
 
         let transfer = mgr.get_inbound_mut(&tid).unwrap();

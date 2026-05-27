@@ -390,16 +390,13 @@ mod tests {
         // Feed the first real chunk.
         r.feed(msgs[0].clone()).unwrap();
         // Feed the duplicate — should error.
-        match r.feed(dup) {
-            Err(e) => {
-                hit_dup_error = true;
-                assert!(
-                    e.to_string().contains("duplicate chunk"),
-                    "unexpected error: {}",
-                    e
-                );
-            }
-            Ok(_) => {}
+        if let Err(e) = r.feed(dup) {
+            hit_dup_error = true;
+            assert!(
+                e.to_string().contains("duplicate chunk"),
+                "unexpected error: {}",
+                e
+            );
         }
         assert!(hit_dup_error, "duplicate chunk should have been rejected");
     }

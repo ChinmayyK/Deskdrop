@@ -195,10 +195,8 @@ async fn sim_ordered_multi_item_delivery() {
 
     let mut received = Vec::new();
     for _ in 0..8 {
-        if let Some(content) = bob.next_clipboard().await {
-            if let ClipboardContent::Text(t) = content {
-                received.push(t);
-            }
+        if let Some(ClipboardContent::Text(t)) = bob.next_clipboard().await {
+            received.push(t);
         }
     }
 

@@ -767,8 +767,8 @@ async fn cmd_history_filtered(
                 return Ok(());
             }
             println!(
-                "{:<6}  {:<17}  {:<16}  {:<8}  {}",
-                "ID", "Time", "Device", "Kind", "Summary"
+                "{:<6}  {:<17}  {:<16}  {:<8}  Summary",
+                "ID", "Time", "Device", "Kind"
             );
             println!("{}", "─".repeat(90));
             for e in &entries {
@@ -798,7 +798,7 @@ async fn cmd_history_filtered(
                     trunc(e["source_device"].as_str().unwrap_or("?"), 16),
                     e["payload"]["type"].as_str().unwrap_or("?"),
                     pin,
-                    trunc_summary(&e),
+                    trunc_summary(e),
                     tag_disp,
                 );
             }

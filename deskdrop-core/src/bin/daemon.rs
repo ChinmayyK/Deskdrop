@@ -67,9 +67,11 @@ async fn run() -> Result<()> {
         SettingsStore::load(default_settings_path()).context("loading settings")?;
     let initial_settings = settings_store.get().clone();
 
-    let mut config = EngineConfig::default();
-    config.device_name = initial_settings.resolved_device_name();
-    config.port = initial_settings.port;
+    let config = EngineConfig {
+        device_name: initial_settings.resolved_device_name(),
+        port: initial_settings.port,
+        ..Default::default()
+    };
 
     let (event_tx, mut event_rx) = mpsc::channel(256);
     let engine = Arc::new(Engine::start(config, event_tx).await?);
@@ -1238,8 +1240,7 @@ async fn remember_history(
     let settings = state.settings.lock().await.get().clone();
     let mut history = state.history.lock().await;
     history
-        .push_with_options(content, source_device, settings.max_history_text_bytes)
-        .map(|entry| entry.clone())
+        .push_with_options(content, source_device, settings.max_history_text_bytes).cloned()
 }
 
 async fn current_device_name(state: &DaemonState) -> String {

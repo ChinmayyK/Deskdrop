@@ -1291,6 +1291,7 @@ impl Engine {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn history_filtered(
         &self,
         kind: Option<String>,
@@ -1347,8 +1348,7 @@ impl Engine {
         entries
             .iter()
             .find(|e| e.id == id)
-            .map(|e| serde_json::to_value(e).ok())
-            .flatten()
+            .and_then(|e| serde_json::to_value(e).ok())
     }
 
     // ── Templates ─────────────────────────────────────────────────────────────
@@ -2635,17 +2635,10 @@ fn is_obviously_local_peer(
         return true;
     }
 
-    match (peer_ip, local_ip) {
-        (Some(peer_ip), Some(local_ip))
-            if peer_ip == local_ip
-                && peer_name
-                    .trim()
-                    .eq_ignore_ascii_case(local_device_name.trim()) =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!((peer_ip, local_ip), (Some(peer_ip), Some(local_ip)) if peer_ip == local_ip
+            && peer_name
+                .trim()
+                .eq_ignore_ascii_case(local_device_name.trim()))
 }
 
 fn peer_should_replace(current: &PeerRecord, candidate: &PeerRecord) -> bool {
@@ -3006,7 +2999,7 @@ fn register_session(
         Ok(_) => {}
         Err(e) => {
             warn!("peer discovery connect failed error={:?}", e);
-            return Err(e.into());
+            return Err(e);
         }
     }
     let _ = shared.peer_manager.set_explicit_disconnect(peer_id, false);

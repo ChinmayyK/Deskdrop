@@ -753,7 +753,7 @@ fn luhn_valid(digits: &str) -> bool {
         sum += digit;
         double = !double;
     }
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 fn is_probable_api_token(text: &str) -> bool {
@@ -968,7 +968,7 @@ mod tests {
         }
 
         // Snapshot the id of the 3rd entry.
-        let anchor_id = history.entries().iter().nth(2).unwrap().id;
+        let anchor_id = history.entries().get(2).unwrap().id;
         let newer: Vec<_> = history.recent_since(anchor_id).collect();
         // Only entries with id > anchor_id should appear.
         assert!(newer.iter().all(|e| e.id > anchor_id));

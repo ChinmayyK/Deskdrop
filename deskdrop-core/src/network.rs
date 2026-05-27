@@ -567,6 +567,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn keepalive_constants_are_reasonable() {
         assert!(KEEPALIVE_IDLE.as_secs() >= 10);
         assert!(KEEPALIVE_INTERVAL.as_secs() >= 1);

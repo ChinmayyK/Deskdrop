@@ -589,7 +589,6 @@ pub mod client {
                     }
                     IpcRequest::TrustPeer { device_id } => {
                         match crate::ipc::parse_uuid(&device_id)
-                            .and_then(|id| Ok(id))
                             .ok()
                             .map(|id| eng.trust_peer(id))
                         {

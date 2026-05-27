@@ -467,8 +467,10 @@ mod tests {
 
     #[test]
     fn validate_detects_bad_poll_interval() {
-        let mut s = Settings::default();
-        s.clipboard_poll_ms = 0;
+        let s = Settings {
+            clipboard_poll_ms: 0,
+            ..Default::default()
+        };
         let errs = s.validate();
         assert!(errs.iter().any(|e| e.contains("clipboard_poll_ms")));
     }
@@ -489,16 +491,20 @@ mod tests {
 
     #[test]
     fn sanitize_clamps_poll_ms() {
-        let mut s = Settings::default();
-        s.clipboard_poll_ms = 0;
+        let s = Settings {
+            clipboard_poll_ms: 0,
+            ..Default::default()
+        };
         let clean = s.sanitize();
         assert!(clean.clipboard_poll_ms >= 10);
     }
 
     #[test]
     fn sanitize_strips_empty_patterns() {
-        let mut s = Settings::default();
-        s.ignore_patterns = vec!["".into(), "foo".into(), "".into()];
+        let s = Settings {
+            ignore_patterns: vec!["".into(), "foo".into(), "".into()],
+            ..Default::default()
+        };
         let clean = s.sanitize();
         assert_eq!(clean.ignore_patterns, vec!["foo"]);
     }
