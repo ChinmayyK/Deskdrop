@@ -1240,7 +1240,8 @@ async fn remember_history(
     let settings = state.settings.lock().await.get().clone();
     let mut history = state.history.lock().await;
     history
-        .push_with_options(content, source_device, settings.max_history_text_bytes).cloned()
+        .push_with_options(content, source_device, settings.max_history_text_bytes)
+        .cloned()
 }
 
 async fn current_device_name(state: &DaemonState) -> String {

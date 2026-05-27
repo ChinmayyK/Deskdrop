@@ -381,7 +381,10 @@ impl InboundTransfer {
 
     /// Should we send a chunk ack now?
     pub fn should_ack(&self) -> bool {
-        self.received_chunk_count > 0 && self.received_chunk_count.is_multiple_of(FILE_ACK_EVERY_N_CHUNKS)
+        self.received_chunk_count > 0
+            && self
+                .received_chunk_count
+                .is_multiple_of(FILE_ACK_EVERY_N_CHUNKS)
     }
 
     fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
