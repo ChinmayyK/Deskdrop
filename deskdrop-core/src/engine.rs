@@ -2031,6 +2031,28 @@ impl Engine {
             .map(|(_, tx)| tx)
         {
             let _ = tx.send(msg).await;
+        } else {
+            // Trigger a manual connection if we aren't connected yet.
+            if let Some(peer) = self.shared.peer_manager.get(target_device) {
+                let addrs = peer.socket_addrs();
+                if !addrs.is_empty() {
+                    let shared = self.shared.clone();
+                    tokio::spawn(async move {
+                        if let Ok(()) = connect_loop(
+                            shared.clone(),
+                            addrs,
+                            Some(target_device),
+                            DiscoverySource::Manual,
+                        ).await {
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                            let peers = shared.peer_manager.all_connected_senders();
+                            if let Some(tx) = peers.into_iter().find(|(id, _)| *id == target_device).map(|(_, tx)| tx) {
+                                let _ = tx.send(msg).await;
+                            }
+                        }
+                    });
+                }
+            }
         }
     }
 
@@ -3728,6 +3750,15 @@ fn register_session(
                         Ok(AppMessage::PairingRequest { origin_device, origin_device_name }) => {
                             last_seen = Instant::now();
                             let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
+                            
+                            // Re-emit PairingRequested with the REAL name and PIN so the UI updates
+                            let pin = shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin).unwrap_or_else(|| "0000".to_string());
+                            let _ = shared.event_tx.send(EngineEvent::PairingRequested {
+                                device_id: origin_device,
+                                device_name: origin_device_name.clone(),
+                                pin,
+                            }).await;
+
                             let _ = shared.event_tx.send(EngineEvent::PairingRequest {
                                 device_id: origin_device,
                                 device_name: origin_device_name,
