@@ -9,25 +9,140 @@ using System.Windows.Threading;
 
 namespace Deskdrop.Windows
 {
-    public class ActivityEntry
+    public class BaseViewModel : INotifyPropertyChanged
     {
-        public ulong id { get; set; }
-        public string kind { get; set; } = "";
-        public string summary { get; set; } = "";
-        public ulong timestamp { get; set; }
-        public string source { get; set; } = "";
-        public string content_hash { get; set; } = "";
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+        protected bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "", Action? onChanged = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(backingStore, value)) return false;
+            backingStore = value;
+            onChanged?.Invoke();
+            OnPropertyChanged(propertyName);
+            return true;
+        }
     }
 
-    public class PendingClipboard
+    public class ActivityEntry : BaseViewModel
     {
-        public string content_hash { get; set; } = "";
-        public string summary { get; set; } = "";
-        public string from_device { get; set; } = "";
-        public ulong timestamp { get; set; }
+        private ulong _id;
+        public ulong id { get => _id; set => SetProperty(ref _id, value); }
+        private string _kind = "";
+        public string kind { get => _kind; set => SetProperty(ref _kind, value); }
+        private string _summary = "";
+        public string summary { get => _summary; set => SetProperty(ref _summary, value); }
+        private ulong _timestamp;
+        public ulong timestamp { get => _timestamp; set => SetProperty(ref _timestamp, value); }
+        private string _source = "";
+        public string source { get => _source; set => SetProperty(ref _source, value); }
+        private string _content_hash = "";
+        public string content_hash { get => _content_hash; set => SetProperty(ref _content_hash, value); }
     }
 
-    public class DeskdropStore : INotifyPropertyChanged
+    public class PendingClipboard : BaseViewModel
+    {
+        private string _content_hash = "";
+        public string content_hash { get => _content_hash; set => SetProperty(ref _content_hash, value); }
+        private string _summary = "";
+        public string summary { get => _summary; set => SetProperty(ref _summary, value); }
+        private string _from_device = "";
+        public string from_device { get => _from_device; set => SetProperty(ref _from_device, value); }
+        private ulong _timestamp;
+        public ulong timestamp { get => _timestamp; set => SetProperty(ref _timestamp, value); }
+    }
+
+    public class PeerViewModel : BaseViewModel
+    {
+        private string _device_id = "";
+        public string device_id { get => _device_id; set => SetProperty(ref _device_id, value); }
+        private string _friendly_name = "";
+        public string friendly_name { get => _friendly_name; set => SetProperty(ref _friendly_name, value); }
+        private string _status = "";
+        public string status { get => _status; set { if(SetProperty(ref _status, value)) { OnPropertyChanged(nameof(StatusIcon)); OnPropertyChanged(nameof(ConnectActionText)); } } }
+        private bool _is_trusted;
+        [System.Text.Json.Serialization.JsonPropertyName("trusted")]
+        public bool is_trusted { get => _is_trusted; set => SetProperty(ref _is_trusted, value); }
+        
+        public string StatusIcon => status == "connected" ? "🟢" : "⚪";
+        public string ConnectActionText => status == "connected" ? "Disconnect" : "Connect";
+
+        private int _batteryLevel;
+        public int BatteryLevel { get => _batteryLevel; set { if(SetProperty(ref _batteryLevel, value)) { OnPropertyChanged(nameof(ShowBattery)); OnPropertyChanged(nameof(BatteryIcon)); OnPropertyChanged(nameof(BatteryColor)); } } }
+        private bool _batteryCharging;
+        public bool BatteryCharging { get => _batteryCharging; set { if(SetProperty(ref _batteryCharging, value)) { OnPropertyChanged(nameof(BatteryIcon)); OnPropertyChanged(nameof(BatteryColor)); } } }
+        public bool ShowBattery => BatteryLevel > 0;
+        
+        public string BatteryIcon
+        {
+            get
+            {
+                if (BatteryCharging) return "\uE945"; // Charging icon
+                if (BatteryLevel > 80) return "\uEBAA"; // Full
+                if (BatteryLevel > 50) return "\uEBA6"; // Half
+                if (BatteryLevel > 20) return "\uEBA2"; // Low
+                return "\uEBA0"; // Empty
+            }
+        }
+        public string BatteryColor => BatteryCharging ? "#34C759" : (BatteryLevel <= 20 ? "#FF3B30" : "#8E8E93");
+    }
+
+    public class FileTransferState : BaseViewModel
+    {
+        private string _transfer_id = "";
+        public string transfer_id { get => _transfer_id; set => SetProperty(ref _transfer_id, value); }
+        private string _from_device = "";
+        public string from_device { get => _from_device; set { if (SetProperty(ref _from_device, value)) OnPropertyChanged(nameof(StatusText)); } }
+        private string _file_name = "";
+        public string file_name { get => _file_name; set { if(SetProperty(ref _file_name, value)) OnPropertyChanged(nameof(FileName)); } }
+        private long _bytes_total;
+        public long bytes_total { get => _bytes_total; set => SetProperty(ref _bytes_total, value); }
+        private long _bytes_received;
+        public long bytes_received { get => _bytes_received; set => SetProperty(ref _bytes_received, value); }
+        private int _percent;
+        public int percent { get => _percent; set { if(SetProperty(ref _percent, value)) OnPropertyChanged(nameof(PercentText)); } }
+        private string _status = "";
+        public string status { get => _status; set { if(SetProperty(ref _status, value)) { OnPropertyChanged(nameof(StatusText)); OnPropertyChanged(nameof(ProgressColor)); OnPropertyChanged(nameof(PrimaryVisible)); OnPropertyChanged(nameof(PrimaryIcon)); OnPropertyChanged(nameof(SecondaryVisible)); } } }
+        private string? _destination;
+        public string? destination { get => _destination; set => SetProperty(ref _destination, value); }
+
+        public string FileName => file_name;
+        public int Percent => percent;
+        public string PercentText => $"{percent}%";
+        public string StatusText => status == "in_progress" ? $"Receiving from {from_device}..." : status;
+        public string ProgressColor => status == "completed" ? "#34C759" : (status == "failed" ? "#FF3B30" : "#007AFF");
+
+        public bool PrimaryVisible => status == "incoming" || status == "in_progress" || status == "paused" || status == "failed" || status == "completed";
+        public string PrimaryIcon => status == "incoming" ? "\xE8FB" : (status == "in_progress" ? "\xE769" : (status == "paused" ? "\xE768" : (status == "completed" ? "\xE838" : "\xE72C")));
+        public string PrimaryBackground => "#E5E5EA";
+        public string PrimaryForeground => "#007AFF";
+
+        public bool SecondaryVisible => status == "incoming" || status == "in_progress" || status == "paused";
+        public string SecondaryIcon => status == "incoming" ? "\xE711" : "\xE711";
+        public string SecondaryBackground => "#FF3B30";
+        public string SecondaryForeground => "#FFFFFF";
+    }
+
+    public class PeerBatteryState
+    {
+        public string device_id { get; set; } = "";
+        public string device_name { get; set; } = "";
+        public int level { get; set; }
+        public bool charging { get; set; }
+    }
+
+    public class ActiveCallState
+    {
+        public string device_id { get; set; } = "";
+        public string device_name { get; set; } = "";
+        public string state { get; set; } = "";
+        public string number { get; set; } = "";
+        public string contact_name { get; set; } = "";
+    }
+
+    public class DeskdropStore : BaseViewModel
     {
         public static DeskdropStore Shared { get; } = new DeskdropStore();
 
@@ -35,9 +150,9 @@ namespace Deskdrop.Windows
 
         private DeskdropStore()
         {
-            Peers = new ObservableCollection<MainWindow.PeerViewModel>();
+            Peers = new ObservableCollection<PeerViewModel>();
             History = new ObservableCollection<HistoryItem>();
-            ActiveTransfers = new ObservableCollection<MainWindow.FileTransferState>();
+            ActiveTransfers = new ObservableCollection<FileTransferState>();
             ActivityFeed = new ObservableCollection<ActivityEntry>();
             PendingClipboards = new ObservableCollection<PendingClipboard>();
             
@@ -54,15 +169,10 @@ namespace Deskdrop.Windows
             _pollTimer.Start();
         }
 
-        public event PropertyChangedEventHandler? PropertyChanged;
 
-        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
 
-        private ObservableCollection<MainWindow.PeerViewModel> _peers = null!;
-        public ObservableCollection<MainWindow.PeerViewModel> Peers
+        private ObservableCollection<PeerViewModel> _peers = null!;
+        public ObservableCollection<PeerViewModel> Peers
         {
             get => _peers;
             set { _peers = value; OnPropertyChanged(); }
@@ -75,8 +185,8 @@ namespace Deskdrop.Windows
             set { _history = value; OnPropertyChanged(); }
         }
 
-        private ObservableCollection<MainWindow.FileTransferState> _activeTransfers = null!;
-        public ObservableCollection<MainWindow.FileTransferState> ActiveTransfers
+        private ObservableCollection<FileTransferState> _activeTransfers = null!;
+        public ObservableCollection<FileTransferState> ActiveTransfers
         {
             get => _activeTransfers;
             set { _activeTransfers = value; OnPropertyChanged(); }
@@ -96,8 +206,8 @@ namespace Deskdrop.Windows
             set { _pendingClipboards = value; OnPropertyChanged(); }
         }
 
-        private MainWindow.ActiveCallState? _activeCall;
-        public MainWindow.ActiveCallState? ActiveCall
+        private ActiveCallState? _activeCall;
+        public ActiveCallState? ActiveCall
         {
             get => _activeCall;
             set { _activeCall = value; OnPropertyChanged(); }
@@ -117,8 +227,13 @@ namespace Deskdrop.Windows
             set { _statusLine = value; OnPropertyChanged(); }
         }
 
+        private bool _isRefreshInFlight;
+
         public void UpdateStateFromDaemon()
         {
+            if (_isRefreshInFlight) return;
+            _isRefreshInFlight = true;
+
             System.Threading.Tasks.Task.Run(() =>
             {
                 try
@@ -137,6 +252,18 @@ namespace Deskdrop.Windows
                         {
                             ParseDaemonState(dataElem);
                         }
+
+                        var activity = DaemonClient.Send(new { cmd = "activity_recent" });
+                        if (activity != null && activity.RootElement.TryGetProperty("data", out var actDataElem))
+                        {
+                            ParseActivityFeed(actDataElem);
+                        }
+
+                        var pending = DaemonClient.Send(new { cmd = "pending_remote_clipboards" });
+                        if (pending != null && pending.RootElement.TryGetProperty("data", out var pendDataElem))
+                        {
+                            ParsePendingClipboards(pendDataElem);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -147,7 +274,44 @@ namespace Deskdrop.Windows
                         StatusLine = $"Error connecting to daemon: {ex.Message}";
                     });
                 }
+                finally
+                {
+                    _isRefreshInFlight = false;
+                }
             });
+        }
+
+        private void ParseActivityFeed(JsonElement dataElem)
+        {
+            if (dataElem.TryGetProperty("entries", out var entriesElem))
+            {
+                var entries = JsonSerializer.Deserialize<System.Collections.Generic.List<ActivityEntry>>(entriesElem.GetRawText());
+                if (entries != null)
+                {
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                    {
+                        // Replace feed instead of live diffing for simplicity in Phase 1
+                        ActivityFeed.Clear();
+                        foreach (var e in entries) ActivityFeed.Add(e);
+                    });
+                }
+            }
+        }
+
+        private void ParsePendingClipboards(JsonElement dataElem)
+        {
+            if (dataElem.TryGetProperty("clipboards", out var clipboardsElem))
+            {
+                var clips = JsonSerializer.Deserialize<System.Collections.Generic.List<PendingClipboard>>(clipboardsElem.GetRawText());
+                if (clips != null)
+                {
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                    {
+                        PendingClipboards.Clear();
+                        foreach (var c in clips) PendingClipboards.Add(c);
+                    });
+                }
+            }
         }
 
         private void ParseDaemonState(JsonElement dataElem)
@@ -156,11 +320,11 @@ namespace Deskdrop.Windows
             {
                 if (dataElem.TryGetProperty("peers", out var peersElem))
                 {
-                    var newPeers = JsonSerializer.Deserialize<System.Collections.Generic.List<MainWindow.PeerViewModel>>(peersElem.GetRawText());
+                    var newPeers = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText());
                     
                     if (dataElem.TryGetProperty("peer_batteries", out var batElem))
                     {
-                        var batteries = JsonSerializer.Deserialize<System.Collections.Generic.List<MainWindow.PeerBatteryState>>(batElem.GetRawText());
+                        var batteries = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerBatteryState>>(batElem.GetRawText());
                         if (newPeers != null && batteries != null)
                         {
                             foreach (var peer in newPeers)
@@ -202,24 +366,25 @@ namespace Deskdrop.Windows
 
                 if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
                 {
-                    var transfers = JsonSerializer.Deserialize<System.Collections.Generic.List<MainWindow.FileTransferState>>(transfersElem.GetRawText());
+                    var transfers = JsonSerializer.Deserialize<System.Collections.Generic.List<FileTransferState>>(transfersElem.GetRawText());
                     if (transfers != null)
                     {
                         var existing = ActiveTransfers.ToList();
-                        foreach(var t in transfers)
+                        foreach (var tr in transfers)
                         {
-                            var match = ActiveTransfers.FirstOrDefault(a => a.transfer_id == t.transfer_id);
+                            var match = ActiveTransfers.FirstOrDefault(t => t.transfer_id == tr.transfer_id);
                             if (match != null)
                             {
-                                match.status = t.status;
-                                match.bytes_received = t.bytes_received;
-                                match.bytes_total = t.bytes_total;
-                                match.percent = t.percent;
+                                match.status = tr.status;
+                                match.bytes_received = tr.bytes_received;
+                                match.bytes_total = tr.bytes_total;
+                                match.percent = tr.percent;
+                                match.destination = tr.destination;
                                 existing.Remove(match);
                             }
                             else
                             {
-                                ActiveTransfers.Add(t);
+                                ActiveTransfers.Add(tr);
                             }
                         }
                         foreach(var rem in existing) ActiveTransfers.Remove(rem);
@@ -232,7 +397,7 @@ namespace Deskdrop.Windows
 
                 if (dataElem.TryGetProperty("active_call", out var callElem) && callElem.ValueKind != JsonValueKind.Null)
                 {
-                    ActiveCall = JsonSerializer.Deserialize<MainWindow.ActiveCallState>(callElem.GetRawText());
+                    ActiveCall = JsonSerializer.Deserialize<ActiveCallState>(callElem.GetRawText());
                 }
                 else
                 {

@@ -5,7 +5,7 @@
         WindowStyle="None" AllowsTransparency="True" Background="#90000000"
         Topmost="True" ShowInTaskbar="False" WindowState="Maximized"
         AllowDrop="True" Drop="Window_Drop" DragEnter="Window_DragEnter" DragLeave="Window_DragLeave"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        MouseLeftButtonDown="Window_MouseLeftButtonDown" Loaded="Window_Loaded">
     <Grid>
         <Border x:Name="DropBorder" BorderBrush="#32ADE6" BorderThickness="4" CornerRadius="20" 
                 Margin="100" Background="#4032ADE6" Opacity="0.5">

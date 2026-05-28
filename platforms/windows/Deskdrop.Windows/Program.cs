@@ -25,19 +25,31 @@ namespace Deskdrop.Windows
         private const string DLL = "deskdrop_core";
 
         // Event codes (must match Rust CR_EVENT_* constants)
-        public const int PB_EVENT_NONE                = 0;
-        public const int PB_EVENT_CLIPBOARD_TEXT      = 1;
-        public const int PB_EVENT_CLIPBOARD_IMAGE     = 2;
-        public const int PB_EVENT_CLIPBOARD_FILE      = 3;
-        public const int PB_EVENT_TOFU_PROMPT         = 4;
-        public const int PB_EVENT_PEER_CONNECTED      = 5;
-        public const int PB_EVENT_PEER_DISCONNECTED   = 6;
-        public const int PB_EVENT_WARNING             = 7;
-        public const int PB_EVENT_INCOMING_CALL       = 8;
+        public const int PB_EVENT_NONE = 0;
+        public const int PB_EVENT_CLIPBOARD_TEXT = 1;
+        public const int PB_EVENT_CLIPBOARD_IMAGE = 2;
+        public const int PB_EVENT_CLIPBOARD_FILE = 3;
+        public const int PB_EVENT_PAIRING_REQUESTED = 4; // TOFU prompt
+        public const int PB_EVENT_PEER_CONNECTED = 5;
+        public const int PB_EVENT_PEER_DISCONNECTED = 6;
+        public const int PB_EVENT_WARNING = 7;
+        public const int PB_EVENT_CLIPBOARD_SYNCED = 8;
         public const int PB_EVENT_CLIPBOARD_AVAILABLE = 11; // timeline-first
         public const int PB_EVENT_FILE_TRANSFER_INCOMING = 12;
+        public const int PB_EVENT_FILE_TRANSFER_PROGRESS = 13;
         public const int PB_EVENT_FILE_TRANSFER_COMPLETE = 14;
-        public const int PB_EVENT_ACTIVITY_UPDATED    = 16;
+        public const int PB_EVENT_FILE_TRANSFER_FAILED = 15;
+        public const int PB_EVENT_ACTIVITY_UPDATED = 16;
+        public const int PB_EVENT_CALL_STATE_CHANGED = 17;
+        public const int PB_EVENT_CALL_ACTION = 18;
+        public const int PB_EVENT_BATTERY_STATE_CHANGED = 19;
+        public const int PB_EVENT_FILE_TRANSFER_PAUSED = 20;
+        public const int PB_EVENT_FILE_TRANSFER_RESUMED = 21;
+        public const int PB_EVENT_CAMERA_STREAM_REQUEST = 22;
+        public const int PB_EVENT_CAMERA_STREAM_ACCEPT = 23;
+        public const int PB_EVENT_CAMERA_STREAM_STOP = 24;
+        public const int PB_EVENT_CAMERA_FRAME = 25;
+        public const int PB_EVENT_SYSTEM_HEALTH_UPDATED = 26;
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_start(
@@ -61,8 +73,7 @@ namespace Deskdrop.Windows
             byte[] data, UIntPtr len);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int deskdrop_push_camera_frame(
-            IntPtr handle, byte[] data, UIntPtr len);
+        public static extern int deskdrop_push_video_frame(IntPtr handle, byte[] data, UIntPtr size);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int deskdrop_send_file_path(
@@ -93,8 +104,8 @@ namespace Deskdrop.Windows
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_event_fingerprint(IntPtr ev);
 
-        // [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
-        // public static extern IntPtr deskdrop_event_device_id(IntPtr ev);
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_device_id(IntPtr ev);
 
         /// Respond to a TOFU prompt. trust=1 to accept, trust=0 to reject.
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
@@ -436,7 +447,7 @@ namespace Deskdrop.Windows
             NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
             try
             {
-                NativeCore.deskdrop_push_camera_frame(_handle, jpegBytes, (UIntPtr)jpegBytes.Length);
+                NativeCore.deskdrop_push_video_frame(_handle, jpegBytes, (UIntPtr)jpegBytes.Length);
             }
             finally
             {
@@ -565,10 +576,10 @@ namespace Deskdrop.Windows
                     break;
                 }
 
-                case NativeCore.PB_EVENT_TOFU_PROMPT:
+                case NativeCore.PB_EVENT_PAIRING_REQUESTED:
                 {
                     var name = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                    var id   = name; // Pre-compiled DLL lacks deskdrop_event_device_id
+                    var id   = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? name;
                     var fp   = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_fingerprint(ev)) ?? "";
                     TofuPromptRequested?.Invoke(id, name, fp);
                     break;
@@ -601,10 +612,10 @@ namespace Deskdrop.Windows
                     break;
                 }
 
-                case NativeCore.PB_EVENT_INCOMING_CALL:
+                case NativeCore.PB_EVENT_CALL_STATE_CHANGED:
                 {
                     var caller = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                    var deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? caller;
+                    var deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? caller;
                     IncomingCallRequested?.Invoke(caller, deviceId);
                     break;
                 }
@@ -1009,6 +1020,16 @@ namespace Deskdrop.Windows
             OnSendFile(this, EventArgs.Empty);
         }
 
+        public void RespondToTrustExternal(string deviceId, bool accepted)
+        {
+            _mgr.RespondToTrust(deviceId, accepted);
+            if (accepted)
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    NotificationHelper.ShowToast("Deskdrop", "Device trusted successfully."));
+            }
+        }
+
         // ── Dashboard panel ─────────────────────────────────────────────────────
 
         public void OpenDashboard()
@@ -1277,9 +1298,38 @@ namespace Deskdrop.Windows
                 if (File.Exists(file))
                 {
                     Task.Run(() => {
-                        // We need access to the clipboard manager. We can expose it or a PushFile method on TrayApp.
                         app.PushFileExternal(file);
                     });
+                }
+            }
+            else if (args.Length >= 1 && args[0].StartsWith("deskdrop://"))
+            {
+                try
+                {
+                    var uri = new Uri(args[0]);
+                    if (uri.Host == "tofu")
+                    {
+                        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+                        var action = query["action"];
+                        var deviceId = query["device_id"];
+                        if (action == "accept" && !string.IsNullOrEmpty(deviceId))
+                        {
+                            app.RespondToTrustExternal(deviceId, true);
+                        }
+                        else if (action == "reject" && !string.IsNullOrEmpty(deviceId))
+                        {
+                            app.RespondToTrustExternal(deviceId, false);
+                        }
+                    }
+                    else if (uri.Host == "pair")
+                    {
+                        System.Windows.Application.Current.Dispatcher.Invoke(() => app.OpenDashboard());
+                        // Trigger pairing logic if necessary
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogError(ex);
                 }
             }
             else if (args.Length >= 1 && args[0] == "--send-file-dialog")
@@ -1306,7 +1356,23 @@ namespace Deskdrop.Windows
             {
                 try
                 {
-                    using var server = new NamedPipeServerStream("DeskdropIPC", PipeDirection.In, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous);
+                    var security = new System.IO.Pipes.PipeSecurity();
+                    var user = System.Security.Principal.WindowsIdentity.GetCurrent().User;
+                    if (user != null)
+                    {
+                        security.AddAccessRule(new System.IO.Pipes.PipeAccessRule(user, System.IO.Pipes.PipeAccessRights.FullControl, System.Security.AccessControl.AccessControlType.Allow));
+                    }
+                    
+                    using var server = System.IO.Pipes.NamedPipeServerStreamAcl.Create(
+                        "DeskdropIPC", 
+                        PipeDirection.In, 
+                        1, 
+                        PipeTransmissionMode.Message, 
+                        PipeOptions.Asynchronous, 
+                        0, 
+                        0, 
+                        security);
+                        
                     await server.WaitForConnectionAsync();
                     
                     using var reader = new StreamReader(server);

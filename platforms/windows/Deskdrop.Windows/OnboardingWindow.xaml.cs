@@ -5,6 +5,8 @@ namespace Deskdrop.Windows
 {
     public partial class OnboardingWindow : Window
     {
+        public bool Success { get; private set; } = false;
+
         public OnboardingWindow()
         {
             InitializeComponent();
@@ -22,12 +24,29 @@ namespace Deskdrop.Windows
 
         private void BtnSkip_Click(object sender, RoutedEventArgs e)
         {
-            Close();
+            var res = System.Windows.MessageBox.Show("Are you sure you want to skip pairing? You won't be able to drop files to other devices until you pair.", "Skip Setup", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
+            if (res == System.Windows.MessageBoxResult.Yes)
+            {
+                Success = true;
+                Close();
+            }
         }
 
         private void BtnShowQRCode_Click(object sender, RoutedEventArgs e)
         {
-            new QRCodeWindow(MainWindow.GetLocalIPAddress(), "000000").ShowDialog();
+            new QRPairingWindow().ShowDialog();
+            
+            // Check if we paired successfully
+            if (DeskdropStore.Shared.Peers.Count > 0)
+            {
+                IntroView.Visibility = Visibility.Collapsed;
+                DoneView.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void BtnFinish_Click(object sender, RoutedEventArgs e)
+        {
+            Success = true;
             Close();
         }
     }

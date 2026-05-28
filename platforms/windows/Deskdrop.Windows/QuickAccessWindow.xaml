@@ -70,10 +70,57 @@
             
             <Border Grid.Row="0" Background="White" CornerRadius="12,12,0,0" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#E5E5EA">
                 <Grid>
-                    <TextBlock Text="Recent Activity" FontWeight="Bold" FontSize="16" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnSettings_Click" ToolTip="Open Dashboard"/>
-                    </StackPanel>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    
+                    <Grid Grid.Row="0">
+                        <TextBlock Text="Quick Access" FontWeight="Bold" FontSize="16" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnSettings_Click" ToolTip="Open Dashboard"/>
+                        </StackPanel>
+                    </Grid>
+                    
+                    <TextBox x:Name="TxtSearch" Grid.Row="1" Margin="0,12,0,12" Padding="8,6" Background="#F2F2F7" BorderThickness="0" Foreground="{StaticResource Ink}" FontSize="13" TextChanged="TxtSearch_TextChanged">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="6">
+                                                <Grid>
+                                                    <TextBlock Text="Search clipboard..." Foreground="{StaticResource InkSoft}" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="{Binding Text.IsEmpty, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                    <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                    
+                    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="DeviceTargetsList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#F2F2F7" CornerRadius="16" Padding="12,6" Margin="0,0,8,0" Cursor="Hand" MouseLeftButtonDown="DeviceTarget_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <TextBlock Text="{Binding friendly_name}" FontSize="12" FontWeight="Medium" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </Grid>
             </Border>
 

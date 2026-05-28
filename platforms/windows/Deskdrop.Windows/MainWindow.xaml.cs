@@ -81,10 +81,26 @@ namespace Deskdrop.Windows
 
         private void HideAllViews()
         {
+            if (ActivityView != null) ActivityView.Visibility = Visibility.Collapsed;
             if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
             if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
             if (TransfersView != null) TransfersView.Visibility = Visibility.Collapsed;
+        }
+
+        private void NavActivity_Click(object sender, RoutedEventArgs e)
+        {
+            LoadActivityView();
+        }
+
+        private void LoadActivityView()
+        {
+            HideAllViews();
+            if (ActivityView != null) AnimateView(ActivityView);
+            if (ActivityFeedList != null)
+            {
+                ActivityFeedList.ItemsSource = _clipboardManager.GetHistory().ToList();
+            }
         }
 
         private void OnQuickContextUpdated(string? text)
@@ -188,6 +204,16 @@ namespace Deskdrop.Windows
                 new PaletteCommand { Title = "Quit Deskdrop", Icon = "🛑", Action = "Quit" }
             };
 
+            foreach (var peer in DeskdropStore.Shared.Peers)
+            {
+                allCommands.Insert(0, new PaletteCommand {
+                    Title = $"Send Clipboard to {peer.friendly_name}",
+                    Icon = "📋",
+                    Action = "SendClipboardToTarget",
+                    Target = peer.device_id
+                });
+            }
+
             var filtered = string.IsNullOrWhiteSpace(query)
                 ? allCommands
                 : allCommands.Where(c => c.Title.ToLowerInvariant().Contains(query)).ToList();
@@ -217,7 +243,7 @@ namespace Deskdrop.Windows
                         }
                         break;
                     case "ShowQR":
-                        new QRCodeWindow(GetLocalIPAddress(), "000000").Show();
+                        new QRPairingWindow().Show();
                         break;
                     case "Diagnostics":
                         LoadDiagnosticsView();
@@ -227,6 +253,26 @@ namespace Deskdrop.Windows
                         break;
                     case "Quit":
                         System.Windows.Application.Current.Shutdown();
+                        break;
+                    case "SendClipboardToTarget":
+                        System.Threading.Tasks.Task.Run(() => 
+                        {
+                            var clipboardText = "";
+                            Dispatcher.Invoke(() => {
+                                if (System.Windows.Forms.Clipboard.ContainsText())
+                                    clipboardText = System.Windows.Forms.Clipboard.GetText();
+                            });
+                            
+                            if (!string.IsNullOrEmpty(clipboardText))
+                            {
+                                DaemonClient.Send(new {
+                                    cmd = "push_clipboard",
+                                    target_device = cmd.Target,
+                                    text = clipboardText
+                                });
+                                Dispatcher.Invoke(() => ShowToast("Clipboard sent."));
+                            }
+                        });
                         break;
                 }
             }
@@ -427,7 +473,14 @@ namespace Deskdrop.Windows
                 if (System.Windows.Application.Current.Windows.OfType<OnboardingWindow>().Count() == 0)
                 {
                     var ob = new OnboardingWindow();
-                    ob.Closed += (s, e) => _hasCompletedOnboarding = true;
+                    ob.Closed += (s, e) => 
+                    {
+                        if (ob.Success)
+                        {
+                            _hasCompletedOnboarding = true;
+                            // Optionally persist to settings here or rely on Daemon
+                        }
+                    };
                     ob.Show();
                 }
             }
@@ -512,80 +565,9 @@ namespace Deskdrop.Windows
             public string Title { get; set; } = "";
             public string Icon { get; set; } = "";
             public string Action { get; set; } = "";
+            public string Target { get; set; } = "";
         }
 
-        public class ActiveCallState
-        {
-            public string device_id { get; set; } = "";
-            public string device_name { get; set; } = "";
-            public string state { get; set; } = "";
-            public string number { get; set; } = "";
-            public string contact_name { get; set; } = "";
-        }
-
-        public class PeerBatteryState
-        {
-            public string device_id { get; set; } = "";
-            public string device_name { get; set; } = "";
-            public int level { get; set; }
-            public bool charging { get; set; }
-        }
-
-        public class PeerViewModel
-        {
-            public string device_id { get; set; } = "";
-            public string friendly_name { get; set; } = "";
-            public string status { get; set; } = "";
-            [System.Text.Json.Serialization.JsonPropertyName("trusted")]
-            public bool is_trusted { get; set; }
-            
-            public string StatusIcon => status == "connected" ? "🟢" : "⚪";
-            public string ConnectActionText => status == "connected" ? "Disconnect" : "Connect";
-
-            public int BatteryLevel { get; set; }
-            public bool BatteryCharging { get; set; }
-            public bool ShowBattery => BatteryLevel > 0;
-            
-            public string BatteryIcon
-            {
-                get
-                {
-                    if (BatteryCharging) return "\uE945"; // Charging icon
-                    if (BatteryLevel > 80) return "\uEBAA"; // Full
-                    if (BatteryLevel > 50) return "\uEBA6"; // Half
-                    if (BatteryLevel > 20) return "\uEBA2"; // Low
-                    return "\uEBA0"; // Empty
-                }
-            }
-            public string BatteryColor => BatteryCharging ? "#34C759" : (BatteryLevel <= 20 ? "#FF3B30" : "#8E8E93");
-        }
-
-        public class FileTransferState
-        {
-            public string transfer_id { get; set; } = "";
-            public string from_device { get; set; } = "";
-            public string file_name { get; set; } = "";
-            public long bytes_total { get; set; }
-            public long bytes_received { get; set; }
-            public int percent { get; set; }
-            public string status { get; set; } = "";
-
-            public string FileName => file_name;
-            public int Percent => percent;
-            public string PercentText => $"{percent}%";
-            public string StatusText => status == "in_progress" ? $"Receiving from {from_device}..." : status;
-            public string ProgressColor => status == "completed" ? "#34C759" : (status == "failed" ? "#FF3B30" : "#007AFF");
-
-            public bool PrimaryVisible => status == "incoming" || status == "in_progress" || status == "paused" || status == "failed";
-            public string PrimaryIcon => status == "incoming" ? "\xE8FB" : (status == "in_progress" ? "\xE769" : (status == "paused" ? "\xE768" : "\xE72C"));
-            public string PrimaryBackground => "#E5E5EA";
-            public string PrimaryForeground => "#007AFF";
-
-            public bool SecondaryVisible => status == "incoming" || status == "in_progress" || status == "paused";
-            public string SecondaryIcon => "\xE711"; // Cancel/Reject
-            public string SecondaryBackground => "#FFF0F0";
-            public string SecondaryForeground => "#FF3B30";
-        }
 
         private void LoadSettingsView()
         {
@@ -605,22 +587,30 @@ namespace Deskdrop.Windows
             }
 
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Deskdrop");
-            if (key == null) return;
+            if (key != null)
+            {
+                ChkEnableHotkeys.IsChecked = (int?)key.GetValue("EnableHotkeys", 1) == 1;
+            }
 
-            ChkSyncEnabled.IsChecked = (int?)key.GetValue("SyncEnabled", 1) == 1;
-            ChkShowNotifications.IsChecked = (int?)key.GetValue("ShowNotifications", 1) == 1;
-            ChkRequireTofu.IsChecked = (int?)key.GetValue("RequireTofu", 1) == 1;
-            TxtDeviceName.Text = (string?)key.GetValue("DeviceName", "") ?? "";
-            ChkEnableHotkeys.IsChecked = (int?)key.GetValue("EnableHotkeys", 1) == 1;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var settingsDoc = DaemonClient.Send(new { cmd = "get_settings" });
+                if (settingsDoc != null && settingsDoc.RootElement.TryGetProperty("settings", out var settings))
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (settings.TryGetProperty("sync_enabled", out var sync)) ChkSyncEnabled.IsChecked = sync.GetBoolean();
+                        if (settings.TryGetProperty("show_receive_notification", out var notif)) ChkShowNotifications.IsChecked = notif.GetBoolean();
+                        if (settings.TryGetProperty("require_tofu_confirmation", out var tofu)) ChkRequireTofu.IsChecked = tofu.GetBoolean();
+                        if (settings.TryGetProperty("device_name", out var devName)) TxtDeviceName.Text = devName.GetString() ?? "";
+                    });
+                }
+            });
         }
 
         private void BtnSaveSettings_Click(object sender, RoutedEventArgs e)
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Deskdrop");
-            key.SetValue("SyncEnabled", ChkSyncEnabled.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            key.SetValue("ShowNotifications", ChkShowNotifications.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            key.SetValue("RequireTofu", ChkRequireTofu.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            key.SetValue("DeviceName", TxtDeviceName.Text, Microsoft.Win32.RegistryValueKind.String);
             key.SetValue("EnableHotkeys", ChkEnableHotkeys.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
 
             try
@@ -804,13 +794,8 @@ namespace Deskdrop.Windows
                     "Trust Device?", 
                     msg, 
                     null,
-                    onAccept: () => {
-                        _clipboardManager?.RespondToTrust(deviceId, true);
-                        ShowToast($"Trusted {deviceName}");
-                    },
-                    onReject: () => {
-                        _clipboardManager?.RespondToTrust(deviceId, false);
-                    }
+                    $"deskdrop://tofu?action=accept&device_id={System.Uri.EscapeDataString(deviceId)}",
+                    $"deskdrop://tofu?action=reject&device_id={System.Uri.EscapeDataString(deviceId)}"
                 );
             });
         }
@@ -949,6 +934,10 @@ namespace Deskdrop.Windows
                         if (transfer.status == "incoming") DaemonClient.AcceptFileTransfer(transfer.transfer_id);
                         else if (transfer.status == "in_progress") DaemonClient.PauseFileTransfer(transfer.transfer_id);
                         else if (transfer.status == "paused") DaemonClient.ResumeFileTransfer(transfer.transfer_id);
+                        else if (transfer.status == "completed" && !string.IsNullOrEmpty(transfer.destination))
+                        {
+                            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{transfer.destination}\"");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -977,9 +966,32 @@ namespace Deskdrop.Windows
             }
         }
 
+        private void ActivityFeedItem_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is HistoryItem item)
+            {
+                if (item.TypeIcon == "📎")
+                {
+                    if (System.IO.File.Exists(item.FullText))
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{item.FullText}\"");
+                    }
+                    else if (System.IO.Directory.Exists(item.FullText))
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", $"\"{item.FullText}\"");
+                    }
+                }
+                else
+                {
+                    System.Windows.Clipboard.SetText(item.FullText);
+                    ShowToast("Copied to clipboard.");
+                }
+            }
+        }
+
         private void TransferHistoryItem_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            // Placeholder for clicking a transfer history item
+            ActivityFeedItem_Click(sender, e);
         }
     }
 }

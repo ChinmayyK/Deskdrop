@@ -6,7 +6,7 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
     <Window.Resources>
-        <ResourceDictionary Source="Styles.xaml"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     </Window.Resources>
     
     <Border Background="{StaticResource SurfaceStrong}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="24">
@@ -14,55 +14,68 @@
             <DropShadowEffect Color="Black" BlurRadius="32" ShadowDepth="8" Opacity="0.2"/>
         </Border.Effect>
         <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16" Content="&#xE711;" FontFamily="Segoe MDL2 Assets" Background="Transparent" BorderThickness="0" Click="BtnClose_Click" Panel.ZIndex="1"/>
             
-            <Button Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16" Content="&#xE711;" FontFamily="Segoe MDL2 Assets" Background="Transparent" BorderThickness="0" Click="BtnClose_Click"/>
-            
-            <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="48">
-                <TextBlock Text="Welcome to Deskdrop" FontSize="36" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,16"/>
-                <TextBlock Text="Your seamless ecosystem across Windows, macOS, Android, and iOS." FontSize="16" Foreground="{StaticResource InkSoft}" TextAlignment="Center" Margin="0,0,0,48"/>
+            <Grid x:Name="IntroView" Visibility="Visible">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="48">
+                    <TextBlock Text="Welcome to Deskdrop" FontSize="36" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,16"/>
+                    <TextBlock Text="Your seamless ecosystem across Windows, macOS, Android, and iOS." FontSize="16" Foreground="{StaticResource InkSoft}" TextAlignment="Center" Margin="0,0,0,48"/>
+                    
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <StackPanel Grid.Column="0" Margin="16" Width="200">
+                            <Border Width="64" Height="64" CornerRadius="32" Background="#E5F2FF" Margin="0,0,0,16">
+                                <TextBlock Text="&#xE8EA;" FontFamily="Segoe MDL2 Assets" FontSize="28" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="1. Get the app" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBlock Text="Install Deskdrop on your mobile device." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
+                        </StackPanel>
+                        
+                        <StackPanel Grid.Column="1" Margin="16" Width="200">
+                            <Border Width="64" Height="64" CornerRadius="32" Background="#E5F9E9" Margin="0,0,0,16">
+                                <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="28" Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="2. Scan &amp; Pair" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBlock Text="Use the Magic Link QR code to securely pair." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
+                        </StackPanel>
+                        
+                        <StackPanel Grid.Column="2" Margin="16" Width="200">
+                            <Border Width="64" Height="64" CornerRadius="32" Background="#FFF0F0" Margin="0,0,0,16">
+                                <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="28" Foreground="{StaticResource BrandRed}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="3. Drop anything" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBlock Text="Drag and drop files to instantly send them." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
                 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,48">
+                    <Button Content="Show Magic Link" Style="{StaticResource ModernButton}" Background="{StaticResource BrandElectric}" Foreground="White" Padding="32,16" FontSize="16" Click="BtnShowQRCode_Click" Margin="0,0,16,0"/>
+                    <Button Content="Skip for now" Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="32,16" FontSize="16" Click="BtnSkip_Click"/>
+                </StackPanel>
+            </Grid>
+
+            <Grid x:Name="DoneView" Visibility="Collapsed">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="48">
+                    <Border Width="96" Height="96" CornerRadius="48" Background="#E5F9E9" Margin="0,0,0,24">
+                        <TextBlock Text="&#xE930;" FontFamily="Segoe MDL2 Assets" FontSize="48" Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="You're all set!" FontSize="36" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,16"/>
+                    <TextBlock Text="Your device is now securely paired. You can close this window and start dropping files." FontSize="16" Foreground="{StaticResource InkSoft}" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="400" Margin="0,0,0,48"/>
                     
-                    <StackPanel Grid.Column="0" Margin="16" Width="200">
-                        <Border Width="64" Height="64" CornerRadius="32" Background="#E5F2FF" Margin="0,0,0,16">
-                            <TextBlock Text="&#xE8EA;" FontFamily="Segoe MDL2 Assets" FontSize="28" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <TextBlock Text="1. Get the app" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
-                        <TextBlock Text="Install Deskdrop on your mobile device." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
-                    </StackPanel>
-                    
-                    <StackPanel Grid.Column="1" Margin="16" Width="200">
-                        <Border Width="64" Height="64" CornerRadius="32" Background="#E5F9E9" Margin="0,0,0,16">
-                            <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="28" Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <TextBlock Text="2. Scan &amp; Pair" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
-                        <TextBlock Text="Use the Magic Link QR code to securely pair." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
-                    </StackPanel>
-                    
-                    <StackPanel Grid.Column="2" Margin="16" Width="200">
-                        <Border Width="64" Height="64" CornerRadius="32" Background="#FFF0F0" Margin="0,0,0,16">
-                            <TextBlock Text="&#xE8D5;" FontFamily="Segoe MDL2 Assets" FontSize="28" Foreground="{StaticResource BrandRed}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <TextBlock Text="3. Drop anything" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
-                        <TextBlock Text="Drag and drop files to instantly send them." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
-                    </StackPanel>
-                </Grid>
-            </StackPanel>
+                    <Button Content="Finish &amp; Start Using Deskdrop" Style="{StaticResource ModernButton}" Background="{StaticResource BrandElectric}" Foreground="White" Padding="32,16" FontSize="16" Click="BtnFinish_Click"/>
+                </StackPanel>
+            </Grid>
             
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,48">
-                <Button Content="Show Magic Link" Style="{StaticResource ModernButton}" Background="{StaticResource BrandElectric}" Foreground="White" Padding="32,16" FontSize="16" Click="BtnShowQRCode_Click" Margin="0,0,16,0"/>
-                <Button Content="Skip for now" Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="32,16" FontSize="16" Click="BtnSkip_Click"/>
-            </StackPanel>
         </Grid>
     </Border>
 </Window>

@@ -277,6 +277,46 @@
                 <!-- HOME VIEW -->
                 <!-- HOME VIEW MOVED TO QUICK ACCESS WINDOW -->
 
+                <!-- ACTIVITY VIEW -->
+                <Grid x:Name="ActivityView" Visibility="Visible" Margin="48,16,48,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                        <TextBlock Text="Activity Feed" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                    </StackPanel>
+                    
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,120">
+                        <StackPanel>
+                            <TextBlock Text="RECENT ACTIVITY" FontSize="12" FontWeight="Bold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,8"/>
+                            <ItemsControl x:Name="ActivityFeedList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,4" Padding="12" Cursor="Hand" MouseLeftButtonDown="ActivityFeedItem_Click">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding TypeIcon}" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{StaticResource BrandElectric}" Width="28" VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Summary}" FontSize="14" FontWeight="Medium" Foreground="{StaticResource Ink}"/>
+                                                    <TextBlock Text="{Binding Source}" Foreground="{StaticResource InkSoft}" FontSize="12"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding RelativeTime}" FontSize="12" Foreground="{StaticResource InkSoft}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
                 <!-- TRANSFERS VIEW -->
                 <Grid x:Name="TransfersView" Visibility="Collapsed" Margin="48,16,48,0">
                     <Grid.RowDefinitions>
@@ -595,13 +635,16 @@
                         <!-- Quick Actions Capsule -->
                         <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="4">
                             <StackPanel Orientation="Horizontal">
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Click="NavDiagnostics_Click" ToolTip="Diagnostics">
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Click="NavActivity_Click" ToolTip="Activity Feed (Ctrl+A)" AutomationProperties.Name="Activity Feed">
+                                    <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                                </Button>
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="NavDiagnostics_Click" ToolTip="Diagnostics (Ctrl+D)" AutomationProperties.Name="Diagnostics">
                                     <TextBlock Text="&#xE9E9;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                                 </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" ToolTip="Device Manager">
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="NavDevices_Click" ToolTip="Device Manager (Ctrl+M)" AutomationProperties.Name="Device Manager">
                                     <TextBlock Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                                 </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="NavSettings_Click" ToolTip="Settings">
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="NavSettings_Click" ToolTip="Settings (Ctrl+,)" AutomationProperties.Name="Settings">
                                     <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                                 </Button>
                             </StackPanel>
@@ -611,11 +654,11 @@
                     <!-- Windows Native Caption Buttons (Top Right) -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,16,16,0">
                         <!-- Minimize -->
-                        <Button Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" Width="46" Height="32" Click="BtnMinimize_Click" WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Button Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" Width="46" Height="32" Click="BtnMinimize_Click" WindowChrome.IsHitTestVisibleInChrome="True" AutomationProperties.Name="Minimize">
                             <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                         </Button>
                         <!-- Close -->
-                        <Button Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" Width="46" Height="32" Click="BtnClose_Click" WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Button Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" Width="46" Height="32" Click="BtnClose_Click" WindowChrome.IsHitTestVisibleInChrome="True" AutomationProperties.Name="Close">
                             <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                         </Button>
                     </StackPanel>

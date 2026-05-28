@@ -65,7 +65,7 @@ namespace Deskdrop.Windows
                     var doc = JsonDocument.Parse(line);
                     if (doc.RootElement.TryGetProperty("status", out var st) && st.GetString() == "error")
                     {
-                        var msg = doc.RootElement.TryGetProperty("error", out var err) ? err.GetString() : "Unknown IPC error";
+                        var msg = doc.RootElement.TryGetProperty("message", out var err) ? err.GetString() : "Unknown IPC error";
                         throw new InvalidOperationException($"IPC returned error: {msg}");
                     }
                     return doc;
