@@ -307,14 +307,11 @@ impl PeerManager {
                 status: PeerConnectionState::Connecting,
                 ..PeerRecord::default()
             });
-            if entry.status == PeerConnectionState::Connecting
-                && endpoint.is_some()
-                && entry.socket_addrs().contains(&endpoint.unwrap())
-            {
-                return Ok(false);
-            }
+
             if let Some(endpoint) = endpoint {
-                entry.ips = vec![endpoint.ip()];
+                if !entry.ips.contains(&endpoint.ip()) {
+                    entry.ips.push(endpoint.ip());
+                }
                 entry.port = endpoint.port();
             }
             entry.status = PeerConnectionState::Connecting;
@@ -340,7 +337,9 @@ impl PeerManager {
                 ips: vec![endpoint.ip()],
                 ..PeerRecord::default()
             });
-            entry.ips = vec![endpoint.ip()];
+            if !entry.ips.contains(&endpoint.ip()) {
+                entry.ips.push(endpoint.ip());
+            }
             entry.port = endpoint.port();
             entry.last_seen = Some(now_secs());
             entry.status = PeerConnectionState::Connected;
