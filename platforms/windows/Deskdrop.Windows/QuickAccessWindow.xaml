@@ -1,6 +1,7 @@
 <Window x:Class="Deskdrop.Windows.QuickAccessWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
         Title="Quick Access" Height="600" Width="380"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
@@ -79,7 +80,7 @@
                     <Grid Grid.Row="0">
                         <TextBlock Text="Quick Access" FontWeight="Bold" FontSize="16" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnSettings_Click" ToolTip="Open Dashboard"/>
+                            <Button   FontSize="14" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnSettings_Click" ToolTip="Open Dashboard"><iconPacks:PackIconLucide Kind="HelpCircle"/></Button>
                         </StackPanel>
                     </Grid>
                     
@@ -113,7 +114,7 @@
                                 <DataTemplate>
                                     <Border Background="#F2F2F7" CornerRadius="16" Padding="12,6" Margin="0,0,8,0" Cursor="Hand" MouseLeftButtonDown="DeviceTarget_Click">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE975;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <iconPacks:PackIconLucide Kind="Smartphone" Width="12" Height="12"    Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                             <TextBlock Text="{Binding friendly_name}" FontSize="12" FontWeight="Medium" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Border>
@@ -145,8 +146,8 @@
                                     
                                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding RelativeTime}" Foreground="{StaticResource InkSoft}" FontSize="10" FontWeight="Medium" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <Button Content="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="12" Background="Transparent" Foreground="{Binding PinColor}" BorderThickness="0" Margin="0,0,4,0" Cursor="Hand" Click="BtnPinItem_Click" ToolTip="Pin to top"/>
-                                        <Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12" Background="Transparent" Foreground="{StaticResource BrandRed}" BorderThickness="0" Cursor="Hand" Click="BtnDeleteItem_Click" ToolTip="Delete"/>
+                                        <Button   FontSize="12" Background="Transparent" Foreground="{Binding PinColor}" BorderThickness="0" Margin="0,0,4,0" Cursor="Hand" Click="BtnPinItem_Click" ToolTip="Pin to top"><iconPacks:PackIconLucide Kind="HelpCircle"/></Button>
+                                        <Button   FontSize="12" Background="Transparent" Foreground="{StaticResource BrandRed}" BorderThickness="0" Cursor="Hand" Click="BtnDeleteItem_Click" ToolTip="Delete"><iconPacks:PackIconLucide Kind="Trash2"/></Button>
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -157,3 +158,4 @@
         </Grid>
     </Border>
 </Window>
+

@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <PackageReference Include="QRCoder" Version="1.4.3" />
+    <PackageReference Include="MahApps.Metro.IconPacks.Lucide" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>

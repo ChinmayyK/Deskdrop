@@ -67,7 +67,7 @@ namespace Deskdrop.Windows
         [System.Text.Json.Serialization.JsonPropertyName("trusted")]
         public bool is_trusted { get => _is_trusted; set { if(SetProperty(ref _is_trusted, value)) { OnPropertyChanged(nameof(ShowVerifyButton)); OnPropertyChanged(nameof(ShowDisconnectButton)); OnPropertyChanged(nameof(ShowConnectButton)); } } }
         
-        public string StatusIcon => status == "connected" ? "🟢" : "⚪";
+        public string StatusIcon => status == "connected" ? "CheckCircle" : "Circle";
         
         public bool ShowVerifyButton => status == "connected" && !is_trusted;
         public bool ShowDisconnectButton => status == "connected" && is_trusted;
@@ -83,11 +83,11 @@ namespace Deskdrop.Windows
         {
             get
             {
-                if (BatteryCharging) return "\uE945"; // Charging icon
-                if (BatteryLevel > 80) return "\uEBAA"; // Full
-                if (BatteryLevel > 50) return "\uEBA6"; // Half
-                if (BatteryLevel > 20) return "\uEBA2"; // Low
-                return "\uEBA0"; // Empty
+                if (BatteryCharging) return "BatteryCharging"; // Charging icon
+                if (BatteryLevel > 80) return "BatteryFull"; // Full
+                if (BatteryLevel > 50) return "BatteryMedium"; // Half
+                if (BatteryLevel > 20) return "BatteryLow"; // Low
+                return "Battery"; // Empty
             }
         }
         public string BatteryColor => BatteryCharging ? "#34C759" : (BatteryLevel <= 20 ? "#FF3B30" : "#8E8E93");
@@ -118,13 +118,13 @@ namespace Deskdrop.Windows
         public string StatusText => status == "in_progress" ? $"Receiving from {from_device}..." : status;
         public string ProgressColor => status == "completed" ? "#34C759" : (status == "failed" ? "#FF3B30" : "#007AFF");
 
-        public bool PrimaryVisible => status == "incoming" || status == "in_progress" || status == "paused" || status == "failed" || status == "completed";
-        public string PrimaryIcon => status == "incoming" ? "\xE8FB" : (status == "in_progress" ? "\xE769" : (status == "paused" ? "\xE768" : (status == "completed" ? "\xE838" : "\xE72C")));
-        public string PrimaryBackground => "#E5E5EA";
-        public string PrimaryForeground => "#007AFF";
+        public string PrimaryIcon => status == "incoming" ? "PhoneIncoming" : (status == "in_progress" ? "Pause" : (status == "paused" ? "Play" : (status == "completed" ? "CheckCircle" : "RefreshCw")));
+        public string PrimaryBackground => status == "incoming" ? "#34C759" : (status == "in_progress" ? "#F2F2F7" : (status == "paused" ? "#007AFF" : (status == "completed" ? "#E5F9E9" : "#F2F2F7")));
+        public string PrimaryForeground => status == "incoming" ? "White" : (status == "in_progress" ? "#1C1C1E" : (status == "paused" ? "White" : (status == "completed" ? "#34C759" : "#1C1C1E")));
+        public bool PrimaryVisible => true;
 
         public bool SecondaryVisible => status == "incoming" || status == "in_progress" || status == "paused";
-        public string SecondaryIcon => status == "incoming" ? "\xE711" : "\xE711";
+        public string SecondaryIcon => status == "incoming" ? "X" : "X";
         public string SecondaryBackground => "#FF3B30";
         public string SecondaryForeground => "#FFFFFF";
     }

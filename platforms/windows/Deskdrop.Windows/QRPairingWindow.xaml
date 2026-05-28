@@ -1,6 +1,7 @@
 <Window x:Class="Deskdrop.Windows.QRPairingWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
         Title="Magic Link Pair" Height="450" Width="400"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
@@ -22,7 +23,7 @@
         <Grid>
             <!-- Title Bar for Dragging -->
             <Grid Height="40" VerticalAlignment="Top" Background="Transparent" MouseLeftButtonDown="Window_MouseDown" Panel.ZIndex="10">
-                <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Width="40" Height="30" HorizontalAlignment="Right" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnClose_Click"/>
+                <Button   FontSize="10" Width="40" Height="30" HorizontalAlignment="Right" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Click="BtnClose_Click"><iconPacks:PackIconLucide Kind="X"/></Button>
             </Grid>
 
             <Grid Margin="32,48,32,32">
@@ -46,3 +47,4 @@
         </Grid>
     </Border>
 </Window>
+

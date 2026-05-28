@@ -45,7 +45,11 @@ namespace Deskdrop.Windows
                 try
                 {
                     var state = DaemonClient.Status();
-                    if (state == null) return;
+                    if (state == null)
+                    {
+                        Dispatcher.Invoke(() => System.Windows.MessageBox.Show("Error: DaemonClient.Status() returned null. The IPC pipe might be broken."));
+                        return;
+                    }
 
                     JsonDocument? settings = null;
                     try { settings = DaemonClient.Send(new { cmd = "get_settings" }); } catch { }

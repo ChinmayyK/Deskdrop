@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Linq;
+using System.IO.Compression;
 
 namespace Deskdrop.Windows
 {
@@ -1081,3 +1082,4 @@ namespace Deskdrop.Windows
         }
     }
 }
+

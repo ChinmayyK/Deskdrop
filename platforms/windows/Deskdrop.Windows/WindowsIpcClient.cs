@@ -21,7 +21,7 @@ namespace Deskdrop.Windows
     /// </summary>
     internal sealed class DaemonClient : IDisposable
     {
-        private static string PipeName => $"deskdrop_{Environment.UserName}";
+        private static string PipeName => "deskdrop";
         private const int    TimeoutMs   = 1000;
 
 
