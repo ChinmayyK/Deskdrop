@@ -181,7 +181,8 @@ namespace Deskdrop.Windows
         public event Action<string,string>? ClipboardReceived;      // (text, fromDevice)
         public event Action<HistoryItem>?  HistoryItemAdded;
         public event Action<string?>?      QuickContextUpdated;     // (text or null)
-        public event Action<string,string>? IncomingCallRequested;   // (callerName, deviceId)
+        public event Action<string, string, string>? IncomingCallRequested;   // (callerName, deviceId, state)
+        public event Action<string>?       SystemHealthUpdated;     // json health payload
 
         private string? _quickContextText;
         public string? QuickContextText => _quickContextText;
@@ -383,15 +384,18 @@ namespace Deskdrop.Windows
                 {
                     var files = Clipboard.GetFileDropList();
                     if (files == null || files.Count == 0) return;
-                    var path  = files[0]!;
-                    var bytes = File.ReadAllBytes(path);
-                    var name  = Path.GetFileName(path);
-                    NativeCore.deskdrop_push_file(_handle, name, bytes, (UIntPtr)bytes.Length);
-                    AddHistory(new HistoryItem
+                    
+                    foreach (var path in files)
                     {
-                        Summary = name, Source = "local",
-                        Time = DateTime.Now, TypeIcon = "📎",
-                    });
+                        var name  = Path.GetFileName(path);
+                        // Send via IPC directly using the path to avoid memory spikes on large files
+                        DaemonClient.SendFilePath(path, name, "application/octet-stream");
+                        AddHistory(new HistoryItem
+                        {
+                            Summary = name, Source = "local",
+                            Time = DateTime.Now, TypeIcon = "📎",
+                        });
+                    }
                 }
             }
             catch { /* clipboard is inherently racy on Windows */ }
@@ -549,8 +553,8 @@ namespace Deskdrop.Windows
                     
                     if (tid != null)
                     {
-                        StatusChanged?.Invoke($"⬇️ Receiving {name} from {from}...");
-                        NativeCore.deskdrop_accept_file_transfer(_handle, tid);
+                        StatusChanged?.Invoke($"⬇️ Incoming {name} from {from}...");
+                        // Do not auto-accept here; let core policy or user UI handle it
                     }
                     break;
                 }
@@ -616,7 +620,8 @@ namespace Deskdrop.Windows
                 {
                     var caller = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
                     var deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? caller;
-                    IncomingCallRequested?.Invoke(caller, deviceId);
+                    var state = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? "idle";
+                    IncomingCallRequested?.Invoke(caller, deviceId, state);
                     break;
                 }
 
@@ -642,6 +647,16 @@ namespace Deskdrop.Windows
                             }
                         }
                         catch { /* ignore invalid JSON */ }
+                    }
+                    break;
+                }
+
+                case NativeCore.PB_EVENT_SYSTEM_HEALTH_UPDATED:
+                {
+                    var healthJson = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev));
+                    if (healthJson != null)
+                    {
+                        SystemHealthUpdated?.Invoke(healthJson);
                     }
                     break;
                 }
@@ -878,13 +893,26 @@ namespace Deskdrop.Windows
                 });
             };
 
-            _mgr.IncomingCallRequested += (caller, deviceId) => {
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            _mgr.IncomingCallRequested += (caller, deviceId, state) => {
+                System.Windows.Application.Current?.Dispatcher.Invoke(() =>
                 {
-                    var banner = new IncomingCallBannerWindow(caller);
-                    banner.CallAccepted += (s, e) => _mgr.SendCallAction("accept", deviceId);
-                    banner.CallDeclined += (s, e) => _mgr.SendCallAction("decline", deviceId);
-                    banner.Show();
+                    if (state == "ringing")
+                    {
+                        var banner = new IncomingCallBannerWindow(caller);
+                        banner.CallAccepted += (s, e) => _mgr.SendCallAction("accept", deviceId);
+                        banner.CallDeclined += (s, e) => _mgr.SendCallAction("reject", deviceId);
+                        banner.Show();
+                    }
+                    else
+                    {
+                        foreach (System.Windows.Window window in System.Windows.Application.Current.Windows)
+                        {
+                            if (window is IncomingCallBannerWindow bannerWindow)
+                            {
+                                bannerWindow.Close();
+                            }
+                        }
+                    }
                 });
             };
 

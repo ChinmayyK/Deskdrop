@@ -25,7 +25,16 @@ namespace Deskdrop.Windows
         private const int    TimeoutMs   = 1000;
 
 
-        // ── Public API ────────────────────────────────────────────────────────
+        public static JsonDocument? SendFilePath(string path, string name, string mime, string? targetDevice = null)
+        {
+            if (targetDevice == null)
+            {
+                return Send(new { cmd = "send_file_path", path = path, name = name, mime = mime });
+            }
+            return Send(new { cmd = "send_file_path", path = path, name = name, mime = mime, target_device = targetDevice });
+        }
+
+        // ── Security ────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Returns true if the daemon is currently reachable.
@@ -101,7 +110,7 @@ namespace Deskdrop.Windows
             return Send(new { cmd = "patch_settings", patch = JsonSerializer.Serialize(patch) });
         }
 
-        public static JsonDocument? LatestCameraFrame() => Send(new { cmd = "latest_camera_frame" });
+        public static JsonDocument? LatestCameraFrame(string peerId) => Send(new { cmd = "latest_camera_frame", target_device = peerId });
 
         // ── Private transport ─────────────────────────────────────────────────
 

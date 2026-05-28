@@ -22,6 +22,7 @@ namespace Deskdrop.Windows
             _clipboardManager.HistoryItemAdded += OnHistoryItemAdded;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
+            _clipboardManager.SystemHealthUpdated += OnSystemHealthUpdated;
             LoadTransfersView();
             
             // Bind UI lists to the global store
@@ -93,6 +94,8 @@ namespace Deskdrop.Windows
             LoadActivityView();
         }
 
+
+
         private void LoadActivityView()
         {
             HideAllViews();
@@ -111,6 +114,31 @@ namespace Deskdrop.Windows
         private void OnHistoryItemAdded(HistoryItem obj)
         {
             // Logic handled by DeskdropStore binding
+        }
+
+        private void OnSystemHealthUpdated(string json)
+        {
+            try
+            {
+                var health = System.Text.Json.JsonDocument.Parse(json);
+                if (health.RootElement.TryGetProperty("daemon_running", out var daemonRunning))
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        var isRunning = daemonRunning.GetBoolean();
+                        if (TxtDiagDaemonStatus != null)
+                        {
+                            TxtDiagDaemonStatus.Text = isRunning ? "Running" : "Stopped";
+                            TxtDiagDaemonStatus.Foreground = isRunning ? (SolidColorBrush)FindResource("MacGreen") : (SolidColorBrush)FindResource("MacRed");
+                        }
+                        if (TxtDiagDaemonSuggestion != null)
+                        {
+                            TxtDiagDaemonSuggestion.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
+                        }
+                    });
+                }
+            }
+            catch { /* Ignore parse errors */ }
         }
 
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -545,7 +573,7 @@ namespace Deskdrop.Windows
                 // Open CameraPreviewWindow
                 Dispatcher.Invoke(() =>
                 {
-                    var cameraWindow = new CameraPreviewWindow();
+                    var cameraWindow = new CameraPreviewWindow(_activeCallDeviceId);
                     cameraWindow.Show();
                 });
             }
@@ -567,6 +595,8 @@ namespace Deskdrop.Windows
             public string Action { get; set; } = "";
             public string Target { get; set; } = "";
         }
+
+
 
 
         private void LoadSettingsView()
@@ -602,6 +632,7 @@ namespace Deskdrop.Windows
                         if (settings.TryGetProperty("sync_enabled", out var sync)) ChkSyncEnabled.IsChecked = sync.GetBoolean();
                         if (settings.TryGetProperty("show_receive_notification", out var notif)) ChkShowNotifications.IsChecked = notif.GetBoolean();
                         if (settings.TryGetProperty("require_tofu_confirmation", out var tofu)) ChkRequireTofu.IsChecked = tofu.GetBoolean();
+                        if (settings.TryGetProperty("auto_accept_file_transfers", out var autoAccept)) ChkAutoAcceptFiles.IsChecked = autoAccept.GetBoolean();
                         if (settings.TryGetProperty("device_name", out var devName)) TxtDeviceName.Text = devName.GetString() ?? "";
                     });
                 }
@@ -644,6 +675,7 @@ namespace Deskdrop.Windows
                     device_name = string.IsNullOrWhiteSpace(TxtDeviceName.Text) ? null : TxtDeviceName.Text,
                     require_tofu_confirmation = ChkRequireTofu.IsChecked == true,
                     show_receive_notification = ChkShowNotifications.IsChecked == true,
+                    auto_accept_file_transfers = ChkAutoAcceptFiles.IsChecked == true,
                 });
             });
             
@@ -707,7 +739,7 @@ namespace Deskdrop.Windows
 
         private void BorderStreamCamera_Click(object sender, RoutedEventArgs e)
         {
-            var previewWindow = new CameraPreviewWindow();
+            var previewWindow = new CameraPreviewWindow("");
             previewWindow.Show();
         }
 

@@ -192,7 +192,7 @@ pub enum IpcRequest {
     /// Get a serializable snapshot of global runtime metrics.
     GetMetrics,
     /// Poll the latest camera frame received from any peer.
-    LatestCameraFrame,
+    LatestCameraFrame { target_device: String },
 
     // ── History tag management ────────────────────────────────────────────────
     /// Add a tag to a history entry.
@@ -668,7 +668,7 @@ pub async fn handle_ipc_request(eng: std::sync::Arc<crate::engine::Engine>, req:
                 "device_id": eng.device_id().await,
             }))
         }
-        IpcRequest::LatestCameraFrame => {
+        IpcRequest::LatestCameraFrame { target_device } => {
             // The FFI / local engine doesn't track this yet, so return empty
             IpcResponse::ok_empty()
         }

@@ -34,13 +34,13 @@
         <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="SurfaceStrong" Color="#F2F2F7"/>
         <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceGlass" Color="#D9FFFFFF"/>
+        <SolidColorBrush x:Key="SurfaceGlass" Color="#B3FFFFFF"/> <!-- More translucent for Mica -->
         
         <SolidColorBrush x:Key="Ink" Color="#1C1C1E"/>
-        <SolidColorBrush x:Key="InkSoft" Color="#8E8E93"/>
-        <SolidColorBrush x:Key="InkSubtle" Color="#C7C7CC"/>
-        <SolidColorBrush x:Key="Stroke" Color="#E5E5EA"/>
-        <SolidColorBrush x:Key="StrokeSoft" Color="#F2F2F7"/>
+        <SolidColorBrush x:Key="InkSoft" Color="#6E6E73"/> <!-- Improved contrast -->
+        <SolidColorBrush x:Key="InkSubtle" Color="#8A8A8E"/> <!-- Improved contrast -->
+        <SolidColorBrush x:Key="Stroke" Color="#D1D1D6"/> <!-- Darker for visibility -->
+        <SolidColorBrush x:Key="StrokeSoft" Color="#E5E5EA"/>
 
         <!-- macOS Traffic Light Colors -->
         <SolidColorBrush x:Key="MacRed" Color="#FF5F56"/>
@@ -526,7 +526,8 @@
                                     <CheckBox x:Name="ChkLaunchOnStartup" Content="Launch at login" Margin="0,0,0,16"/>
                                     <CheckBox x:Name="ChkSyncEnabled" Content="Sync clipboard automatically" Margin="0,0,0,16"/>
                                     <CheckBox x:Name="ChkShowNotifications" Content="Show desktop notifications" Margin="0,0,0,16"/>
-                                    <CheckBox x:Name="ChkRequireTofu" Content="Require confirmation for incoming files"/>
+                                    <CheckBox x:Name="ChkAutoAcceptFiles" Content="Auto-accept incoming file transfers" Margin="0,0,0,16"/>
+                                    <CheckBox x:Name="ChkRequireTofu" Content="Require confirmation for unknown devices"/>
                                 </StackPanel>
                             </Border>
 

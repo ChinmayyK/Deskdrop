@@ -331,13 +331,29 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    if let EngineEvent::ClipboardReceived { content, .. } = &e.inner {
-        if let ClipboardContent::Text(ref s) = **content {
-            let cs = CString::new(s.as_bytes()).unwrap_or_default();
-            e.cached_str = Some(cs);
-            return e.cached_str.as_ref().unwrap().as_ptr();
-        }
+    
+    let text: Option<String> = match &e.inner {
+        EngineEvent::ClipboardReceived { content, .. } => {
+            if let ClipboardContent::Text(ref s) = **content {
+                Some(s.clone())
+            } else {
+                None
+            }
+        },
+        EngineEvent::Warning(s) => Some(s.clone()),
+        EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
+        EngineEvent::ActivityFeedUpdated { feed } => {
+            serde_json::to_string(feed).ok()
+        },
+        _ => None,
+    };
+
+    if let Some(s) = text {
+        let cs = CString::new(s.as_bytes()).unwrap_or_default();
+        e.cached_str = Some(cs);
+        return e.cached_str.as_ref().unwrap().as_ptr();
     }
+    
     std::ptr::null()
 }
 

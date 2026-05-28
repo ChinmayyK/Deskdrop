@@ -12,10 +12,12 @@ namespace Deskdrop.Windows
     public partial class CameraPreviewWindow : Window
     {
         private bool _isPolling;
+        private string _peerId;
 
-        public CameraPreviewWindow()
+        public CameraPreviewWindow(string peerId)
         {
             InitializeComponent();
+            _peerId = peerId;
             StartPolling();
         }
 
@@ -28,7 +30,7 @@ namespace Deskdrop.Windows
                 {
                     try
                     {
-                        var resp = DaemonClient.LatestCameraFrame();
+                        var resp = DaemonClient.LatestCameraFrame(_peerId);
                         if (resp != null && resp.RootElement.TryGetProperty("data", out var dataProp))
                         {
                             if (dataProp.TryGetProperty("frame_base64", out var frameProp))
