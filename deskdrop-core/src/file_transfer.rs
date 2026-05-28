@@ -109,7 +109,7 @@ pub enum TransferStatus {
 // ── Sender state ──────────────────────────────────────────────────────────────
 
 enum OutboundSource {
-    Memory(Vec<Vec<u8>>),
+    Memory(Vec<u8>),
     FilePath(PathBuf, Option<std::fs::File>),
 }
 
@@ -128,17 +128,15 @@ pub struct OutboundTransfer {
 }
 
 impl OutboundTransfer {
-    /// Split `data` into chunks and create an outbound transfer.
     pub fn new(data: Vec<u8>, meta: FileTransferMetadata, target_device: Option<Uuid>) -> Self {
-        let chunks: Vec<Vec<u8>> = data.chunks(FILE_CHUNK_SIZE).map(|c| c.to_vec()).collect();
-        let total_chunks = chunks.len() as u32;
+        let total_chunks = chunk_count(meta.size_bytes).unwrap_or(u32::MAX);
 
         Self {
             // Use the announced transfer ID so later accept/ack messages map
             // back to the sender's local outbound state.
             transfer_id: meta.transfer_id,
             meta,
-            source: OutboundSource::Memory(chunks),
+            source: OutboundSource::Memory(data),
             total_chunks,
             next_chunk: 0,
             last_acked_chunk: 0,
@@ -182,10 +180,11 @@ impl OutboundTransfer {
         }
         let idx = self.next_chunk;
         let data = match &mut self.source {
-            OutboundSource::Memory(chunks) => chunks
-                .get(idx as usize)
-                .cloned()
-                .with_context(|| format!("missing outbound chunk {}", idx))?,
+            OutboundSource::Memory(data_vec) => {
+                let start = (idx as usize) * FILE_CHUNK_SIZE;
+                let end = (start + FILE_CHUNK_SIZE).min(data_vec.len());
+                data_vec[start..end].to_vec()
+            }
             OutboundSource::FilePath(path, cached_file) => {
                 if cached_file.is_none() {
                     *cached_file =
@@ -250,8 +249,7 @@ pub struct InboundTransfer {
 
 impl InboundTransfer {
     pub fn new(meta: FileTransferMetadata, from_device: Uuid, from_device_name: String) -> Self {
-        let total_chunks = ((meta.size_bytes as usize).saturating_add(FILE_CHUNK_SIZE - 1)
-            / FILE_CHUNK_SIZE) as u32;
+        let total_chunks = chunk_count(meta.size_bytes).unwrap_or(u32::MAX);
         Self {
             transfer_id: meta.transfer_id,
             meta,
@@ -293,9 +291,10 @@ impl InboundTransfer {
             let _ = std::fs::remove_file(tmp);
             let file = OpenOptions::new()
                 .create(true)
-                .append(true)
+                .write(true)
                 .open(tmp)
                 .with_context(|| format!("creating temp file {}", tmp.display()))?;
+            file.set_len(self.meta.size_bytes).context("pre-allocating disk space for incoming file")?;
             self.file_handle = Some(file);
         }
         self.status = TransferStatus::Transferring;
@@ -389,6 +388,9 @@ impl InboundTransfer {
 
     fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
         if let Some(file) = &mut self.file_handle {
+            // Seek to the correct offset based on chunks received
+            let offset = (self.received_chunk_count as u64) * (FILE_CHUNK_SIZE as u64);
+            file.seek(std::io::SeekFrom::Start(offset)).context("seeking to chunk offset")?;
             file.write_all(data).context("writing chunk to temp file")?;
         } else {
             anyhow::bail!("transfer has not been accepted or file handle is missing");

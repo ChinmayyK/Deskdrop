@@ -260,48 +260,18 @@ mod platform {
             .unwrap_or_else(|| "deskdrop-host".to_string())
     }
 
-    fn service_instance_name(device_name: &str, device_id: Uuid) -> String {
+    fn service_instance_name(_device_name: &str, device_id: Uuid) -> String {
         let prefix = &device_id.to_string()[..8];
-        let safe = sanitize_service_label(device_name);
-        if safe.is_empty() {
-            format!("deskdrop-{prefix}")
-        } else {
-            format!("deskdrop-{prefix}-{safe}")
-        }
+        format!("deskdrop-{prefix}")
     }
 
     fn provisional_device_name(fullname: &str, peer_id: Uuid) -> String {
-        let instance = fullname
+        let _instance = fullname
             .split("._deskdrop._tcp.local.")
             .next()
             .unwrap_or(fullname);
-        let prefix = format!("deskdrop-{}", &peer_id.to_string()[..8]);
-
-        let Some(raw_name) = instance.strip_prefix(&format!("{prefix}-")) else {
-            return format!("device-{}", &peer_id.to_string()[..8]);
-        };
-
-        let humanized = raw_name
-            .split('-')
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
-
-        if humanized.is_empty() {
-            format!("device-{}", &peer_id.to_string()[..8])
-        } else {
-            humanized
-        }
-    }
-
-    fn sanitize_service_label(value: &str) -> String {
-        value
-            .chars()
-            .take(24)
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
-            .collect::<String>()
-            .trim_matches('-')
-            .to_string()
+        
+        format!("device-{}", &peer_id.to_string()[..8])
     }
 
     #[cfg(test)]

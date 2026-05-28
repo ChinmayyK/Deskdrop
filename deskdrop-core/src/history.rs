@@ -234,6 +234,22 @@ impl HistoryEntry {
             .map(|expires_at| expires_at <= now)
             .unwrap_or(false)
     }
+
+    /// Returns a scrubbed clone of this entry if it contains sensitive data.
+    fn scrubbed_for_persistence(&self) -> Self {
+        if self.sensitive_kind.is_some() {
+            let mut clone = self.clone();
+            clone.payload = HistoryPayload::Text {
+                preview: "[Sensitive data scrubbed from disk]".to_string(),
+                full_len: 0,
+                is_truncated: false,
+                full_text: Some("[Sensitive data scrubbed from disk]".to_string()),
+            };
+            clone
+        } else {
+            self.clone()
+        }
+    }
 }
 
 /// Find the largest valid UTF-8 character boundary that is <= `max_bytes`.
@@ -560,7 +576,14 @@ impl History {
         // Atomic write: serialise to a .tmp file then rename so a crash during
         // write never leaves the history file in a partially-written state.
         let tmp_path = self.path.with_extension("tmp");
-        let bytes = serde_json::to_vec_pretty(&self.entries)?;
+        
+        let persistable_entries: Vec<HistoryEntry> = self
+            .entries
+            .iter()
+            .map(|e| e.scrubbed_for_persistence())
+            .collect();
+            
+        let bytes = serde_json::to_vec_pretty(&persistable_entries)?;
         std::fs::write(&tmp_path, &bytes).context("writing history tmp")?;
         std::fs::rename(&tmp_path, &self.path).context("renaming history file")?;
         Ok(())

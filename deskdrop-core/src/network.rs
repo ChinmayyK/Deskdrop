@@ -14,7 +14,7 @@
 //! - Total:            ~20–80 ms ✓
 
 use crate::crypto::{EphemeralKeypair, SessionKey};
-use crate::protocol::{AppMessage, HelloAckFrame, HelloFrame, PROTOCOL_VERSION};
+use crate::protocol::{AppMessage, EcdhFrame, PROTOCOL_VERSION};
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
 use std::net::SocketAddr;

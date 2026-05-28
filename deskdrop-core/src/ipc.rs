@@ -449,7 +449,7 @@ pub mod server {
     }
 
     pub async fn spawn_with_engine(engine: std::sync::Arc<crate::engine::Engine>) -> Result<()> {
-        super::client::spawn_with_engine(engine).await
+        crate::ipc::client::client::spawn_with_engine(engine).await
     }
 
     async fn handle_connection<H, Fut>(stream: UnixStream, handler: Arc<H>)
@@ -671,7 +671,7 @@ pub async fn handle_ipc_request(eng: std::sync::Arc<crate::engine::Engine>, req:
                 "device_id": eng.device_id().await,
             }))
         }
-        IpcRequest::LatestCameraFrame { target_device } => {
+        IpcRequest::LatestCameraFrame { target_device: _ } => {
             // The FFI / local engine doesn't track this yet, so return empty
             IpcResponse::ok_empty()
         }

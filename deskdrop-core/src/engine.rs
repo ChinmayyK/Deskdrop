@@ -557,10 +557,10 @@ impl Engine {
             }
 
             let device_id_str = shared.config.device_id.to_string();
-            // Payload format: DESKDROP_BEACON:<uuid>:<name>:<tcp_port>
+            // Payload format: DESKDROP_BEACON:<uuid>:<tcp_port>
             let mut payload = format!(
-                "DESKDROP_BEACON:{}:{}:{}",
-                device_id_str, shared.config.device_name, shared.config.port
+                "DESKDROP_BEACON:{}:{}",
+                device_id_str, shared.config.port
             )
             .into_bytes();
             if payload.len() > 512 {
@@ -594,12 +594,12 @@ impl Engine {
                     Ok((len, addr)) => {
                         let text = String::from_utf8_lossy(&buf[..len]);
                         if text.starts_with("DESKDROP_BEACON:") {
-                            let parts: Vec<&str> = text.splitn(4, ':').collect();
-                            if parts.len() == 4 {
+                            let parts: Vec<&str> = text.splitn(3, ':').collect();
+                            if parts.len() == 3 {
                                 if let Ok(peer_id) = uuid::Uuid::parse_str(parts[1]) {
                                     if peer_id != shared.config.device_id {
-                                        let peer_name = parts[2].to_string();
-                                        if let Ok(peer_port) = parts[3].parse::<u16>() {
+                                        let peer_name = format!("Device {}", &peer_id.to_string()[..8]);
+                                        if let Ok(peer_port) = parts[2].parse::<u16>() {
                                             let peer_addr = SocketAddr::new(addr.ip(), peer_port);
 
                                             let trusted = {
@@ -1889,7 +1889,7 @@ impl Engine {
     pub async fn connect_to_peer(&self, ip: String, port: u16) -> Result<()> {
         let addr = SocketAddr::new(ip.parse().context("invalid peer IP")?, port);
         self.shared.peer_manager.note_manual_target(addr);
-        match connect_once(self.shared.clone(), addr, None, DiscoverySource::Manual).await {
+        match connect_once(self.shared.clone(), vec![addr], None, DiscoverySource::Manual).await {
             Ok(()) => {
                 self.shared.peer_manager.clear_manual_target(addr);
                 Ok(())
@@ -2191,7 +2191,8 @@ impl Engine {
                             continue;
                         }
                     }
-                    if let Some(endpoint) = shared.peer_manager.endpoint_for(peer.id) {
+                    let endpoints = peer.socket_addrs();
+                    if !endpoints.is_empty() {
                         last_attempt.insert(peer.id, now);
                         let shared_clone = shared.clone();
                         let peer_id = peer.id;
@@ -2199,10 +2200,10 @@ impl Engine {
                         tokio::spawn(async move {
                             tracing::debug!(
                                 peer_id = %peer_id,
-                                endpoint = %endpoint,
+                                endpoints = ?endpoints,
                                 "auto-reconnector: attempting reconnection"
                             );
-                            let _ = connect_once(shared_clone, endpoint, Some(peer_id), discovery)
+                            let _ = connect_once(shared_clone, endpoints, Some(peer_id), discovery)
                                 .await;
                         });
                     }
@@ -2511,7 +2512,7 @@ async fn reconnect_known_peers(shared: EngineShared) {
         if is_obviously_local_peer(
             peer.id,
             &peer.friendly_name,
-            peer.ip,
+            peer.ips.first().cloned(),
             shared.config.device_id,
             &shared.config.device_name,
             Some(local_ip),
@@ -2538,13 +2539,13 @@ async fn reconnect_known_peers(shared: EngineShared) {
                 continue;
             }
 
-            for endpoint in endpoints {
+            for &endpoint in &endpoints {
                 scheduled.insert(endpoint);
             }
             let shared_clone = shared.clone();
             tokio::spawn(async move {
                 if let Err(err) =
-                    connect_loop(shared_clone, vec![endpoint], Some(peer.id), peer.discovery).await
+                    connect_loop(shared_clone, endpoints, Some(peer.id), peer.discovery).await
                 {
                     warn!(peer_id = %peer.id, error = %err, "network-change reconnect failed");
                 }
@@ -2599,7 +2600,7 @@ fn display_peers_for_status(
         if is_obviously_local_peer(
             peer.id,
             &peer.friendly_name,
-            peer.ip,
+            peer.ips.first().cloned(),
             local_device_id,
             local_device_name,
             Some(local_ip),
@@ -2703,7 +2704,7 @@ async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
         tokio::spawn(async move {
             if let Err(err) = connect_loop(
                 shared_clone,
-                addr,
+                vec![addr],
                 Some(peer.device_id),
                 DiscoverySource::Mdns,
             )
@@ -3887,6 +3888,9 @@ fn register_session(
                             let _ = shared.event_tx.send(EngineEvent::CameraFrameReceived {
                                 from_device: origin_device,
                             }).await;
+                        }
+                        Ok(AppMessage::Hello { .. }) | Ok(AppMessage::HelloAck { .. }) => {
+                            // Ignored in session loop
                         }
                         Err(err) => {
                             break err.to_string();

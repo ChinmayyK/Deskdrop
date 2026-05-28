@@ -271,44 +271,47 @@ final class DeskdropIPCClient {
 
     private func sendOnce(cmd: [String: Any]) async throws -> Data {
         let payload = try JSONSerialization.data(withJSONObject: cmd) + Data("\n".utf8)
+        let sockPath = self.socketPath
 
         return try await withCheckedThrowingContinuation { continuation in
-            do {
-                let sock = socket(AF_UNIX, SOCK_STREAM, 0)
-                guard sock >= 0 else { throw DeskdropIPCError.socketFailed }
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let sock = socket(AF_UNIX, SOCK_STREAM, 0)
+                    guard sock >= 0 else { throw DeskdropIPCError.socketFailed }
 
-                var addr = sockaddr_un()
-                addr.sun_family = sa_family_t(AF_UNIX)
-                withUnsafeMutablePointer(to: &addr.sun_path) {
-                    $0.withMemoryRebound(to: Int8.self, capacity: 108) { ptr in
-                        socketPath.withCString { src in _ = strncpy(ptr, src, 107) }
+                    var addr = sockaddr_un()
+                    addr.sun_family = sa_family_t(AF_UNIX)
+                    withUnsafeMutablePointer(to: &addr.sun_path) {
+                        $0.withMemoryRebound(to: Int8.self, capacity: 108) { ptr in
+                            sockPath.withCString { src in _ = strncpy(ptr, src, 107) }
+                        }
                     }
-                }
 
-                let connectResult = withUnsafePointer(to: &addr) {
-                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                        Darwin.connect(sock, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                    let connectResult = withUnsafePointer(to: &addr) {
+                        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                            Darwin.connect(sock, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                        }
                     }
-                }
-                guard connectResult == 0 else {
+                    guard connectResult == 0 else {
+                        Darwin.close(sock)
+                        throw DeskdropIPCError.connectionFailed
+                    }
+
+                    payload.withUnsafeBytes { _ = Darwin.send(sock, $0.baseAddress, payload.count, 0) }
+
+                    var response = Data()
+                    var buf = [UInt8](repeating: 0, count: 4096)
+                    while true {
+                        let n = Darwin.recv(sock, &buf, buf.count, 0)
+                        if n <= 0 { break }
+                        response.append(contentsOf: buf[0..<n])
+                        if response.last == UInt8(ascii: "\n") { break }
+                    }
                     Darwin.close(sock)
-                    throw DeskdropIPCError.connectionFailed
+                    continuation.resume(returning: response)
+                } catch {
+                    continuation.resume(throwing: error)
                 }
-
-                payload.withUnsafeBytes { _ = Darwin.send(sock, $0.baseAddress, payload.count, 0) }
-
-                var response = Data()
-                var buf = [UInt8](repeating: 0, count: 4096)
-                while true {
-                    let n = Darwin.recv(sock, &buf, buf.count, 0)
-                    if n <= 0 { break }
-                    response.append(contentsOf: buf[0..<n])
-                    if response.last == UInt8(ascii: "\n") { break }
-                }
-                Darwin.close(sock)
-                continuation.resume(returning: response)
-            } catch {
-                continuation.resume(throwing: error)
             }
         }
     }

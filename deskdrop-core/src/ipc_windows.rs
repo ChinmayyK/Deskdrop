@@ -29,6 +29,55 @@ fn get_pipe_name() -> String {
     format!(r"\\.\pipe\deskdrop_{}", username)
 }
 
+use std::ptr::null_mut;
+use windows_sys::Win32::Foundation::LocalFree;
+use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorA;
+use windows_sys::Win32::Security::{SECURITY_ATTRIBUTES, SDDL_REVISION_1};
+
+struct SecurePipeAttributes {
+    sa: SECURITY_ATTRIBUTES,
+}
+
+impl SecurePipeAttributes {
+    fn new() -> Self {
+        let sddl = b"D:(A;;GA;;;OW)\0"; // Generic All for Owner
+        let mut sd: *mut std::ffi::c_void = null_mut();
+        unsafe {
+            let res = ConvertStringSecurityDescriptorToSecurityDescriptorA(
+                sddl.as_ptr() as *const u8,
+                SDDL_REVISION_1,
+                &mut sd,
+                null_mut(),
+            );
+            if res == 0 {
+                panic!("ConvertStringSecurityDescriptorToSecurityDescriptorA failed");
+            }
+        }
+        
+        let sa = SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: sd,
+            bInheritHandle: 0,
+        };
+        
+        Self { sa }
+    }
+    
+    fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
+        &mut self.sa as *mut _ as *mut std::ffi::c_void
+    }
+}
+
+impl Drop for SecurePipeAttributes {
+    fn drop(&mut self) {
+        if !self.sa.lpSecurityDescriptor.is_null() {
+            unsafe {
+                LocalFree(self.sa.lpSecurityDescriptor as _);
+            }
+        }
+    }
+}
+
 /// Spawn the Windows named-pipe IPC server.
 ///
 /// `handler` is called once per request and must return a `IpcResponse`.
@@ -42,12 +91,14 @@ where
     tokio::spawn(async move {
         loop {
             // Create a new pipe instance to listen on.
-            let server = match ServerOptions::new()
-                .access_inbound(true)
+            let mut sec_attrs = SecurePipeAttributes::new();
+            let mut opts = ServerOptions::new();
+            opts.access_inbound(true)
                 .access_outbound(true)
                 .pipe_mode(PipeMode::Byte)
-                .max_instances(MAX_INSTANCES)
-                .create(get_pipe_name())
+                .max_instances(MAX_INSTANCES);
+
+            let server = match opts.security_attributes(sec_attrs.as_mut_ptr()).create(get_pipe_name())
             {
                 Ok(s) => s,
                 Err(e) => {

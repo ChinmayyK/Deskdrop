@@ -30,7 +30,7 @@ fn runtime() -> &'static Runtime {
 
 pub struct DeskdropHandle {
     engine: Engine,
-    event_rx: mpsc::Receiver<EngineEvent>,
+    event_rx: std::sync::Mutex<mpsc::Receiver<EngineEvent>>,
 }
 
 /// Allocate and start the engine. Returns NULL on failure.
@@ -82,7 +82,7 @@ pub unsafe extern "C" fn deskdrop_start(
                     }
                 });
             }
-            Box::into_raw(Box::new(DeskdropHandle { engine, event_rx }))
+            Box::into_raw(Box::new(DeskdropHandle { engine, event_rx: std::sync::Mutex::new(event_rx) }))
         }
         Err(e) => {
             eprintln!("deskdrop_start error: {:#}", e);
@@ -259,8 +259,8 @@ pub unsafe extern "C" fn deskdrop_poll_event(handle: *mut DeskdropHandle) -> *mu
     if handle.is_null() {
         return std::ptr::null_mut();
     }
-    let h = &mut *handle;
-    match h.event_rx.try_recv() {
+    let h = &*handle;
+    match h.event_rx.lock().unwrap().try_recv() {
         Ok(event) => Box::into_raw(Box::new(PbEvent {
             inner: event,
             cached_str: None,
@@ -342,8 +342,8 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
         },
         EngineEvent::Warning(s) => Some(s.clone()),
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
-        EngineEvent::ActivityFeedUpdated { feed } => {
-            serde_json::to_string(feed).ok()
+        EngineEvent::ActivityFeedUpdated { entries, .. } => {
+            serde_json::to_string(entries).ok()
         },
         _ => None,
     };

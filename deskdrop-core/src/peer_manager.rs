@@ -409,7 +409,9 @@ impl PeerManager {
                 {
                     let mut store = self.store.write().unwrap();
                     if let Some(entry) = store.peers.get_mut(&device_id) {
-                        entry.ip = Some(live_endpoint.ip());
+                        if !entry.ips.contains(&live_endpoint.ip()) {
+                            entry.ips.push(live_endpoint.ip());
+                        }
                         entry.port = live_endpoint.port();
                         entry.status = PeerConnectionState::Connected;
                         entry.last_error = Some(reason);

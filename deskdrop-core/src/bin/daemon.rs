@@ -772,7 +772,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .context("clipboard payload not found")?;
             Ok(IpcResponse::ok(payload))
         }
-        IpcRequest::LatestCameraFrame => {
+        IpcRequest::LatestCameraFrame { target_device: _ } => {
             let frame = state.engine.camera_frames().await.values().next().cloned();
             if let Some(bytes) = frame {
                 let base64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
