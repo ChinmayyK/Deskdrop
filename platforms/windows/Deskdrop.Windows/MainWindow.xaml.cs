@@ -802,8 +802,8 @@ namespace Deskdrop.Windows
             {
                 var parts = addr.Split(':', 2, StringSplitOptions.RemoveEmptyEntries);
                 object cmd = parts.Length == 2 && ushort.TryParse(parts[1], out var p)
-                    ? new { cmd = "connect_manual", host = parts[0], port = (int)p }
-                    : (object)new { cmd = "connect_manual", host = addr };
+                    ? new { cmd = "connect_peer", ip = parts[0], port = (int)p }
+                    : (object)new { cmd = "connect_peer", ip = addr, port = 47823 };
                 
                 var resp = DaemonClient.Send(cmd);
                 Dispatcher.Invoke(() =>

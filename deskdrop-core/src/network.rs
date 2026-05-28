@@ -115,8 +115,6 @@ fn apply_keepalive(stream: &TcpStream) -> Result<()> {
         .with_time(KEEPALIVE_IDLE)
         .with_interval(KEEPALIVE_INTERVAL);
 
-    // Retries are platform-specific (Linux / macOS; Windows uses a global).
-    #[cfg(not(windows))]
     let keepalive = keepalive.with_retries(KEEPALIVE_RETRIES);
 
     sock_ref
@@ -235,70 +233,79 @@ pub async fn handshake_initiator(
     let ephemeral = EphemeralKeypair::generate();
     let my_nonce = crate::crypto::random_nonce16();
 
-    let hello = HelloFrame {
+    let ecdh = EcdhFrame {
         version: PROTOCOL_VERSION,
-        device_id: my_device_id,
-        device_name: my_device_name.to_string(),
-        identity_pubkey: my_identity_pubkey,
         ecdh_pubkey: ephemeral.public_bytes,
         nonce: my_nonce,
-        metadata_json: None,
     };
 
-    send_frame(stream, &hello).await.context("sending Hello")?;
+    send_frame(stream, &ecdh).await.context("sending EcdhFrame")?;
 
-    let ack: HelloAckFrame =
+    let ack_ecdh: EcdhFrame =
         tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
             .await
-            .context("timeout waiting for HelloAck")?
-            .context("receiving HelloAck")?;
+            .context("timeout waiting for EcdhFrame")?
+            .context("receiving EcdhFrame")?;
 
     anyhow::ensure!(
-        ack.version == PROTOCOL_VERSION,
+        ack_ecdh.version == PROTOCOL_VERSION,
         "protocol version mismatch: peer={} us={}",
-        ack.version,
+        ack_ecdh.version,
         PROTOCOL_VERSION
     );
 
-    // Fix 2: Verify the responder's nonce echo.
-    // The responder computes nonce_response = XOR(initiator_nonce, responder_nonce).
-    // We recover the responder_nonce: responder_nonce = XOR(my_nonce, nonce_response).
-    // Then we re-derive the expected nonce_response and check it matches.
-    // This binds the ack to our specific hello frame; a replayer who didn't see
-    // the original exchange cannot produce a valid nonce_response.
-    let recovered_responder_nonce = xor_nonces(&my_nonce, &ack.nonce_response);
-    let expected_nonce_response = xor_nonces(&my_nonce, &recovered_responder_nonce);
-    anyhow::ensure!(
-        expected_nonce_response == ack.nonce_response,
-        "handshake nonce verification failed — possible replay or MITM"
-    );
-    // Additionally: the recovered responder nonce must not be all-zero
-    // (which would mean the peer simply echoed our nonce, not XOR'd its own).
-    anyhow::ensure!(
-        recovered_responder_nonce != [0u8; 16],
-        "handshake nonce_response is trivial (all-zero responder contribution)"
-    );
-
-    let (session, pin) = ephemeral
-        .derive_session_key(ack.ecdh_pubkey)
+    let (mut session, pin) = ephemeral
+        .derive_session_key(ack_ecdh.ecdh_pubkey)
         .context("ECDH key derivation")?;
 
-    info!(
-        "Handshake complete with '{}' ({})",
-        ack.device_name, ack.device_id
+    let hello = AppMessage::Hello {
+        device_id: my_device_id,
+        device_name: my_device_name.to_string(),
+        identity_pubkey: my_identity_pubkey,
+        metadata_json: None,
+    };
+
+    send_encrypted(stream, &mut session, &hello).await.context("sending encrypted Hello")?;
+
+    let ack_msg: AppMessage = tokio::time::timeout(Duration::from_secs(10), recv_encrypted(stream, &mut session))
+        .await
+        .context("timeout waiting for HelloAck")?
+        .context("receiving HelloAck")?;
+
+    let AppMessage::HelloAck {
+        device_id,
+        device_name,
+        identity_pubkey,
+        nonce_response,
+        trusted,
+        ..
+    } = ack_msg else {
+        anyhow::bail!("expected HelloAck");
+    };
+
+    let recovered_responder_nonce = xor_nonces(&my_nonce, &nonce_response);
+    let expected_nonce_response = xor_nonces(&my_nonce, &recovered_responder_nonce);
+    anyhow::ensure!(
+        expected_nonce_response == nonce_response,
+        "handshake nonce verification failed"
     );
+    anyhow::ensure!(
+        recovered_responder_nonce != [0u8; 16],
+        "handshake nonce_response is trivial"
+    );
+
+    info!("Handshake complete with '{}' ({})", device_name, device_id);
 
     Ok(HandshakeResult {
         session,
         pin,
-        peer_device_id: ack.device_id,
-        peer_device_name: ack.device_name,
-        peer_identity_pubkey_bytes: ack.identity_pubkey,
-        peer_already_trusted: ack.trusted,
+        peer_device_id: device_id,
+        peer_device_name: device_name,
+        peer_identity_pubkey_bytes: identity_pubkey,
+        peer_already_trusted: trusted,
     })
 }
 
-/// Responder side (we accepted the connection).
 pub async fn handshake_responder<F, Fut>(
     stream: &mut TcpStream,
     my_device_id: Uuid,
@@ -310,55 +317,67 @@ where
     F: FnOnce(Uuid, [u8; 32]) -> Fut,
     Fut: std::future::Future<Output = bool>,
 {
-    let hello: HelloFrame = tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
+    let ecdh: EcdhFrame = tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
         .await
-        .context("timeout waiting for Hello")?
-        .context("receiving Hello")?;
+        .context("timeout waiting for EcdhFrame")?
+        .context("receiving EcdhFrame")?;
 
     anyhow::ensure!(
-        hello.version == PROTOCOL_VERSION,
+        ecdh.version == PROTOCOL_VERSION,
         "protocol version mismatch: peer={} us={}",
-        hello.version,
+        ecdh.version,
         PROTOCOL_VERSION
     );
 
     let ephemeral = EphemeralKeypair::generate();
     let my_nonce = crate::crypto::random_nonce16();
-    // nonce_response = XOR(initiator_nonce, our_nonce).
-    // The initiator recovers our_nonce = XOR(their_nonce, nonce_response)
-    // and verifies that nonce_response == XOR(their_nonce, recovered_nonce).
-    let nonce_response = xor_nonces(&hello.nonce, &my_nonce);
+    let nonce_response = xor_nonces(&ecdh.nonce, &my_nonce);
 
-    let peer_is_trusted = check_trust(hello.device_id, hello.identity_pubkey).await;
+    let ack_ecdh = EcdhFrame {
+        version: PROTOCOL_VERSION,
+        ecdh_pubkey: ephemeral.public_bytes,
+        nonce: my_nonce,
+    };
+
+    send_frame(stream, &ack_ecdh).await.context("sending EcdhFrame ack")?;
+
+    let (mut session, pin) = ephemeral
+        .derive_session_key(ecdh.ecdh_pubkey)
+        .context("ECDH key derivation")?;
+
+    let hello_msg: AppMessage = tokio::time::timeout(Duration::from_secs(10), recv_encrypted(stream, &mut session))
+        .await
+        .context("timeout waiting for Hello")?
+        .context("receiving Hello")?;
+
+    let AppMessage::Hello { device_id, device_name, identity_pubkey, .. } = hello_msg else {
+        anyhow::bail!("expected Hello");
+    };
+
+    let peer_is_trusted = check_trust(device_id, identity_pubkey).await;
     let name_to_send = if peer_is_trusted {
         my_device_name.to_string()
     } else {
         "Deskdrop Device".to_string()
     };
 
-    let ack = HelloAckFrame {
-        version: PROTOCOL_VERSION,
+    let ack = AppMessage::HelloAck {
         device_id: my_device_id,
         device_name: name_to_send,
         identity_pubkey: my_identity_pubkey,
-        ecdh_pubkey: ephemeral.public_bytes,
         nonce_response,
         trusted: peer_is_trusted,
         metadata_json: None,
     };
 
-    send_frame(stream, &ack).await.context("sending HelloAck")?;
-
-    let (session, pin) = ephemeral
-        .derive_session_key(hello.ecdh_pubkey)
-        .context("ECDH key derivation")?;
+    send_encrypted(stream, &mut session, &ack).await.context("sending HelloAck")?;
 
     Ok(HandshakeResult {
         session,
         pin,
-        peer_device_id: hello.device_id,
-        peer_device_name: hello.device_name,
-        peer_identity_pubkey_bytes: hello.identity_pubkey,
+        peer_device_id: device_id,
+        peer_device_name: device_name,
+        peer_identity_pubkey_bytes: identity_pubkey,
         peer_already_trusted: peer_is_trusted,
     })
 }

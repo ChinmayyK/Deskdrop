@@ -174,7 +174,7 @@ impl HistoryMetadata {
 
 // ── Device metadata (exchanged during handshake / discovery) ─────────────────
 
-/// Sent in the HelloFrame `device_name` extension slot so peers know
+/// Sent in the Hello `device_name` extension slot so peers know
 /// the platform and can format notifications like "Copied from Chinmay's Pixel 8".
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DeviceMetadata {
@@ -204,33 +204,28 @@ pub struct FileTransferMetadata {
 // ── Wire messages ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HelloFrame {
+pub struct EcdhFrame {
     pub version: u16,
-    pub device_id: Uuid,
-    pub device_name: String,
-    pub identity_pubkey: [u8; 32],
     pub ecdh_pubkey: [u8; 32],
     pub nonce: [u8; 16],
-    /// Optional structured platform metadata (encoded as JSON string).
-    /// This travels over bincode, so it must always occupy a stable field slot.
-    pub metadata_json: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HelloAckFrame {
-    pub version: u16,
-    pub device_id: Uuid,
-    pub device_name: String,
-    pub identity_pubkey: [u8; 32],
-    pub ecdh_pubkey: [u8; 32],
-    pub nonce_response: [u8; 16],
-    pub trusted: bool,
-    /// This travels over bincode, so it must always occupy a stable field slot.
-    pub metadata_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AppMessage {
+    Hello {
+        device_id: Uuid,
+        device_name: String,
+        identity_pubkey: [u8; 32],
+        metadata_json: Option<String>,
+    },
+    HelloAck {
+        device_id: Uuid,
+        device_name: String,
+        identity_pubkey: [u8; 32],
+        nonce_response: [u8; 16],
+        trusted: bool,
+        metadata_json: Option<String>,
+    },
     ClipboardPush {
         seq: u64,
         content: std::sync::Arc<ClipboardContent>,
@@ -461,21 +456,15 @@ mod tests {
 
     #[test]
     fn optional_wire_fields_round_trip_through_bincode() {
-        let hello = HelloFrame {
+        let hello = EcdhFrame {
             version: PROTOCOL_VERSION,
-            device_id: Uuid::nil(),
-            device_name: "PeerA".into(),
-            identity_pubkey: [1u8; 32],
             ecdh_pubkey: [2u8; 32],
             nonce: [3u8; 16],
-            metadata_json: None,
         };
-        let ack = HelloAckFrame {
-            version: PROTOCOL_VERSION,
+        let ack = AppMessage::HelloAck {
             device_id: Uuid::nil(),
             device_name: "PeerB".into(),
             identity_pubkey: [4u8; 32],
-            ecdh_pubkey: [5u8; 32],
             nonce_response: [6u8; 16],
             trusted: false,
             metadata_json: None,
@@ -486,15 +475,17 @@ mod tests {
             error: None,
         };
 
-        let decoded_hello: HelloFrame =
+        let decoded_hello: EcdhFrame =
             bincode::deserialize(&bincode::serialize(&hello).unwrap()).unwrap();
-        let decoded_ack: HelloAckFrame =
+        let decoded_ack: AppMessage =
             bincode::deserialize(&bincode::serialize(&ack).unwrap()).unwrap();
         let decoded_file_ack: AppMessage =
             bincode::deserialize(&bincode::serialize(&file_ack).unwrap()).unwrap();
 
-        assert!(decoded_hello.metadata_json.is_none());
-        assert!(decoded_ack.metadata_json.is_none());
+        match decoded_ack {
+            AppMessage::HelloAck { metadata_json, .. } => assert!(metadata_json.is_none()),
+            _ => panic!("Expected HelloAck"),
+        }
         match decoded_file_ack {
             AppMessage::FileTransferCompleteAck {
                 transfer_id,

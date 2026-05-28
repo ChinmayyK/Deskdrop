@@ -632,7 +632,7 @@ impl Engine {
                                                 }
                                                 if matches!(
                                                     shared.peer_manager.get(peer_id),
-                                                    Some(record) if record.status == PeerConnectionState::Connecting && record.socket_addr() == Some(peer_addr)
+                                                    Some(record) if record.status == PeerConnectionState::Connecting && record.socket_addrs().contains(&peer_addr)
                                                 ) {
                                                     continue;
                                                 }
@@ -2523,7 +2523,8 @@ async fn reconnect_known_peers(shared: EngineShared) {
             continue;
         }
 
-        if let Some(endpoint) = peer.socket_addr() {
+        let endpoints = peer.socket_addrs();
+        if !endpoints.is_empty() {
             if !should_initiate_session(&shared, peer.id, peer.discovery).await {
                 continue;
             }
@@ -2537,7 +2538,9 @@ async fn reconnect_known_peers(shared: EngineShared) {
                 continue;
             }
 
-            scheduled.insert(endpoint);
+            for endpoint in endpoints {
+                scheduled.insert(endpoint);
+            }
             let shared_clone = shared.clone();
             tokio::spawn(async move {
                 if let Err(err) =
@@ -2688,7 +2691,7 @@ async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
         shared.peer_manager.get(peer.device_id),
         Some(record)
             if record.status == PeerConnectionState::Connecting
-                && record.socket_addr() == Some(addr)
+                && record.socket_addrs().contains(&addr)
     ) {
         return Ok(());
     }

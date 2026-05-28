@@ -40,7 +40,7 @@ mod platform {
     pub struct PeerInfo {
         pub device_id: Uuid,
         pub device_name: String,
-        pub addr: IpAddr,
+        pub addrs: Vec<IpAddr>,
         pub port: u16,
     }
 
@@ -164,19 +164,22 @@ mod platform {
                                 let device_name =
                                     provisional_device_name(info.get_fullname(), peer_id);
 
-                                // Fix 7: Prefer IPv4 over IPv6 link-local.
-                                // Old code: `info.get_addresses().iter().next()` — arbitrary
-                                // HashSet order, often picks fe80:: which needs a scope_id.
-                                let addr = prefer_ipv4(info.get_addresses());
-                                let Some(addr) = addr else {
+                                // Extract all available IPs (IPv4 and IPv6).
+                                let mut addrs: Vec<IpAddr> = info.get_addresses().iter().copied().collect();
+                                
+                                // Best-effort: sort so IPv4 comes first, since it is less likely
+                                // to fail due to missing link-local scope IDs.
+                                addrs.sort_by_key(|a| if a.is_ipv4() { 0 } else { 1 });
+                                
+                                if addrs.is_empty() {
                                     warn!("mDNS: service {} has no usable addresses", peer_id);
                                     continue;
-                                };
+                                }
 
                                 let port = info.get_port();
                                 info!(
-                                    "mDNS: found peer {} at {}:{} (name resolved after handshake)",
-                                    peer_id, addr, port
+                                    "mDNS: found peer {} at {:?}:{} (name resolved after handshake)",
+                                    peer_id, addrs, port
                                 );
                                 // Dedup guard: skip re-emitting Found for a device UUID
                                 // that is already resolved at the same address+port.
@@ -201,7 +204,7 @@ mod platform {
                                 let peer = PeerInfo {
                                     device_id: peer_id,
                                     device_name,
-                                    addr,
+                                    addrs,
                                     port,
                                 };
 
@@ -242,35 +245,6 @@ mod platform {
             self.mdns.shutdown().context("shutting down mDNS")?;
             Ok(())
         }
-    }
-
-    /// Fix 7: Select the best address from a peer's advertised set.
-    ///
-    /// Preference order:
-    ///   1. IPv4 — no scope_id needed, works universally on LAN.
-    ///   2. IPv6 global unicast (not fe80::/10) — usable without scope_id.
-    ///   3. IPv6 link-local — last resort; may fail without scope_id.
-    fn prefer_ipv4<'a>(addrs: impl IntoIterator<Item = &'a IpAddr>) -> Option<IpAddr> {
-        let addrs: Vec<IpAddr> = addrs.into_iter().copied().collect();
-        if addrs.is_empty() {
-            return None;
-        }
-        // 1. Any IPv4.
-        if let Some(&v4) = addrs.iter().find(|a| a.is_ipv4()) {
-            return Some(v4);
-        }
-        // 2. IPv6 global unicast.
-        if let Some(&v6) = addrs.iter().find(|a| {
-            if let IpAddr::V6(v6) = a {
-                !v6.is_loopback() && !is_ipv6_link_local(*v6)
-            } else {
-                false
-            }
-        }) {
-            return Some(v6);
-        }
-        // 3. Fallback.
-        Some(addrs[0])
     }
 
     /// Returns true if the address is in the IPv6 link-local range (fe80::/10).
@@ -335,28 +309,6 @@ mod platform {
         use super::*;
 
         #[test]
-        fn prefer_ipv4_over_v6_link_local() {
-            let v4: IpAddr = "192.168.1.1".parse().unwrap();
-            let ll: IpAddr = "fe80::1".parse().unwrap();
-            assert_eq!(prefer_ipv4(&[ll, v4]), Some(v4));
-        }
-
-        #[test]
-        fn prefer_ipv4_falls_back_to_global_v6() {
-            let ll: IpAddr = "fe80::1".parse().unwrap();
-            let global: IpAddr = "2001:db8::1".parse().unwrap();
-            assert_eq!(prefer_ipv4(&[ll, global]), Some(global));
-        }
-
-        #[test]
-        fn prefer_ipv4_link_local_last_resort() {
-            let ll: IpAddr = "fe80::1".parse().unwrap();
-            assert_eq!(prefer_ipv4(&[ll]), Some(ll));
-        }
-
-        #[test]
-        fn prefer_ipv4_empty_is_none() {
-            let empty: &[IpAddr] = &[];
             assert_eq!(prefer_ipv4(empty), None);
         }
 
@@ -407,7 +359,7 @@ mod platform {
     pub struct PeerInfo {
         pub device_id: Uuid,
         pub device_name: String,
-        pub addr: IpAddr,
+        pub addrs: Vec<IpAddr>,
         pub port: u16,
     }
 

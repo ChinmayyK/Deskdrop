@@ -61,7 +61,7 @@ pub struct PeerRecord {
     pub id: Uuid,
     pub friendly_name: String,
     pub platform: Option<String>,
-    pub ip: Option<IpAddr>,
+    pub ips: Vec<IpAddr>,
     pub port: u16,
 
     // ── Lifecycle layers ──────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ impl Default for PeerRecord {
             id: Uuid::nil(),
             friendly_name: String::new(),
             platform: None,
-            ip: None,
+            ips: Vec::new(),
             port: crate::protocol::DEFAULT_PORT,
             trusted: false,
             remembered: true,
@@ -110,8 +110,8 @@ impl Default for PeerRecord {
 }
 
 impl PeerRecord {
-    pub fn socket_addr(&self) -> Option<SocketAddr> {
-        self.ip.map(|ip| SocketAddr::new(ip, self.port))
+    pub fn socket_addrs(&self) -> Vec<SocketAddr> {
+        self.ips.iter().map(|ip| SocketAddr::new(*ip, self.port)).collect()
     }
 
     /// Whether this peer should receive clipboard payloads right now.
@@ -273,7 +273,7 @@ impl PeerManager {
             if platform.is_some() {
                 record.platform = platform;
             }
-            record.ip = Some(endpoint.ip());
+            record.ips = vec![endpoint.ip()];
             record.port = endpoint.port();
             record.trusted = trusted;
             record.last_seen = Some(now);
@@ -301,18 +301,18 @@ impl PeerManager {
                 port: endpoint
                     .map(|addr| addr.port())
                     .unwrap_or(crate::protocol::DEFAULT_PORT),
-                ip: endpoint.map(|addr| addr.ip()),
+                ips: endpoint.map(|addr| vec![addr.ip()]).unwrap_or_default(),
                 status: PeerConnectionState::Connecting,
                 ..PeerRecord::default()
             });
             if entry.status == PeerConnectionState::Connecting
                 && endpoint.is_some()
-                && entry.socket_addr() == endpoint
+                && entry.socket_addrs().contains(&endpoint.unwrap())
             {
                 return Ok(false);
             }
             if let Some(endpoint) = endpoint {
-                entry.ip = Some(endpoint.ip());
+                entry.ips = vec![endpoint.ip()];
                 entry.port = endpoint.port();
             }
             entry.status = PeerConnectionState::Connecting;
@@ -335,10 +335,10 @@ impl PeerManager {
             let entry = store.peers.entry(device_id).or_insert_with(|| PeerRecord {
                 id: device_id,
                 port: endpoint.port(),
-                ip: Some(endpoint.ip()),
+                ips: vec![endpoint.ip()],
                 ..PeerRecord::default()
             });
-            entry.ip = Some(endpoint.ip());
+            entry.ips = vec![endpoint.ip()];
             entry.port = endpoint.port();
             entry.last_seen = Some(now_secs());
             entry.status = PeerConnectionState::Connected;
@@ -619,7 +619,7 @@ impl PeerManager {
     }
 
     pub fn endpoint_for(&self, device_id: Uuid) -> Option<SocketAddr> {
-        self.get(device_id).and_then(|record| record.socket_addr())
+        self.get(device_id).and_then(|record| record.socket_addrs().first().copied())
     }
 
     pub fn note_manual_target(&self, endpoint: SocketAddr) {
