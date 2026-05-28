@@ -115,6 +115,7 @@ fn apply_keepalive(stream: &TcpStream) -> Result<()> {
         .with_time(KEEPALIVE_IDLE)
         .with_interval(KEEPALIVE_INTERVAL);
 
+    #[cfg(not(windows))]
     let keepalive = keepalive.with_retries(KEEPALIVE_RETRIES);
 
     sock_ref

@@ -308,9 +308,6 @@ mod platform {
     mod tests {
         use super::*;
 
-        #[test]
-            assert_eq!(prefer_ipv4(empty), None);
-        }
 
         #[test]
         fn is_ipv6_link_local_detection() {

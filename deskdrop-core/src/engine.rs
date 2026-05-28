@@ -2669,46 +2669,50 @@ fn peer_display_rank(
 }
 
 async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
-    let addr = SocketAddr::new(peer.addr, peer.port);
     let trusted = shared.trust.lock().await.is_trusted(peer.device_id);
-    shared.peer_manager.upsert_peer(
-        peer.device_id,
-        peer.device_name.clone(),
-        addr,
-        trusted,
-        DiscoverySource::Mdns,
-    )?;
 
     if !should_initiate_session(&shared, peer.device_id, DiscoverySource::Mdns).await {
         return Ok(());
     }
 
-    if shared.peer_manager.live_endpoint(peer.device_id) == Some(addr) {
-        return Ok(());
-    }
+    for ip in peer.addrs {
+        let addr = SocketAddr::new(ip, peer.port);
 
-    if matches!(
-        shared.peer_manager.get(peer.device_id),
-        Some(record)
-            if record.status == PeerConnectionState::Connecting
-                && record.socket_addrs().contains(&addr)
-    ) {
-        return Ok(());
-    }
-
-    let shared_clone = shared.clone();
-    tokio::spawn(async move {
-        if let Err(err) = connect_loop(
-            shared_clone,
+        let _ = shared.peer_manager.upsert_peer(
+            peer.device_id,
+            peer.device_name.clone(),
             addr,
-            Some(peer.device_id),
+            trusted,
             DiscoverySource::Mdns,
-        )
-        .await
-        {
-            warn!(peer_id = %peer.device_id, error = %err, "discovered peer connection failed");
+        );
+
+        if shared.peer_manager.live_endpoint(peer.device_id) == Some(addr) {
+            continue;
         }
-    });
+
+        if matches!(
+            shared.peer_manager.get(peer.device_id),
+            Some(record)
+                if record.status == PeerConnectionState::Connecting
+                    && record.socket_addrs().contains(&addr)
+        ) {
+            continue;
+        }
+
+        let shared_clone = shared.clone();
+        tokio::spawn(async move {
+            if let Err(err) = connect_loop(
+                shared_clone,
+                addr,
+                Some(peer.device_id),
+                DiscoverySource::Mdns,
+            )
+            .await
+            {
+                warn!(peer_id = %peer.device_id, error = %err, "discovered peer connection failed");
+            }
+        });
+    }
 
     Ok(())
 }

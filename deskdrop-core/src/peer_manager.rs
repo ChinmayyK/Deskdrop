@@ -253,7 +253,7 @@ impl PeerManager {
                 id: device_id,
                 friendly_name: friendly_name.clone(),
                 platform: platform.clone(),
-                ip: Some(endpoint.ip()),
+                ips: vec![endpoint.ip()],
                 port: endpoint.port(),
                 trusted,
                 remembered: true,
@@ -273,7 +273,9 @@ impl PeerManager {
             if platform.is_some() {
                 record.platform = platform;
             }
-            record.ips = vec![endpoint.ip()];
+            if !record.ips.contains(&endpoint.ip()) {
+                record.ips.push(endpoint.ip());
+            }
             record.port = endpoint.port();
             record.trusted = trusted;
             record.last_seen = Some(now);
