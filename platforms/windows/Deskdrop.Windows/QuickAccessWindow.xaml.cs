@@ -33,10 +33,16 @@ namespace Deskdrop.Windows
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            // Position near bottom right
-            var workArea = SystemParameters.WorkArea;
-            Left = workArea.Right - Width - 20;
-            Top = workArea.Bottom - Height - 20;
+            var cursorPosition = System.Windows.Forms.Cursor.Position;
+            var screen = System.Windows.Forms.Screen.FromPoint(cursorPosition);
+            var workArea = screen.WorkingArea;
+
+            var source = PresentationSource.FromVisual(this);
+            double scaleX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+            double scaleY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+
+            Left = (workArea.Right / scaleX) - Width - 20;
+            Top = (workArea.Bottom / scaleY) - Height - 20;
         }
 
         private void Window_Deactivated(object sender, EventArgs e)

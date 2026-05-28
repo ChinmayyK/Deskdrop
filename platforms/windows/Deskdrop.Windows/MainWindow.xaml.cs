@@ -59,7 +59,7 @@ namespace Deskdrop.Windows
         {
             if (view == null) return;
             view.Visibility = Visibility.Visible;
-            if (FindResource("FadeInTransition") is System.Windows.Media.Animation.Storyboard sb)
+            if (TryFindResource("FadeInTransition") is System.Windows.Media.Animation.Storyboard sb)
             {
                 sb.Begin(view);
             }
@@ -100,7 +100,10 @@ namespace Deskdrop.Windows
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
             base.OnMouseLeftButtonDown(e);
-            DragMove();
+            if (e.ButtonState == MouseButtonState.Pressed)
+            {
+                DragMove();
+            }
         }
 
         protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
@@ -313,8 +316,43 @@ namespace Deskdrop.Windows
 
         private void BtnRestartConnection_Click(object sender, RoutedEventArgs e)
         {
-            System.Diagnostics.Process.Start(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrEmpty(exePath)) return;
+            System.Diagnostics.Process.Start(exePath);
             System.Windows.Application.Current.Shutdown();
+        }
+
+        private void BtnExportBundle_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Zip Archive|*.zip",
+                    Title = "Export Support Bundle",
+                    FileName = $"deskdrop-support-{DateTime.Now:yyyyMMddHHmmss}.zip"
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    var appDataDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
+                    if (System.IO.Directory.Exists(appDataDir))
+                    {
+                        if (System.IO.File.Exists(dialog.FileName))
+                            System.IO.File.Delete(dialog.FileName);
+                        System.IO.Compression.ZipFile.CreateFromDirectory(appDataDir, dialog.FileName, System.IO.Compression.CompressionLevel.Fastest, false);
+                        ShowToast("Support bundle exported successfully.");
+                    }
+                    else
+                    {
+                        ShowToast("No logs found to export.", true);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowToast($"Failed to export bundle: {ex.Message}", true);
+            }
         }
 
         private void BtnScanAgain_Click(object sender, RoutedEventArgs e)
@@ -573,6 +611,7 @@ namespace Deskdrop.Windows
             ChkShowNotifications.IsChecked = (int?)key.GetValue("ShowNotifications", 1) == 1;
             ChkRequireTofu.IsChecked = (int?)key.GetValue("RequireTofu", 1) == 1;
             TxtDeviceName.Text = (string?)key.GetValue("DeviceName", "") ?? "";
+            ChkEnableHotkeys.IsChecked = (int?)key.GetValue("EnableHotkeys", 1) == 1;
         }
 
         private void BtnSaveSettings_Click(object sender, RoutedEventArgs e)
@@ -582,6 +621,7 @@ namespace Deskdrop.Windows
             key.SetValue("ShowNotifications", ChkShowNotifications.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
             key.SetValue("RequireTofu", ChkRequireTofu.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
             key.SetValue("DeviceName", TxtDeviceName.Text, Microsoft.Win32.RegistryValueKind.String);
+            key.SetValue("EnableHotkeys", ChkEnableHotkeys.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
 
             try
             {
@@ -627,15 +667,22 @@ namespace Deskdrop.Windows
                 var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
                 if (string.IsNullOrEmpty(exePath)) return;
 
-                // Add to HKEY_CLASSES_ROOT\*\shell\Deskdrop
-                using var key = Microsoft.Win32.Registry.ClassesRoot.CreateSubKey(@"*\shell\Deskdrop");
+                // Add to HKEY_CURRENT_USER\Software\Classes\*\shell\Deskdrop
+                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Classes\*\shell\Deskdrop");
                 key.SetValue("", "Send via Deskdrop");
                 key.SetValue("Icon", $"\"{exePath}\",0");
 
                 using var commandKey = key.CreateSubKey("command");
                 commandKey.SetValue("", $"\"{exePath}\" --push-file \"%1\"");
 
-                ShowToast("Context menu installed successfully!");
+                // Register deskdrop:// protocol
+                using var uriKey = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Classes\deskdrop");
+                uriKey.SetValue("", "URL:Deskdrop Protocol");
+                uriKey.SetValue("URL Protocol", "");
+                using var uriCmdKey = uriKey.CreateSubKey(@"shell\open\command");
+                uriCmdKey.SetValue("", $"\"{exePath}\" \"%1\"");
+
+                ShowToast("Context menu & protocol installed successfully!");
             }
             catch (UnauthorizedAccessException)
             {
@@ -752,17 +799,19 @@ namespace Deskdrop.Windows
         {
             Dispatcher.Invoke(() =>
             {
-                var msg = $"Incoming connection from {deviceName}\nFingerprint: {FormatFingerprint(fingerprint)}\n\nDo you trust this device?";
-                var result = System.Windows.MessageBox.Show(msg, "Trust Device", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
-                if (result == System.Windows.MessageBoxResult.Yes)
-                {
-                    _clipboardManager?.RespondToTrust(deviceId, true);
-                    ShowToast($"Trusted {deviceName}");
-                }
-                else
-                {
-                    _clipboardManager?.RespondToTrust(deviceId, false);
-                }
+                var msg = $"Incoming connection from {deviceName}\nFingerprint: {FormatFingerprint(fingerprint)}";
+                NotificationHelper.ShowToastWithActions(
+                    "Trust Device?", 
+                    msg, 
+                    null,
+                    onAccept: () => {
+                        _clipboardManager?.RespondToTrust(deviceId, true);
+                        ShowToast($"Trusted {deviceName}");
+                    },
+                    onReject: () => {
+                        _clipboardManager?.RespondToTrust(deviceId, false);
+                    }
+                );
             });
         }
 

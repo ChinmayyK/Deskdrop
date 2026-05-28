@@ -491,6 +491,13 @@
                             </Border>
 
                             <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
+                                <StackPanel>
+                                    <TextBlock Text="Global Hotkeys" FontWeight="SemiBold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
+                                    <CheckBox x:Name="ChkEnableHotkeys" Content="Enable global keyboard shortcuts (Ctrl+Shift+D, etc.)" Margin="0,0,0,16"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -535,6 +542,22 @@
                                         <TextBlock x:Name="TxtDiagDaemonSuggestion" Text="If stopped, please restart." Foreground="{StaticResource InkSubtle}" FontSize="11" Visibility="Collapsed"/>
                                     </StackPanel>
                                     <Button x:Name="BtnRestartConnection" Grid.Column="2" Content="Restart App" Style="{StaticResource ModernButton}" VerticalAlignment="Center" Click="BtnRestartConnection_Click"/>
+                                </Grid>
+                            </Border>
+
+                            <Border CornerRadius="12" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="48"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="&#xE8B0;" FontFamily="Segoe MDL2 Assets" FontSize="24" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Support Bundle" FontWeight="SemiBold" Foreground="{StaticResource Ink}" FontSize="14"/>
+                                        <TextBlock Text="Export logs and settings for support" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <Button x:Name="BtnExportBundle" Grid.Column="2" Content="Export .zip" Style="{StaticResource ModernButton}" VerticalAlignment="Center" Click="BtnExportBundle_Click"/>
                                 </Grid>
                             </Border>
 

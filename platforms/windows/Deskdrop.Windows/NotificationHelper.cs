@@ -36,5 +36,51 @@ namespace Deskdrop.Windows
                 // Fallback silently if toast APIs are disabled by user
             }
         }
+
+        public static void ShowToastWithActions(string title, string body, string? iconPath, Action onAccept, Action onReject)
+        {
+            try
+            {
+                var xmlString = $@"
+<toast>
+  <visual>
+    <binding template='ToastGeneric'>
+      <text>{System.Security.SecurityElement.Escape(title)}</text>
+      <text>{System.Security.SecurityElement.Escape(body)}</text>
+      {(string.IsNullOrEmpty(iconPath) ? "" : $"<image placement='appLogoOverride' src='file:///{iconPath.Replace("\\", "/")}' />")}
+    </binding>
+  </visual>
+  <actions>
+    <action content='Accept' arguments='accept' />
+    <action content='Reject' arguments='reject' />
+  </actions>
+</toast>";
+
+                var xml = new XmlDocument();
+                xml.LoadXml(xmlString);
+
+                var toast = new ToastNotification(xml);
+                toast.Activated += (sender, args) =>
+                {
+                    if (args is ToastActivatedEventArgs toastArgs)
+                    {
+                        if (toastArgs.Arguments == "accept")
+                        {
+                            System.Windows.Application.Current?.Dispatcher.InvokeAsync(onAccept);
+                        }
+                        else if (toastArgs.Arguments == "reject")
+                        {
+                            System.Windows.Application.Current?.Dispatcher.InvokeAsync(onReject);
+                        }
+                    }
+                };
+
+                ToastNotificationManager.CreateToastNotifier("Deskdrop").Show(toast);
+            }
+            catch
+            {
+                // Fallback silently if toast APIs are disabled by user
+            }
+        }
     }
 }

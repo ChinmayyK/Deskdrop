@@ -219,6 +219,13 @@ namespace Deskdrop.Windows
             if (_handle != IntPtr.Zero) { NativeCore.deskdrop_stop(_handle); _handle = IntPtr.Zero; }
         }
 
+        public void RestartDaemon()
+        {
+            Stop();
+            System.Threading.Thread.Sleep(500);
+            Start();
+        }
+
         public void Dispose() => Stop();
 
         /// Call after the user responds Yes/No to a TOFU dialog.
@@ -755,6 +762,9 @@ namespace Deskdrop.Windows
                     Application.Exit(); 
             };
 
+            Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+
             _menu.Items.AddRange(new ToolStripItem[]
             {
                 _statusItem,
@@ -787,61 +797,64 @@ namespace Deskdrop.Windows
             };
 
             // Register Global Hotkeys
-            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.V, () => {
-                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                    OpenQuickAccess();
+            if (LoadSettings().EnableHotkeys)
+            {
+                GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.V, () => {
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                        OpenQuickAccess();
+                    });
                 });
-            });
 
-            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control, System.Windows.Input.Key.K, () => {
-                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                    OpenDashboard();
-                    if (_mainWindow != null)
-                    {
-                        // Open Command Palette
-                        _mainWindow.ToggleCommandPaletteGlobal();
-                    }
-                });
-            });
-
-            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.L, () => {
-                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                    System.Threading.Tasks.Task.Run(() => {
-                        var url = BrowserUrlFetcher.GetActiveBrowserUrl();
-                        if (!string.IsNullOrEmpty(url))
+                GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control, System.Windows.Input.Key.K, () => {
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                        OpenDashboard();
+                        if (_mainWindow != null)
                         {
-                            _mgr.PushText(url);
-                            System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                                NotificationHelper.ShowToast("Deskdrop", $"Pushed URL: {url}");
-                            });
-                        }
-                        else
-                        {
-                            System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                                NotificationHelper.ShowToast("Deskdrop", "Could not detect active browser URL.");
-                            });
+                            // Open Command Palette
+                            _mainWindow.ToggleCommandPaletteGlobal();
                         }
                     });
                 });
-            });
 
-            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.D, () => {
-                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                    var dropZone = new DropZoneWindow(_mgr);
-                    dropZone.Show();
-                    dropZone.Activate();
+                GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.L, () => {
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                        System.Threading.Tasks.Task.Run(() => {
+                            var url = BrowserUrlFetcher.GetActiveBrowserUrl();
+                            if (!string.IsNullOrEmpty(url))
+                            {
+                                _mgr.PushText(url);
+                                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                                    NotificationHelper.ShowToast("Deskdrop", $"Pushed URL: {url}");
+                                });
+                            }
+                            else
+                            {
+                                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                                    NotificationHelper.ShowToast("Deskdrop", "Could not detect active browser URL.");
+                                });
+                            }
+                        });
+                    });
                 });
-            });
 
-            GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.C, () => {
-                System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                    if (System.Windows.Forms.Clipboard.ContainsText() || System.Windows.Forms.Clipboard.ContainsImage() || System.Windows.Forms.Clipboard.ContainsFileDropList())
-                    {
-                        _mgr.PushLocalClipboard();
-                        NotificationHelper.ShowToast("Deskdrop", "Clipboard sent.");
-                    }
+                GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.D, () => {
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                        var dropZone = new DropZoneWindow(_mgr);
+                        dropZone.Show();
+                        dropZone.Activate();
+                    });
                 });
-            });
+
+                GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.C, () => {
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                        if (System.Windows.Forms.Clipboard.ContainsText() || System.Windows.Forms.Clipboard.ContainsImage() || System.Windows.Forms.Clipboard.ContainsFileDropList())
+                        {
+                            _mgr.PushLocalClipboard();
+                            NotificationHelper.ShowToast("Deskdrop", "Clipboard sent.");
+                        }
+                    });
+                });
+            }
 
             _mgr.StatusChanged       += OnStatusChanged;
             _mgr.TofuPromptRequested += OnTofuPrompt;
@@ -1000,24 +1013,13 @@ namespace Deskdrop.Windows
 
         public void OpenDashboard()
         {
-            if (_quickAccessWindow != null)
+            if (_mainWindow == null)
             {
-                _quickAccessWindow.Close();
-                _quickAccessWindow = null;
+                _mainWindow = new MainWindow(_mgr);
+                _mainWindow.Closed += (_, _) => _mainWindow = null;
             }
-
-            if (_mainWindow != null && _mainWindow.IsLoaded)
-            {
-                if (_mainWindow.Visibility != System.Windows.Visibility.Visible)
-                    _mainWindow.Show();
-                if (_mainWindow.WindowState == System.Windows.WindowState.Minimized)
-                    _mainWindow.WindowState = System.Windows.WindowState.Normal;
-                _mainWindow.Activate();
-                return;
-            }
-
-            _mainWindow = new MainWindow(_mgr);
             _mainWindow.Show();
+            _mainWindow.Activate();
         }
 
         public void OpenQuickAccess()
@@ -1037,19 +1039,20 @@ namespace Deskdrop.Windows
         // ── Settings ──────────────────────────────────────────────────────────
 
         public record AppSettings(bool SyncEnabled, bool ShowNotifications,
-            string DeviceName, ushort Port, bool HasCompletedOnboarding);
+            string DeviceName, ushort Port, bool HasCompletedOnboarding, bool EnableHotkeys);
 
         public static AppSettings LoadSettings()
         {
             using var key = Registry.CurrentUser.OpenSubKey(@"Software\Deskdrop");
-            if (key == null) return new AppSettings(true, true, "", 47823, false);
+            if (key == null) return new AppSettings(true, true, "", 47823, false, true);
             return new AppSettings(
                 SyncEnabled:       ((int?)key.GetValue("SyncEnabled",       1) ?? 1) != 0,
                 ShowNotifications: ((int?)key.GetValue("ShowNotifications", 1) ?? 1) != 0,
                 DeviceName:        (string?)key.GetValue("DeviceName", "") ?? "",
                 Port:              (ushort)Math.Clamp(
                     (int?)key.GetValue("Port", 47823) ?? 47823, 1024, 65535),
-                HasCompletedOnboarding: ((int?)key.GetValue("HasCompletedOnboarding", 0) ?? 0) != 0);
+                HasCompletedOnboarding: ((int?)key.GetValue("HasCompletedOnboarding", 0) ?? 0) != 0,
+                EnableHotkeys:     ((int?)key.GetValue("EnableHotkeys", 1) ?? 1) != 0);
         }
         
         public static void CompleteOnboarding()
@@ -1099,9 +1102,33 @@ namespace Deskdrop.Windows
 
         // Removed ShowInputDialog as we're migrating away from WinForms Dialogs
 
+        private void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+        {
+            if (e.Mode == Microsoft.Win32.PowerModes.Resume)
+            {
+                System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+                    _mgr.RestartDaemon();
+                });
+            }
+        }
+
+        private void OnNetworkAddressChanged(object? sender, EventArgs e)
+        {
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+                _mgr.RestartDaemon();
+            });
+        }
+
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { _tray.Dispose(); _mgr.Dispose(); _menu.Dispose(); }
+            if (disposing) 
+            { 
+                Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+                System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+                _tray.Dispose(); 
+                _mgr.Dispose(); 
+                _menu.Dispose(); 
+            }
             base.Dispose(disposing);
         }
     }
@@ -1127,47 +1154,48 @@ namespace Deskdrop.Windows
         [STAThread]
         static void Main(string[] args)
         {
-            using var mutex = new Mutex(true, "Deskdrop_SingleInstance_v1", out bool isNew);
-            if (!isNew)
+            try
             {
-                if (args.Length > 0)
+                using var mutex = new Mutex(true, "Deskdrop_SingleInstance_v1", out bool isNew);
+                if (!isNew)
                 {
-                    try
+                    if (args.Length > 0)
                     {
-                        using var client = new NamedPipeClientStream(".", "DeskdropIPC", PipeDirection.Out);
-                        client.Connect(1000);
-                        using var writer = new StreamWriter(client);
-                        writer.WriteLine(string.Join("|", args));
-                        writer.Flush();
+                        try
+                        {
+                            using var client = new NamedPipeClientStream(".", "DeskdropIPC", PipeDirection.Out);
+                            client.Connect(1000);
+                            using var writer = new StreamWriter(client);
+                            writer.WriteLine(string.Join("|", args));
+                            writer.Flush();
+                        }
+                        catch { }
                     }
-                    catch { }
-                }
-                else
-                {
-                    // No arguments, just bring dashboard to front
-                    try
+                    else
                     {
-                        using var client = new NamedPipeClientStream(".", "DeskdropIPC", PipeDirection.Out);
-                        client.Connect(1000);
-                        using var writer = new StreamWriter(client);
-                        writer.WriteLine("--open-dashboard");
-                        writer.Flush();
+                        try
+                        {
+                            using var client = new NamedPipeClientStream(".", "DeskdropIPC", PipeDirection.Out);
+                            client.Connect(1000);
+                            using var writer = new StreamWriter(client);
+                            writer.WriteLine("--open-dashboard");
+                            writer.Flush();
+                        }
+                        catch { }
                     }
-                    catch { }
+                    return;
                 }
-                return;
-            }
 
-            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-            Application.ThreadException += (_, e) => LogError(e.Exception);
-            AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-                LogError((Exception)e.ExceptionObject);
+                Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                Application.ThreadException += (_, e) => LogError(e.Exception);
+                AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+                    LogError((Exception)e.ExceptionObject);
 
-            var wpfApp = new System.Windows.Application();
-            wpfApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+                var wpfApp = new System.Windows.Application();
+                wpfApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             wpfApp.DispatcherUnhandledException += (_, e) => 
             {
                 LogError(e.Exception);
@@ -1234,6 +1262,11 @@ namespace Deskdrop.Windows
             }
             
             wpfApp.Run();
+            }
+            catch (Exception ex)
+            {
+                LogError(ex);
+            }
         }
 
         private static void HandleCommandLine(string[] args, TrayApp app)

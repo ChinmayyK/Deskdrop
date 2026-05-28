@@ -14,6 +14,24 @@ namespace Deskdrop.Windows
             _clipboardManager = clipboardManager;
         }
 
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            var cursorPosition = System.Windows.Forms.Cursor.Position;
+            var screen = System.Windows.Forms.Screen.FromPoint(cursorPosition);
+            var workArea = screen.WorkingArea;
+
+            var source = PresentationSource.FromVisual(this);
+            double scaleX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+            double scaleY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+
+            WindowState = WindowState.Normal;
+            Left = workArea.Left / scaleX;
+            Top = workArea.Top / scaleY;
+            Width = workArea.Width / scaleX;
+            Height = workArea.Height / scaleY;
+            WindowState = WindowState.Maximized;
+        }
+
         private void Window_DragEnter(object sender, System.Windows.DragEventArgs e)
         {
             if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
