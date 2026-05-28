@@ -215,10 +215,23 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// Resolved device name: custom name if set, else hostname.
+    /// Resolved device name: custom name if set, else hostname (cleaned).
     pub fn resolved_device_name(&self) -> String {
         if self.device_name.is_empty() {
-            whoami::devicename()
+            let raw = whoami::devicename();
+            let patterns = ["'s ", "’s ", "s' ", "s’ "];
+            let mut result = raw.as_str();
+            for p in patterns.iter() {
+                if let Some(idx) = result.rfind(p) {
+                    result = &result[idx + p.len()..];
+                }
+            }
+            let cleaned = result.trim().to_string();
+            if cleaned.is_empty() {
+                raw
+            } else {
+                cleaned
+            }
         } else {
             self.device_name.clone()
         }

@@ -140,8 +140,7 @@ impl IdentityStore {
         }
     }
 
-    /// Load key from disk (or secure keyring on supported platforms).
-    #[cfg(target_os = "android")]
+    /// Load key from disk.
     pub fn load(&self) -> Result<IdentityKey> {
         let bytes = std::fs::read(&self.path)
             .with_context(|| format!("reading identity key from {:?}", self.path))?;
@@ -157,64 +156,29 @@ impl IdentityStore {
         Ok(IdentityKey::from_secret_bytes(raw))
     }
 
-    #[cfg(not(target_os = "android"))]
-    pub fn load(&self) -> Result<IdentityKey> {
-        let entry = keyring::Entry::new("deskdrop", "identity_key")
-            .context("failed to access system keyring")?;
-        
-        match entry.get_password() {
-            Ok(hex_str) => {
-                let bytes = hex::decode(&hex_str).context("failed to decode identity key from keyring")?;
-                anyhow::ensure!(
-                    bytes.len() == 32,
-                    "identity key from keyring corrupt: expected 32 bytes, got {}",
-                    bytes.len()
-                );
-                let mut raw = [0u8; 32];
-                raw.copy_from_slice(&bytes);
-                Ok(IdentityKey::from_secret_bytes(raw))
-            }
-            Err(_) => {
-                // Fallback to legacy file and migrate
-                let bytes = std::fs::read(&self.path)
-                    .with_context(|| format!("reading legacy identity key from {:?}", self.path))?;
-                anyhow::ensure!(
-                    bytes.len() == 32,
-                    "legacy identity key file corrupt: expected 32 bytes, got {}",
-                    bytes.len()
-                );
-                let mut raw = [0u8; 32];
-                raw.copy_from_slice(&bytes);
-                let key = IdentityKey::from_secret_bytes(raw);
-                
-                // Migrate to keyring
-                let _ = self.save(&key);
-                let _ = std::fs::remove_file(&self.path);
-                
-                Ok(key)
-            }
-        }
-    }
-
-    /// Save key to secure keyring (or disk with restricted permissions on Android).
-    #[cfg(target_os = "android")]
+    /// Save key to disk.
     pub fn save(&self, key: &IdentityKey) -> Result<()> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent).context("creating key directory")?;
         }
 
         let tmp = self.path.with_extension("tmp");
-        std::fs::write(&tmp, key.secret_bytes()).context("writing identity key")?;
-        std::fs::rename(&tmp, &self.path).context("renaming identity key")?;
-        Ok(())
-    }
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true).mode(0o600);
+            let mut file = options.open(&tmp).context("creating temporary identity key file")?;
+            std::io::Write::write_all(&mut file, &key.secret_bytes()).context("writing identity key")?;
+        }
+        
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&tmp, key.secret_bytes()).context("writing identity key")?;
+        }
 
-    #[cfg(not(target_os = "android"))]
-    pub fn save(&self, key: &IdentityKey) -> Result<()> {
-        let entry = keyring::Entry::new("deskdrop", "identity_key")
-            .context("failed to access system keyring")?;
-        let hex_str = hex::encode(key.secret_bytes());
-        entry.set_password(&hex_str).context("failed to save identity key to keyring")?;
+        std::fs::rename(&tmp, &self.path).context("renaming identity key")?;
         Ok(())
     }
 

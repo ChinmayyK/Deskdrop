@@ -61,7 +61,6 @@ default-net = "0.22.0"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 mdns-sd = "0.10"
-keyring = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
