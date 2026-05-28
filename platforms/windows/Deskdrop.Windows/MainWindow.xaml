@@ -309,8 +309,8 @@
                                                     <ProgressBar Value="{Binding Percent}" Maximum="100" Height="4" Margin="0,6,0,0" Foreground="{Binding ProgressColor}" Background="#E5E5EA" BorderThickness="0"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                                                    <Button Content="{Binding ActionIcon1}" FontFamily="Segoe MDL2 Assets" FontSize="14" Width="32" Height="32" Style="{StaticResource ModernButton}" Background="#E5E5EA" Foreground="{Binding ActionColor1}" Margin="0,0,8,0" Command="{Binding ActionCommand1}"/>
-                                                    <Button Content="{Binding ActionIcon2}" FontFamily="Segoe MDL2 Assets" FontSize="14" Width="32" Height="32" Style="{StaticResource ModernButton}" Background="#FFF0F0" Foreground="#FF3B30" Command="{Binding ActionCommand2}"/>
+                                                    <Button Content="{Binding PrimaryIcon}" FontFamily="Segoe MDL2 Assets" FontSize="14" Width="32" Height="32" Style="{StaticResource ModernButton}" Background="{Binding PrimaryBackground}" Foreground="{Binding PrimaryForeground}" Margin="0,0,8,0" Click="BtnTransferPrimaryAction_Click" Visibility="{Binding PrimaryVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                    <Button Content="{Binding SecondaryIcon}" FontFamily="Segoe MDL2 Assets" FontSize="14" Width="32" Height="32" Style="{StaticResource ModernButton}" Background="{Binding SecondaryBackground}" Foreground="{Binding SecondaryForeground}" Click="BtnTransferSecondaryAction_Click" Visibility="{Binding SecondaryVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
@@ -443,7 +443,12 @@
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </StackPanel>
-                                                <Button Grid.Column="2" Style="{StaticResource ModernButton}" Content="Disconnect" Background="#FFF0F0" Foreground="{StaticResource BrandRed}" Padding="12,6" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Style="{StaticResource ModernButton}" Content="&#xE8AC;" FontFamily="Segoe MDL2 Assets" ToolTip="Rename" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="8" Click="BtnRenameDevice_Click" Tag="{Binding device_id}"/>
+                                                    <Button Style="{StaticResource ModernButton}" Content="&#xE769;" FontFamily="Segoe MDL2 Assets" ToolTip="Pause Sync" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="8" Click="BtnPauseSyncDevice_Click" Tag="{Binding device_id}"/>
+                                                    <Button Style="{StaticResource ModernButton}" Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" ToolTip="Forget Device" Background="Transparent" Foreground="{StaticResource BrandRed}" Padding="8" Click="BtnForgetDevice_Click" Tag="{Binding device_id}"/>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Disconnect" Background="#FFF0F0" Foreground="{StaticResource BrandRed}" Padding="12,6" Margin="8,0,0,0" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -480,7 +485,8 @@
                                 <StackPanel>
                                     <CheckBox x:Name="ChkLaunchOnStartup" Content="Launch at login" Margin="0,0,0,16"/>
                                     <CheckBox x:Name="ChkSyncEnabled" Content="Sync clipboard automatically" Margin="0,0,0,16"/>
-                                    <CheckBox x:Name="ChkShowNotifications" Content="Show desktop notifications"/>
+                                    <CheckBox x:Name="ChkShowNotifications" Content="Show desktop notifications" Margin="0,0,0,16"/>
+                                    <CheckBox x:Name="ChkRequireTofu" Content="Require confirmation for incoming files"/>
                                 </StackPanel>
                             </Border>
 
@@ -530,6 +536,13 @@
                                     </StackPanel>
                                     <Button x:Name="BtnRestartConnection" Grid.Column="2" Content="Restart App" Style="{StaticResource ModernButton}" VerticalAlignment="Center" Click="BtnRestartConnection_Click"/>
                                 </Grid>
+                            </Border>
+
+                            <Border CornerRadius="12" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Performance Metrics" FontWeight="SemiBold" Foreground="{StaticResource Ink}" FontSize="14" Margin="0,0,0,12"/>
+                                    <TextBlock x:Name="TxtMetricsContent" Text="Loading metrics..." Foreground="{StaticResource InkSoft}" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"/>
+                                </StackPanel>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>

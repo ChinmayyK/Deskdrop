@@ -31,8 +31,10 @@ namespace Deskdrop.Windows
                         var resp = DaemonClient.LatestCameraFrame();
                         if (resp != null && resp.RootElement.TryGetProperty("data", out var dataProp))
                         {
-                            var base64 = dataProp.GetString();
-                            if (!string.IsNullOrEmpty(base64))
+                            if (dataProp.TryGetProperty("frame_base64", out var frameProp))
+                            {
+                                var base64 = frameProp.GetString();
+                                if (!string.IsNullOrEmpty(base64))
                             {
                                 var bytes = Convert.FromBase64String(base64);
                                 await Dispatcher.InvokeAsync(() =>
@@ -47,6 +49,7 @@ namespace Deskdrop.Windows
                                     bitmap.Freeze();
                                     CameraImage.Source = bitmap;
                                 });
+                            }
                             }
                         }
                     }

@@ -9,6 +9,24 @@ using System.Windows.Threading;
 
 namespace Deskdrop.Windows
 {
+    public class ActivityEntry
+    {
+        public ulong id { get; set; }
+        public string kind { get; set; } = "";
+        public string summary { get; set; } = "";
+        public ulong timestamp { get; set; }
+        public string source { get; set; } = "";
+        public string content_hash { get; set; } = "";
+    }
+
+    public class PendingClipboard
+    {
+        public string content_hash { get; set; } = "";
+        public string summary { get; set; } = "";
+        public string from_device { get; set; } = "";
+        public ulong timestamp { get; set; }
+    }
+
     public class DeskdropStore : INotifyPropertyChanged
     {
         public static DeskdropStore Shared { get; } = new DeskdropStore();
@@ -20,6 +38,8 @@ namespace Deskdrop.Windows
             Peers = new ObservableCollection<MainWindow.PeerViewModel>();
             History = new ObservableCollection<HistoryItem>();
             ActiveTransfers = new ObservableCollection<MainWindow.FileTransferState>();
+            ActivityFeed = new ObservableCollection<ActivityEntry>();
+            PendingClipboards = new ObservableCollection<PendingClipboard>();
             
             StartPolling();
         }
@@ -41,25 +61,39 @@ namespace Deskdrop.Windows
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private ObservableCollection<MainWindow.PeerViewModel> _peers;
+        private ObservableCollection<MainWindow.PeerViewModel> _peers = null!;
         public ObservableCollection<MainWindow.PeerViewModel> Peers
         {
             get => _peers;
             set { _peers = value; OnPropertyChanged(); }
         }
 
-        private ObservableCollection<HistoryItem> _history;
+        private ObservableCollection<HistoryItem> _history = null!;
         public ObservableCollection<HistoryItem> History
         {
             get => _history;
             set { _history = value; OnPropertyChanged(); }
         }
 
-        private ObservableCollection<MainWindow.FileTransferState> _activeTransfers;
+        private ObservableCollection<MainWindow.FileTransferState> _activeTransfers = null!;
         public ObservableCollection<MainWindow.FileTransferState> ActiveTransfers
         {
             get => _activeTransfers;
             set { _activeTransfers = value; OnPropertyChanged(); }
+        }
+
+        private ObservableCollection<ActivityEntry> _activityFeed = null!;
+        public ObservableCollection<ActivityEntry> ActivityFeed
+        {
+            get => _activityFeed;
+            set { _activityFeed = value; OnPropertyChanged(); }
+        }
+
+        private ObservableCollection<PendingClipboard> _pendingClipboards = null!;
+        public ObservableCollection<PendingClipboard> PendingClipboards
+        {
+            get => _pendingClipboards;
+            set { _pendingClipboards = value; OnPropertyChanged(); }
         }
 
         private MainWindow.ActiveCallState? _activeCall;
@@ -143,9 +177,24 @@ namespace Deskdrop.Windows
 
                     if (newPeers != null)
                     {
-                        // In a real app we'd sync this collection gracefully, for now we just clear and add to avoid complete reallocation issues
-                        Peers.Clear();
-                        foreach(var p in newPeers) Peers.Add(p);
+                        var existing = Peers.ToList();
+                        foreach(var peer in newPeers)
+                        {
+                            var match = Peers.FirstOrDefault(p => p.device_id == peer.device_id);
+                            if (match != null)
+                            {
+                                match.friendly_name = peer.friendly_name;
+                                match.status = peer.status;
+                                match.BatteryLevel = peer.BatteryLevel;
+                                match.BatteryCharging = peer.BatteryCharging;
+                                existing.Remove(match);
+                            }
+                            else
+                            {
+                                Peers.Add(peer);
+                            }
+                        }
+                        foreach(var rem in existing) Peers.Remove(rem);
                         
                         StatusLine = Peers.Count == 0 ? "✅ Running — no devices connected" : $"📡 Connected to {Peers.Count(p => p.status == "connected")} devices";
                     }
@@ -156,8 +205,24 @@ namespace Deskdrop.Windows
                     var transfers = JsonSerializer.Deserialize<System.Collections.Generic.List<MainWindow.FileTransferState>>(transfersElem.GetRawText());
                     if (transfers != null)
                     {
-                        ActiveTransfers.Clear();
-                        foreach(var t in transfers) ActiveTransfers.Add(t);
+                        var existing = ActiveTransfers.ToList();
+                        foreach(var t in transfers)
+                        {
+                            var match = ActiveTransfers.FirstOrDefault(a => a.transfer_id == t.transfer_id);
+                            if (match != null)
+                            {
+                                match.status = t.status;
+                                match.bytes_received = t.bytes_received;
+                                match.bytes_total = t.bytes_total;
+                                match.percent = t.percent;
+                                existing.Remove(match);
+                            }
+                            else
+                            {
+                                ActiveTransfers.Add(t);
+                            }
+                        }
+                        foreach(var rem in existing) ActiveTransfers.Remove(rem);
                     }
                 }
                 else

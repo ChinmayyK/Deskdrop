@@ -292,6 +292,23 @@ namespace Deskdrop.Windows
                 TxtDiagDaemonSuggestion.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
                 BtnRestartConnection.Visibility = isRunning ? Visibility.Collapsed : Visibility.Visible;
             }
+
+            if (isRunning && TxtMetricsContent != null)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    var doc = DaemonClient.GetMetrics();
+                    if (doc != null && doc.RootElement.TryGetProperty("data", out var data))
+                    {
+                        var json = System.Text.Json.JsonSerializer.Serialize(data, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                        Dispatcher.Invoke(() => TxtMetricsContent.Text = json);
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() => TxtMetricsContent.Text = "No metrics available.");
+                    }
+                });
+            }
         }
 
         private void BtnRestartConnection_Click(object sender, RoutedEventArgs e)
@@ -308,43 +325,7 @@ namespace Deskdrop.Windows
 
         public void ShowToast(string message, bool isError = false)
         {
-            // Dispatcher.Invoke(() =>
-            // {
-            //     NotificationMessage.Text = message;
-            //     if (isError)
-            //     {
-            //         NotificationIcon.Text = "\xE783"; // Warning icon
-            //         NotificationIcon.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 59, 48)); // Red
-            //     }
-            //     else
-            //     {
-            //         NotificationIcon.Text = "\xE946"; // Info icon
-            //         NotificationIcon.Foreground = (SolidColorBrush)FindResource("BrandElectric");
-            //     }
-            //     
-            //     NotificationToast.Visibility = Visibility.Visible;
-            //     if (FindResource("ToastSlideIn") is System.Windows.Media.Animation.Storyboard slideIn)
-            //     {
-            //         slideIn.Begin(NotificationToast);
-            //     }
-            //     
-            //     // Auto-hide after 3 seconds
-            //     System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ => 
-            //     {
-            //         Dispatcher.Invoke(() => 
-            //         {
-            //             // if (FindResource("ToastSlideOut") is System.Windows.Media.Animation.Storyboard slideOut)
-            //             // {
-            //             //     slideOut.Completed += (s, ev) => NotificationToast.Visibility = Visibility.Collapsed;
-            //             //     slideOut.Begin(NotificationToast);
-            //             // }
-            //             // else
-            //             // {
-            //             //     NotificationToast.Visibility = Visibility.Collapsed;
-            //             // }
-            //         });
-            //     });
-            // });
+            NotificationHelper.ShowToast(isError ? "Deskdrop Error" : "Deskdrop", message);
         }
 
 
@@ -403,31 +384,52 @@ namespace Deskdrop.Windows
             if (_hasCompletedOnboarding) return;
             
             bool foundDevice = peers.Count > 0;
-            bool pairedDevice = peers.Exists(p => p.is_trusted);
-            
-            // if (Step1Icon != null)
-            // {
-            //     Step1Icon.Text = foundDevice ? "\uE73E" : "\uE73E"; // Same icon but we can change color
-            //     Step1Icon.Foreground = new SolidColorBrush(foundDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
-            //     Step1Text.Foreground = new SolidColorBrush(foundDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
-            // }
-            // 
-            // if (Step2Icon != null)
-            // {
-            //     Step2Icon.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
-            //     Step2Text.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
-            // }
-            // 
-            // if (Step3Icon != null)
-            // {
-            //     Step3Icon.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#32ADE6") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#38383A"));
-            //     Step3Text.Foreground = new SolidColorBrush(pairedDevice ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF") : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#8E8E93"));
-            // }
-            // 
-            // if (pairedDevice && BtnDismissOnboarding != null)
-            // {
-            //     BtnDismissOnboarding.Visibility = Visibility.Visible;
-            // }
+            if (!foundDevice)
+            {
+                if (System.Windows.Application.Current.Windows.OfType<OnboardingWindow>().Count() == 0)
+                {
+                    var ob = new OnboardingWindow();
+                    ob.Closed += (s, e) => _hasCompletedOnboarding = true;
+                    ob.Show();
+                }
+            }
+            else
+            {
+                _hasCompletedOnboarding = true;
+                foreach (var w in System.Windows.Application.Current.Windows.OfType<OnboardingWindow>().ToList())
+                {
+                    w.Close();
+                }
+            }
+        }
+
+        private void BtnRenameDevice_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is string deviceId)
+            {
+                var peer = DeskdropStore.Shared.Peers.FirstOrDefault(p => p.device_id == deviceId);
+                if (peer != null)
+                {
+                    string newName = peer.friendly_name + " (Renamed)";
+                    System.Threading.Tasks.Task.Run(() => DaemonClient.RenameTrustedDevice(deviceId, newName));
+                }
+            }
+        }
+
+        private void BtnPauseSyncDevice_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is string deviceId)
+            {
+                System.Threading.Tasks.Task.Run(() => DaemonClient.PauseSyncPeer(deviceId));
+            }
+        }
+
+        private void BtnForgetDevice_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement el && el.Tag is string deviceId)
+            {
+                System.Threading.Tasks.Task.Run(() => DaemonClient.ForgetDevice(deviceId));
+            }
         }
 
         private void BtnDisconnectDevice_Click(object sender, RoutedEventArgs e)
@@ -535,6 +537,16 @@ namespace Deskdrop.Windows
             public string PercentText => $"{percent}%";
             public string StatusText => status == "in_progress" ? $"Receiving from {from_device}..." : status;
             public string ProgressColor => status == "completed" ? "#34C759" : (status == "failed" ? "#FF3B30" : "#007AFF");
+
+            public bool PrimaryVisible => status == "incoming" || status == "in_progress" || status == "paused" || status == "failed";
+            public string PrimaryIcon => status == "incoming" ? "\xE8FB" : (status == "in_progress" ? "\xE769" : (status == "paused" ? "\xE768" : "\xE72C"));
+            public string PrimaryBackground => "#E5E5EA";
+            public string PrimaryForeground => "#007AFF";
+
+            public bool SecondaryVisible => status == "incoming" || status == "in_progress" || status == "paused";
+            public string SecondaryIcon => "\xE711"; // Cancel/Reject
+            public string SecondaryBackground => "#FFF0F0";
+            public string SecondaryForeground => "#FF3B30";
         }
 
         private void LoadSettingsView()
@@ -558,11 +570,8 @@ namespace Deskdrop.Windows
             if (key == null) return;
 
             ChkSyncEnabled.IsChecked = (int?)key.GetValue("SyncEnabled", 1) == 1;
-            // ChkSyncText.IsChecked = (int?)key.GetValue("SyncText", 1) == 1;
-            // ChkSyncImages.IsChecked = (int?)key.GetValue("SyncImages", 1) == 1;
-            // ChkSyncFiles.IsChecked = (int?)key.GetValue("SyncFiles", 1) == 1;
             ChkShowNotifications.IsChecked = (int?)key.GetValue("ShowNotifications", 1) == 1;
-            // ChkRequireTofu.IsChecked = (int?)key.GetValue("RequireTofu", 1) == 1;
+            ChkRequireTofu.IsChecked = (int?)key.GetValue("RequireTofu", 1) == 1;
             TxtDeviceName.Text = (string?)key.GetValue("DeviceName", "") ?? "";
         }
 
@@ -570,11 +579,8 @@ namespace Deskdrop.Windows
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Deskdrop");
             key.SetValue("SyncEnabled", ChkSyncEnabled.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            // key.SetValue("SyncText", ChkSyncText.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            // key.SetValue("SyncImages", ChkSyncImages.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            // key.SetValue("SyncFiles", ChkSyncFiles.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
             key.SetValue("ShowNotifications", ChkShowNotifications.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-            // key.SetValue("RequireTofu", ChkRequireTofu.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            key.SetValue("RequireTofu", ChkRequireTofu.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
             key.SetValue("DeviceName", TxtDeviceName.Text, Microsoft.Win32.RegistryValueKind.String);
 
             try
@@ -605,11 +611,8 @@ namespace Deskdrop.Windows
                 {
                     cmd = "save_settings",
                     sync_enabled = ChkSyncEnabled.IsChecked == true,
-                    // sync_text = ChkSyncText.IsChecked == true,
-                    // sync_images = ChkSyncImages.IsChecked == true,
-                    // sync_files = ChkSyncFiles.IsChecked == true,
                     device_name = string.IsNullOrWhiteSpace(TxtDeviceName.Text) ? null : TxtDeviceName.Text,
-                    // require_tofu_confirmation = ChkRequireTofu.IsChecked == true,
+                    require_tofu_confirmation = ChkRequireTofu.IsChecked == true,
                     show_receive_notification = ChkShowNotifications.IsChecked == true,
                 });
             });
@@ -744,38 +747,23 @@ namespace Deskdrop.Windows
             qrWindow.ShowDialog();
         }
 
-        private string? _currentTofuDeviceId;
 
         public void ShowTofuPrompt(string deviceId, string deviceName, string fingerprint)
         {
             Dispatcher.Invoke(() =>
             {
-                _currentTofuDeviceId = deviceId;
-                // TxtTofuDeviceName.Text = deviceName;
-                // TxtTofuFingerprint.Text = FormatFingerprint(fingerprint);
-                // TofuPromptOverlay.Visibility = Visibility.Visible;
+                var msg = $"Incoming connection from {deviceName}\nFingerprint: {FormatFingerprint(fingerprint)}\n\nDo you trust this device?";
+                var result = System.Windows.MessageBox.Show(msg, "Trust Device", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
+                if (result == System.Windows.MessageBoxResult.Yes)
+                {
+                    _clipboardManager?.RespondToTrust(deviceId, true);
+                    ShowToast($"Trusted {deviceName}");
+                }
+                else
+                {
+                    _clipboardManager?.RespondToTrust(deviceId, false);
+                }
             });
-        }
-
-        private void BtnTofuTrust_Click(object sender, RoutedEventArgs e)
-        {
-            if (_currentTofuDeviceId != null)
-            {
-                _clipboardManager?.RespondToTrust(_currentTofuDeviceId, true);
-                ShowToast($"Trusted"); // {TxtTofuDeviceName.Text}");
-                _currentTofuDeviceId = null;
-            }
-            // TofuPromptOverlay.Visibility = Visibility.Collapsed;
-        }
-
-        private void BtnTofuReject_Click(object sender, RoutedEventArgs e)
-        {
-            if (_currentTofuDeviceId != null)
-            {
-                _clipboardManager?.RespondToTrust(_currentTofuDeviceId, false);
-                _currentTofuDeviceId = null;
-            }
-            // TofuPromptOverlay.Visibility = Visibility.Collapsed;
         }
 
         private static string FormatFingerprint(string raw)
@@ -795,7 +783,7 @@ namespace Deskdrop.Windows
 
         // --- NEW MISSING METHODS FOR XAML ---
 
-        private string GetLocalIPAddress()
+        public static string GetLocalIPAddress()
         {
             try
             {
@@ -901,6 +889,45 @@ namespace Deskdrop.Windows
             }
         }
         
+        private void BtnTransferPrimaryAction_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is FileTransferState transfer)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        if (transfer.status == "incoming") DaemonClient.AcceptFileTransfer(transfer.transfer_id);
+                        else if (transfer.status == "in_progress") DaemonClient.PauseFileTransfer(transfer.transfer_id);
+                        else if (transfer.status == "paused") DaemonClient.ResumeFileTransfer(transfer.transfer_id);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => ShowToast($"Transfer action failed: {ex.Message}"));
+                    }
+                });
+            }
+        }
+
+        private void BtnTransferSecondaryAction_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is FileTransferState transfer)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        if (transfer.status == "incoming") DaemonClient.RejectFileTransfer(transfer.transfer_id, "User rejected");
+                        else if (transfer.status == "in_progress" || transfer.status == "paused") DaemonClient.CancelFileTransfer(transfer.transfer_id);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => ShowToast($"Transfer action failed: {ex.Message}"));
+                    }
+                });
+            }
+        }
+
         private void TransferHistoryItem_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             // Placeholder for clicking a transfer history item

@@ -47,13 +47,14 @@ namespace Deskdrop.Windows
                 try
                 {
                     var state = DaemonClient.Status();
+                    var settings = DaemonClient.Send(new { cmd = "get_settings" });
                     if (state == null) return;
 
-                    var root = state.RootElement;
-                    var name = root.TryGetProperty("device_name", out var nProp) && nProp.ValueKind == JsonValueKind.String 
+                    var root = state.RootElement.TryGetProperty("data", out var d) ? d : state.RootElement;
+                    var name = settings != null && settings.RootElement.TryGetProperty("data", out var sData) && sData.TryGetProperty("device_name", out var nProp) && nProp.ValueKind == JsonValueKind.String 
                                 ? nProp.GetString() : Environment.MachineName;
                     
-                    var fp = root.TryGetProperty("fingerprint_display", out var fProp) 
+                    var fp = root.TryGetProperty("local_fingerprint", out var fProp) 
                                 ? fProp.GetString() : "";
 
                     var ip = root.TryGetProperty("bind_ip", out var ipProp) ? ipProp.GetString() : GetLocalIPAddress();

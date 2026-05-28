@@ -60,8 +60,19 @@ namespace Deskdrop.Windows
                 // Read response line.
                 using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
                 var line = ReadLineWithTimeout(pipe, TimeoutMs);
-                return line != null ? JsonDocument.Parse(line) : null;
+                if (line != null)
+                {
+                    var doc = JsonDocument.Parse(line);
+                    if (doc.RootElement.TryGetProperty("status", out var st) && st.GetString() == "error")
+                    {
+                        var msg = doc.RootElement.TryGetProperty("error", out var err) ? err.GetString() : "Unknown IPC error";
+                        throw new InvalidOperationException($"IPC returned error: {msg}");
+                    }
+                    return doc;
+                }
+                return null;
             }
+            catch (InvalidOperationException) { throw; }
             catch { return null; }
         }
 
@@ -137,6 +148,26 @@ namespace Deskdrop.Windows
 
         public static JsonDocument? RevokeTrustedDevice(string deviceId) =>
             Send(new { cmd = "revoke_trusted_device", device_id = deviceId });
+
+        // ── Transfer Controls ─────────────────────────────────────────────────
+        public static JsonDocument? AcceptFileTransfer(string transferId) => Send(new { cmd = "accept_file_transfer", transfer_id = transferId });
+        public static JsonDocument? RejectFileTransfer(string transferId, string reason) => Send(new { cmd = "reject_file_transfer", transfer_id = transferId, reason = reason });
+        public static JsonDocument? PauseFileTransfer(string transferId) => Send(new { cmd = "pause_file_transfer", transfer_id = transferId });
+        public static JsonDocument? ResumeFileTransfer(string transferId) => Send(new { cmd = "resume_file_transfer", transfer_id = transferId });
+        public static JsonDocument? CancelFileTransfer(string transferId) => Send(new { cmd = "cancel_file_transfer", transfer_id = transferId });
+
+        // ── Device Management ─────────────────────────────────────────────────
+        public static JsonDocument? RenameTrustedDevice(string deviceId, string displayName) => Send(new { cmd = "rename_trusted_device", device_id = deviceId, display_name = displayName });
+        public static JsonDocument? PauseSyncPeer(string deviceId) => Send(new { cmd = "pause_sync_peer", device_id = deviceId });
+        public static JsonDocument? ResumeSyncPeer(string deviceId) => Send(new { cmd = "resume_sync_peer", device_id = deviceId });
+        public static JsonDocument? ForgetDevice(string deviceId) => Send(new { cmd = "forget_device", device_id = deviceId });
+        public static JsonDocument? SetAutoConnect(string deviceId, bool enabled) => Send(new { cmd = "set_auto_connect", device_id = deviceId, enabled });
+
+        // ── Activity & Settings ───────────────────────────────────────────────
+        public static JsonDocument? ActivityRecent(int limit) => Send(new { cmd = "activity_recent", limit });
+        public static JsonDocument? PendingRemoteClipboards() => Send(new { cmd = "pending_remote_clipboards" });
+        public static JsonDocument? ApplyClipboard(string contentHash) => Send(new { cmd = "apply_clipboard", content_hash = contentHash });
+        public static JsonDocument? GetMetrics() => Send(new { cmd = "get_metrics" });
 
         public static JsonDocument? Shutdown() => Send(new { cmd = "shutdown" });
         

@@ -1,0 +1,426 @@
+Deskdrop Windows App Deep Audit and Polish Plan
+Date: May 28, 2026
+Scope: platforms/windows/Deskdrop.Windows, with macOS and Android used as the product quality target. This audit focuses on UI/UX, feature parity, runtime architecture, system integration, reliability, polish, and the concrete path to a premium Windows app.
+Executive Verdict
+The Windows app is not a blank slate. It already has useful pieces: tray app, quick access panel, WPF dashboard, command palette, drag-and-drop overlay, global hotkeys, QR display, Explorer context menu install, taskbar jump list, toast wrapper, file send, clipboard watcher, incoming call banner, camera preview, and direct Rust FFI startup.
+But it is currently closer to a feature-rich prototype shell than a polished Windows peer of the macOS and Android apps. The surface looks advanced, yet several core flows are partial, disconnected, or silently fail. The largest issue is architectural: Windows mixes direct FFI with a named-pipe client, while the embedded Windows FFI pipe handler only supports a subset of the daemon IPC protocol. That means the UI requests state and commands that the app host often cannot provide.
+The goal should not be to make Windows look like macOS. The goal should be to match the macOS app's product depth and the Android app's resilience while feeling native to Windows 11.
+Product Bar
+The polished Windows app should feel like this:
+Starts silently, stays alive, rhttps://codeshare.io/econnects after sleep/network changes, and never makes the user babysit the daemon.
+First run guides the user through firewall/network readiness, pairing, trust verification, and a successful sample send.
+Main window exposes three primary jobs: devices, activity/clipboard, and transfers.
+Quick access is instant, searchable, keyboard-friendly, and useful even when the full dashboard is closed.
+Every action has visible, trustworthy feedback. No silent failures.
+All pairing/trust/security moments are explicit and reassuring.
+Transfers show accurate progress, speed, ETA, pause/resume/cancel, and final "show in Explorer".
+Settings are complete, validated, grouped, and saved through the same engine state as macOS.
+Diagnostics can actually repair common issues or produce a useful support bundle.
+Visual system is Fluent/Windows-native: Mica or Acrylic where appropriate, Segoe UI Variable, proper high contrast, dark mode, DPI scaling, native focus, Windows notification actions, and correct tray/taskbar behavior.
+Reference Baseline
+macOS Strengths To Match
+Store-driven app state in platforms/macos/Deskdrop/DeskdropStore.swift, including peers, activity feed, transfers, settings, toasts, call state, battery state, and adaptive polling.
+Full activity feed in platforms/macos/Deskdrop/ActivityFeedView.swift, with search, filters, day grouping, pending clipboard banners, apply actions, expanded previews, context menus, and file rows.
+Complete transfer dashboard in platforms/macos/Deskdrop/TransfersDashboardView.swift, including incoming/active states, progress, speed/ETA, accept/reject, pause/resume/cancel, and reveal in Finder.
+Preferences depth in platforms/macos/Deskdrop/PreferencesView.swift: general, sync, network, security, history, content filters, rate limits, dirty state, validation, and local fingerprint display.
+Command palette depth in platforms/macos/Deskdrop/CommandPaletteView.swift: grouped commands, per-device actions, dynamic sync state, clipboard history results, shortcuts, and haptics.
+Menu bar popover in platforms/macos/Deskdrop/MenuBarPopoverView.swift: compact status, primary actions, dashboard/quick access, scan, diagnostics, and quit.
+Android Strengths To Match
+Guided onboarding in platforms/android/app/src/main/java/com/deskdrop/ui/OnboardingScreen.kt: find device, QR/manual IP, pairing, sample send, completion.
+Service resilience in platforms/android/app/src/main/java/com/deskdrop/DeskdropService.kt: foreground service, notification channels, wake/wifi/multicast locks, NSD discovery, network callbacks, reconnect backoff, live settings application, active transfers, call/battery continuity.
+Mobile UI richness in platforms/android/app/src/main/java/com/deskdrop/ui/MainScreen.kt: compact status strip, bottom dock, quick actions, active transfer cards, activity timeline, device cards, QR/manual pairing affordances.
+Android OS integrations: quick settings tile, share sheet, notification listener, battery settings prompts, QR scanner, notification actions, and foreground service controls.
+Diagnostics activity in platforms/android/app/src/main/java/com/deskdrop/DiagnosticsActivity.kt, which checks service, local network, clipboard sync, and OEM battery restrictions.
+Critical Windows Findings
+P0. Runtime Contract Split Breaks Product Features
+Windows starts the engine directly through FFI in platforms/windows/Deskdrop.Windows/Program.cs:182. The FFI layer then creates a Windows named-pipe handler in deskdrop-core/src/ffi.rs:78, but that handler only supports a subset of IPC and returns "unsupported in FFI IPC" for the rest at deskdrop-core/src/ffi.rs:181.
+The Windows UI expects daemon-style status fields:
+peer_batteries in platforms/windows/Deskdrop.Windows/DeskdropStore.cs:127
+active_transfers in platforms/windows/Deskdrop.Windows/DeskdropStore.cs:154
+active_call in platforms/windows/Deskdrop.Windows/DeskdropStore.cs:168
+But the embedded FFI status handler only returns peers, peer count, local fingerprint, bind IP, and bind port. This makes large parts of the Windows UI aspirational rather than real.
+Recommendation: choose one runtime model.
+Preferred: Windows app owns or launches the Rust daemon and talks to the full daemon IPC protocol.
+Acceptable short term: make the FFI Windows pipe handler reuse the exact same dispatcher as deskdrop-core/src/bin/daemon.rs and deskdrop-core/src/ipc.rs.
+Do not keep two divergent protocol implementations.
+P0. Action Feedback Is Often Invisible
+MainWindow.ShowToast is effectively commented out in platforms/windows/Deskdrop.Windows/MainWindow.xaml.cs:309, but many dashboard actions call it: settings saved, QR command, manual connect, send files, camera errors, context menu install, and drag/drop send. This creates silent or invisible success/failure states.
+Some paths use NotificationHelper.ShowToast, but the UI-level toast layer is not unified. A premium Windows app needs one notification/feedback service that supports inline toast, Action Center notifications, retry actions, and error details.
+P0. Pairing And Trust Are Not Product-Ready
+Windows has QR pairing UI, but the implementation is inconsistent:
+Command palette "Show Magic Link (QR)" creates QRCodeWindow(GetLocalIPAddress(), "000000") at platforms/windows/Deskdrop.Windows/MainWindow.xaml.cs:217, which is not the Android deskdrop://pair?... format and displays a fake PIN.
+QRPairingWindow reads device_name, fingerprint_display, bind_ip, and bind_port from the response root, but IPC responses wrap fields inside data. As a result it falls back to local/default values even when richer daemon data exists.
+ShowTofuPrompt at platforms/windows/Deskdrop.Windows/MainWindow.xaml.cs:749 stores state but the visible prompt fields and overlay are commented out.
+Trust/reject handlers exist at platforms/windows/Deskdrop.Windows/MainWindow.xaml.cs:760, but the actual user-facing trust dialog is missing.
+In platforms/windows/Deskdrop.Windows/Program.cs:565, TOFU uses id = name because the precompiled DLL lacks deskdrop_event_device_id; this is unsafe because names are not stable device IDs.
+Windows cannot be considered seamless until pairing is a complete guided flow with fingerprint/PIN verification, retry states, and clear success/failure.
+P0. Transfers UI Is Not Actually Wired To Transfer Controls
+The Windows transfer template binds to ActionIcon1, ActionColor1, ActionCommand1, ActionIcon2, and ActionCommand2 at platforms/windows/Deskdrop.Windows/MainWindow.xaml:312, but FileTransferState does not define those members. WPF will fail those bindings silently.
+The Windows FFI event layer auto-accepts incoming transfers in platforms/windows/Deskdrop.Windows/Program.cs:529, but there is no product decision or user policy shown in the UI. Also:
+No progress event accessor is exposed in Windows FFI.
+Pause/resume/cancel are not wired from UI to IPC.
+Incoming accept/reject is not surfaced.
+Completed transfer history click is a placeholder at platforms/windows/Deskdrop.Windows/MainWindow.xaml.cs:904.
+File sending uses File.ReadAllBytes in platforms/windows/Deskdrop.Windows/Program.cs:369 and platforms/windows/Deskdrop.Windows/Program.cs:413, which is not acceptable for large files.
+Target behavior should mirror macOS and Android: progress, speed, ETA, accept/reject, pause/resume/cancel, cancel from notification, and reveal in Explorer.
+P0. History And Activity Have Two Sources Of Truth
+Windows keeps in-memory history in ClipboardManager, mirrors some items into DeskdropStore.Shared.History, and also has a core/daemon history API available through IPC. The UI is not consistently backed by the durable core history.
+Problems:
+Quick access pin/delete mutates DeskdropStore.Shared.History directly instead of using ClipboardManager.DeleteHistory or core history APIs.
+HistoryItem.IsPinned does not implement property change notification, so pin color/order can be stale.
+Pinning does not resort the list.
+The dashboard transfer history is populated only when LoadTransfersView runs.
+The macOS-style activity feed features in the core are not exposed on Windows.
+Recommendation: Windows should use the same activity/history contract as macOS: activity_recent, activity_since, pending_remote_clipboards, apply_clipboard, history_pin, history_delete, history_search, and history_repush.
+P1. Windows Visual Style Is Polished-Looking But Not Native Enough
+The WPF shell uses comments and tokens labeled as macOS in platforms/windows/Deskdrop.Windows/MainWindow.xaml. The bottom floating capsule and traffic-light heritage are visually borrowed from macOS. The result is attractive but not convincingly Windows-native.
+Windows should adopt Fluent 2 conventions:
+Mica or Acrylic host backdrop, not transparent WPF window plus hand-made card shell.
+Segoe UI Variable and Windows 11 spacing/focus.
+NavigationView-like structure or a compact left rail for larger dashboards.
+Native caption buttons and snap layout support.
+Dark mode and high contrast from system settings.
+Windows App SDK notifications where possible.
+Fluent symbols or Segoe Fluent Icons with consistent sizing.
+P1. Settings Are Far Behind macOS And Android
+Windows settings currently expose device name, launch at login, sync enabled, and notifications. Several controls are commented out in platforms/windows/Deskdrop.Windows/MainWindow.xaml.cs:548 to platforms/windows/Deskdrop.Windows/MainWindow.xaml.cs:617.
+Missing or incomplete:
+Sync mode: auto/manual/receive-only.
+Content types: text/images/files.
+Timeline-first/auto-apply policy.
+Max payload, history limit, max stored text size.
+Clipboard polling, debounce, duplicate window, rate limits.
+Sensitive text blocking and ignore patterns.
+Require TOFU confirmation.
+Local fingerprint display.
+Per-peer settings.
+Theme/dark mode.
+Shortcut customization.
+Dirty state, validation, save result, and revert.
+The macOS settings model is the target.
+P1. Diagnostics Are Too Shallow
+Windows diagnostics only checks daemon running/stopped and offers app restart. It should become a real repair surface:
+Daemon/app host running.
+IPC pipe reachable.
+mDNS/discovery state.
+Bound port and conflicts.
+Windows Firewall rule.
+Network profile: private/public/domain.
+Clipboard watcher status.
+Notification permission/AUMID status.
+Startup task status.
+Trusted device count and recent reconnect failures.
+Latest crash log.
+Export support bundle.
+P1. Camera And Call Continuity Are Inconsistent
+Camera preview polls latest_camera_frame in platforms/windows/Deskdrop.Windows/CameraPreviewWindow.xaml.cs:31, but daemon responses contain data.frame_base64 in deskdrop-core/src/bin/daemon.rs:779; the Windows preview expects data itself to be a string. In the embedded FFI IPC model, latest_camera_frame is unsupported anyway.
+Incoming call exists in two forms: an inline dashboard banner and IncomingCallBannerWindow. Actions use "reject" in one place and "decline" in another. Android has real call action fallback through notification listener and TelecomManager; Windows should show a consistent continuity panel and send one canonical action vocabulary.
+P1. Hotkeys Are Useful But Not User-Configurable
+Windows registers several global shortcuts in platforms/windows/Deskdrop.Windows/Program.cs:791 onward:
+Ctrl+Shift+V for quick access.
+Ctrl+K for dashboard command palette.
+Ctrl+Shift+L for active browser URL.
+Ctrl+Shift+D for drop zone.
+Ctrl+Shift+C for push clipboard.
+These are powerful, but there is no conflict UI, no settings page, and no visible onboarding. A global Ctrl+K is especially likely to conflict with applications. Shortcuts should be customizable and disabled if registration fails.
+P1. Explorer Integration Needs A Windows-Grade Design
+The context menu installer writes to HKEY_CLASSES_ROOT\*\shell\Deskdrop and asks for Administrator if it fails. A polished app should avoid admin where possible:
+Use per-user registration under HKCU.
+Add uninstall/repair state in settings.
+Support "Send with Deskdrop" target selection.
+Support folders and multi-select.
+Consider Windows Share target/protocol registration.
+P2. Notification System Is Basic
+NotificationHelper uses WinRT toast templates with ToastNotificationManager.CreateToastNotifier("Deskdrop"). Without robust app identity/start-menu shortcut/AUMID handling, notifications can be unreliable. They also lack action buttons.
+Target:
+Receive clipboard: Apply, Copy, Open Quick Access.
+File incoming: Accept, Reject.
+Transfer complete: Show in Explorer.
+Pairing request: Trust, Reject, View fingerprint.
+Call: Accept, Decline.
+Failure: Retry, Open Diagnostics.
+P2. Accessibility, Localization, And Scaling Are Not Yet Designed
+WPF UI mostly lacks automation names, focus states, keyboard traversal contracts, screen reader labels, high contrast behavior, reduced motion behavior, localization, and text expansion handling. This matters because a Windows desktop app will be used at many DPI scales, display densities, and accessibility modes.
+Feature Parity Matrix
+Area	macOS Target	Android Target	Windows Current	Windows Target
+First run	Guided onboarding, pairing, sample send	Strong step onboarding, QR scan/manual IP	Onboarding removed/stubbed	Full Windows onboarding with firewall, pair, verify, sample
+Runtime	App + daemon IPC with store	Foreground service, reconnect, NSD	Direct FFI plus partial pipe	One full protocol, event stream, resilient host
+Devices	Rename, trust, revoke, pause, auto-connect	Trust/reject/forget, pairing request	Disconnect only in dashboard	Full device management and per-peer settings
+Pairing	PIN/fingerprint and QR show	QR scan/manual IP and pairing activity	QR show partial, TOFU hidden	QR show/scan via webcam optional, visible SAS trust
+Activity	Search, filter, apply, context menu	Timeline rows with apply/delete/resend	Quick access in-memory list	Durable searchable activity feed
+Pending clipboard	Staged apply model	Apply by content hash	Mixed auto/history model	Clear timeline-first policy with apply/copy/resend
+Transfers	Progress, speed, ETA, accept/reject, pause/resume/cancel	Same plus notifications	Partial list, silent bindings, auto-accept	Full transfer control surface
+Settings	General/sync/network/security/history	Appearance/sync/features/devices/background	Basic registry settings	Full settings snapshot through engine
+Diagnostics	Service, network, clipboard, version	Service, network, OEM battery, clipboard	Daemon status only	Full repair/support console
+Notifications	Overlay/toasts	Foreground + alert channels + actions	Basic toast wrapper	Actionable Windows notifications
+OS integration	Menu bar, hotkeys, drop zone	QS tile, share sheet, service	Tray, hotkeys, jump list, context menu	Native tray, jump list, protocol/share, Explorer target
+Visual polish	Cohesive design system	Mobile glass/material, haptics	Monolithic macOS-like WPF	Fluent Windows design system
+Proposed Windows Product Architecture
+1. Unify The Engine Contract
+Create a single Windows-facing engine gateway:
+EngineClient: typed async IPC client with request/response models.
+EngineHost: starts/stops daemon or embedded core, but exposes the same protocol either way.
+EngineEventStream: pushes events to UI instead of relying only on one-second polling.
+EngineStateStore: one source of truth for peers, activity, transfers, settings, diagnostics, call state, battery, and toasts.
+The Windows UI should not know whether the engine is daemon-backed or embedded. It should only know typed state and commands.
+2. Prefer Daemon IPC For Windows
+The macOS architecture already benefits from a rich IPC daemon. Windows should move toward the same model:
+App starts hidden tray/dashboard.
+App ensures daemon is running.
+App talks to \\.\pipe\deskdrop.
+Daemon owns mDNS, core state, file transfer lifecycle, history, settings, and event stream.
+This avoids divergent FFI behavior and lets Windows reuse the same protocol surface as macOS and CLI.
+3. Make UI State Durable And Observable
+Replace ad hoc in-memory state with durable models:
+PeerViewModel
+ActivityEntryViewModel
+TransferViewModel
+SettingsSnapshot
+DiagnosticsSnapshot
+TrustPromptViewModel
+ToastViewModel
+CommandDescriptor
+Collections should update by diffing IDs, not clear/re-add every second. This prevents flicker, preserves selection, and makes the UI feel alive rather than polling-bound.
+4. Split The Monolith
+Program.cs and MainWindow.xaml are too large for a premium app. Split:
+NativeCore.cs or remove if daemon IPC wins.
+ClipboardManager.cs
+TrayApp.cs
+AppEntry.cs
+EngineClient.cs
+EngineStore.cs
+NotificationService.cs
+HotKeyService.cs
+StartupService.cs
+ExplorerIntegrationService.cs
+DiagnosticsService.cs
+Views/DevicesView.xaml
+Views/ActivityView.xaml
+Views/TransfersView.xaml
+Views/SettingsView.xaml
+Views/DiagnosticsView.xaml
+Views/OnboardingWindow.xaml
+Views/TrustPromptDialog.xaml
+Resources/FluentTokens.xaml
+Resources/Components.xaml
+Proposed UX Redesign
+First Run Onboarding
+Windows needs a first-run journey as strong as Android:
+Welcome: "Deskdrop keeps clipboard and files on your local network."
+Network readiness: show current network, private/public profile, firewall status, port.
+Pair device: show QR code and manual IP; optionally scan QR with webcam.
+Trust verification: show device name, platform, SAS PIN, fingerprint, and explicit Trust/Reject.
+Send sample: send "Hello from Windows" to selected device and confirm receipt.
+Finish: enable launch at login, open Quick Access, show shortcuts.
+Dashboard Shell
+Use a Windows-native layout:
+Top app bar with app title, status pill, search/command entry, scan button, send button, settings.
+Left rail or compact tab bar: Home, Activity, Devices, Transfers, Settings, Diagnostics.
+Main content should not be trapped inside nested cards.
+Bottom floating macOS dock should be removed or redesigned as a Windows navigation rail.
+Home
+Purpose: answer "is Deskdrop working and what can I do now?"
+Must include:
+Connection status and last sync.
+Current clipboard preview with "Send to all" and target dropdown.
+Active transfer summary.
+Nearby/paired devices summary.
+Latest activity.
+Important repair prompts if daemon/firewall/network is unhealthy.
+Devices
+Purpose: manage trust and targets.
+Device card states:
+Nearby untrusted: Pair, Ignore.
+Pairing requested: Show PIN/fingerprint, Trust, Reject.
+Trusted connected: Send clipboard, Send files, Disconnect, Pause sync, Rename, Details.
+Trusted offline: Connect, Forget, Auto-connect toggle.
+Device detail drawer: fingerprint, first seen, last seen, IP, platform, battery, settings.
+Activity
+Purpose: timeline-first clipboard and system history.
+Features:
+Search.
+Filters: All, Clipboard, Files, Devices, Warnings.
+Day grouping.
+Pending clipboard banner with Apply Latest.
+Row actions: Apply, Copy, Send Again, Pin, Delete, Show in Explorer.
+Expanded preview for text.
+Empty states that tell the next useful action.
+Transfers
+Purpose: confident file movement.
+Active transfer row:
+File icon, name, source/target, status.
+Progress, speed, ETA, transferred bytes.
+Incoming: Accept, Reject, Save As if supported.
+Active: Pause, Cancel.
+Paused: Resume, Cancel.
+Complete: Show in Explorer, Send Again.
+Failed: Retry, Details.
+Quick Access
+Purpose: fast clipboard memory.
+Keep it small but powerful:
+Search field.
+Current clipboard quick send.
+Recent activity rows.
+Pending clipboard apply.
+Pin/delete/send actions.
+Keyboard navigation.
+Open dashboard button.
+Correct screen positioning across multi-monitor setups.
+Command Palette
+Purpose: power-user flow.
+Match macOS depth:
+Grouped commands: Navigate, Clipboard, Devices, Transfers, Network, Settings.
+Dynamic commands per connected device.
+Search history entries when query is typed.
+Disabled states with reason.
+Shortcut hints.
+Recent commands.
+Settings
+Suggested Windows settings sections:
+General: device name, launch at login, theme, onboarding replay.
+Sync: enable sync, sync mode, text/images/files, timeline-first, auto-apply.
+Network: port, manual connect defaults, discovery, firewall repair.
+Security: require TOFU, local fingerprint, block likely secrets, ignore patterns.
+History: history limit, max text size, clear/export.
+Notifications: receive banners, action center behavior, mirrored Android notifications.
+Shortcuts: hotkey enable/customize/conflict status.
+Integrations: Explorer context menu, protocol handler, jump lists.
+Advanced: rate limits, debounce, duplicate window, logs.
+Diagnostics
+Diagnostics should become a repair console:
+App host: running, version, uptime.
+IPC: named pipe reachable, latency.
+Engine: running, device ID, fingerprint.
+Network: current adapter, IP, network profile, mDNS status.
+Port: bound, conflict detection.
+Firewall: rule present and enabled.
+Clipboard: watcher active, last sequence number.
+Notifications: app identity/AUMID, permission, last toast result.
+Startup: launch at login status.
+Transfers: active count, stuck transfer detector.
+Logs: open log folder, copy diagnostics, export zip.
+Implementation Roadmap
+Phase 0: Stabilize The Contract
+Goal: make the existing app honest and shippable before visual polish.
+Decide daemon IPC vs embedded FFI.
+If embedded remains, route Windows FFI IPC through the full IpcRequest dispatcher.
+Fix latest_camera_frame response parsing.
+Fix QRPairingWindow response unwrapping and standard URI.
+Restore visible toast/inline feedback.
+Add a visible TOFU trust prompt.
+Replace transfer action placeholder bindings with real commands or remove the buttons until wired.
+Stop reading entire large files into memory; use file-path transfer where possible.
+Add typed response error handling in WindowsIpcClient.
+Add a Windows CI build check and make it blocking.
+Phase 1: Match Core Product Parity
+Goal: Windows reaches the baseline of macOS/Android features.
+Implement durable activity feed from core IPC.
+Implement pending clipboard apply/copy/resend.
+Implement transfer controls: incoming accept/reject, pause/resume/cancel, retry, reveal.
+Implement full devices management: trust, reject, rename, forget, pause/resume sync, auto-connect.
+Implement full settings panes and save through save_settings.
+Implement real diagnostics.
+Add first-run onboarding.
+Phase 2: Fluent Windows Polish
+Goal: Windows feels like a premium Windows app, not a port.
+Build FluentTokens.xaml with light/dark/high-contrast tokens.
+Replace macOS-like floating dock with Windows-native navigation.
+Use Mica/Acrylic appropriately.
+Adopt Segoe UI Variable and consistent icon sizing.
+Add system theme detection.
+Add focus visuals, keyboard navigation, screen reader names.
+Add reduce-motion support.
+Improve tray icon assets for light/dark/high DPI.
+Replace UI emoji with Fluent icons.
+Phase 3: Seamlessness And OS Integrations
+Goal: make Windows feel ambient and reliable.
+Network/sleep resume hooks with immediate reconnect.
+Firewall repair flow.
+Actionable notifications.
+Per-user Explorer context menu with uninstall/repair.
+Protocol handler for deskdrop://.
+Optional Share target if packaging supports it.
+Jump list actions with status-sensitive commands.
+Hotkey settings and conflict reporting.
+Multi-monitor quick access/drop-zone positioning.
+Phase 4: QA, Release, And Support
+Goal: confidence.
+Automated build: Windows WPF/WinUI, Rust core, installer.
+Smoke tests for IPC commands.
+UI automation for onboarding, pairing prompt, settings save, command palette.
+Manual test matrix: Windows 10, Windows 11, light/dark, high DPI, high contrast, sleep/resume, public/private network, firewall on/off.
+Transfer tests: tiny file, 100 MB, folder/multi-file, cancel, pause/resume, disconnect/reconnect.
+Pairing tests: Android -> Windows, Windows -> Android, macOS -> Windows, Windows -> macOS.
+Diagnostics export sanity check.
+File-Level Change Map
+platforms/windows/Deskdrop.Windows/Program.cs
+Split into smaller services.
+Remove duplicated responsibilities from TrayApp.
+Prefer SendFilePath/IPC over File.ReadAllBytes.
+Make incoming file transfer policy explicit.
+Canonicalize call actions to one vocabulary.
+Surface errors to NotificationService and EngineStore.
+Remove duplicate quick context subscription currently present in MainWindow.xaml.cs:23 and MainWindow.xaml.cs:24.
+platforms/windows/Deskdrop.Windows/DeskdropStore.cs
+Become the single observable store.
+Stop clear/re-add polling collections every second.
+Add activity, settings, diagnostics, trust prompts, pending clipboard, notifications, and command palette state.
+Handle error state and reconnect state explicitly.
+platforms/windows/Deskdrop.Windows/WindowsIpcClient.cs
+Replace anonymous objects with typed requests.
+Return typed Result<T> with status == error message propagation.
+Add full command coverage: activity, settings, transfers, pairing, device management, diagnostics, templates.
+Support cancellation and longer timeouts for long operations.
+platforms/windows/Deskdrop.Windows/MainWindow.xaml
+Break into view components.
+Remove macOS comments/tokens and replace with Windows Fluent resources.
+Replace placeholder search with real command/search entry.
+Replace transfer binding placeholders.
+Add real empty/loading/error states.
+Add accessibility names and keyboard focus order.
+platforms/windows/Deskdrop.Windows/QuickAccessWindow.xaml
+Source data from durable activity/history.
+Add search.
+Make pin/delete/send actions call core APIs.
+Keep window alive predictably during interactions.
+Improve multi-monitor placement.
+platforms/windows/Deskdrop.Windows/QRPairingWindow.xaml.cs
+Read response fields from data.
+Use one standard URI: deskdrop://pair?name=...&ip=...&port=...&fingerprint=....
+Show actual fingerprint and optional PIN.
+Close only on successful trusted pairing, not any peer count increase.
+platforms/windows/Deskdrop.Windows/CameraPreviewWindow.xaml.cs
+Parse data.frame_base64.
+Show connection state, last frame time, and errors.
+Stop polling when no stream is active.
+Avoid 30fps pipe polling if an event stream can carry camera frame notifications.
+platforms/windows/Deskdrop.Windows/NotificationHelper.cs
+Become NotificationService.
+Establish app identity/AUMID/start menu shortcut.
+Use actionable notifications.
+Route notification button clicks back to the running app.
+deskdrop-core/src/ffi.rs
+Remove or complete the divergent Windows IPC handler.
+If embedded Windows remains, reuse the same handler logic as daemon IPC.
+Include active transfers, active call, batteries, pending clipboard, settings, activity, and camera frame commands in status/IPC.
+Acceptance Checklist
+Windows should not be called polished until all of this is true:
+Fresh install opens onboarding and pairs with Android and macOS without docs.
+Trust prompt shows actual device ID/fingerprint/PIN and works.
+Sending text, image, file, and multi-file works both directions.
+Large file send does not allocate the full file in UI memory.
+Active transfer controls work.
+Activity feed persists across app restart.
+Pending clipboard item can be applied, copied, resent, pinned, and deleted.
+Settings save through the engine and survive restart.
+Diagnostics can fix or explain common network/firewall/daemon issues.
+All primary actions produce visible feedback.
+Tray, hotkeys, jump list, Explorer context menu, notifications, and protocol handler are coherent.
+App respects dark mode, high contrast, DPI scaling, keyboard navigation, and screen readers.
+Windows CI builds the app and installer.
+Validation Notes
+cargo check -p deskdrop-core --lib passes locally on May 28, 2026.
+Local .NET tooling is unavailable in this workspace (dotnet: command not found), so the Windows WPF project could not be built locally.
+Existing checked-in Windows CI logs show prior WPF build failures, including MainWindow.xaml property errors and older missing-symbol errors. Treat CI health as a Phase 0 requirement, even if some current source files have moved past those exact errors.
+Recommended Next Step
+Start with Phase 0. The first concrete implementation should be the engine contract cleanup, visible feedback restoration, and pairing/trust repair. Visual redesign should come immediately after the app is honest about what works, because polishing a broken state contract will create a beautiful but unreliable shell.

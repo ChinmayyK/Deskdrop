@@ -410,8 +410,7 @@ namespace Deskdrop.Windows
             try
             {
                 var name = Path.GetFileName(path);
-                var bytes = File.ReadAllBytes(path);
-                NativeCore.deskdrop_push_file(_handle, name, bytes, (UIntPtr)bytes.Length);
+                NativeCore.deskdrop_send_file_path(_handle, targetDevice, path, name, "application/octet-stream");
                 AddHistory(new HistoryItem
                 {
                     Summary = name, Source = "local",
