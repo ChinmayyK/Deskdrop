@@ -45,8 +45,10 @@ namespace Deskdrop.Windows
                 try
                 {
                     var state = DaemonClient.Status();
-                    var settings = DaemonClient.Send(new { cmd = "get_settings" });
                     if (state == null) return;
+
+                    JsonDocument? settings = null;
+                    try { settings = DaemonClient.Send(new { cmd = "get_settings" }); } catch { }
 
                     var root = state.RootElement.TryGetProperty("data", out var d) ? d : state.RootElement;
                     var name = settings != null && settings.RootElement.TryGetProperty("data", out var sData) && sData.TryGetProperty("device_name", out var nProp) && nProp.ValueKind == JsonValueKind.String 
