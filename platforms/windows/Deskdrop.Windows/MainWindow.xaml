@@ -487,7 +487,9 @@
                                                     <Button Style="{StaticResource ModernButton}" Content="&#xE8AC;" FontFamily="Segoe MDL2 Assets" ToolTip="Rename" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="8" Click="BtnRenameDevice_Click" Tag="{Binding device_id}"/>
                                                     <Button Style="{StaticResource ModernButton}" Content="&#xE769;" FontFamily="Segoe MDL2 Assets" ToolTip="Pause Sync" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="8" Click="BtnPauseSyncDevice_Click" Tag="{Binding device_id}"/>
                                                     <Button Style="{StaticResource ModernButton}" Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" ToolTip="Forget Device" Background="Transparent" Foreground="{StaticResource BrandRed}" Padding="8" Click="BtnForgetDevice_Click" Tag="{Binding device_id}"/>
-                                                    <Button Style="{StaticResource ModernButton}" Content="Disconnect" Background="#FFF0F0" Foreground="{StaticResource BrandRed}" Padding="12,6" Margin="8,0,0,0" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click"/>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Verify" Background="{StaticResource BrandBlue}" Foreground="White" Padding="12,6" Margin="8,0,0,0" Tag="{Binding device_id}" Click="BtnVerifyDevice_Click" Visibility="{Binding ShowVerifyButton, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Disconnect" Background="#FFF0F0" Foreground="{StaticResource BrandRed}" Padding="12,6" Margin="8,0,0,0" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click" Visibility="{Binding ShowDisconnectButton, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Connect" Background="#E5F0FA" Foreground="{StaticResource BrandBlue}" Padding="12,6" Margin="8,0,0,0" Tag="{Binding device_id}" Click="BtnConnectDevice_Click" Visibility="{Binding ShowConnectButton, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
@@ -636,14 +638,8 @@
                         <!-- Quick Actions Capsule -->
                         <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="4">
                             <StackPanel Orientation="Horizontal">
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Click="NavActivity_Click" ToolTip="Activity Feed (Ctrl+A)" AutomationProperties.Name="Activity Feed">
-                                    <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
-                                </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="NavDiagnostics_Click" ToolTip="Diagnostics (Ctrl+D)" AutomationProperties.Name="Diagnostics">
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Click="NavDiagnostics_Click" ToolTip="Diagnostics (Ctrl+D)" AutomationProperties.Name="Diagnostics">
                                     <TextBlock Text="&#xE9E9;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
-                                </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="NavDevices_Click" ToolTip="Device Manager (Ctrl+M)" AutomationProperties.Name="Device Manager">
-                                    <TextBlock Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                                 </Button>
                                 <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="NavSettings_Click" ToolTip="Settings (Ctrl+,)" AutomationProperties.Name="Settings">
                                     <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
@@ -666,13 +662,15 @@
                 </Grid>
             </Border>
 
+
             <!-- BOTTOM CHROME: FloatingNavBar Capsule -->
             <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,32" CornerRadius="24" Background="{StaticResource SurfaceGlass}" BorderBrush="#30000000" BorderThickness="1" Padding="6" Panel.ZIndex="200" WindowChrome.IsHitTestVisibleInChrome="True">
                 <Border.Effect>
                     <DropShadowEffect Color="Black" Opacity="0.12" BlurRadius="24" ShadowDepth="12"/>
                 </Border.Effect>
                 <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="NavBtnDevices" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE975;" Content="Ecosystem" Click="NavDevices_Click"/>
+                    <RadioButton x:Name="NavBtnDevices" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE975;" Content="Ecosystem" Click="NavDevices_Click" IsChecked="True"/>
+                    <RadioButton x:Name="NavBtnActivity" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE81C;" Content="Activity" Click="NavActivity_Click"/>
                     <RadioButton x:Name="NavBtnTransfers" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE8D5;" Content="Transfers" Click="NavTransfers_Click"/>
                 </StackPanel>
             </Border>

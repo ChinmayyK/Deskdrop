@@ -380,9 +380,12 @@ impl IpcResponse {
 // ── Socket path ───────────────────────────────────────────────────────────────
 
 pub fn socket_path() -> PathBuf {
-    #[cfg(windows)]
-    return PathBuf::from(r"\\.\pipe\deskdrop");
-
+    #[cfg(target_os = "windows")]
+    {
+        let username = std::env::var("USERNAME").unwrap_or_else(|_| "default".to_string());
+        return PathBuf::from(format!(r"\\.\pipe\deskdrop_{}", username));
+    }
+    
     #[cfg(not(windows))]
     {
         if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR") {

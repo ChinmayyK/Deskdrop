@@ -348,6 +348,10 @@ namespace Deskdrop.Windows
             NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
             try
             {
+                if (Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing") || 
+                    Clipboard.ContainsData("Clipboard Viewer Ignore")) 
+                    return;
+
                 if (Clipboard.ContainsText())
                 {
                     var text = Clipboard.GetText();
@@ -388,8 +392,16 @@ namespace Deskdrop.Windows
                     foreach (var path in files)
                     {
                         var name  = Path.GetFileName(path);
-                        // Send via IPC directly using the path to avoid memory spikes on large files
-                        DaemonClient.SendFilePath(path, name, "application/octet-stream");
+                        try
+                        {
+                            // Send via IPC directly using the path to avoid memory spikes on large files
+                            DaemonClient.SendFilePath(path, name, "application/octet-stream");
+                        }
+                        catch
+                        {
+                            // Fallback if the Daemon doesn't support send_file_path IPC command
+                            PushFile(path);
+                        }
                         AddHistory(new HistoryItem
                         {
                             Summary = name, Source = "local",
@@ -432,7 +444,16 @@ namespace Deskdrop.Windows
             try
             {
                 var name = Path.GetFileName(path);
-                NativeCore.deskdrop_send_file_path(_handle, targetDevice, path, name, "application/octet-stream");
+                try
+                {
+                    NativeCore.deskdrop_send_file_path(_handle, targetDevice, path, name, "application/octet-stream");
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    // Fallback to older deskdrop_push_file which loads the file into memory
+                    byte[] data = File.ReadAllBytes(path);
+                    NativeCore.deskdrop_push_file(_handle, name, data, (UIntPtr)data.Length);
+                }
                 AddHistory(new HistoryItem
                 {
                     Summary = name, Source = "local",
@@ -1062,13 +1083,32 @@ namespace Deskdrop.Windows
 
         public void OpenDashboard()
         {
-            if (_mainWindow == null)
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
-                _mainWindow = new MainWindow(_mgr);
-                _mainWindow.Closed += (_, _) => _mainWindow = null;
-            }
-            _mainWindow.Show();
-            _mainWindow.Activate();
+                try
+                {
+                    if (_mainWindow == null)
+                    {
+                        _mainWindow = new MainWindow(_mgr);
+                        _mainWindow.Closed += (_, _) => _mainWindow = null;
+                    }
+                    
+                    _mainWindow.Show();
+                    if (_mainWindow.WindowState == System.Windows.WindowState.Minimized)
+                    {
+                        _mainWindow.WindowState = System.Windows.WindowState.Normal;
+                    }
+                    _mainWindow.Activate();
+                    _mainWindow.Topmost = true;
+                    _mainWindow.Topmost = false;
+                    _mainWindow.Focus();
+                }
+                catch (Exception ex)
+                {
+                    _mainWindow = null;
+                    Program.LogError(ex);
+                }
+            });
         }
 
         public void OpenQuickAccess()
@@ -1205,14 +1245,14 @@ namespace Deskdrop.Windows
         {
             try
             {
-                using var mutex = new Mutex(true, "Deskdrop_SingleInstance_v1", out bool isNew);
+                using var mutex = new Mutex(true, $"Deskdrop_SingleInstance_v1_{Environment.UserName}", out bool isNew);
                 if (!isNew)
                 {
                     if (args.Length > 0)
                     {
                         try
                         {
-                            using var client = new NamedPipeClientStream(".", "DeskdropIPC", PipeDirection.Out);
+                            using var client = new NamedPipeClientStream(".", $"DeskdropIPC_{Environment.UserName}", PipeDirection.Out);
                             client.Connect(1000);
                             using var writer = new StreamWriter(client);
                             writer.WriteLine(string.Join("|", args));
@@ -1224,7 +1264,7 @@ namespace Deskdrop.Windows
                     {
                         try
                         {
-                            using var client = new NamedPipeClientStream(".", "DeskdropIPC", PipeDirection.Out);
+                            using var client = new NamedPipeClientStream(".", $"DeskdropIPC_{Environment.UserName}", PipeDirection.Out);
                             client.Connect(1000);
                             using var writer = new StreamWriter(client);
                             writer.WriteLine("--open-dashboard");
@@ -1238,6 +1278,7 @@ namespace Deskdrop.Windows
                 Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
+                RegisterProtocolHandler();
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
                 Application.ThreadException += (_, e) => LogError(e.Exception);
                 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -1378,6 +1419,32 @@ namespace Deskdrop.Windows
             }
         }
 
+        private static void RegisterProtocolHandler()
+        {
+            try
+            {
+                var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (string.IsNullOrEmpty(exePath)) return;
+
+                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Classes\deskdrop");
+                if (key != null)
+                {
+                    key.SetValue("", "URL:Deskdrop Protocol");
+                    key.SetValue("URL Protocol", "");
+
+                    using var defaultIcon = key.CreateSubKey("DefaultIcon");
+                    if (defaultIcon != null) defaultIcon.SetValue("", $"\"{exePath}\",1");
+
+                    using var command = key.CreateSubKey(@"shell\open\command");
+                    if (command != null) command.SetValue("", $"\"{exePath}\" \"%1\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError(ex);
+            }
+        }
+
         private static async Task StartIpcServer(TrayApp app)
         {
             while (true)
@@ -1392,7 +1459,7 @@ namespace Deskdrop.Windows
                     }
                     
                     using var server = System.IO.Pipes.NamedPipeServerStreamAcl.Create(
-                        "DeskdropIPC", 
+                        $"DeskdropIPC_{Environment.UserName}", 
                         PipeDirection.In, 
                         1, 
                         PipeTransmissionMode.Message, 
@@ -1419,7 +1486,7 @@ namespace Deskdrop.Windows
             }
         }
 
-        private static void LogError(Exception ex)
+        internal static void LogError(Exception ex)
         {
             try
             {

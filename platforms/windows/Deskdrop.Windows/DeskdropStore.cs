@@ -57,17 +57,21 @@ namespace Deskdrop.Windows
     public class PeerViewModel : BaseViewModel
     {
         private string _device_id = "";
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
         public string device_id { get => _device_id; set => SetProperty(ref _device_id, value); }
         private string _friendly_name = "";
         public string friendly_name { get => _friendly_name; set => SetProperty(ref _friendly_name, value); }
         private string _status = "";
-        public string status { get => _status; set { if(SetProperty(ref _status, value)) { OnPropertyChanged(nameof(StatusIcon)); OnPropertyChanged(nameof(ConnectActionText)); } } }
+        public string status { get => _status; set { if(SetProperty(ref _status, value)) { OnPropertyChanged(nameof(StatusIcon)); OnPropertyChanged(nameof(ShowVerifyButton)); OnPropertyChanged(nameof(ShowDisconnectButton)); OnPropertyChanged(nameof(ShowConnectButton)); } } }
         private bool _is_trusted;
         [System.Text.Json.Serialization.JsonPropertyName("trusted")]
-        public bool is_trusted { get => _is_trusted; set => SetProperty(ref _is_trusted, value); }
+        public bool is_trusted { get => _is_trusted; set { if(SetProperty(ref _is_trusted, value)) { OnPropertyChanged(nameof(ShowVerifyButton)); OnPropertyChanged(nameof(ShowDisconnectButton)); OnPropertyChanged(nameof(ShowConnectButton)); } } }
         
         public string StatusIcon => status == "connected" ? "🟢" : "⚪";
-        public string ConnectActionText => status == "connected" ? "Disconnect" : "Connect";
+        
+        public bool ShowVerifyButton => status == "connected" && !is_trusted;
+        public bool ShowDisconnectButton => status == "connected" && is_trusted;
+        public bool ShowConnectButton => status != "connected";
 
         private int _batteryLevel;
         public int BatteryLevel { get => _batteryLevel; set { if(SetProperty(ref _batteryLevel, value)) { OnPropertyChanged(nameof(ShowBattery)); OnPropertyChanged(nameof(BatteryIcon)); OnPropertyChanged(nameof(BatteryColor)); } } }
@@ -227,12 +231,11 @@ namespace Deskdrop.Windows
             set { _statusLine = value; OnPropertyChanged(); }
         }
 
-        private bool _isRefreshInFlight;
+        private int _isRefreshInFlight = 0;
 
         public void UpdateStateFromDaemon()
         {
-            if (_isRefreshInFlight) return;
-            _isRefreshInFlight = true;
+            if (System.Threading.Interlocked.CompareExchange(ref _isRefreshInFlight, 1, 0) != 0) return;
 
             System.Threading.Tasks.Task.Run(() =>
             {
@@ -276,7 +279,7 @@ namespace Deskdrop.Windows
                 }
                 finally
                 {
-                    _isRefreshInFlight = false;
+                    System.Threading.Interlocked.Exchange(ref _isRefreshInFlight, 0);
                 }
             });
         }
@@ -290,9 +293,25 @@ namespace Deskdrop.Windows
                 {
                     System.Windows.Application.Current?.Dispatcher.Invoke(() =>
                     {
-                        // Replace feed instead of live diffing for simplicity in Phase 1
-                        ActivityFeed.Clear();
-                        foreach (var e in entries) ActivityFeed.Add(e);
+                        var existing = ActivityFeed.ToList();
+                        foreach (var e in entries)
+                        {
+                            var match = existing.FirstOrDefault(x => x.id == e.id);
+                            if (match != null)
+                            {
+                                match.kind = e.kind;
+                                match.summary = e.summary;
+                                match.timestamp = e.timestamp;
+                                match.source = e.source;
+                                match.content_hash = e.content_hash;
+                                existing.Remove(match);
+                            }
+                            else
+                            {
+                                ActivityFeed.Add(e);
+                            }
+                        }
+                        foreach (var rem in existing) ActivityFeed.Remove(rem);
                     });
                 }
             }
@@ -307,8 +326,23 @@ namespace Deskdrop.Windows
                 {
                     System.Windows.Application.Current?.Dispatcher.Invoke(() =>
                     {
-                        PendingClipboards.Clear();
-                        foreach (var c in clips) PendingClipboards.Add(c);
+                        var existing = PendingClipboards.ToList();
+                        foreach (var c in clips)
+                        {
+                            var match = existing.FirstOrDefault(x => x.content_hash == c.content_hash);
+                            if (match != null)
+                            {
+                                match.summary = c.summary;
+                                match.from_device = c.from_device;
+                                match.timestamp = c.timestamp;
+                                existing.Remove(match);
+                            }
+                            else
+                            {
+                                PendingClipboards.Add(c);
+                            }
+                        }
+                        foreach (var rem in existing) PendingClipboards.Remove(rem);
                     });
                 }
             }

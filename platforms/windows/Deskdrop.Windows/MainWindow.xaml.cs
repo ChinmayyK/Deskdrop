@@ -23,7 +23,7 @@ namespace Deskdrop.Windows
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             _clipboardManager.SystemHealthUpdated += OnSystemHealthUpdated;
-            LoadTransfersView();
+            LoadDevicesView();
             
             // Bind UI lists to the global store
             if (ActiveTransfersList != null) ActiveTransfersList.ItemsSource = DeskdropStore.Shared.ActiveTransfers;
@@ -414,7 +414,14 @@ namespace Deskdrop.Windows
                     {
                         if (System.IO.File.Exists(dialog.FileName))
                             System.IO.File.Delete(dialog.FileName);
-                        System.IO.Compression.ZipFile.CreateFromDirectory(appDataDir, dialog.FileName, System.IO.Compression.CompressionLevel.Fastest, false);
+
+                        using (var archive = System.IO.Compression.ZipFile.Open(dialog.FileName, System.IO.Compression.ZipArchiveMode.Create))
+                        {
+                            foreach (var file in System.IO.Directory.GetFiles(appDataDir, "*.log"))
+                            {
+                                archive.CreateEntryFromFile(file, System.IO.Path.GetFileName(file));
+                            }
+                        }
                         ShowToast("Support bundle exported successfully.");
                     }
                     else
@@ -495,30 +502,55 @@ namespace Deskdrop.Windows
         {
             if (_hasCompletedOnboarding) return;
             
+            // Check registry — if user already onboarded, skip
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Deskdrop");
+                if (key != null && ((int?)key.GetValue("HasCompletedOnboarding", 0) ?? 0) != 0)
+                {
+                    _hasCompletedOnboarding = true;
+                    return;
+                }
+            }
+            catch { }
+
             bool foundDevice = peers.Count > 0;
             if (!foundDevice)
             {
-                if (System.Windows.Application.Current.Windows.OfType<OnboardingWindow>().Count() == 0)
+                try
                 {
-                    var ob = new OnboardingWindow();
-                    ob.Closed += (s, e) => 
+                    if (System.Windows.Application.Current.Windows.OfType<OnboardingWindow>().Count() == 0)
                     {
-                        if (ob.Success)
+                        var ob = new OnboardingWindow();
+                        ob.Closed += (s, e) => 
                         {
-                            _hasCompletedOnboarding = true;
-                            // Optionally persist to settings here or rely on Daemon
-                        }
-                    };
-                    ob.Show();
+                            if (ob.Success)
+                            {
+                                _hasCompletedOnboarding = true;
+                            }
+                        };
+                        ob.Show();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // If OnboardingWindow fails to load (e.g. XAML resource errors),
+                    // silently skip onboarding rather than crashing the whole app.
+                    System.Diagnostics.Debug.WriteLine($"OnboardingWindow failed: {ex.Message}");
+                    _hasCompletedOnboarding = true;
                 }
             }
             else
             {
                 _hasCompletedOnboarding = true;
-                foreach (var w in System.Windows.Application.Current.Windows.OfType<OnboardingWindow>().ToList())
+                try
                 {
-                    w.Close();
+                    foreach (var w in System.Windows.Application.Current.Windows.OfType<OnboardingWindow>().ToList())
+                    {
+                        w.Close();
+                    }
                 }
+                catch { }
             }
         }
 
@@ -561,6 +593,24 @@ namespace Deskdrop.Windows
                     RefreshDevicesListUI();
                 });
             }
+        }
+
+        private void BtnVerifyDevice_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    DaemonClient.Send(new { cmd = "trust_peer", device_id = deviceId });
+                    RefreshDevicesListUI();
+                });
+            }
+        }
+
+        private void BtnConnectDevice_Click(object sender, RoutedEventArgs e)
+        {
+            // The engine handles reconnects automatically, just refresh UI for now
+            RefreshDevicesListUI();
         }
 
         private void BtnAcceptCall_Click(object sender, RoutedEventArgs e)

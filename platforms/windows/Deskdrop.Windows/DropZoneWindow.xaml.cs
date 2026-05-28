@@ -57,23 +57,24 @@ namespace Deskdrop.Windows
                 string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
                 if (files != null && files.Length > 0)
                 {
-                    // Push the first file for now (could support multiple in future)
-                    string path = files[0];
-                    if (File.Exists(path))
-                    {
-                        System.Threading.Tasks.Task.Run(() => {
-                            try {
-                                _clipboardManager.PushFile(path);
-                                System.Windows.Application.Current.Dispatcher.Invoke(() => {
-                                    NotificationHelper.ShowToast("Deskdrop", $"Sending {Path.GetFileName(path)}...");
-                                });
-                            } catch (Exception ex) {
-                                System.Windows.Application.Current.Dispatcher.Invoke(() => {
-                                    NotificationHelper.ShowToast("Deskdrop Error", $"Failed to send file: {ex.Message}");
-                                });
+                    System.Threading.Tasks.Task.Run(() => {
+                        foreach (string path in files)
+                        {
+                            if (File.Exists(path))
+                            {
+                                try {
+                                    _clipboardManager.PushFile(path);
+                                    System.Windows.Application.Current.Dispatcher.Invoke(() => {
+                                        NotificationHelper.ShowToast("Deskdrop", $"Sending {Path.GetFileName(path)}...");
+                                    });
+                                } catch (Exception ex) {
+                                    System.Windows.Application.Current.Dispatcher.Invoke(() => {
+                                        NotificationHelper.ShowToast("Deskdrop Error", $"Failed to send file: {ex.Message}");
+                                    });
+                                }
                             }
-                        });
-                    }
+                        }
+                    });
                 }
             }
             Close();
