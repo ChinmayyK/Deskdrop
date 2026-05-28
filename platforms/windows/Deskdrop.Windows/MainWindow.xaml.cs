@@ -419,7 +419,11 @@ namespace Deskdrop.Windows
                         {
                             foreach (var file in System.IO.Directory.GetFiles(appDataDir, "*.log"))
                             {
-                                archive.CreateEntryFromFile(file, System.IO.Path.GetFileName(file));
+                                var name = System.IO.Path.GetFileName(file).ToLower();
+                                if (name == "deskdrop.log" || name.StartsWith("deskdrop-") && name.EndsWith(".log"))
+                                {
+                                    archive.CreateEntryFromFile(file, System.IO.Path.GetFileName(file));
+                                }
                             }
                         }
                         ShowToast("Support bundle exported successfully.");

@@ -9,14 +9,14 @@ namespace Deskdrop.Windows
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
-        public static string? GetActiveBrowserUrl()
+        public static async System.Threading.Tasks.Task<string?> GetActiveBrowserUrl()
         {
             try
             {
                 var task = System.Threading.Tasks.Task.Run(() =>
                 {
                     var foregroundWindow = GetForegroundWindow();
-                    if (foregroundWindow == IntPtr.Zero) return null;
+                    if (foregroundWindow == IntPtr.Zero) return (string?)null;
 
                     var windowElement = AutomationElement.FromHandle(foregroundWindow);
                     if (windowElement == null) return null;
@@ -44,9 +44,10 @@ namespace Deskdrop.Windows
                     return null;
                 });
                 
-                if (System.Threading.Tasks.Task.WaitAny(new[] { task }, 500) == 0)
+                var timeoutTask = System.Threading.Tasks.Task.Delay(500);
+                if (await System.Threading.Tasks.Task.WhenAny(task, timeoutTask) == task)
                 {
-                    return task.Result;
+                    return await task;
                 }
             }
             catch { /* Ignore automation exceptions */ }

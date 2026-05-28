@@ -22,8 +22,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{PipeMode, ServerOptions};
 use tracing::{debug, info, warn};
 
-const PIPE_NAME: &str = r"\\.\pipe\deskdrop";
 const MAX_INSTANCES: usize = 8;
+
+fn get_pipe_name() -> String {
+    let username = std::env::var("USERNAME").unwrap_or_else(|_| "default".to_string());
+    format!(r"\\.\pipe\deskdrop_{}", username)
+}
 
 /// Spawn the Windows named-pipe IPC server.
 ///
@@ -33,7 +37,7 @@ where
     H: Fn(IpcRequest) -> Fut + Send + Sync + 'static,
     Fut: std::future::Future<Output = IpcResponse> + Send + 'static,
 {
-    info!("Windows IPC server on {}", PIPE_NAME);
+    info!("Windows IPC server on {}", get_pipe_name());
 
     tokio::spawn(async move {
         loop {
@@ -43,7 +47,7 @@ where
                 .access_outbound(true)
                 .pipe_mode(PipeMode::Byte)
                 .max_instances(MAX_INSTANCES)
-                .create(PIPE_NAME)
+                .create(get_pipe_name())
             {
                 Ok(s) => s,
                 Err(e) => {
@@ -122,7 +126,7 @@ pub mod client {
             let deadline = tokio::time::Instant::now() + Duration::from_millis(500);
 
             loop {
-                match ClientOptions::new().open(PIPE_NAME) {
+                match ClientOptions::new().open(get_pipe_name()) {
                     Ok(pipe) => return Ok(Self { pipe }),
                     Err(e) if tokio::time::Instant::now() < deadline => {
                         // Wait for pipe to become available.

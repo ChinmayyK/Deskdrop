@@ -121,6 +121,32 @@ fn apply_keepalive(stream: &TcpStream) -> Result<()> {
     sock_ref
         .set_tcp_keepalive(&keepalive)
         .context("setting TCP keepalive")?;
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawSocket;
+        let socket = stream.as_raw_socket();
+        let val: u32 = KEEPALIVE_RETRIES;
+        
+        #[link(name = "ws2_32")]
+        extern "system" {
+            fn setsockopt(s: usize, level: i32, optname: i32, optval: *const u8, optlen: i32) -> i32;
+        }
+        
+        let ret = unsafe {
+            setsockopt(
+                socket as usize,
+                6,  // IPPROTO_TCP
+                16, // TCP_KEEPCNT (supported since Windows 10 1703)
+                &val as *const u32 as *const u8,
+                4,
+            )
+        };
+        if ret != 0 {
+            tracing::warn!("Failed to set TCP_KEEPCNT on Windows, keepalive timeout may be slow");
+        }
+    }
+    
     Ok(())
 }
 

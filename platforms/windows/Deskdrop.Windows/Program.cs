@@ -865,8 +865,8 @@ namespace Deskdrop.Windows
 
                 GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.L, () => {
                     System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                        System.Threading.Tasks.Task.Run(() => {
-                            var url = BrowserUrlFetcher.GetActiveBrowserUrl();
+                        System.Threading.Tasks.Task.Run(async () => {
+                            var url = await BrowserUrlFetcher.GetActiveBrowserUrl();
                             if (!string.IsNullOrEmpty(url))
                             {
                                 _mgr.PushText(url);

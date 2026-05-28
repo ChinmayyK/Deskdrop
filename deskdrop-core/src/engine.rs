@@ -646,7 +646,7 @@ impl Engine {
                                                 tokio::spawn(async move {
                                                     if let Err(err) = connect_loop(
                                                         shared_clone,
-                                                        peer_addr,
+                                                        vec![peer_addr],
                                                         Some(peer_id),
                                                         DiscoverySource::UdpBeacon,
                                                     )
@@ -2544,7 +2544,7 @@ async fn reconnect_known_peers(shared: EngineShared) {
             let shared_clone = shared.clone();
             tokio::spawn(async move {
                 if let Err(err) =
-                    connect_loop(shared_clone, endpoint, Some(peer.id), peer.discovery).await
+                    connect_loop(shared_clone, vec![endpoint], Some(peer.id), peer.discovery).await
                 {
                     warn!(peer_id = %peer.id, error = %err, "network-change reconnect failed");
                 }
@@ -2558,7 +2558,7 @@ async fn reconnect_known_peers(shared: EngineShared) {
             let shared_clone = shared.clone();
             tokio::spawn(async move {
                 if let Err(err) =
-                    connect_loop(shared_clone, endpoint, None, DiscoverySource::Manual).await
+                    connect_loop(shared_clone, vec![endpoint], None, DiscoverySource::Manual).await
                 {
                     warn!(
                         addr = %endpoint,
@@ -2579,7 +2579,7 @@ async fn reconnect_known_peers(shared: EngineShared) {
         let shared_clone = shared.clone();
         tokio::spawn(async move {
             if let Err(err) =
-                connect_loop(shared_clone, endpoint, None, DiscoverySource::Manual).await
+                connect_loop(shared_clone, vec![endpoint], None, DiscoverySource::Manual).await
             {
                 warn!(addr = %endpoint, error = %err, "manual reconnect after network change failed");
             }
@@ -2798,43 +2798,51 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
 
 async fn connect_loop(
     shared: EngineShared,
-    endpoint: SocketAddr,
+    endpoints: Vec<SocketAddr>,
     expected_device_id: Option<Uuid>,
     discovery: DiscoverySource,
 ) -> Result<()> {
+    if endpoints.is_empty() {
+        return Ok(());
+    }
+    
     if let Some(device_id) = expected_device_id {
         if !shared
             .peer_manager
-            .mark_connecting(device_id, Some(endpoint))?
+            .mark_connecting(device_id, Some(endpoints[0]))?
         {
             return Ok(());
         }
     }
 
-    let mut backoff = Backoff::new(endpoint.to_string());
+    let mut backoff = Backoff::new(endpoints[0].to_string());
     loop {
-        match connect_once(shared.clone(), endpoint, expected_device_id, discovery).await {
+        match connect_once(shared.clone(), endpoints.clone(), expected_device_id, discovery).await {
             Ok(()) => {
-                shared.peer_manager.clear_manual_target(endpoint);
+                for ep in &endpoints {
+                    shared.peer_manager.clear_manual_target(*ep);
+                }
                 return Ok(());
             }
             Err(err) => {
                 if let Some(device_id) = expected_device_id {
                     let _ = shared
                         .peer_manager
-                        .mark_failed(device_id, endpoint, err.to_string());
+                        .mark_failed(device_id, endpoints[0], err.to_string());
                 } else {
-                    shared.peer_manager.record_manual_failure(endpoint);
+                    for ep in &endpoints {
+                        shared.peer_manager.record_manual_failure(*ep);
+                    }
                 }
 
                 match backoff.next() {
                     Some(delay) => {
-                        warn!(addr = %endpoint, error = %err, retry_in_ms = delay.as_millis(), "peer connect failed");
+                        warn!(error = %err, retry_in_ms = delay.as_millis(), "peer connect multi failed");
                         tokio::time::sleep(delay).await;
                     }
                     None => {
                         let message =
-                            format!("connection to {endpoint} failed after retries: {err}");
+                            format!("connection to multiple endpoints failed after retries: {err}");
                         let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
                         return Err(err);
                     }
@@ -2846,15 +2854,40 @@ async fn connect_loop(
 
 async fn connect_once(
     shared: EngineShared,
-    endpoint: SocketAddr,
+    endpoints: Vec<SocketAddr>,
     expected_device_id: Option<Uuid>,
     discovery: DiscoverySource,
 ) -> Result<()> {
     let started = Instant::now();
-    let mut stream = timeout(shared.config.connect_timeout, TcpStream::connect(endpoint))
-        .await
-        .context("connect timeout")?
-        .with_context(|| format!("connecting to {endpoint}"))?;
+    let mut tasks = tokio::task::JoinSet::new();
+    for &ep in &endpoints {
+        let timeout_dur = shared.config.connect_timeout;
+        tasks.spawn(async move {
+            let res = timeout(timeout_dur, TcpStream::connect(ep)).await;
+            (ep, res)
+        });
+    }
+
+    let mut connected_stream = None;
+    let mut connected_endpoint = None;
+    let mut last_err = None;
+
+    while let Some(res) = tasks.join_next().await {
+        if let Ok((ep, Ok(Ok(stream)))) = res {
+            connected_stream = Some(stream);
+            connected_endpoint = Some(ep);
+            break; // Dropping the JoinSet aborts all other connection attempts!
+        } else if let Ok((_, Err(err))) = res { // Timeout
+            last_err = Some(anyhow::anyhow!("timeout: {}", err));
+        } else if let Ok((_, Ok(Err(err)))) = res { // IO Error
+            last_err = Some(anyhow::anyhow!("io error: {}", err));
+        }
+    }
+
+    let mut stream = connected_stream.ok_or_else(|| {
+        last_err.unwrap_or_else(|| anyhow::anyhow!("all connection attempts failed"))
+    })?;
+    let endpoint = connected_endpoint.unwrap();
     network::optimize_stream(&stream, "outgoing engine stream");
 
     let mut name_to_send = "Deskdrop Device";

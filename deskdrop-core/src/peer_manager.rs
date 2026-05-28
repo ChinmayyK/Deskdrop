@@ -307,7 +307,9 @@ impl PeerManager {
                 status: PeerConnectionState::Connecting,
                 ..PeerRecord::default()
             });
-
+            if entry.status == PeerConnectionState::Connecting {
+                return Ok(false);
+            }
             if let Some(endpoint) = endpoint {
                 if !entry.ips.contains(&endpoint.ip()) {
                     entry.ips.push(endpoint.ip());
