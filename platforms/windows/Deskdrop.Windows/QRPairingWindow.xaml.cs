@@ -1,6 +1,4 @@
 using System;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -64,12 +62,10 @@ namespace Deskdrop.Windows
 
                     var qrGenerator = new QRCodeGenerator();
                     var qrCodeData = qrGenerator.CreateQrCode(url, QRCodeGenerator.ECCLevel.M);
-                    var qrCode = new QRCode(qrCodeData);
-                    using var bitmap = qrCode.GetGraphic(10);
+                    var qrCode = new PngByteQRCode(qrCodeData);
+                    byte[] qrCodeImage = qrCode.GetGraphic(10);
                     
-                    using var ms = new MemoryStream();
-                    bitmap.Save(ms, ImageFormat.Png);
-                    ms.Position = 0;
+                    using var ms = new MemoryStream(qrCodeImage);
 
                     Dispatcher.Invoke(() =>
                     {
