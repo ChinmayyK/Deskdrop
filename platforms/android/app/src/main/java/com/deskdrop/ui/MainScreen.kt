@@ -321,7 +321,11 @@ fun HomeTab(
     onReplayOnboarding: () -> Unit,
     onTabSelected: (AppTab) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .androidx.compose.foundation.verticalScroll(androidx.compose.foundation.rememberScrollState())
+    ) {
         val hasConnectedPeers = peers.any { it.isConnected || it.trusted }
         
         Spacer(modifier = Modifier.height(24.dp)) // Contextual gap from Status Strip
