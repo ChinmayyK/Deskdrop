@@ -475,7 +475,7 @@ mod tests {
             error: None,
         };
 
-        let decoded_hello: EcdhFrame =
+        let _decoded_hello: EcdhFrame =
             bincode::deserialize(&bincode::serialize(&hello).unwrap()).unwrap();
         let decoded_ack: AppMessage =
             bincode::deserialize(&bincode::serialize(&ack).unwrap()).unwrap();

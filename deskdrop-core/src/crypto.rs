@@ -119,14 +119,31 @@ impl EphemeralKeypair {
         // the opaque `SharedSecret` wrapper (which provides no zeroize method).
         let mut shared_bytes: [u8; 32] = *shared.as_bytes();
 
-        // HKDF-SHA256: IKM = shared secret, salt = none.
+        // HIGH-01 FIX: Use a deterministic salt derived from both ephemeral
+        // public keys in canonical byte order. This provides defense-in-depth:
+        // even if the ECDH shared secret has low entropy (weak RNG), the salt
+        // ensures session keys remain unpredictable. This follows TLS 1.3 and
+        // Noise protocol conventions.
+        let salt = {
+            let mut hasher = Sha256::new();
+            if self.public_bytes <= peer_pubkey_bytes {
+                hasher.update(self.public_bytes);
+                hasher.update(peer_pubkey_bytes);
+            } else {
+                hasher.update(peer_pubkey_bytes);
+                hasher.update(self.public_bytes);
+            }
+            hasher.finalize()
+        };
+
+        // HKDF-SHA256: IKM = shared secret, salt = hash(sorted ephemeral pubkeys).
         // The info string is prefixed with the protocol version so that HKDF
         // output is domain-separated across wire-format revisions (LOW-03).
         // Changing PROTOCOL_VERSION in protocol.rs automatically invalidates
         // old session keys — peers on different protocol versions cannot
         // decrypt each other's frames even if they share an ephemeral key.
         let info = format!("deskdrop-v{}-session", crate::protocol::PROTOCOL_VERSION);
-        let hk = Hkdf::<Sha256>::new(None, &shared_bytes);
+        let hk = Hkdf::<Sha256>::new(Some(&salt), &shared_bytes);
 
         // Derive the pairing PIN before zeroizing shared_bytes.
         let pin = crate::pairing::derive_pin(&shared_bytes);
@@ -208,7 +225,7 @@ impl SessionKey {
         // prevents replay of any previously seen or skipped frame — a captured
         // frame can never satisfy counter == recv_counter once it has been
         // incremented past it.
-        let counter = u64::from_be_bytes(nonce_bytes[..8].try_into().unwrap());
+        let counter = u64::from_be_bytes(nonce_bytes[..8].try_into().expect("nonce slice is exactly 8 bytes"));
         anyhow::ensure!(
             counter == self.recv_counter,
             "replayed or out-of-order frame: got counter {}, expected {}",
@@ -238,7 +255,7 @@ impl SessionKey {
         nonce_bytes.copy_from_slice(&buffer[..12]);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
-        let counter = u64::from_be_bytes(nonce_bytes[..8].try_into().unwrap());
+        let counter = u64::from_be_bytes(nonce_bytes[..8].try_into().expect("nonce slice is exactly 8 bytes"));
         anyhow::ensure!(
             counter == self.recv_counter,
             "replayed or out-of-order frame: got counter {}, expected {}",
@@ -275,10 +292,13 @@ pub fn random_nonce16() -> [u8; 16] {
     n
 }
 
-/// Generate a random 6-digit numeric PIN for device pairing displays.
+/// Generate a random 6-digit numeric PIN for legacy/test pairing displays.
 ///
-/// The PIN is derived from 3 random bytes so the distribution is uniform
-/// over [000000, 999999] — no modulo bias.
+/// Note: The production pairing PIN is derived via HKDF in `pairing::derive_pin`.
+/// This function has negligible modulo bias (u32::MAX is not evenly divisible
+/// by 1_000_000, so PINs 0–295967 are ~0.007% more likely). This is acceptable
+/// for a 6-digit PIN but callers requiring cryptographic uniformity should use
+/// rejection sampling instead.
 pub fn generate_pairing_pin() -> String {
     let mut bytes = [0u8; 4];
     rand::thread_rng().fill_bytes(&mut bytes);

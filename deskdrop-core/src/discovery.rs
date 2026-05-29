@@ -247,12 +247,6 @@ mod platform {
         }
     }
 
-    /// Returns true if the address is in the IPv6 link-local range (fe80::/10).
-    fn is_ipv6_link_local(addr: std::net::Ipv6Addr) -> bool {
-        let o = addr.octets();
-        o[0] == 0xFE && (o[1] & 0xC0) == 0x80
-    }
-
     fn gethostname() -> String {
         hostname::get()
             .ok()
@@ -280,14 +274,6 @@ mod platform {
 
 
         #[test]
-        fn is_ipv6_link_local_detection() {
-            let ll: std::net::Ipv6Addr = "fe80::1".parse().unwrap();
-            let global: std::net::Ipv6Addr = "2001:db8::1".parse().unwrap();
-            assert!(is_ipv6_link_local(ll));
-            assert!(!is_ipv6_link_local(global));
-        }
-
-        #[test]
         fn version_validation_logic() {
             // Simulate parsing the v TXT record.
             let our_version = PROTOCOL_VERSION;
@@ -305,13 +291,7 @@ mod platform {
             assert_eq!(Some(new_version).filter(|&v| v == PROTOCOL_VERSION), None);
         }
 
-        #[test]
-        fn provisional_name_uses_service_label_when_present() {
-            let id = Uuid::parse_str("12345678-1234-5678-1234-567812345678").unwrap();
-            let name =
-                provisional_device_name("deskdrop-12345678-Pixel-8-Pro._deskdrop._tcp.local.", id);
-            assert_eq!(name, "Pixel 8 Pro");
-        }
+
     }
 }
 

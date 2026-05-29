@@ -391,8 +391,22 @@ pub fn socket_path() -> PathBuf {
         if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR") {
             PathBuf::from(runtime).join("deskdrop.sock")
         } else {
+            // MED-01 FIX: Use a private subdirectory instead of placing the
+            // socket directly in /tmp. This prevents symlink attacks where an
+            // attacker pre-creates a symlink at the socket path to hijack
+            // file deletion or socket binding.
             let uid = unsafe { libc::getuid() };
-            PathBuf::from(format!("/tmp/deskdrop-{}.sock", uid))
+            let dir = PathBuf::from(format!("/tmp/deskdrop-{}", uid));
+            // Create with mode 0o700 — only the owner can list or create files.
+            if !dir.exists() {
+                let _ = std::fs::create_dir(&dir);
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+            }
+            dir.join("deskdrop.sock")
         }
     }
 }
@@ -417,7 +431,12 @@ pub mod server {
         let path = socket_path();
 
         // Remove stale socket from previous run.
+        // MED-01 FIX: Refuse to follow symlinks — an attacker could plant a
+        // symlink pointing at a victim file, causing us to delete it.
         if path.exists() {
+            if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+                anyhow::bail!("IPC socket path {:?} is a symlink — refusing to start (possible attack)", path);
+            }
             std::fs::remove_file(&path).ok();
         }
 
@@ -449,7 +468,7 @@ pub mod server {
     }
 
     pub async fn spawn_with_engine(engine: std::sync::Arc<crate::engine::Engine>) -> Result<()> {
-        crate::ipc::client::client::spawn_with_engine(engine).await
+        crate::ipc::client::spawn_with_engine(engine).await
     }
 
     async fn handle_connection<H, Fut>(stream: UnixStream, handler: Arc<H>)
@@ -1145,67 +1164,15 @@ pub async fn handle_ipc_request(eng: std::sync::Arc<crate::engine::Engine>, req:
     }
 }
 
-#[cfg(unix)]
-pub mod client {
-    use super::*;
-    use anyhow::Context;
-    use std::time::Duration;
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    use tokio::net::UnixStream;
-
-    pub struct IpcClient {
-        stream: UnixStream,
-    }
-
-    impl IpcClient {
-        /// Connect to the running daemon. Fails fast if daemon is not running.
-        pub async fn connect() -> Result<Self> {
-            let path = socket_path();
-            let stream =
-                tokio::time::timeout(Duration::from_millis(500), UnixStream::connect(&path))
-                    .await
-                    .with_context(|| "daemon not responding")?
-                    .with_context(|| {
-                        format!("connecting to {:?} — is the daemon running?", path)
-                    })?;
-            Ok(Self { stream })
-        }
-
-        /// Send a request and receive one response.
-        /// A 10-second timeout guards against a hung daemon causing the CLI
-        /// to block indefinitely (HIGH-04).
-        pub async fn request(&mut self, req: &IpcRequest) -> Result<IpcResponse> {
-            let (reader, mut writer) = self.stream.split();
-            let mut reader = BufReader::new(reader);
-
-            let mut req_bytes = serde_json::to_vec(req)?;
-            req_bytes.push(b'\n');
-            writer.write_all(&req_bytes).await.context("IPC write")?;
-
-            let mut line = String::new();
-            tokio::time::timeout(Duration::from_secs(10), reader.read_line(&mut line))
-                .await
-                .with_context(|| "daemon did not respond within 10 s")?
-                .context("IPC read")?;
-            serde_json::from_str(&line).context("IPC response parse")
-        }
-    }
-
-    /// Convenience: spawn the IPC server wired directly to an `Arc<Engine>`.
-    ///
-    /// This is used by the Linux binary (which embeds the engine) so it doesn't
-    /// need to duplicate the full daemon dispatch table.  The handler maps every
-    /// `IpcRequest` variant to the corresponding `engine.*` call.
     pub async fn spawn_with_engine(engine: std::sync::Arc<crate::engine::Engine>) -> Result<()> {
         let handler = std::sync::Arc::new(move |req: IpcRequest| {
             let eng = engine.clone();
             async move {
-                super::handle_ipc_request(eng, req).await
+                handle_ipc_request(eng, req).await
             }
         });
         super::server::spawn(handler).await
     }
-}
 }
 
 // ── Windows named pipe stubs ──────────────────────────────────────────────────

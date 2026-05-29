@@ -38,7 +38,7 @@ fn json_merge_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
         if !target.is_object() {
             *target = serde_json::Value::Object(serde_json::Map::new());
         }
-        let target_obj = target.as_object_mut().unwrap();
+        let target_obj = target.as_object_mut().expect("target is explicitly converted to an object");
         for (key, patch_val) in patch_obj {
             if patch_val.is_null() {
                 target_obj.remove(key);
@@ -567,7 +567,7 @@ impl Engine {
                 payload.truncate(512);
             }
 
-            let broadcast_addr: SocketAddr = "255.255.255.255:47824".parse().unwrap();
+            let broadcast_addr: SocketAddr = "255.255.255.255:47824".parse().expect("static IP is valid");
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
             loop {
                 interval.tick().await;
@@ -3727,6 +3727,10 @@ fn register_session(
                         }
                         Ok(AppMessage::HistoryMetadata { entry }) => {
                             last_seen = Instant::now();
+                            // MED-03 FIX: Only accept history metadata from trusted peers.
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             let _ = shared.peer_manager.update_last_sync(peer_id);
                             let _ = shared.event_tx.send(EngineEvent::HistoryMetadataReceived {
                                 from_device: peer_id,
@@ -3766,6 +3770,42 @@ fn register_session(
                         }
                         Ok(AppMessage::PairingResponse { origin_device, accepted }) => {
                             last_seen = Instant::now();
+
+                            // CRIT-03 FIX: Only process PairingResponse if:
+                            //   1. The origin_device matches the actual session peer_id
+                            //      (prevents a connected peer from spoofing trust for a different device).
+                            //   2. We previously sent a PairingRequest to this peer
+                            //      (tracked via the pairing_requested flag set in respond_to_pairing).
+                            //   3. The peer is not already trusted (prevents re-trust of revoked peers).
+                            if origin_device != peer_id {
+                                tracing::warn!(
+                                    peer_id = %peer_id,
+                                    claimed_device = %origin_device,
+                                    "ignoring PairingResponse: origin_device does not match session peer"
+                                );
+                                continue;
+                            }
+
+                            // Check that we actually initiated pairing with this peer.
+                            // The `pairing_requested` flag is set to true in observe_trust()
+                            // when we emit PairingRequested, and cleared in respond_to_pairing().
+                            // A remote peer sending an unsolicited PairingResponse is rejected.
+                            let we_requested_pairing = shared.peer_manager
+                                .get(peer_id)
+                                .map(|p| p.pairing_requested)
+                                .unwrap_or(false);
+
+                            if !we_requested_pairing {
+                                tracing::warn!(
+                                    peer_id = %peer_id,
+                                    "ignoring unsolicited PairingResponse — no pending pairing request"
+                                );
+                                continue;
+                            }
+
+                            // Clear the pairing_requested flag now that we've received the response.
+                            let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
+
                             if accepted {
                                 let _ = shared.peer_manager.update_trust(origin_device, true);
                                 let mut trust = shared.trust.lock().await;
@@ -3797,6 +3837,10 @@ fn register_session(
                             origin_device, origin_device_name,
                         }) => {
                             last_seen = Instant::now();
+                            // MED-03 FIX: Only process call state from trusted peers.
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             // Persist in shared state for IPC status polling.
                             {
                                 let mut call = shared.active_call.lock().await;
@@ -3827,6 +3871,10 @@ fn register_session(
                             origin_device_name,
                         }) => {
                             last_seen = Instant::now();
+                            // MED-03 FIX: Only process battery status from trusted peers.
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             // Persist in shared state for IPC status polling.
                             {
                                 let mut batteries = shared.peer_batteries.lock().await;
@@ -3868,6 +3916,10 @@ fn register_session(
                             origin_device_name,
                         }) => {
                             last_seen = Instant::now();
+                            // MED-03 FIX: Only process notifications from trusted peers.
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
                             let _activity_id = {
                                 let mut feed = shared.activity.lock().await;
                                 feed.record_remote_notification(origin_device, origin_device_name.clone(), package.clone(), title.clone(), text.clone())

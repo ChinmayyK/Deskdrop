@@ -883,9 +883,8 @@ mod tests {
             .mark_disconnected_if_current(id, second_session_id, Some("closed".into()))
             .unwrap());
         assert_eq!(manager.list().len(), 1);
-        assert_eq!(
-            manager.get(id).unwrap().ip,
-            Some(IpAddr::V4(Ipv4Addr::new(172, 20, 10, 4)))
+        assert!(
+            manager.get(id).unwrap().ips.contains(&IpAddr::V4(Ipv4Addr::new(172, 20, 10, 4)))
         );
     }
 

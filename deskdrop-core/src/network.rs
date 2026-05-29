@@ -310,15 +310,29 @@ pub async fn handshake_initiator(
         anyhow::bail!("expected HelloAck");
     };
 
+    // CRIT-02 FIX: Verify the nonce response is meaningful.
+    //
+    // The responder computes: nonce_response = XOR(initiator_nonce, responder_nonce)
+    // We recover: responder_nonce = XOR(initiator_nonce, nonce_response)
+    //
+    // Previous code: `expected = XOR(my_nonce, recovered)` then `ensure!(expected == nonce_response)`
+    // That was a tautology (always true). Instead, we verify:
+    //   1. The recovered responder nonce is non-trivial (not all zeros).
+    //   2. The recovered responder nonce is not equal to our nonce
+    //      (which would mean attacker just reflected our nonce back as nonce_response = [0;16]).
+    //   3. The nonce_response itself is non-trivial.
     let recovered_responder_nonce = xor_nonces(&my_nonce, &nonce_response);
-    let expected_nonce_response = xor_nonces(&my_nonce, &recovered_responder_nonce);
-    anyhow::ensure!(
-        expected_nonce_response == nonce_response,
-        "handshake nonce verification failed"
-    );
     anyhow::ensure!(
         recovered_responder_nonce != [0u8; 16],
-        "handshake nonce_response is trivial"
+        "handshake nonce verification failed: responder nonce is trivial (zero)"
+    );
+    anyhow::ensure!(
+        recovered_responder_nonce != my_nonce,
+        "handshake nonce verification failed: responder reflected our nonce"
+    );
+    anyhow::ensure!(
+        nonce_response != [0u8; 16],
+        "handshake nonce verification failed: nonce_response is trivial (zero)"
     );
 
     info!("Handshake complete with '{}' ({})", device_name, device_id);

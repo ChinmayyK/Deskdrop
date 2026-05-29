@@ -38,6 +38,10 @@ use uuid::Uuid;
 
 pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks saturate
                                                     // encrypt/serialize/frame/flush overhead.
+
+/// HIGH-03 FIX: Maximum transfer size (4 GB). Rejects announced transfers
+/// exceeding this limit to prevent disk-bomb attacks via pre-allocation.
+pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16; // ACK every 16 MB — keeps the pipeline full
                                              // on LAN while still bounding in-flight data.
 
@@ -291,6 +295,7 @@ impl InboundTransfer {
             let _ = std::fs::remove_file(tmp);
             let file = OpenOptions::new()
                 .create(true)
+                .truncate(true)
                 .write(true)
                 .open(tmp)
                 .with_context(|| format!("creating temp file {}", tmp.display()))?;
@@ -538,6 +543,16 @@ impl FileTransferManager {
             .count();
         if count_from_peer >= 5 {
             anyhow::bail!("too many active transfers from this peer");
+        }
+
+        // HIGH-03 FIX: Reject transfers that exceed the maximum size limit
+        // to prevent disk-bomb attacks via set_len() pre-allocation.
+        if meta.size_bytes > MAX_TRANSFER_BYTES {
+            anyhow::bail!(
+                "transfer size {} bytes exceeds maximum {} bytes",
+                meta.size_bytes,
+                MAX_TRANSFER_BYTES
+            );
         }
 
         let tid = meta.transfer_id;
