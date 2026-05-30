@@ -475,7 +475,7 @@ pub mod server {
     }
 
     pub async fn spawn_with_engine(engine: std::sync::Arc<crate::engine::Engine>) -> Result<()> {
-        crate::ipc::client::spawn_with_engine(engine).await
+        crate::ipc::spawn_with_engine(engine).await
     }
 
     async fn handle_connection<H, Fut>(stream: UnixStream, handler: Arc<H>)
