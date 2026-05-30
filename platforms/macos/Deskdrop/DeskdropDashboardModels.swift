@@ -252,6 +252,8 @@ struct ManagedDevice: Identifiable {
             .attention
         } else if peer.connected {
             .connected
+        } else if peer.pairingRequested {
+            .attention
         } else if peer.trusted && peer.remembered && peer.autoConnect {
             .reconnectable
         } else {

@@ -676,13 +676,7 @@ impl PeerManager {
     pub fn forget_device(&self, device_id: Uuid) -> Result<bool> {
         let found = {
             let mut store = self.store.write().unwrap();
-            if let Some(entry) = store.peers.get_mut(&device_id) {
-                entry.remembered = false;
-                entry.auto_connect = false;
-                true
-            } else {
-                false
-            }
+            store.peers.remove(&device_id).is_some()
         };
         if found {
             self.save()?;
@@ -1010,10 +1004,7 @@ mod tests {
             )
             .unwrap();
         manager.forget_device(id).unwrap();
-        let record = manager.get(id).unwrap();
-        assert!(!record.remembered);
-        assert!(!record.auto_connect);
-        assert!(!record.should_auto_reconnect());
+        assert!(manager.get(id).is_none());
     }
 
     #[test]

@@ -184,14 +184,7 @@ fn forget_device_prevents_auto_reconnect() {
     .unwrap();
     mgr.forget_device(id).unwrap();
 
-    let record = mgr.get(id).unwrap();
-    assert!(!record.remembered, "device must not be remembered");
-    assert!(!record.auto_connect, "auto_connect must be false");
-    assert!(
-        !record.should_auto_reconnect(),
-        "forgotten device must not auto-reconnect"
-    );
-    assert!(record.trusted, "trust is preserved after forget");
+    assert!(mgr.get(id).is_none(), "forgotten device must be removed from manager");
 }
 
 // ── Test: Mesh-aware dedup — per-peer windows ─────────────────────────────────

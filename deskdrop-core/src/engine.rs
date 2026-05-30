@@ -418,6 +418,8 @@ struct EngineShared {
     pub last_pairing_prompt: Arc<Mutex<Option<std::time::Instant>>>,
     /// Throttle for inbound clipboard pushes.
     pub throttle: crate::throttle::Throttle,
+    /// Cross-device duplicate prevention (mesh echo suppression).
+    pub dedup: Arc<Mutex<crate::dedup::Deduplicator>>,
 }
 
 #[derive(Clone)]
@@ -502,6 +504,7 @@ impl Engine {
             camera_frames: Arc::new(Mutex::new(std::collections::HashMap::new())),
             last_pairing_prompt: Arc::new(Mutex::new(None)),
             throttle: crate::throttle::Throttle::default_rate(),
+            dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
         };
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
@@ -874,6 +877,20 @@ impl Engine {
         {
             let mut router = self.shared.mesh_router.lock().await;
             router.register_local_send(hash);
+        }
+
+        // Dedup check to prevent echoing clipboard events triggered by local OS listener reflection.
+        let should_send = {
+            let mut dedup = self.shared.dedup.lock().await;
+            dedup.should_send(hash)
+        };
+        if !should_send {
+            tracing::debug!("suppressing local clipboard push (echo)");
+            return SyncDispatchReport {
+                seq,
+                target: target.clone(),
+                peers: Vec::new(),
+            };
         }
 
         // Record in activity feed.
@@ -1472,6 +1489,11 @@ impl Engine {
     }
 
     // ── Feedback ──────────────────────────────────────────────────────────────
+
+    pub fn set_pairing_requested(&self, device_id: Uuid, requested: bool) -> Result<()> {
+        let _ = self.shared.peer_manager.set_pairing_requested(device_id, requested)?;
+        Ok(())
+    }
 
     pub async fn feedback_recent(&self, n: usize) -> Vec<crate::engine_support::FeedbackEvent> {
         self.shared.feedback.lock().await.recent(n)
@@ -2755,10 +2777,6 @@ fn peer_display_rank(
 async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
     let trusted = shared.trust.lock().await.is_trusted(peer.device_id);
 
-    if !should_initiate_session(&shared, peer.device_id, DiscoverySource::Mdns).await {
-        return Ok(());
-    }
-
     for ip in peer.addrs {
         let addr = SocketAddr::new(ip, peer.port);
 
@@ -2769,6 +2787,10 @@ async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
             trusted,
             DiscoverySource::Mdns,
         );
+
+        if !should_initiate_session(&shared, peer.device_id, DiscoverySource::Mdns).await {
+            continue;
+        }
 
         if shared.peer_manager.live_endpoint(peer.device_id) == Some(addr) {
             continue;
@@ -3288,6 +3310,21 @@ fn register_session(
                                 // ── Timeline-first clipboard UX ───────────────
                                 let hash = hash_content(&content);
                                 let hash_hex = hex::encode(hash);
+
+                                // ── Deduplicator Check ───────────────
+                                let should_apply = {
+                                    let mut dedup = shared.dedup.lock().await;
+                                    dedup.should_apply(origin_device, hash)
+                                };
+
+                                if !should_apply {
+                                    tracing::debug!("suppressing inbound clipboard push (dedup)");
+                                    // It is either an echo of our own send, or a duplicate from a second peer.
+                                    // Acknowledge it, but skip all local UI/clipboard updates.
+                                    let _ = sess.send(&AppMessage::ClipboardAck { seq }).await;
+                                    continue;
+                                }
+
                                 let auto_apply = shared.apply_policy.lock().await
                                     .should_auto_apply(origin_device);
 
@@ -4097,12 +4134,19 @@ fn register_session(
                     })
                     .await;
 
+                shared.dedup.lock().await.remove_peer(peer_id);
+
                 shared
                     .file_transfers
                     .lock()
                     .await
                     .cancel_all_for_device(peer_id);
                 shared.camera_frames.lock().await.remove(&peer_id);
+
+                // FIX: Phantom Pairing Prompts. Clear pairing state if connection drops.
+                let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
+                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+
 
                 // Record in activity feed.
                 let feed = shared.activity.clone();

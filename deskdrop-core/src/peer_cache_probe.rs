@@ -9,8 +9,7 @@
 //! |-----------------------|----------------|
 //! | 0 – 5 min             | 10 s           |
 //! | 5 – 30 min            | 30 s           |
-//! | 30 min – 24 h         | 2 min          |
-//! | > 24 h                | stop probing   |
+//! | > 30 min              | stop probing   |
 //!
 //! When a TCP connect succeeds, the module emits a `DiscoveredPeer` event via
 //! the `DiscoveryInputHandle`, which flows through the unified discovery
@@ -47,11 +46,7 @@ const TIER1_INTERVAL: Duration = Duration::from_secs(10);
 const TIER2_CUTOFF_SECS: u64 = 30 * 60;
 const TIER2_INTERVAL: Duration = Duration::from_secs(30);
 
-/// Tier 3: 30 minutes – 24 hours → probe every 2 minutes.
-const TIER3_CUTOFF_SECS: u64 = 24 * 60 * 60;
-const TIER3_INTERVAL: Duration = Duration::from_secs(2 * 60);
-
-/// After 24 hours offline, stop probing entirely.
+/// After 30 minutes offline, stop probing entirely.
 /// The peer is likely on a different network or powered off.
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -71,7 +66,7 @@ pub struct ProbeTarget {
 }
 
 /// Determine the appropriate probe interval based on how long a peer has been
-/// disconnected. Returns `None` if probing should stop (peer offline > 24h).
+/// disconnected. Returns `None` if probing should stop (peer offline > 30m).
 ///
 /// # Arguments
 ///
@@ -86,10 +81,8 @@ pub fn probe_interval(seconds_since_disconnect: u64) -> Option<Duration> {
         Some(TIER1_INTERVAL)
     } else if seconds_since_disconnect < TIER2_CUTOFF_SECS {
         Some(TIER2_INTERVAL)
-    } else if seconds_since_disconnect < TIER3_CUTOFF_SECS {
-        Some(TIER3_INTERVAL)
     } else {
-        None // Exceeded 24 hours — stop probing.
+        None // Exceeded 30 minutes — stop probing.
     }
 }
 
@@ -106,7 +99,7 @@ pub fn probe_interval(seconds_since_disconnect: u64) -> Option<Duration> {
 ///    through the `targets_rx` channel (e.g. whenever the peer list changes or
 ///    on a timer).
 /// 3. The probe loop iterates over all targets, skips any that have exceeded
-///    the 24-hour window, and performs TCP connect probes at the tier-appropriate
+///    the 30-minute window, and performs TCP connect probes at the tier-appropriate
 ///    interval.
 /// 4. On a successful probe, a `DiscoveredPeer` event is emitted via the
 ///    `DiscoveryInputHandle`, causing the discovery manager to re-announce the
@@ -195,7 +188,7 @@ impl PeerCacheProbe {
 
         let now_secs = now_unix_secs();
 
-        // Retain only targets that haven't exceeded the 24-hour window.
+        // Retain only targets that haven't exceeded the 30-minute window.
         targets.retain(|t| {
             let elapsed = now_secs.saturating_sub(t.disconnected_at);
             if probe_interval(elapsed).is_none() {
@@ -389,45 +382,16 @@ mod tests {
         assert_eq!(probe_interval(secs), Some(TIER2_INTERVAL));
     }
 
-    #[test]
-    fn tier3_interval_at_cutoff() {
-        // Exactly 30 minutes → tier 3 (5min).
-        assert_eq!(probe_interval(TIER2_CUTOFF_SECS), Some(TIER3_INTERVAL));
-        assert_eq!(
-            probe_interval(TIER2_CUTOFF_SECS),
-            Some(Duration::from_secs(120))
-        );
-    }
-
-    #[test]
-    fn tier3_interval_at_12_hours() {
-        // 12 hours → still tier 3.
-        assert_eq!(probe_interval(12 * 60 * 60), Some(TIER3_INTERVAL));
-    }
-
-    #[test]
-    fn tier3_interval_just_before_24h() {
-        // 23h 59m 59s → still tier 3.
-        let secs = TIER3_CUTOFF_SECS - 1;
-        assert_eq!(probe_interval(secs), Some(TIER3_INTERVAL));
-    }
-
-    #[test]
-    fn stops_probing_at_24h() {
-        // Exactly 24 hours → stop.
-        assert_eq!(probe_interval(TIER3_CUTOFF_SECS), None);
-    }
-
-    #[test]
-    fn stops_probing_after_24h() {
-        // 48 hours → definitely stop.
-        assert_eq!(probe_interval(48 * 60 * 60), None);
-    }
-
-    #[test]
+#[test]
     fn stops_probing_at_max() {
         // u64::MAX → stop.
         assert_eq!(probe_interval(u64::MAX), None);
+    }
+
+        #[test]
+    fn stops_probing_at_30m() {
+        assert_eq!(probe_interval(TIER2_CUTOFF_SECS), None);
+        assert_eq!(probe_interval(TIER2_CUTOFF_SECS + 1), None);
     }
 
     // ── Interval boundary continuity ──────────────────────────────────────────
@@ -436,10 +400,8 @@ mod tests {
     fn intervals_are_monotonically_increasing_across_tiers() {
         let t1 = probe_interval(0).unwrap();
         let t2 = probe_interval(TIER1_CUTOFF_SECS).unwrap();
-        let t3 = probe_interval(TIER2_CUTOFF_SECS).unwrap();
 
         assert!(t1 < t2, "tier1 < tier2");
-        assert!(t2 < t3, "tier2 < tier3");
     }
 
     #[test]
@@ -663,7 +625,7 @@ mod tests {
                     Ipv4Addr::new(192, 168, 1, 20).into(),
                     DEFAULT_PORT,
                 )],
-                disconnected_at: now - TIER3_CUTOFF_SECS - 1, // >24h — should be evicted.
+                disconnected_at: now - TIER2_CUTOFF_SECS, // >24h — should be evicted.
             },
         ];
 
@@ -686,12 +648,12 @@ mod tests {
         let targets = vec![
             ProbeTarget {
                 device_id: Uuid::new_v4(),
-                device_name: "Tier3".into(),
+                device_name: "Tier2".into(),
                 addrs: vec![SocketAddr::new(
                     Ipv4Addr::new(10, 0, 0, 1).into(),
                     DEFAULT_PORT,
                 )],
-                disconnected_at: now - 3600, // 1 hour ago → tier 3 (5 min).
+                disconnected_at: now - 600, // 10 min ago → tier 2.
             },
             ProbeTarget {
                 device_id: Uuid::new_v4(),
@@ -723,7 +685,7 @@ mod tests {
                 Ipv4Addr::new(10, 0, 0, 1).into(),
                 DEFAULT_PORT,
             )],
-            disconnected_at: now - TIER3_CUTOFF_SECS - 1, // >24h.
+            disconnected_at: now - TIER2_CUTOFF_SECS, // >24h.
         }];
 
         assert_eq!(probe.shortest_interval(&targets), None);

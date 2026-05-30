@@ -63,9 +63,21 @@ final class DeskdropStore: ObservableObject {
 
     @AppStorage("lastUsedDeviceId") private var lastUsedDeviceId: String = ""
 
+    private var cameraWindowClosedObserver: Any?
+
     init(ipc: DeskdropIPCClient = .shared) {
         self.ipc = ipc
         startPolling()
+        
+        cameraWindowClosedObserver = NotificationCenter.default.addObserver(forName: .deskdropCameraWindowClosed, object: nil, queue: .main) { [weak self] _ in
+            self?.stopCameraPolling()
+        }
+    }
+    
+    deinit {
+        if let obs = cameraWindowClosedObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
     }
 
     // MARK: - Computed / Bridging
@@ -381,6 +393,9 @@ final class DeskdropStore: ObservableObject {
         }
     }
 
+    func stopCameraPolling() {
+        isCameraPolling = false
+    }
     // MARK: - Device actions (ManagedDevice variants)
 
     func disconnect(_ device: ManagedDevice) {
@@ -394,6 +409,10 @@ final class DeskdropStore: ObservableObject {
     }
     func revoke(_ device: ManagedDevice) {
         Task { try? await ipc.revokeDevice(deviceId: device.id); await refresh() }
+    }
+
+    func forget(_ device: ManagedDevice) {
+        Task { try? await ipc.forgetDevice(deviceId: device.id); await refresh() }
     }
     func rename(_ device: ManagedDevice, to newName: String) {
         Task { try? await ipc.renameDevice(deviceId: device.id, displayName: newName); await refresh() }

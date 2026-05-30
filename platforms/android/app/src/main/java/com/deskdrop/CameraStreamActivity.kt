@@ -27,6 +27,10 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import com.deskdrop.ui.theme.AppTheme
 import java.io.ByteArrayOutputStream
 import android.graphics.ImageFormat
@@ -75,6 +79,26 @@ class CameraStreamActivity : ComponentActivity() {
 @Composable
 fun CameraScreenContent(activity: CameraStreamActivity) {
     AppTheme(useDarkTheme = true) {
+        val infiniteTransition = rememberInfiniteTransition()
+        val pulseScale by infiniteTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 2f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "pulseScale"
+        )
+        val pulseAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.8f,
+            targetValue = 0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "pulseAlpha"
+        )
+
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             CameraPreview(
                 executor = activity.getExecutor(),
@@ -95,14 +119,20 @@ fun CameraScreenContent(activity: CameraStreamActivity) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Continuity Camera",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White
-                    )
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.4f),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Text(
+                            text = "Continuity Camera",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                     IconButton(
                         onClick = { activity.finish() },
-                        modifier = Modifier.background(Color.White.copy(alpha = 0.2f), shape = MaterialTheme.shapes.small)
+                        modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), shape = CircleShape)
                     ) {
                         Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Color.White)
                     }
@@ -110,19 +140,31 @@ fun CameraScreenContent(activity: CameraStreamActivity) {
 
                 // Bottom indicator
                 Surface(
-                    color = Color.Black.copy(alpha = 0.5f),
-                    shape = MaterialTheme.shapes.large,
+                    color = Color.Black.copy(alpha = 0.6f),
+                    shape = CircleShape,
                     modifier = Modifier.padding(bottom = 32.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Green)
+                        Box(contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .scale(pulseScale)
+                                    .background(Color.Green.copy(alpha = pulseAlpha), CircleShape)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color.Green, CircleShape)
+                            )
+                        }
                         Text(
-                            text = "Streaming to connected devices...",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "Streaming to connected devices",
+                            style = MaterialTheme.typography.bodyLarge,
                             color = Color.White
                         )
                     }

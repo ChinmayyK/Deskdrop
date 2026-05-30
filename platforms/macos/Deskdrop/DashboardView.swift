@@ -986,6 +986,7 @@ private struct DeviceCard: View {
                     } else {
                         Button("Pair") { store.sendPairingRequest(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                     }
+                    Button("Remove") { store.forget(device) }.buttonStyle(CRSecondaryButtonStyle())
                 } else {
                     Button("Rename")       { rename(device) }.buttonStyle(CRSecondaryButtonStyle())
                     Button("Revoke Trust") { store.revoke(device) }.buttonStyle(CRDestructiveButtonStyle())
@@ -1093,6 +1094,8 @@ struct DeviceCentricDashboardView: View {
     @State private var pendingFileTarget: ManagedDevice?
     @Environment(\.colorScheme) var scheme
 
+    private var attention: [ManagedDevice] { store.devices.filter { $0.trustState != .trusted } }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -1106,6 +1109,25 @@ struct DeviceCentricDashboardView: View {
                 .padding(.horizontal, 40)
                 .padding(.top, 40)
                 .padding(.bottom, 20)
+
+                // Attention Section
+                if !attention.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(CRTheme.accentOrange)
+                            Text("Awaiting your decision").font(.system(size: 14, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                        }
+                        .padding(.horizontal, 40)
+                        
+                        LazyVStack(spacing: 12) {
+                            ForEach(attention) { device in
+                                UntrustedDeviceCard(device: device, store: store)
+                                    .padding(.horizontal, 40)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 30)
+                }
 
                 if !store.connectedDevices.isEmpty {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
@@ -1247,6 +1269,135 @@ private struct CompactDeviceCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(CRTheme.brandElectric.opacity(isHovered ? 0.3 : 0.0), lineWidth: 1)
+        }
+        .onHover { isHovered = $0 }
+        .animation(.crSpring, value: isHovered)
+    }
+}
+
+// MARK: - Untrusted Device Card (Premium UI)
+
+private struct UntrustedDeviceCard: View {
+    let device: ManagedDevice
+    @ObservedObject var store: DeskdropStore
+    @Environment(\.colorScheme) var colorScheme
+    @State private var isHovered = false
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 20) {
+            // Animated Icon
+            ZStack {
+                Circle()
+                    .fill(CRTheme.accentOrange.opacity(0.15))
+                    .frame(width: 56, height: 56)
+                    .scaleEffect(pulse ? 1.15 : 1.0)
+                    .opacity(pulse ? 0.8 : 1.0)
+                    .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: pulse)
+                
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(CRTheme.accentOrange)
+            }
+            .onAppear { pulse = true }
+            
+            // Text Content
+            VStack(alignment: .leading, spacing: 6) {
+                Text(device.name)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(CRTheme.ink)
+                
+                HStack(spacing: 6) {
+                    if device.pairingRequested {
+                        Text("Wants to pair with this Mac")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    } else {
+                        Text(device.isConnected ? "Connected, but untrusted" : "Previously paired device")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Actions & PIN
+            HStack(spacing: 12) {
+                if device.pairingRequested {
+                    if let pin = device.pairingPin, !pin.isEmpty {
+                        VStack(spacing: 2) {
+                            Text("SECURITY PIN")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .tracking(0.5)
+                                .foregroundStyle(CRTheme.inkSubtle)
+                            Text(pin)
+                                .font(.system(size: 20, weight: .heavy, design: .monospaced))
+                                .foregroundStyle(CRTheme.ink)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(CRTheme.surfaceStrong)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .strokeBorder(CRTheme.stroke, lineWidth: 1)
+                                        )
+                                }
+                        }
+                        .padding(.trailing, 8)
+                    }
+                    
+                    Button {
+                        store.respondToPairing(device, accepted: false)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(CRTheme.surfaceStrong))
+                    }
+                    .buttonStyle(.plain)
+                    .scaleEffect(isHovered ? 1.05 : 1.0)
+                    
+                    Button {
+                        store.respondToPairing(device, accepted: true)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .bold))
+                            Text("Accept")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .frame(height: 36)
+                        .background {
+                            Capsule()
+                                .fill(LinearGradient(colors: [CRTheme.accentGreen, Color(red: 40/255, green: 167/255, blue: 69/255)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .shadow(color: CRTheme.accentGreen.opacity(0.3), radius: 8, y: 4)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                } else {
+                    Button("Pair Device") { store.sendPairingRequest(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                    Button("Remove") { store.forget(device) }.buttonStyle(CRSecondaryButtonStyle())
+                }
+            }
+        }
+        .padding(20)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(CRTheme.surfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(
+                            isHovered ? CRTheme.accentOrange.opacity(0.5) : CRTheme.stroke,
+                            lineWidth: isHovered ? 1.5 : 1.0
+                        )
+                )
+                .shadow(color: isHovered ? CRTheme.accentOrange.opacity(0.15) : Color.black.opacity(0.05), radius: 12, y: 6)
         }
         .onHover { isHovered = $0 }
         .animation(.crSpring, value: isHovered)

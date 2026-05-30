@@ -320,7 +320,8 @@ class DeskdropService : Service() {
         const val ACTION_RESUME_FILE_TRANSFER = "com.deskdrop.RESUME_FILE_TRANSFER"
         const val ACTION_CONNECT_MANUAL     = "com.deskdrop.CONNECT_MANUAL"
         const val ACTION_TRUST_PEER         = "com.deskdrop.TRUST_PEER"
-        const val ACTION_REJECT_PEER        = "com.deskdrop.REJECT_PEER"
+        const val ACTION_REJECT_PEER = "com.deskdrop.REJECT_PEER"
+        const val ACTION_HANDLE_CALL_STATE = "com.deskdrop.HANDLE_CALL_STATE"
         const val ACTION_FORGET_PEER        = "com.deskdrop.FORGET_PEER"
         const val ACTION_SEND_PAIRING_REQUEST = "com.deskdrop.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "com.deskdrop.RESPOND_TO_PAIRING"
@@ -492,7 +493,7 @@ class DeskdropService : Service() {
                         Log.i(TAG, "PUSH_CLIPBOARD ignored: no connected peers")
                         return START_STICKY
                     }
-                    val cm   = getSystemService(ClipboardManager::class.java)
+                    val cm = getSystemService(android.content.ClipboardManager::class.java)
                     val explicitText = intent.getStringExtra(EXTRA_CLIPBOARD_TEXT)
                     val text = explicitText ?: cm.primaryClip?.getItemAt(0)
                         ?.coerceToText(this)?.toString()
@@ -531,27 +532,10 @@ class DeskdropService : Service() {
                 }
                 return START_STICKY
             }
-            ACTION_TRUST_PEER -> {
-                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
-                val h = engineHandle
-                if (h != 0L) {
-                    val result = DeskdropJni.trustPeer(h, deviceId)
-                    Log.i(TAG, "Manual trust request for $deviceId: result=$result")
-                    persistStatus()
-                }
-                return START_STICKY
-            }
-            ACTION_REJECT_PEER -> {
-                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
-                val h = engineHandle
-                if (h != 0L) {
-                    val result = DeskdropJni.rejectPeer(h, deviceId)
-                    Log.i(TAG, "Manual reject request for $deviceId: result=$result")
-                    persistStatus()
-                }
-                return START_STICKY
-            }
-            ACTION_FORGET_PEER -> {
+            ACTION_TRUST_PEER -> handleTrustPeer(intent)
+            ACTION_REJECT_PEER -> handleRejectPeer(intent)
+            ACTION_HANDLE_CALL_STATE -> handleCallStateIntent(intent)
+            ACTION_FORGET_PEER        -> {
                 val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
                 val h = engineHandle
                 if (h != 0L) {
@@ -671,6 +655,7 @@ class DeskdropService : Service() {
                 }
                 return START_STICKY
             }
+            else -> Log.w(TAG, "Unknown action: ${intent?.action}")
         }
 
         // Start / re-attach foreground
@@ -711,15 +696,11 @@ class DeskdropService : Service() {
                 myDeviceUuidPrefix = myDeviceId?.take(8)
                 startNsdDiscovery()   // advertise + browse so the Mac can find us
                 registerNetworkCallback() // restart NSD on WiFi changes
-                startCallStateMonitor()   // call continuity: relay phone state to peers
+                // call continuity: receiver is statically registered now
                 startBatteryMonitor()     // F20: relay battery status to peers
                 persistStatus()
             } else {
                 // Engine was already running — permission may have just been granted.
-                // Restart the call monitor in case it was skipped earlier.
-                if (hasCallPermissions() && callStateReceiver == null) {
-                    startCallStateMonitor()
-                }
                 startBatteryMonitor()
             }
 
@@ -776,7 +757,7 @@ class DeskdropService : Service() {
 
     override fun onDestroy() {
         stopNsdDiscovery()
-        stopCallStateMonitor()
+
         stopBatteryMonitor()
         unregisterNetworkCallback()
         cancelNsdRetry()
@@ -1982,40 +1963,42 @@ class DeskdropService : Service() {
         }
     }
 
-    private fun startCallStateMonitor() {
-        if (!hasCallPermissions()) {
-            Log.i(TAG, "Call continuity: missing READ_PHONE_STATE permission — skipping")
-            return
-        }
-        stopCallStateMonitor()
+    private fun handleCallStateIntent(intent: Intent?) {
+        if (intent == null) return
+        if (!hasCallPermissions()) return
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        if (!prefs.getBoolean("call_continuity_enabled", false)) return
 
-        val receiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: android.content.Context, intent: Intent) {
-                if (intent.action == android.telephony.TelephonyManager.ACTION_PHONE_STATE_CHANGED) {
-                    val stateStr = intent.getStringExtra(android.telephony.TelephonyManager.EXTRA_STATE)
-                    val number = intent.getStringExtra(android.telephony.TelephonyManager.EXTRA_INCOMING_NUMBER)
-                    val state = when (stateStr) {
-                        android.telephony.TelephonyManager.EXTRA_STATE_RINGING -> android.telephony.TelephonyManager.CALL_STATE_RINGING
-                        android.telephony.TelephonyManager.EXTRA_STATE_OFFHOOK -> android.telephony.TelephonyManager.CALL_STATE_OFFHOOK
-                        android.telephony.TelephonyManager.EXTRA_STATE_IDLE -> android.telephony.TelephonyManager.CALL_STATE_IDLE
-                        else -> -1
-                    }
-                    if (state != -1) {
-                        onCallStateUpdate(state, number)
-                    }
-                }
-            }
+        val stateStr = intent.getStringExtra(android.telephony.TelephonyManager.EXTRA_STATE)
+        val number = intent.getStringExtra(android.telephony.TelephonyManager.EXTRA_INCOMING_NUMBER)
+        val state = when (stateStr) {
+            android.telephony.TelephonyManager.EXTRA_STATE_RINGING -> android.telephony.TelephonyManager.CALL_STATE_RINGING
+            android.telephony.TelephonyManager.EXTRA_STATE_OFFHOOK -> android.telephony.TelephonyManager.CALL_STATE_OFFHOOK
+            android.telephony.TelephonyManager.EXTRA_STATE_IDLE -> android.telephony.TelephonyManager.CALL_STATE_IDLE
+            else -> -1
         }
-        val filter = android.content.IntentFilter(android.telephony.TelephonyManager.ACTION_PHONE_STATE_CHANGED)
-        registerReceiver(receiver, filter)
-        callStateReceiver = receiver
-        Log.i(TAG, "Call state monitor started (BroadcastReceiver)")
+        if (state != -1) {
+            onCallStateUpdate(state, number)
+        }
     }
 
-    private fun stopCallStateMonitor() {
-        callStateReceiver?.let {
-            unregisterReceiver(it)
-            callStateReceiver = null
+    private fun handleTrustPeer(intent: Intent) {
+        val deviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return
+        val h = engineHandle
+        if (h != 0L) {
+            val result = DeskdropJni.trustPeer(h, deviceId)
+            Log.i(TAG, "Manual trust request for $deviceId: result=$result")
+            persistStatus()
+        }
+    }
+
+    private fun handleRejectPeer(intent: Intent) {
+        val deviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return
+        val h = engineHandle
+        if (h != 0L) {
+            val result = DeskdropJni.rejectPeer(h, deviceId)
+            Log.i(TAG, "Manual reject request for $deviceId: result=$result")
+            persistStatus()
         }
     }
 

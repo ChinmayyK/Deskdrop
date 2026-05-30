@@ -317,6 +317,7 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             device_name,
             pin,
         } => {
+            let _ = state.engine.set_pairing_requested(device_id, true);
             push_feedback(
                 &state,
                 FeedbackEvent {

@@ -21,6 +21,15 @@ done
 echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE})...${NC}\n"
 
 # ==========================================
+# 0. Version Bump & Clean
+# ==========================================
+echo -e "${BLUE}▶ Bumping version numbers...${NC}"
+python3 scripts/bump-version.py
+
+echo -e "${BLUE}▶ Wiping macOS app data (~/Library/Application Support/deskdrop)...${NC}"
+rm -rf ~/Library/Application\ Support/deskdrop
+
+# ==========================================
 # 1. macOS Reinstall
 # ==========================================
 echo -e "${BLUE}▶ [macOS] Stopping existing processes...${NC}"
@@ -65,6 +74,8 @@ adb uninstall "$APP_ID" || echo -e "${RED}Warning: $APP_ID not found on device o
 
 echo -e "${BLUE}▶ [Android] Installing new version...${NC}"
 if adb install -r "$APK_PATH"; then
+    echo -e "${BLUE}▶ [Android] Wiping app data to prevent backup restore...${NC}"
+    adb shell pm clear "$APP_ID" || true
     echo -e "${GREEN}▶ [Android] ✅ Installed! Launching...${NC}"
     adb shell am start -n "$APP_ID/com.deskdrop.MainActivity"
 else
