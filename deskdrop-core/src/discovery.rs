@@ -165,12 +165,13 @@ mod platform {
                                     provisional_device_name(info.get_fullname(), peer_id);
 
                                 // Extract all available IPs (IPv4 and IPv6).
-                                let mut addrs: Vec<IpAddr> = info.get_addresses().iter().copied().collect();
-                                
+                                let mut addrs: Vec<IpAddr> =
+                                    info.get_addresses().iter().copied().collect();
+
                                 // Best-effort: sort so IPv4 comes first, since it is less likely
                                 // to fail due to missing link-local scope IDs.
                                 addrs.sort_by_key(|a| if a.is_ipv4() { 0 } else { 1 });
-                                
+
                                 if addrs.is_empty() {
                                     warn!("mDNS: service {} has no usable addresses", peer_id);
                                     continue;
@@ -264,14 +265,13 @@ mod platform {
             .split("._deskdrop._tcp.local.")
             .next()
             .unwrap_or(fullname);
-        
+
         format!("device-{}", &peer_id.to_string()[..8])
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
-
 
         #[test]
         fn version_validation_logic() {
@@ -290,8 +290,6 @@ mod platform {
             // Future version should also be filtered out.
             assert_eq!(Some(new_version).filter(|&v| v == PROTOCOL_VERSION), None);
         }
-
-
     }
 }
 

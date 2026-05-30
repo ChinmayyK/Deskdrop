@@ -156,7 +156,8 @@ impl PairingSession {
 
     /// Check and update timeout.
     pub fn check_timeout(&mut self) -> bool {
-        if self.is_expired() && self.state != PairingState::Completed
+        if self.is_expired()
+            && self.state != PairingState::Completed
             && self.state != PairingState::Rejected
         {
             self.state = PairingState::TimedOut;

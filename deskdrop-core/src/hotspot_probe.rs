@@ -89,22 +89,10 @@ pub fn spawn_hotspot_probe(
 
             if is_host {
                 // We ARE the hotspot — scan connected clients.
-                probe_hotspot_clients(
-                    my_device_id,
-                    &iface,
-                    port,
-                    &discovery_handle,
-                )
-                .await;
+                probe_hotspot_clients(my_device_id, &iface, port, &discovery_handle).await;
             } else {
                 // We're a CLIENT — probe the gateway.
-                probe_hotspot_gateway(
-                    my_device_id,
-                    &iface,
-                    port,
-                    &discovery_handle,
-                )
-                .await;
+                probe_hotspot_gateway(my_device_id, &iface, port, &discovery_handle).await;
             }
         }
     });
@@ -220,8 +208,8 @@ async fn probe_tcp(addr: SocketAddr) -> bool {
             // The stream is dropped immediately (we don't send any data).
             true
         }
-        Ok(Err(_)) => false,   // Connection refused or error
-        Err(_) => false,       // Timeout
+        Ok(Err(_)) => false, // Connection refused or error
+        Err(_) => false,     // Timeout
     }
 }
 

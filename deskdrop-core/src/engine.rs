@@ -38,7 +38,9 @@ fn json_merge_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
         if !target.is_object() {
             *target = serde_json::Value::Object(serde_json::Map::new());
         }
-        let target_obj = target.as_object_mut().expect("target is explicitly converted to an object");
+        let target_obj = target
+            .as_object_mut()
+            .expect("target is explicitly converted to an object");
         for (key, patch_val) in patch_obj {
             if patch_val.is_null() {
                 target_obj.remove(key);
@@ -567,16 +569,14 @@ impl Engine {
 
             let device_id_str = shared.config.device_id.to_string();
             // Payload format: DESKDROP_BEACON:<uuid>:<tcp_port>
-            let mut payload = format!(
-                "DESKDROP_BEACON:{}:{}",
-                device_id_str, shared.config.port
-            )
-            .into_bytes();
+            let mut payload =
+                format!("DESKDROP_BEACON:{}:{}", device_id_str, shared.config.port).into_bytes();
             if payload.len() > 512 {
                 payload.truncate(512);
             }
 
-            let broadcast_addr: SocketAddr = "255.255.255.255:47824".parse().expect("static IP is valid");
+            let broadcast_addr: SocketAddr =
+                "255.255.255.255:47824".parse().expect("static IP is valid");
 
             // ── AirDrop-style startup burst ──────────────────────────────────
             // Send 3 rapid beacons in the first 300ms so peers discover us
@@ -616,7 +616,8 @@ impl Engine {
                             if parts.len() == 3 {
                                 if let Ok(peer_id) = uuid::Uuid::parse_str(parts[1]) {
                                     if peer_id != shared.config.device_id {
-                                        let peer_name = format!("Device {}", &peer_id.to_string()[..8]);
+                                        let peer_name =
+                                            format!("Device {}", &peer_id.to_string()[..8]);
                                         if let Ok(peer_port) = parts[2].parse::<u16>() {
                                             let peer_addr = SocketAddr::new(addr.ip(), peer_port);
 
@@ -1491,7 +1492,10 @@ impl Engine {
     // ── Feedback ──────────────────────────────────────────────────────────────
 
     pub fn set_pairing_requested(&self, device_id: Uuid, requested: bool) -> Result<()> {
-        let _ = self.shared.peer_manager.set_pairing_requested(device_id, requested)?;
+        let _ = self
+            .shared
+            .peer_manager
+            .set_pairing_requested(device_id, requested)?;
         Ok(())
     }
 
@@ -1926,7 +1930,14 @@ impl Engine {
     pub async fn connect_to_peer(&self, ip: String, port: u16) -> Result<()> {
         let addr = SocketAddr::new(ip.parse().context("invalid peer IP")?, port);
         self.shared.peer_manager.note_manual_target(addr);
-        match connect_once(self.shared.clone(), vec![addr], None, DiscoverySource::Manual).await {
+        match connect_once(
+            self.shared.clone(),
+            vec![addr],
+            None,
+            DiscoverySource::Manual,
+        )
+        .await
+        {
             Ok(()) => {
                 self.shared.peer_manager.clear_manual_target(addr);
                 Ok(())
@@ -2087,10 +2098,16 @@ impl Engine {
                             addrs,
                             Some(target_device),
                             DiscoverySource::Manual,
-                        ).await {
+                        )
+                        .await
+                        {
                             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                             let peers = shared.peer_manager.all_connected_senders();
-                            if let Some(tx) = peers.into_iter().find(|(id, _)| *id == target_device).map(|(_, tx)| tx) {
+                            if let Some(tx) = peers
+                                .into_iter()
+                                .find(|(id, _)| *id == target_device)
+                                .map(|(_, tx)| tx)
+                            {
                                 let _ = tx.send(msg).await;
                             }
                         }
@@ -2235,7 +2252,10 @@ impl Engine {
                 const TRUST_MAX_AGE: u64 = 7 * 24 * 3600;
                 match trust.lock().await.prune_stale(TRUST_MAX_AGE) {
                     Ok(n) if n > 0 => {
-                        tracing::info!(pruned = n, "pruned stale trust records (untrusted, >7 days old)");
+                        tracing::info!(
+                            pruned = n,
+                            "pruned stale trust records (untrusted, >7 days old)"
+                        );
                     }
                     Err(err) => {
                         tracing::warn!(error = %err, "trust store pruning failed");
@@ -2415,14 +2435,15 @@ fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Disco
                         .peer_manager
                         .get(device_id)
                         .map(|peer| peer.friendly_name.clone());
-                    
+
                     if let Some(peer) = peer_shared.peer_manager.get(device_id) {
                         if !peer.trusted && !peer.remembered {
                             let _ = peer_shared.peer_manager.forget_device(device_id);
                         } else {
-                            let _ = peer_shared
-                                .peer_manager
-                                .mark_disconnected(device_id, Some("mDNS announcement lost".to_string()));
+                            let _ = peer_shared.peer_manager.mark_disconnected(
+                                device_id,
+                                Some("mDNS announcement lost".to_string()),
+                            );
                         }
                     }
                     let _ = peer_shared
@@ -2918,7 +2939,7 @@ async fn connect_loop(
     if endpoints.is_empty() {
         return Ok(());
     }
-    
+
     if let Some(device_id) = expected_device_id {
         if !shared
             .peer_manager
@@ -2930,7 +2951,14 @@ async fn connect_loop(
 
     let mut backoff = Backoff::new(endpoints[0].to_string());
     loop {
-        match connect_once(shared.clone(), endpoints.clone(), expected_device_id, discovery).await {
+        match connect_once(
+            shared.clone(),
+            endpoints.clone(),
+            expected_device_id,
+            discovery,
+        )
+        .await
+        {
             Ok(()) => {
                 for ep in &endpoints {
                     shared.peer_manager.clear_manual_target(*ep);
@@ -2939,9 +2967,10 @@ async fn connect_loop(
             }
             Err(err) => {
                 if let Some(device_id) = expected_device_id {
-                    let _ = shared
-                        .peer_manager
-                        .mark_failed(device_id, endpoints[0], err.to_string());
+                    let _ =
+                        shared
+                            .peer_manager
+                            .mark_failed(device_id, endpoints[0], err.to_string());
                 } else {
                     for ep in &endpoints {
                         shared.peer_manager.record_manual_failure(*ep);
@@ -2990,9 +3019,11 @@ async fn connect_once(
             connected_stream = Some(stream);
             connected_endpoint = Some(ep);
             break; // Dropping the JoinSet aborts all other connection attempts!
-        } else if let Ok((_, Err(err))) = res { // Timeout
+        } else if let Ok((_, Err(err))) = res {
+            // Timeout
             last_err = Some(anyhow::anyhow!("timeout: {}", err));
-        } else if let Ok((_, Ok(Err(err)))) = res { // IO Error
+        } else if let Ok((_, Ok(Err(err)))) = res {
+            // IO Error
             last_err = Some(anyhow::anyhow!("io error: {}", err));
         }
     }
@@ -3865,7 +3896,7 @@ fn register_session(
                         Ok(AppMessage::PairingRequest { origin_device, origin_device_name }) => {
                             last_seen = Instant::now();
                             let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
-                            
+
                             // Re-emit PairingRequested with the REAL name and PIN so the UI updates
                             let pin = shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin).unwrap_or_else(|| "0000".to_string());
                             let _ = shared.event_tx.send(EngineEvent::PairingRequested {
@@ -4154,7 +4185,6 @@ fn register_session(
                 let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
                 let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
 
-
                 // Record in activity feed.
                 let feed = shared.activity.clone();
                 let name = peer_name.clone();
@@ -4254,7 +4284,11 @@ async fn should_initiate_session(
     }
     match discovery {
         DiscoverySource::Manual => true,
-        DiscoverySource::Mdns | DiscoverySource::Unknown | DiscoverySource::UdpBeacon | DiscoverySource::UdpMulticast | DiscoverySource::HotspotProbe => {
+        DiscoverySource::Mdns
+        | DiscoverySource::Unknown
+        | DiscoverySource::UdpBeacon
+        | DiscoverySource::UdpMulticast
+        | DiscoverySource::HotspotProbe => {
             // Prevent SSRF: only auto-connect to trusted peers. Untrusted peers
             // must be manually connected via the UI by the user.
             if !shared.trust.lock().await.is_trusted(peer_id) {

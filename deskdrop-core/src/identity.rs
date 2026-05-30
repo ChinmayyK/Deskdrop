@@ -163,16 +163,19 @@ impl IdentityStore {
         }
 
         let tmp = self.path.with_extension("tmp");
-        
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt;
             let mut options = std::fs::OpenOptions::new();
             options.write(true).create(true).truncate(true).mode(0o600);
-            let mut file = options.open(&tmp).context("creating temporary identity key file")?;
-            std::io::Write::write_all(&mut file, &key.secret_bytes()).context("writing identity key")?;
+            let mut file = options
+                .open(&tmp)
+                .context("creating temporary identity key file")?;
+            std::io::Write::write_all(&mut file, &key.secret_bytes())
+                .context("writing identity key")?;
         }
-        
+
         #[cfg(not(unix))]
         {
             std::fs::write(&tmp, key.secret_bytes()).context("writing identity key")?;

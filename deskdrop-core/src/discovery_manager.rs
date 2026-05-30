@@ -219,15 +219,35 @@ impl MergedPeer {
 
     /// Primary discovery source (highest priority active source).
     fn primary_source(&self) -> DiscoverySource {
-        if self.sources.iter().any(|s| s.source == DiscoverySource::Mdns) {
+        if self
+            .sources
+            .iter()
+            .any(|s| s.source == DiscoverySource::Mdns)
+        {
             DiscoverySource::Mdns
-        } else if self.sources.iter().any(|s| s.source == DiscoverySource::Manual) {
+        } else if self
+            .sources
+            .iter()
+            .any(|s| s.source == DiscoverySource::Manual)
+        {
             DiscoverySource::Manual
-        } else if self.sources.iter().any(|s| s.source == DiscoverySource::HotspotProbe) {
+        } else if self
+            .sources
+            .iter()
+            .any(|s| s.source == DiscoverySource::HotspotProbe)
+        {
             DiscoverySource::HotspotProbe
-        } else if self.sources.iter().any(|s| s.source == DiscoverySource::UdpBeacon) {
+        } else if self
+            .sources
+            .iter()
+            .any(|s| s.source == DiscoverySource::UdpBeacon)
+        {
             DiscoverySource::UdpBeacon
-        } else if self.sources.iter().any(|s| s.source == DiscoverySource::UdpMulticast) {
+        } else if self
+            .sources
+            .iter()
+            .any(|s| s.source == DiscoverySource::UdpMulticast)
+        {
             DiscoverySource::UdpMulticast
         } else {
             DiscoverySource::Unknown
@@ -327,13 +347,7 @@ impl DiscoveryManager {
     /// - The manager (must be spawned via `run()`)
     /// - An input handle for discovery layers to submit events
     /// - An output receiver for the engine to consume unified events
-    pub fn new(
-        my_device_id: Uuid,
-    ) -> (
-        Self,
-        DiscoveryInputHandle,
-        mpsc::Receiver<DiscoveryEvent>,
-    ) {
+    pub fn new(my_device_id: Uuid) -> (Self, DiscoveryInputHandle, mpsc::Receiver<DiscoveryEvent>) {
         let (input_tx, input_rx) = mpsc::channel(256);
         let (output_tx, output_rx) = mpsc::channel(64);
 
@@ -450,10 +464,7 @@ impl DiscoveryManager {
             if merged.is_empty() {
                 let _ = self
                     .output_tx
-                    .send(DiscoveryEvent::PeerDisappeared {
-                        device_id,
-                        source,
-                    })
+                    .send(DiscoveryEvent::PeerDisappeared { device_id, source })
                     .await;
                 self.peers.remove(&device_id);
                 debug!(
@@ -591,7 +602,10 @@ mod tests {
         // Should not get another PeerAppeared (might get PeerUpdated if addrs differ).
         let result = tokio::time::timeout(Duration::from_millis(50), output.recv()).await;
         // Since addrs are the same, no event should be emitted.
-        assert!(result.is_err(), "should not emit duplicate event for same addrs");
+        assert!(
+            result.is_err(),
+            "should not emit duplicate event for same addrs"
+        );
 
         drop(handle);
         let _ = manager_task.await;
@@ -660,7 +674,10 @@ mod tests {
 
         // Should NOT get PeerDisappeared since UDP source still active.
         let result = tokio::time::timeout(Duration::from_millis(50), output.recv()).await;
-        assert!(result.is_err(), "peer should not disappear while UDP source active");
+        assert!(
+            result.is_err(),
+            "peer should not disappear while UDP source active"
+        );
 
         // Now lose UDP too.
         handle.lost(peer_id, DiscoverySource::UdpBeacon).await;

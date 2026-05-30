@@ -576,13 +576,13 @@ impl History {
         // Atomic write: serialise to a .tmp file then rename so a crash during
         // write never leaves the history file in a partially-written state.
         let tmp_path = self.path.with_extension("tmp");
-        
+
         let persistable_entries: Vec<HistoryEntry> = self
             .entries
             .iter()
             .map(|e| e.scrubbed_for_persistence())
             .collect();
-            
+
         let bytes = serde_json::to_vec_pretty(&persistable_entries)?;
         std::fs::write(&tmp_path, &bytes).context("writing history tmp")?;
         std::fs::rename(&tmp_path, &self.path).context("renaming history file")?;
@@ -783,19 +783,17 @@ fn is_probable_api_token(text: &str) -> bool {
     let trimmed = text.trim_matches(|ch: char| ch.is_whitespace() || ch == '"' || ch == '\'');
 
     // Check Stripe/Highnote prefixes dynamically to avoid contiguous strings in the binary
-    let sk_live = ['s', 'k', '_', 'l', 'i', 'v', 'e', '_'].iter().collect::<String>();
-    let sk_test = ['s', 'k', '_', 't', 'e', 's', 't', '_'].iter().collect::<String>();
+    let sk_live = ['s', 'k', '_', 'l', 'i', 'v', 'e', '_']
+        .iter()
+        .collect::<String>();
+    let sk_test = ['s', 'k', '_', 't', 'e', 's', 't', '_']
+        .iter()
+        .collect::<String>();
     if trimmed.starts_with(&sk_live) || trimmed.starts_with(&sk_test) {
         return true;
     }
 
-    const PREFIXES: &[&str] = &[
-        "ghp_",
-        "github_pat_",
-        "xoxb-",
-        "xoxp-",
-        "AIza",
-    ];
+    const PREFIXES: &[&str] = &["ghp_", "github_pat_", "xoxb-", "xoxp-", "AIza"];
     if PREFIXES.iter().any(|prefix| trimmed.starts_with(prefix)) {
         return true;
     }

@@ -73,16 +73,17 @@ pub unsafe extern "C" fn deskdrop_start(
                 runtime().spawn(async move {
                     let handler = std::sync::Arc::new(move |req: crate::ipc::IpcRequest| {
                         let eng = e_clone.clone();
-                        async move {
-                            crate::ipc::handle_ipc_request(eng, req).await
-                        }
+                        async move { crate::ipc::handle_ipc_request(eng, req).await }
                     });
                     if let Err(e) = crate::ipc_windows::spawn_windows_ipc(handler).await {
                         eprintln!("Windows IPC server failed to start: {}", e);
                     }
                 });
             }
-            Box::into_raw(Box::new(DeskdropHandle { engine, event_rx: std::sync::Mutex::new(event_rx) }))
+            Box::into_raw(Box::new(DeskdropHandle {
+                engine,
+                event_rx: std::sync::Mutex::new(event_rx),
+            }))
         }
         Err(e) => {
             eprintln!("deskdrop_start error: {:#}", e);
@@ -333,7 +334,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    
+
     let text: Option<String> = match &e.inner {
         EngineEvent::ClipboardReceived { content, .. } => {
             if let ClipboardContent::Text(ref s) = **content {
@@ -341,12 +342,10 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
             } else {
                 None
             }
-        },
+        }
         EngineEvent::Warning(s) => Some(s.clone()),
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
-        EngineEvent::ActivityFeedUpdated { entries, .. } => {
-            serde_json::to_string(entries).ok()
-        },
+        EngineEvent::ActivityFeedUpdated { entries, .. } => serde_json::to_string(entries).ok(),
         _ => None,
     };
 
@@ -355,7 +354,7 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
         e.cached_str = Some(cs);
         return e.cached_str.as_ref().unwrap().as_ptr();
     }
-    
+
     std::ptr::null()
 }
 

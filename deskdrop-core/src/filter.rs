@@ -561,12 +561,18 @@ impl Filter for SensitiveTextFilter {
 
         if let ClipboardContent::Text(text) = content {
             let lower = text.to_lowercase();
-            
+
             // Check for obfuscated Stripe/Highnote prefixes to avoid raw strings in binary
-            let sk_live = ['s', 'k', '_', 'l', 'i', 'v', 'e', '_'].iter().collect::<String>();
-            let sk_test = ['s', 'k', '_', 't', 'e', 's', 't', '_'].iter().collect::<String>();
-            let rk_live = ['r', 'k', '_', 'l', 'i', 'v', 'e', '_'].iter().collect::<String>();
-            
+            let sk_live = ['s', 'k', '_', 'l', 'i', 'v', 'e', '_']
+                .iter()
+                .collect::<String>();
+            let sk_test = ['s', 'k', '_', 't', 'e', 's', 't', '_']
+                .iter()
+                .collect::<String>();
+            let rk_live = ['r', 'k', '_', 'l', 'i', 'v', 'e', '_']
+                .iter()
+                .collect::<String>();
+
             for pat in &[sk_live, sk_test, rk_live] {
                 if lower.contains(pat) {
                     return Verdict::deny(format!(

@@ -174,7 +174,11 @@ fn parse_beacon(payload: &[u8]) -> Option<BeaconData> {
 
     // Validate magic prefix.
     if parts[0] != BEACON_MAGIC {
-        trace!("beacon parse: bad magic '{}', expected '{}'", parts[0], BEACON_MAGIC);
+        trace!(
+            "beacon parse: bad magic '{}', expected '{}'",
+            parts[0],
+            BEACON_MAGIC
+        );
         return None;
     }
 
@@ -274,10 +278,7 @@ pub async fn spawn_broadcast_beacon(
 
     let socket = create_broadcast_send_socket(config.broadcast_port)?;
 
-    let broadcast_dest = SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::BROADCAST),
-        config.broadcast_port,
-    );
+    let broadcast_dest = SocketAddr::new(IpAddr::V4(Ipv4Addr::BROADCAST), config.broadcast_port);
 
     info!(
         "udp broadcast beacon: starting (interval={:?}, port={}, device={})",
@@ -403,10 +404,7 @@ pub async fn spawn_multicast_beacon(
         PROTOCOL_VERSION,
     );
 
-    let multicast_dest = SocketAddr::new(
-        IpAddr::V4(config.multicast_addr),
-        config.multicast_port,
-    );
+    let multicast_dest = SocketAddr::new(IpAddr::V4(config.multicast_addr), config.multicast_port);
 
     // Create a standard UDP socket for sending multicast.
     let socket = create_multicast_send_socket(config.multicast_addr)?;
@@ -524,7 +522,10 @@ async fn handle_received_beacon(
     let peer = beacon_to_peer(&beacon, src.ip(), source);
     debug!(
         "udp {:?}: discovered peer {} at {}:{}",
-        source, beacon.device_id, src.ip(), beacon.port
+        source,
+        beacon.device_id,
+        src.ip(),
+        beacon.port
     );
     input_handle.found(peer).await;
 }
@@ -587,9 +588,7 @@ fn create_broadcast_recv_socket(port: u16) -> Result<UdpSocket, anyhow::Error> {
 }
 
 /// Create a UDP socket suitable for sending multicast packets.
-fn create_multicast_send_socket(
-    multicast_addr: Ipv4Addr,
-) -> Result<UdpSocket, anyhow::Error> {
+fn create_multicast_send_socket(multicast_addr: Ipv4Addr) -> Result<UdpSocket, anyhow::Error> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
 
     socket.set_reuse_address(true)?;
@@ -686,7 +685,10 @@ fn create_multicast_recv_socket(
 
     // Fallback: join on INADDR_ANY if no specific interface worked.
     if !joined_any {
-        debug!("udp multicast: joining {} on INADDR_ANY (fallback)", multicast_addr);
+        debug!(
+            "udp multicast: joining {} on INADDR_ANY (fallback)",
+            multicast_addr
+        );
         socket.join_multicast_v4(&multicast_addr, &Ipv4Addr::UNSPECIFIED)?;
     }
 
@@ -743,7 +745,11 @@ mod tests {
         let payload = format_beacon(id, 47823, &fp, 3);
         let text = std::str::from_utf8(&payload).unwrap();
         let fields: Vec<&str> = text.split(':').collect();
-        assert_eq!(fields.len(), 5, "beacon should have exactly 5 colon-separated fields");
+        assert_eq!(
+            fields.len(),
+            5,
+            "beacon should have exactly 5 colon-separated fields"
+        );
     }
 
     // ── Beacon parsing ────────────────────────────────────────────────────────
@@ -861,7 +867,11 @@ mod tests {
             identity_fingerprint_prefix: [0; 8],
             protocol_version: PROTOCOL_VERSION,
         };
-        assert!(!should_accept_beacon(&beacon, my_id, Some(PROTOCOL_VERSION)));
+        assert!(!should_accept_beacon(
+            &beacon,
+            my_id,
+            Some(PROTOCOL_VERSION)
+        ));
     }
 
     #[test]
@@ -874,7 +884,11 @@ mod tests {
             identity_fingerprint_prefix: [0; 8],
             protocol_version: 999,
         };
-        assert!(!should_accept_beacon(&beacon, my_id, Some(PROTOCOL_VERSION)));
+        assert!(!should_accept_beacon(
+            &beacon,
+            my_id,
+            Some(PROTOCOL_VERSION)
+        ));
     }
 
     #[test]
@@ -962,7 +976,10 @@ mod tests {
         let config = UdpBeaconConfig::default();
         assert_eq!(config.broadcast_port, BROADCAST_PORT);
         assert_eq!(config.multicast_port, MULTICAST_PORT);
-        assert_eq!(config.multicast_addr, MULTICAST_ADDR.parse::<Ipv4Addr>().unwrap());
+        assert_eq!(
+            config.multicast_addr,
+            MULTICAST_ADDR.parse::<Ipv4Addr>().unwrap()
+        );
         assert_eq!(config.service_port, crate::protocol::DEFAULT_PORT);
         assert_eq!(config.required_protocol_version, Some(PROTOCOL_VERSION));
         assert!(config.beacon_interval >= Duration::from_secs(1));
@@ -1053,7 +1070,15 @@ mod tests {
         let fp = [0xab; 8];
         let payload = format_beacon(id, 47823, &fp, 3);
         // A typical beacon should be around 75-95 bytes.
-        assert!(payload.len() < 150, "beacon is unexpectedly large: {} bytes", payload.len());
-        assert!(payload.len() > 50, "beacon is unexpectedly small: {} bytes", payload.len());
+        assert!(
+            payload.len() < 150,
+            "beacon is unexpectedly large: {} bytes",
+            payload.len()
+        );
+        assert!(
+            payload.len() > 50,
+            "beacon is unexpectedly small: {} bytes",
+            payload.len()
+        );
     }
 }

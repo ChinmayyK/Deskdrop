@@ -127,12 +127,18 @@ fn apply_keepalive(stream: &TcpStream) -> Result<()> {
         use std::os::windows::io::AsRawSocket;
         let socket = stream.as_raw_socket();
         let val: u32 = KEEPALIVE_RETRIES;
-        
+
         #[link(name = "ws2_32")]
         extern "system" {
-            fn setsockopt(s: usize, level: i32, optname: i32, optval: *const u8, optlen: i32) -> i32;
+            fn setsockopt(
+                s: usize,
+                level: i32,
+                optname: i32,
+                optval: *const u8,
+                optlen: i32,
+            ) -> i32;
         }
-        
+
         let ret = unsafe {
             setsockopt(
                 socket as usize,
@@ -146,7 +152,7 @@ fn apply_keepalive(stream: &TcpStream) -> Result<()> {
             tracing::warn!("Failed to set TCP_KEEPCNT on Windows, keepalive timeout may be slow");
         }
     }
-    
+
     Ok(())
 }
 
@@ -266,7 +272,9 @@ pub async fn handshake_initiator(
         nonce: my_nonce,
     };
 
-    send_frame(stream, &ecdh).await.context("sending EcdhFrame")?;
+    send_frame(stream, &ecdh)
+        .await
+        .context("sending EcdhFrame")?;
 
     let ack_ecdh: EcdhFrame =
         tokio::time::timeout(Duration::from_secs(5), recv_frame(stream, 8192))
@@ -292,12 +300,15 @@ pub async fn handshake_initiator(
         metadata_json: None,
     };
 
-    send_encrypted(stream, &mut session, &hello).await.context("sending encrypted Hello")?;
-
-    let ack_msg: AppMessage = tokio::time::timeout(Duration::from_secs(5), recv_encrypted(stream, &mut session))
+    send_encrypted(stream, &mut session, &hello)
         .await
-        .context("timeout waiting for HelloAck")?
-        .context("receiving HelloAck")?;
+        .context("sending encrypted Hello")?;
+
+    let ack_msg: AppMessage =
+        tokio::time::timeout(Duration::from_secs(5), recv_encrypted(stream, &mut session))
+            .await
+            .context("timeout waiting for HelloAck")?
+            .context("receiving HelloAck")?;
 
     let AppMessage::HelloAck {
         device_id,
@@ -306,7 +317,8 @@ pub async fn handshake_initiator(
         nonce_response,
         trusted,
         ..
-    } = ack_msg else {
+    } = ack_msg
+    else {
         anyhow::bail!("expected HelloAck");
     };
 
@@ -380,18 +392,27 @@ where
         nonce: my_nonce,
     };
 
-    send_frame(stream, &ack_ecdh).await.context("sending EcdhFrame ack")?;
+    send_frame(stream, &ack_ecdh)
+        .await
+        .context("sending EcdhFrame ack")?;
 
     let (mut session, pin) = ephemeral
         .derive_session_key(ecdh.ecdh_pubkey)
         .context("ECDH key derivation")?;
 
-    let hello_msg: AppMessage = tokio::time::timeout(Duration::from_secs(5), recv_encrypted(stream, &mut session))
-        .await
-        .context("timeout waiting for Hello")?
-        .context("receiving Hello")?;
+    let hello_msg: AppMessage =
+        tokio::time::timeout(Duration::from_secs(5), recv_encrypted(stream, &mut session))
+            .await
+            .context("timeout waiting for Hello")?
+            .context("receiving Hello")?;
 
-    let AppMessage::Hello { device_id, device_name, identity_pubkey, .. } = hello_msg else {
+    let AppMessage::Hello {
+        device_id,
+        device_name,
+        identity_pubkey,
+        ..
+    } = hello_msg
+    else {
         anyhow::bail!("expected Hello");
     };
 
@@ -411,7 +432,9 @@ where
         metadata_json: None,
     };
 
-    send_encrypted(stream, &mut session, &ack).await.context("sending HelloAck")?;
+    send_encrypted(stream, &mut session, &ack)
+        .await
+        .context("sending HelloAck")?;
 
     Ok(HandshakeResult {
         session,

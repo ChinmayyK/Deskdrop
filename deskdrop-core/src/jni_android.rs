@@ -1120,7 +1120,12 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_reportDiscoveredPeer(
         Err(_) => return -1,
     };
     let h = unsafe { &*(handle as *const AndroidHandle) };
-    match rt().block_on(h.engine.report_discovered_peer(device_id, device_name_str, ip_str, port as u16)) {
+    match rt().block_on(h.engine.report_discovered_peer(
+        device_id,
+        device_name_str,
+        ip_str,
+        port as u16,
+    )) {
         Ok(()) => 0,
         Err(_) => -1,
     }

@@ -32,7 +32,7 @@ fn get_pipe_name() -> String {
 use std::ptr::null_mut;
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorA;
-use windows_sys::Win32::Security::{SECURITY_ATTRIBUTES, SDDL_REVISION_1};
+use windows_sys::Win32::Security::{SDDL_REVISION_1, SECURITY_ATTRIBUTES};
 
 struct SecurePipeAttributes {
     sa: SECURITY_ATTRIBUTES,
@@ -53,16 +53,16 @@ impl SecurePipeAttributes {
                 panic!("ConvertStringSecurityDescriptorToSecurityDescriptorA failed");
             }
         }
-        
+
         let sa = SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: sd,
             bInheritHandle: 0,
         };
-        
+
         Self { sa }
     }
-    
+
     fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
         &mut self.sa as *mut _ as *mut std::ffi::c_void
     }
@@ -98,7 +98,9 @@ where
                 .pipe_mode(PipeMode::Byte)
                 .max_instances(MAX_INSTANCES);
 
-            let server = match opts.security_attributes(sec_attrs.as_mut_ptr()).create(get_pipe_name())
+            let server = match opts
+                .security_attributes(sec_attrs.as_mut_ptr())
+                .create(get_pipe_name())
             {
                 Ok(s) => s,
                 Err(e) => {

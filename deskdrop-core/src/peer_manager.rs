@@ -124,7 +124,7 @@ pub struct PeerRecord {
     /// When this peer last disconnected (enables adaptive probe scheduling).
     #[serde(default)]
     pub last_disconnect_at: Option<u64>,
-    
+
     // ── Computed fields (for UI serialization) ───────────────────────────────
     #[serde(default)]
     pub lifecycle_state: Option<DeviceLifecycleState>,
@@ -181,7 +181,10 @@ impl PeerRecord {
             }
         } else if self.pairing_requested {
             DeviceLifecycleState::PendingApproval
-        } else if self.status == PeerConnectionState::Connecting || self.status == PeerConnectionState::Connected || self.pairing_pin.is_some() {
+        } else if self.status == PeerConnectionState::Connecting
+            || self.status == PeerConnectionState::Connected
+            || self.pairing_pin.is_some()
+        {
             DeviceLifecycleState::PairingInProgress
         } else {
             DeviceLifecycleState::Discovered
@@ -189,7 +192,10 @@ impl PeerRecord {
     }
 
     pub fn socket_addrs(&self) -> Vec<SocketAddr> {
-        self.ips.iter().map(|ip| SocketAddr::new(*ip, self.port)).collect()
+        self.ips
+            .iter()
+            .map(|ip| SocketAddr::new(*ip, self.port))
+            .collect()
     }
 
     /// Whether this peer should receive clipboard payloads right now.
@@ -270,17 +276,19 @@ impl PeerManager {
 
     pub fn save(&self) -> Result<()> {
         let path = self.path.clone();
-        
+
         let store_to_save = {
             let store = self.store.read().unwrap();
             PeerStoreData {
-                peers: store.peers.iter()
+                peers: store
+                    .peers
+                    .iter()
                     .filter(|(_, p)| p.trusted || p.remembered)
                     .map(|(id, p)| (*id, p.clone()))
                     .collect(),
             }
         };
-        
+
         let bytes = serde_json::to_vec_pretty(&store_to_save)?;
 
         let save_fn = move || {
@@ -372,7 +380,10 @@ impl PeerManager {
             });
 
             // Do not overwrite a real name with a placeholder name.
-            if !friendly_name.starts_with("device-") || record.friendly_name.starts_with("device-") || record.friendly_name.is_empty() {
+            if !friendly_name.starts_with("device-")
+                || record.friendly_name.starts_with("device-")
+                || record.friendly_name.is_empty()
+            {
                 record.friendly_name = friendly_name;
             }
             if platform.is_some() {
@@ -777,7 +788,8 @@ impl PeerManager {
     }
 
     pub fn endpoint_for(&self, device_id: Uuid) -> Option<SocketAddr> {
-        self.get(device_id).and_then(|record| record.socket_addrs().first().copied())
+        self.get(device_id)
+            .and_then(|record| record.socket_addrs().first().copied())
     }
 
     pub fn note_manual_target(&self, endpoint: SocketAddr) {
@@ -900,9 +912,7 @@ impl PeerManager {
                     return true;
                 }
                 // Remove untrusted + disconnected peers not seen in 24h
-                let last_activity = record.last_seen
-                    .or(record.last_discovery_at)
-                    .unwrap_or(0);
+                let last_activity = record.last_seen.or(record.last_discovery_at).unwrap_or(0);
                 if now.saturating_sub(last_activity) > STALE_THRESHOLD_SECS {
                     return false;
                 }
@@ -912,7 +922,10 @@ impl PeerManager {
             before - store.peers.len()
         };
         if pruned > 0 {
-            tracing::info!(pruned, "pruned stale peer records (untrusted, not seen in 24h)");
+            tracing::info!(
+                pruned,
+                "pruned stale peer records (untrusted, not seen in 24h)"
+            );
             let _ = self.save();
         }
         pruned
@@ -1051,9 +1064,11 @@ mod tests {
             .mark_disconnected_if_current(id, second_session_id, Some("closed".into()))
             .unwrap());
         assert_eq!(manager.list().len(), 1);
-        assert!(
-            manager.get(id).unwrap().ips.contains(&IpAddr::V4(Ipv4Addr::new(172, 20, 10, 4)))
-        );
+        assert!(manager
+            .get(id)
+            .unwrap()
+            .ips
+            .contains(&IpAddr::V4(Ipv4Addr::new(172, 20, 10, 4))));
     }
 
     // ── Fix 14: connected_count and sync_eligible_count ───────────────────────

@@ -299,7 +299,8 @@ impl InboundTransfer {
                 .write(true)
                 .open(tmp)
                 .with_context(|| format!("creating temp file {}", tmp.display()))?;
-            file.set_len(self.meta.size_bytes).context("pre-allocating disk space for incoming file")?;
+            file.set_len(self.meta.size_bytes)
+                .context("pre-allocating disk space for incoming file")?;
             self.file_handle = Some(file);
         }
         self.status = TransferStatus::Transferring;
@@ -395,7 +396,8 @@ impl InboundTransfer {
         if let Some(file) = &mut self.file_handle {
             // Seek to the correct offset based on chunks received
             let offset = (self.received_chunk_count as u64) * (FILE_CHUNK_SIZE as u64);
-            file.seek(std::io::SeekFrom::Start(offset)).context("seeking to chunk offset")?;
+            file.seek(std::io::SeekFrom::Start(offset))
+                .context("seeking to chunk offset")?;
             file.write_all(data).context("writing chunk to temp file")?;
         } else {
             anyhow::bail!("transfer has not been accepted or file handle is missing");

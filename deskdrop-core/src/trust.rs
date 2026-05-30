@@ -288,12 +288,10 @@ impl TrustStore {
     pub fn prune_stale(&mut self, max_age_secs: u64) -> Result<usize> {
         let now = now_secs();
         let before = self.data.devices.len();
-        self.data.devices.retain(|_, record| {
-            match record.state {
-                TrustState::Trusted | TrustState::Revoked => true,
-                TrustState::Untrusted | TrustState::Rejected => {
-                    now.saturating_sub(record.last_seen) <= max_age_secs
-                }
+        self.data.devices.retain(|_, record| match record.state {
+            TrustState::Trusted | TrustState::Revoked => true,
+            TrustState::Untrusted | TrustState::Rejected => {
+                now.saturating_sub(record.last_seen) <= max_age_secs
             }
         });
         let pruned = before - self.data.devices.len();

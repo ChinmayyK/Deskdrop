@@ -184,7 +184,10 @@ fn forget_device_prevents_auto_reconnect() {
     .unwrap();
     mgr.forget_device(id).unwrap();
 
-    assert!(mgr.get(id).is_none(), "forgotten device must be removed from manager");
+    assert!(
+        mgr.get(id).is_none(),
+        "forgotten device must be removed from manager"
+    );
 }
 
 // ── Test: Mesh-aware dedup — per-peer windows ─────────────────────────────────

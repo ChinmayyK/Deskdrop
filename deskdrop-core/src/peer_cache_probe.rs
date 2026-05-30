@@ -241,11 +241,7 @@ impl PeerCacheProbe {
                 // We use DiscoverySource::Unknown since this is a cache-based probe,
                 // not a standard discovery mechanism. The discovery manager will merge
                 // this with any existing records.
-                let addrs = target
-                    .addrs
-                    .iter()
-                    .map(|a| a.ip())
-                    .collect::<Vec<_>>();
+                let addrs = target.addrs.iter().map(|a| a.ip()).collect::<Vec<_>>();
                 let port = target
                     .addrs
                     .first()
@@ -274,12 +270,7 @@ impl PeerCacheProbe {
     /// no handshake or protocol data is exchanged.
     async fn probe_peer(&self, target: &ProbeTarget) -> bool {
         for addr in &target.addrs {
-            match tokio::time::timeout(
-                PROBE_CONNECT_TIMEOUT,
-                TcpStream::connect(addr),
-            )
-            .await
-            {
+            match tokio::time::timeout(PROBE_CONNECT_TIMEOUT, TcpStream::connect(addr)).await {
                 Ok(Ok(_stream)) => {
                     // Connection succeeded — peer is reachable at this address.
                     // The stream is dropped immediately (close the socket).
@@ -294,14 +285,19 @@ impl PeerCacheProbe {
                     // listening on a different port, or the address is stale.
                     trace!(
                         "peer cache probe: TCP connect to {} failed for {} '{}': {}",
-                        addr, target.device_id, target.device_name, err
+                        addr,
+                        target.device_id,
+                        target.device_name,
+                        err
                     );
                 }
                 Err(_) => {
                     // Timeout — host is likely unreachable (firewall dropping SYN).
                     trace!(
                         "peer cache probe: TCP connect to {} timed out for {} '{}'",
-                        addr, target.device_id, target.device_name
+                        addr,
+                        target.device_id,
+                        target.device_name
                     );
                 }
             }
@@ -382,13 +378,13 @@ mod tests {
         assert_eq!(probe_interval(secs), Some(TIER2_INTERVAL));
     }
 
-#[test]
+    #[test]
     fn stops_probing_at_max() {
         // u64::MAX → stop.
         assert_eq!(probe_interval(u64::MAX), None);
     }
 
-        #[test]
+    #[test]
     fn stops_probing_at_30m() {
         assert_eq!(probe_interval(TIER2_CUTOFF_SECS), None);
         assert_eq!(probe_interval(TIER2_CUTOFF_SECS + 1), None);

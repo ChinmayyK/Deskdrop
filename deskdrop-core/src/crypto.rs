@@ -225,7 +225,11 @@ impl SessionKey {
         // prevents replay of any previously seen or skipped frame — a captured
         // frame can never satisfy counter == recv_counter once it has been
         // incremented past it.
-        let counter = u64::from_be_bytes(nonce_bytes[..8].try_into().expect("nonce slice is exactly 8 bytes"));
+        let counter = u64::from_be_bytes(
+            nonce_bytes[..8]
+                .try_into()
+                .expect("nonce slice is exactly 8 bytes"),
+        );
         anyhow::ensure!(
             counter == self.recv_counter,
             "replayed or out-of-order frame: got counter {}, expected {}",
@@ -255,7 +259,11 @@ impl SessionKey {
         nonce_bytes.copy_from_slice(&buffer[..12]);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
-        let counter = u64::from_be_bytes(nonce_bytes[..8].try_into().expect("nonce slice is exactly 8 bytes"));
+        let counter = u64::from_be_bytes(
+            nonce_bytes[..8]
+                .try_into()
+                .expect("nonce slice is exactly 8 bytes"),
+        );
         anyhow::ensure!(
             counter == self.recv_counter,
             "replayed or out-of-order frame: got counter {}, expected {}",

@@ -289,8 +289,7 @@ fn is_android_hotspot_subnet(ip: Ipv4Addr) -> bool {
         // Android Wi-Fi Direct / newer hotspot
         | (192, 168, 49)
         // Some Samsung/OnePlus variants
-        | (192, 168, 2)
-        // Android 13+ may use randomized subnets in 192.168.x.x range
+        | (192, 168, 2) // Android 13+ may use randomized subnets in 192.168.x.x range
     )
 }
 
