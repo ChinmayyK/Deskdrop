@@ -91,16 +91,20 @@ where
     tokio::spawn(async move {
         loop {
             // Create a new pipe instance to listen on.
-            let mut sec_attrs = SecurePipeAttributes::new();
-            let mut opts = ServerOptions::new();
-            opts.access_inbound(true)
-                .access_outbound(true)
-                .pipe_mode(PipeMode::Byte)
-                .max_instances(MAX_INSTANCES);
+            let server = {
+                let mut sec_attrs = SecurePipeAttributes::new();
+                let mut opts = ServerOptions::new();
+                opts.access_inbound(true)
+                    .access_outbound(true)
+                    .pipe_mode(PipeMode::Byte)
+                    .max_instances(MAX_INSTANCES);
 
-            let server = match unsafe {
-                opts.create_with_security_attributes_raw(get_pipe_name(), sec_attrs.as_mut_ptr())
-            } {
+                unsafe {
+                    opts.create_with_security_attributes_raw(get_pipe_name(), sec_attrs.as_mut_ptr())
+                }
+            };
+
+            let server = match server {
                 Ok(s) => s,
                 Err(e) => {
                     warn!("Named pipe create error: {}", e);

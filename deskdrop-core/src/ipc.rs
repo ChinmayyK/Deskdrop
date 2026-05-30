@@ -558,8 +558,9 @@ pub mod client {
             serde_json::from_str(&line).context("IPC response parse")
         }
     }
+}
 
-    /// Convenience: spawn the IPC server wired directly to an `Arc<Engine>`.
+/// Convenience: spawn the IPC server wired directly to an `Arc<Engine>`.
     ///
     /// This is used by the Linux binary (which embeds the engine) so it doesn't
     /// need to duplicate the full daemon dispatch table.  The handler maps every
@@ -1147,13 +1148,13 @@ pub mod client {
         }
     }
 
-    pub async fn spawn_with_engine(engine: std::sync::Arc<crate::engine::Engine>) -> Result<()> {
-        let handler = std::sync::Arc::new(move |req: IpcRequest| {
-            let eng = engine.clone();
-            async move { handle_ipc_request(eng, req).await }
-        });
-        super::server::spawn(handler).await
-    }
+#[cfg(unix)]
+pub async fn spawn_with_engine(engine: std::sync::Arc<crate::engine::Engine>) -> anyhow::Result<()> {
+    let handler = std::sync::Arc::new(move |req: IpcRequest| {
+        let eng = engine.clone();
+        async move { handle_ipc_request(eng, req).await }
+    });
+    server::spawn(handler).await
 }
 
 // ── Windows named pipe stubs ──────────────────────────────────────────────────
