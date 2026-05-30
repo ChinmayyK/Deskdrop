@@ -419,7 +419,7 @@ impl PeerManager {
                 if record.addr_history.len() > 10 {
                     record
                         .addr_history
-                        .sort_by(|a, b| b.last_seen_at.cmp(&a.last_seen_at));
+                        .sort_by_key(|b| std::cmp::Reverse(b.last_seen_at));
                     record.addr_history.truncate(10);
                 }
             }

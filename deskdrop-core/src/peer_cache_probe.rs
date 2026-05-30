@@ -46,8 +46,8 @@ const TIER1_INTERVAL: Duration = Duration::from_secs(10);
 const TIER2_CUTOFF_SECS: u64 = 30 * 60;
 const TIER2_INTERVAL: Duration = Duration::from_secs(30);
 
-/// After 30 minutes offline, stop probing entirely.
-/// The peer is likely on a different network or powered off.
+// After 30 minutes offline, stop probing entirely.
+// The peer is likely on a different network or powered off.
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
