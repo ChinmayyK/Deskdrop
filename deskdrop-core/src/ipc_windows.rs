@@ -98,10 +98,9 @@ where
                 .pipe_mode(PipeMode::Byte)
                 .max_instances(MAX_INSTANCES);
 
-            let server = match opts
-                .security_attributes(sec_attrs.as_mut_ptr())
-                .create(get_pipe_name())
-            {
+            let server = match unsafe {
+                opts.create_with_security_attributes_raw(get_pipe_name(), sec_attrs.as_mut_ptr())
+            } {
                 Ok(s) => s,
                 Err(e) => {
                     warn!("Named pipe create error: {}", e);
