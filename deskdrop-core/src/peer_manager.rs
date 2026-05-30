@@ -47,8 +47,34 @@ pub enum DiscoverySource {
     Mdns,
     Manual,
     UdpBeacon,
+    UdpMulticast,
+    /// Discovered via hotspot gateway probing (Android/iPhone hotspot).
+    HotspotProbe,
     #[default]
     Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceLifecycleState {
+    Discovered,
+    PendingApproval,
+    PairingInProgress,
+    Paired,
+    Trusted,
+    Connecting,
+    Reconnecting,
+    Connected,
+    AutoConnected,
+}
+
+/// Historical address record for a peer, enabling peer cache probe
+/// to try old addresses when a peer moves between IPs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddrRecord {
+    pub addr: std::net::SocketAddr,
+    pub last_seen_at: u64,
+    pub success_count: u32,
 }
 
 /// Full device record persisted in the peer store.
@@ -83,6 +109,25 @@ pub struct PeerRecord {
     pub pairing_requested: bool,
     /// The generated pairing PIN to display, if pairing is requested.
     pub pairing_pin: Option<String>,
+
+    // ── Multi-layer discovery state ──────────────────────────────────────────
+    /// When this peer was last seen via any discovery layer (separate from
+    /// `last_seen` which tracks TCP session activity).
+    #[serde(default)]
+    pub last_discovery_at: Option<u64>,
+    /// Which discovery layers have seen this peer.
+    #[serde(default)]
+    pub discovery_sources: Vec<DiscoverySource>,
+    /// Historical IP+port records — enables peer cache probe to try old addresses.
+    #[serde(default)]
+    pub addr_history: Vec<AddrRecord>,
+    /// When this peer last disconnected (enables adaptive probe scheduling).
+    #[serde(default)]
+    pub last_disconnect_at: Option<u64>,
+    
+    // ── Computed fields (for UI serialization) ───────────────────────────────
+    #[serde(default)]
+    pub lifecycle_state: Option<DeviceLifecycleState>,
 }
 
 impl Default for PeerRecord {
@@ -105,11 +150,44 @@ impl Default for PeerRecord {
             explicit_disconnect: false,
             pairing_requested: false,
             pairing_pin: None,
+            last_discovery_at: None,
+            discovery_sources: Vec::new(),
+            addr_history: Vec::new(),
+            last_disconnect_at: None,
+            lifecycle_state: None,
         }
     }
 }
 
 impl PeerRecord {
+    pub fn lifecycle_state(&self) -> DeviceLifecycleState {
+        if self.trusted {
+            match self.status {
+                PeerConnectionState::Connected => {
+                    if self.auto_connect {
+                        DeviceLifecycleState::AutoConnected
+                    } else {
+                        DeviceLifecycleState::Connected
+                    }
+                }
+                PeerConnectionState::Connecting => {
+                    if self.explicit_disconnect {
+                        DeviceLifecycleState::Connecting
+                    } else {
+                        DeviceLifecycleState::Reconnecting
+                    }
+                }
+                _ => DeviceLifecycleState::Trusted,
+            }
+        } else if self.pairing_requested {
+            DeviceLifecycleState::PendingApproval
+        } else if self.status == PeerConnectionState::Connecting || self.status == PeerConnectionState::Connected || self.pairing_pin.is_some() {
+            DeviceLifecycleState::PairingInProgress
+        } else {
+            DeviceLifecycleState::Discovered
+        }
+    }
+
     pub fn socket_addrs(&self) -> Vec<SocketAddr> {
         self.ips.iter().map(|ip| SocketAddr::new(*ip, self.port)).collect()
     }
@@ -198,9 +276,13 @@ impl PeerManager {
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            let tmp = path.with_extension("tmp");
+            use rand::Rng;
+            let rng_suffix: u32 = rand::thread_rng().gen();
+            let tmp = path.with_extension(format!("tmp.{}", rng_suffix));
             if std::fs::write(&tmp, &bytes).is_ok() {
                 let _ = std::fs::rename(&tmp, &path);
+            } else {
+                let _ = std::fs::remove_file(&tmp);
             }
         };
 
@@ -267,9 +349,21 @@ impl PeerManager {
                 explicit_disconnect: false,
                 pairing_requested: false,
                 pairing_pin: None,
+                last_discovery_at: Some(now),
+                discovery_sources: vec![discovery],
+                addr_history: vec![AddrRecord {
+                    addr: endpoint,
+                    last_seen_at: now,
+                    success_count: 1,
+                }],
+                last_disconnect_at: None,
+                lifecycle_state: None,
             });
 
-            record.friendly_name = friendly_name;
+            // Do not overwrite a real name with a placeholder name.
+            if !friendly_name.starts_with("device-") || record.friendly_name.starts_with("device-") || record.friendly_name.is_empty() {
+                record.friendly_name = friendly_name;
+            }
             if platform.is_some() {
                 record.platform = platform;
             }
@@ -282,6 +376,32 @@ impl PeerManager {
             if record.discovery == DiscoverySource::Unknown {
                 record.discovery = discovery;
             }
+
+            // Track multi-layer discovery metadata.
+            record.last_discovery_at = Some(now);
+            if !record.discovery_sources.contains(&discovery) {
+                record.discovery_sources.push(discovery);
+            }
+            // Maintain address history (cap at 10 entries).
+            let addr = endpoint;
+            if let Some(existing) = record.addr_history.iter_mut().find(|r| r.addr == addr) {
+                existing.last_seen_at = now;
+                existing.success_count = existing.success_count.saturating_add(1);
+            } else {
+                record.addr_history.push(AddrRecord {
+                    addr,
+                    last_seen_at: now,
+                    success_count: 1,
+                });
+                // Keep only the 10 most recently seen.
+                if record.addr_history.len() > 10 {
+                    record
+                        .addr_history
+                        .sort_by(|a, b| b.last_seen_at.cmp(&a.last_seen_at));
+                    record.addr_history.truncate(10);
+                }
+            }
+
             record.clone()
         };
 
@@ -377,6 +497,7 @@ impl PeerManager {
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Disconnected;
                 entry.last_error = reason;
+                entry.last_disconnect_at = Some(now_secs());
             }
         }
         self.save()
@@ -611,6 +732,33 @@ impl PeerManager {
             .collect()
     }
 
+    /// Returns trusted, remembered, disconnected peers that are eligible for
+    /// active probing by the peer cache probe module.
+    ///
+    /// A peer is eligible if:
+    /// - It is trusted and remembered
+    /// - It is not currently connected
+    /// - It has at least one known address (from addr_history or current IPs)
+    /// - It was not explicitly disconnected by the user
+    pub fn peers_needing_probe(&self) -> Vec<PeerRecord> {
+        let store = self.store.read().unwrap();
+        let live = self.live.read().unwrap();
+        store
+            .peers
+            .values()
+            .filter(|p| {
+                p.trusted
+                    && p.remembered
+                    && !p.explicit_disconnect
+                    && !live.contains_key(&p.id)
+                    && (p.status == PeerConnectionState::Disconnected
+                        || p.status == PeerConnectionState::Failed)
+                    && (!p.addr_history.is_empty() || !p.ips.is_empty())
+            })
+            .cloned()
+            .collect()
+    }
+
     pub fn is_connected(&self, device_id: Uuid) -> bool {
         self.live.read().unwrap().contains_key(&device_id)
     }
@@ -732,16 +880,34 @@ impl PeerManager {
             .keys()
             .copied()
             .collect();
+        let now = now_secs();
+        const STALE_THRESHOLD_SECS: u64 = 24 * 3600; // 24 hours
         let pruned = {
             let mut store = self.store.write().unwrap_or_else(|p| p.into_inner());
             let before = store.peers.len();
-            store
-                .peers
-                .retain(|id, record| live_ids.contains(id) || record.remembered || record.trusted);
+            store.peers.retain(|id, record| {
+                // Always keep live connections
+                if live_ids.contains(id) {
+                    return true;
+                }
+                // Always keep trusted peers
+                if record.trusted {
+                    return true;
+                }
+                // Remove untrusted + disconnected peers not seen in 24h
+                let last_activity = record.last_seen
+                    .or(record.last_discovery_at)
+                    .unwrap_or(0);
+                if now.saturating_sub(last_activity) > STALE_THRESHOLD_SECS {
+                    return false;
+                }
+                // Keep recent untrusted peers (they may be mid-pairing)
+                true
+            });
             before - store.peers.len()
         };
         if pruned > 0 {
-            tracing::info!(pruned, "pruned stale (transient, untrusted) peer records");
+            tracing::info!(pruned, "pruned stale peer records (untrusted, not seen in 24h)");
             let _ = self.save();
         }
         pruned

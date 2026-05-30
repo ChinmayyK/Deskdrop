@@ -131,7 +131,6 @@ android: install-android-targets
 
 _android-native:
 	cargo ndk \
-		-p 26 \
 		-t aarch64-linux-android \
 		-t armv7-linux-androideabi \
 		-t x86_64-linux-android \

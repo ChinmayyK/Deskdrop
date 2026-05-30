@@ -1446,10 +1446,25 @@ fun PeerListCard(
                 style = CRTypography.label,
                 color = CRTheme.textHigh(isDark)
             )
+            val stateText = when (peer.lifecycleState) {
+                "discovered" -> "Nearby Discovered"
+                "pending_approval" -> "Pending Approval"
+                "paired" -> "Paired Offline"
+                "connected" -> "Connected"
+                "auto_connected" -> "Auto Connected"
+                else -> if (peer.trusted) "Trusted Device" else "Pending Approval"
+            }
+            val stateColor = when (peer.lifecycleState) {
+                "discovered" -> CRTheme.brandElectric
+                "pending_approval" -> CRTheme.accentAmber
+                "paired" -> CRTheme.textMedium(isDark)
+                "connected", "auto_connected" -> CRTheme.accentGreen
+                else -> if (peer.trusted) CRTheme.accentGreen else CRTheme.accentAmber
+            }
             Text(
-                text = if (peer.trusted) "Trusted Device" else "Pending Approval",
+                text = stateText,
                 style = CRTypography.caption,
-                color = if (peer.trusted) CRTheme.accentGreen else CRTheme.accentAmber
+                color = stateColor
             )
         }
         if (!peer.trusted) {

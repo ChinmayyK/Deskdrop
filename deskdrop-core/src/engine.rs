@@ -121,6 +121,12 @@ pub enum EngineEvent {
     PairingRejected {
         device_id: Uuid,
     },
+    /// An untrusted peer was discovered on the network (useful for UI lists).
+    PeerDiscovered {
+        device_id: Uuid,
+        device_name: String,
+        platform: Option<String>,
+    },
     SystemHealthUpdated(SystemHealthState),
     ClipboardDeliveryStatus {
         activity_id: u64,
@@ -308,12 +314,12 @@ impl Default for EngineConfig {
             trust_store_path: default_trust_store_path(),
             peer_store_path: default_peer_store_path(),
             identity_path: IdentityStore::default_path(),
-            connect_timeout: Duration::from_secs(10),
-            heartbeat_interval: Duration::from_secs(30),
-            heartbeat_timeout: Duration::from_secs(300),
+            connect_timeout: Duration::from_secs(3),
+            heartbeat_interval: Duration::from_secs(10),
+            heartbeat_timeout: Duration::from_secs(30),
             bind_ip: None,
             enable_discovery: true,
-            network_poll_interval: Duration::from_secs(2),
+            network_poll_interval: Duration::from_secs(1),
             data_dir: default_peer_store_path()
                 .parent()
                 .map(PathBuf::from)
@@ -568,7 +574,16 @@ impl Engine {
             }
 
             let broadcast_addr: SocketAddr = "255.255.255.255:47824".parse().expect("static IP is valid");
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
+
+            // ── AirDrop-style startup burst ──────────────────────────────────
+            // Send 3 rapid beacons in the first 300ms so peers discover us
+            // almost instantly, then fall back to the regular interval.
+            for _ in 0..3 {
+                let _ = socket.send_to(&payload, broadcast_addr).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(1500));
             loop {
                 interval.tick().await;
                 if let Err(err) = socket.send_to(&payload, broadcast_addr).await {
@@ -664,7 +679,7 @@ impl Engine {
                     }
                     Err(err) => {
                         tracing::warn!(error = %err, "UDP listener recv_from failed");
-                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
                     }
                 }
             }
@@ -2020,6 +2035,13 @@ impl Engine {
     }
 
     pub async fn send_pairing_request(&self, target_device: Uuid) {
+        // Mark that WE initiated a pairing request so the PairingResponse
+        // handler accepts the response (CRIT-03 anti-spoof check).
+        let _ = self
+            .shared
+            .peer_manager
+            .set_pairing_requested(target_device, true);
+
         let msg = AppMessage::PairingRequest {
             origin_device: self.shared.config.device_id,
             origin_device_name: self.shared.config.device_name.clone(),
@@ -2056,6 +2078,29 @@ impl Engine {
         }
     }
 
+    pub async fn initiate_pairing(&self, target_device: Uuid) -> Result<()> {
+        self.send_pairing_request(target_device).await;
+        Ok(())
+    }
+
+    pub async fn report_discovered_peer(
+        &self,
+        device_id: Uuid,
+        device_name: String,
+        ip: String,
+        port: u16,
+    ) -> Result<()> {
+        let ip_addr = ip.parse::<std::net::IpAddr>().context("invalid IP")?;
+        let endpoint = std::net::SocketAddr::new(ip_addr, port);
+        let _ = self.shared.peer_manager.upsert_peer(
+            device_id,
+            device_name,
+            endpoint,
+            false,
+            crate::peer_manager::DiscoverySource::Manual,
+        );
+        Ok(())
+    }
     pub async fn respond_to_pairing(&self, requester_device: Uuid, accepted: bool) -> Result<()> {
         let _ = self
             .shared
@@ -2078,8 +2123,11 @@ impl Engine {
             let _ = tx.send(msg).await;
         }
         if !accepted {
-            // If we decline, disconnect the untrusted session
-            let _ = self.disconnect_peer(requester_device).await;
+            // Reject the peer in the trust store so they don't auto-reconnect
+            // and re-prompt endlessly. observe_trust checks for Rejected state
+            // and bails, preventing the re-prompt loop.
+            // reject_peer also disconnects the session internally.
+            let _ = self.reject_peer(requester_device).await;
         }
         Ok(())
     }
@@ -2153,12 +2201,25 @@ impl Engine {
     /// peer records to prevent unbounded memory/disk growth (MED-05).
     fn spawn_peer_pruner(&self) {
         let peer_manager = self.shared.peer_manager.clone();
+        let trust = self.shared.trust.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(300)); // 5 minutes
             interval.tick().await; // skip the first immediate tick
             loop {
                 interval.tick().await;
                 peer_manager.prune_stale_peers();
+
+                // Also prune stale trust records (Untrusted/Rejected not seen in 7 days)
+                const TRUST_MAX_AGE: u64 = 7 * 24 * 3600;
+                match trust.lock().await.prune_stale(TRUST_MAX_AGE) {
+                    Ok(n) if n > 0 => {
+                        tracing::info!(pruned = n, "pruned stale trust records (untrusted, >7 days old)");
+                    }
+                    Err(err) => {
+                        tracing::warn!(error = %err, "trust store pruning failed");
+                    }
+                    _ => {}
+                }
             }
         });
     }
@@ -2182,7 +2243,7 @@ impl Engine {
     fn spawn_auto_reconnector(&self) {
         let shared = self.shared.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(10));
+            let mut interval = tokio::time::interval(Duration::from_secs(3));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             // Track when we last attempted reconnection per peer to avoid flooding.
             let mut last_attempt: std::collections::HashMap<uuid::Uuid, tokio::time::Instant> =
@@ -2209,7 +2270,7 @@ impl Engine {
                     // Rate-limit: don't attempt more than once every 15 seconds per peer.
                     let now = tokio::time::Instant::now();
                     if let Some(&last) = last_attempt.get(&peer.id) {
-                        if now.duration_since(last) < Duration::from_secs(15) {
+                        if now.duration_since(last) < Duration::from_secs(5) {
                             continue;
                         }
                     }
@@ -2410,7 +2471,7 @@ async fn run_server_loop(shared: EngineShared, server: Server) {
             }
             Err(err) => {
                 error!(error = %err, "server accept error");
-                tokio::time::sleep(Duration::from_millis(200)).await;
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
         }
     }
@@ -2430,7 +2491,7 @@ async fn bind_server_with_retry(addr: SocketAddr) -> Result<Server> {
                     attempt,
                     "listener bind failed during rebind, retrying"
                 );
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
             }
             Err(err) => return Err(err),
         }
@@ -2913,12 +2974,8 @@ async fn connect_once(
     let endpoint = connected_endpoint.unwrap();
     network::optimize_stream(&stream, "outgoing engine stream");
 
-    let mut name_to_send = "Deskdrop Device";
-    if let Some(id) = expected_device_id {
-        if shared.trust.lock().await.is_trusted(id) {
-            name_to_send = &shared.config.device_name;
-        }
-    }
+    // Always send the real device name — name is not a security concern.
+    let name_to_send = &shared.config.device_name;
 
     let hs = network::handshake_initiator(
         &mut stream,
@@ -3026,6 +3083,12 @@ async fn observe_trust(
             let _ = shared
                 .peer_manager
                 .set_pairing_pin(device_id, Some(pin.display()));
+            // NOTE: We intentionally do NOT set pairing_requested here.
+            // That flag is only set by send_pairing_request() (explicit
+            // user "Pair" action) or when receiving AppMessage::PairingRequest
+            // over the wire. Setting it here would allow any connected
+            // device to auto-trust itself by sending PairingResponse
+            // without user consent (security regression).
             let _ = shared
                 .event_tx
                 .send(EngineEvent::PairingRequested {
@@ -3335,6 +3398,10 @@ fn register_session(
                         Ok(AppMessage::FileTransferAnnounce { meta }) => {
                             last_seen = Instant::now();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                let _ = sess.send(&AppMessage::FileTransferCancel {
+                                    transfer_id: meta.transfer_id,
+                                    reason: "Device not trusted (Accept pairing request first)".to_string()
+                                }).await;
                                 let _ = shared.event_tx.send(EngineEvent::Warning(format!(
                                     "ignoring file transfer from untrusted peer {}",
                                     peer_name
@@ -3794,11 +3861,15 @@ fn register_session(
                                 .get(peer_id)
                                 .map(|p| p.pairing_requested)
                                 .unwrap_or(false);
+                            let we_already_trust_them = shared.peer_manager
+                                .get(peer_id)
+                                .map(|p| p.trusted)
+                                .unwrap_or(false);
 
-                            if !we_requested_pairing {
+                            if !we_requested_pairing && !we_already_trust_them {
                                 tracing::warn!(
                                     peer_id = %peer_id,
-                                    "ignoring unsolicited PairingResponse — no pending pairing request"
+                                    "ignoring unsolicited PairingResponse — no pending pairing request and not already trusted"
                                 );
                                 continue;
                             }
@@ -3806,10 +3877,33 @@ fn register_session(
                             // Clear the pairing_requested flag now that we've received the response.
                             let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
 
-                            if accepted {
-                                let _ = shared.peer_manager.update_trust(origin_device, true);
-                                let mut trust = shared.trust.lock().await;
-                                let _ = trust.trust_peer(origin_device);
+                            if !accepted {
+                                tracing::info!(peer_id = %peer_id, "peer rejected pairing request");
+                                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                                break "peer rejected pairing request".to_string();
+                            } else {
+                                // ── CRITICAL: Establish mutual trust ──────────────
+                                // The remote peer accepted our pairing request and
+                                // already trusts us (set in respond_to_pairing).
+                                // We must trust them back so the connection is fully
+                                // bidirectional — otherwise the dashboard shows
+                                // "not connected" and file transfers fail.
+                                tracing::info!(peer_id = %peer_id, "peer accepted pairing — establishing mutual trust");
+                                if !we_already_trust_them {
+                                    let mut trust = shared.trust.lock().await;
+                                    let _ = trust.trust_peer(peer_id);
+                                    let _ = shared.peer_manager.update_trust(peer_id, true);
+                                }
+                                let _ = shared.peer_manager.set_auto_connect(peer_id, true);
+                                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+
+                                // Emit PeerConnected so the UI updates immediately.
+                                let _ = shared.event_tx.send(EngineEvent::PeerConnected {
+                                    device_id: peer_id,
+                                    device_name: peer_name.clone(),
+                                    addr: endpoint,
+                                    trusted: true,
+                                }).await;
                             }
                             let _ = shared.event_tx.send(EngineEvent::PairingResponse {
                                 device_id: origin_device,
@@ -4026,10 +4120,54 @@ fn register_session(
                     .map(|peer| peer.trusted || peer.discovery == DiscoverySource::Manual)
                     .unwrap_or(false)
                 {
-                    // Relies on `spawn_auto_reconnector` watchdog to pick up the reconnect
-                    // safely, rather than aggressively spinning a new connect_loop which
-                    // can cause 0-delay infinite reconnect loops if the socket immediately closes.
-                    tracing::debug!("peer disconnected, awaiting auto-reconnector watchdog");
+                    // ── AirDrop-style immediate reconnect ────────────────────
+                    // Instead of waiting for the 3s auto-reconnector tick,
+                    // spawn an immediate reconnect attempt after a short
+                    // anti-loop delay. This cuts reconnect latency from ~3s
+                    // to ~500ms for trusted peers.
+                    let shared_reconnect = shared.clone();
+                    let peer_endpoints = shared
+                        .peer_manager
+                        .get(peer_id)
+                        .map(|p| p.socket_addrs())
+                        .unwrap_or_default();
+                    let peer_discovery = shared
+                        .peer_manager
+                        .get(peer_id)
+                        .map(|p| p.discovery)
+                        .unwrap_or(DiscoverySource::Unknown);
+                    if !peer_endpoints.is_empty() {
+                        tokio::spawn(async move {
+                            // Small delay to prevent 0-delay infinite loops
+                            // if the remote immediately resets.
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            // Only attempt if still disconnected (auto-reconnector
+                            // may have already picked it up).
+                            let still_offline = shared_reconnect
+                                .peer_manager
+                                .get(peer_id)
+                                .map(|p| {
+                                    p.status
+                                        == crate::peer_manager::PeerConnectionState::Disconnected
+                                        || p.status
+                                            == crate::peer_manager::PeerConnectionState::Failed
+                                })
+                                .unwrap_or(false);
+                            if still_offline {
+                                tracing::debug!(
+                                    peer_id = %peer_id,
+                                    "immediate reconnect: attempting fast recovery"
+                                );
+                                let _ = connect_once(
+                                    shared_reconnect,
+                                    peer_endpoints,
+                                    Some(peer_id),
+                                    peer_discovery,
+                                )
+                                .await;
+                            }
+                        });
+                    }
                 }
             }
             Ok(false) => {}
@@ -4065,7 +4203,7 @@ async fn should_initiate_session(
     }
     match discovery {
         DiscoverySource::Manual => true,
-        DiscoverySource::Mdns | DiscoverySource::Unknown | DiscoverySource::UdpBeacon => {
+        DiscoverySource::Mdns | DiscoverySource::Unknown | DiscoverySource::UdpBeacon | DiscoverySource::UdpMulticast | DiscoverySource::HotspotProbe => {
             // Prevent SSRF: only auto-connect to trusted peers. Untrusted peers
             // must be manually connected via the UI by the user.
             if !shared.trust.lock().await.is_trusted(peer_id) {

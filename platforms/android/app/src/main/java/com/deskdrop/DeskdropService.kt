@@ -55,6 +55,7 @@ object DeskdropJni {
     const val CR_EVENT_PAIRING_REQUESTED     = 4
     const val CR_EVENT_PEER_CONNECTED        = 5
     const val CR_EVENT_PEER_DISCONNECTED     = 6
+    const val CR_EVENT_PEER_DISCOVERED       = 27
     const val CR_EVENT_WARNING               = 7
     const val CR_EVENT_CLIPBOARD_SYNCED      = 8
     // 9, 10 reserved
@@ -140,6 +141,8 @@ object DeskdropJni {
      * Returns 0 on success, -1 on error.
      */
     @JvmStatic external fun connectToPeer(handle: Long, ip: String, port: Int): Int
+    @JvmStatic external fun reportDiscoveredPeer(handle: Long, deviceId: String, deviceName: String, ip: String, port: Int): Int
+    @JvmStatic external fun initiatePairing(handle: Long, deviceId: String): Int
     @JvmStatic external fun disconnectPeer(handle: Long, deviceId: String): Int
 
     /**
@@ -1172,6 +1175,18 @@ class DeskdropService : Service() {
             }
             DeskdropJni.CR_EVENT_SYSTEM_HEALTH_UPDATED -> {
                 // TODO: Update system health state model
+            }
+
+            // ── Peer discovered ───────────────────────────────────────────────
+            DeskdropJni.CR_EVENT_PEER_DISCOVERED -> {
+                val deviceId = DeskdropJni.eventDeviceId(ev) ?: return
+                val name = resolvePeerDisplayName(
+                    deviceId,
+                    DeskdropJni.eventDeviceName(ev)
+                )
+                Log.i(TAG, "Peer discovered: $name (id=$deviceId)")
+                persistStatus() // Triggers UI update via Flow
+                updateForegroundNotification()
             }
 
             // ── Peer connected ────────────────────────────────────────────────
@@ -2343,29 +2358,25 @@ class DeskdropService : Service() {
                 }
 
                 val peerDeviceId = info.attributeString("id")
+                if (peerDeviceId.isNullOrBlank()) {
+                    Log.w(TAG, "NSD: peer missing device id, skipping")
+                    return
+                }
                 val myId = myDeviceId
-                if (!peerDeviceId.isNullOrBlank() && !myId.isNullOrBlank()) {
-                    if (peerDeviceId.equals(myId, ignoreCase = true)) {
-                        Log.d(TAG, "NSD: skipping self-resolved peer id $peerDeviceId")
-                        return
-                    }
-                    if (!shouldInitiateDiscoveredSession(myId, peerDeviceId)) {
-                        Log.i(
-                            TAG,
-                            "NSD: $peerDeviceId should initiate against $myId; waiting for inbound session"
-                        )
-                        return
-                    }
+                if (myId != null && peerDeviceId.equals(myId, ignoreCase = true)) {
+                    Log.d(TAG, "NSD: skipping self-resolved peer id $peerDeviceId")
+                    return
                 }
 
                 val h = engineHandle
                 if (h != 0L) {
-                    val result = DeskdropJni.connectToPeer(h, ip, port)
+                    val fallbackName = "Deskdrop Device" // Name is discovered during handshake
+                    val result = DeskdropJni.reportDiscoveredPeer(h, peerDeviceId, fallbackName, ip, port)
                     if (result == 0) {
-                        Log.i(TAG, "NSD: connectToPeer($ip:$port) queued")
+                        Log.i(TAG, "NSD: reportDiscoveredPeer($ip:$port, id=$peerDeviceId) pushed to DiscoveryManager")
                         nsdRetryCount.set(0L)
                     } else {
-                        Log.w(TAG, "NSD: connectToPeer($ip:$port) failed (result=$result)")
+                        Log.w(TAG, "NSD: reportDiscoveredPeer failed (result=$result)")
                     }
                 }
                 } finally {

@@ -896,6 +896,8 @@ private struct DeviceCard: View {
     let rename: (ManagedDevice) -> Void
     var emphasizeTrust: Bool = false
     @State private var isHovered = false
+    @Environment(\.colorScheme) var colorScheme
+    private var isDark: Bool { colorScheme == .dark }
 
     private var accent: Color { emphasizeTrust ? CRTheme.accentOrange : device.connectionState.color }
 
@@ -973,6 +975,12 @@ private struct DeviceCard: View {
                 }
                 if device.trustState != .trusted {
                     if device.pairingRequested {
+                        if let pin = device.pairingPin, !pin.isEmpty {
+                            Text("PIN: \(pin)")
+                                .font(.system(.body, design: .monospaced).weight(.bold))
+                                .foregroundStyle(CRTheme.ink)
+                                .padding(.horizontal, 8)
+                        }
                         Button("Accept") { store.respondToPairing(device, accepted: true) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
                         Button("Decline") { store.respondToPairing(device, accepted: false) }.buttonStyle(CRDestructiveButtonStyle())
                     } else {

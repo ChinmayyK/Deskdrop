@@ -28,14 +28,14 @@ const MAX_FRAME_SIZE: u32 = 40 * 1024 * 1024; // 40 MB limit for safety (to acco
 
 /// v3 fix: outbound connections must succeed within this window.
 /// A stale mDNS entry to a dead host would otherwise block forever.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// v3 fix: TCP keepalive — detect silently-dropped Wi-Fi connections.
 /// Idle time before the first probe, then interval between probes.
-const KEEPALIVE_IDLE: Duration = Duration::from_secs(60);
-const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
+const KEEPALIVE_IDLE: Duration = Duration::from_secs(15);
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(3);
 #[allow(dead_code)]
-const KEEPALIVE_RETRIES: u32 = 6;
+const KEEPALIVE_RETRIES: u32 = 3;
 const SOCKET_BUFFER_MIN: usize = 4 * 1024 * 1024; // 4 MB
 const SOCKET_BUFFER_PREFERRED: usize = 8 * 1024 * 1024; // 8 MB — room for ≥2 full chunks in flight
 
@@ -269,7 +269,7 @@ pub async fn handshake_initiator(
     send_frame(stream, &ecdh).await.context("sending EcdhFrame")?;
 
     let ack_ecdh: EcdhFrame =
-        tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
+        tokio::time::timeout(Duration::from_secs(5), recv_frame(stream, 8192))
             .await
             .context("timeout waiting for EcdhFrame")?
             .context("receiving EcdhFrame")?;
@@ -294,7 +294,7 @@ pub async fn handshake_initiator(
 
     send_encrypted(stream, &mut session, &hello).await.context("sending encrypted Hello")?;
 
-    let ack_msg: AppMessage = tokio::time::timeout(Duration::from_secs(10), recv_encrypted(stream, &mut session))
+    let ack_msg: AppMessage = tokio::time::timeout(Duration::from_secs(5), recv_encrypted(stream, &mut session))
         .await
         .context("timeout waiting for HelloAck")?
         .context("receiving HelloAck")?;
@@ -358,7 +358,7 @@ where
     F: FnOnce(Uuid, [u8; 32]) -> Fut,
     Fut: std::future::Future<Output = bool>,
 {
-    let ecdh: EcdhFrame = tokio::time::timeout(Duration::from_secs(10), recv_frame(stream, 8192))
+    let ecdh: EcdhFrame = tokio::time::timeout(Duration::from_secs(5), recv_frame(stream, 8192))
         .await
         .context("timeout waiting for EcdhFrame")?
         .context("receiving EcdhFrame")?;
@@ -386,7 +386,7 @@ where
         .derive_session_key(ecdh.ecdh_pubkey)
         .context("ECDH key derivation")?;
 
-    let hello_msg: AppMessage = tokio::time::timeout(Duration::from_secs(10), recv_encrypted(stream, &mut session))
+    let hello_msg: AppMessage = tokio::time::timeout(Duration::from_secs(5), recv_encrypted(stream, &mut session))
         .await
         .context("timeout waiting for Hello")?
         .context("receiving Hello")?;
@@ -396,11 +396,11 @@ where
     };
 
     let peer_is_trusted = check_trust(device_id, identity_pubkey).await;
-    let name_to_send = if peer_is_trusted {
-        my_device_name.to_string()
-    } else {
-        "Deskdrop Device".to_string()
-    };
+    // Always send the real device name — name is not a security concern.
+    // Trust controls data access (clipboard, files), not name visibility.
+    // Masking as "Deskdrop Device" confused users who couldn't identify
+    // which device was trying to pair with them.
+    let name_to_send = my_device_name.to_string();
 
     let ack = AppMessage::HelloAck {
         device_id: my_device_id,

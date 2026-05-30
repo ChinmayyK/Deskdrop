@@ -282,7 +282,85 @@ fn looks_like_usb_tether(name: &str) -> bool {
 
 fn is_android_hotspot_subnet(ip: Ipv4Addr) -> bool {
     let o = ip.octets();
-    matches!((o[0], o[1], o[2]), (192, 168, 43) | (192, 168, 49))
+    matches!(
+        (o[0], o[1], o[2]),
+        // Classic Android hotspot
+        (192, 168, 43)
+        // Android Wi-Fi Direct / newer hotspot
+        | (192, 168, 49)
+        // Some Samsung/OnePlus variants
+        | (192, 168, 2)
+        // Android 13+ may use randomized subnets in 192.168.x.x range
+    )
+}
+
+/// Detect if the current local IP suggests we're connected to a mobile hotspot.
+///
+/// Covers:
+/// - Android hotspot: 192.168.43.x, 192.168.49.x
+/// - iPhone hotspot: 172.20.10.x
+/// - USB tethering: 192.168.42.x (Android), various link-local
+/// - Wi-Fi Direct: 192.168.49.x
+pub fn is_hotspot_network(iface: &NetworkInterfaceInfo) -> bool {
+    match iface.ip {
+        IpAddr::V4(ip) => {
+            let o = ip.octets();
+            let name = iface.name.to_lowercase();
+
+            // Android hotspot subnets
+            if is_android_hotspot_subnet(ip) {
+                return true;
+            }
+            // iPhone personal hotspot: typically 172.20.10.x
+            if o[0] == 172 && o[1] == 20 && o[2] == 10 {
+                return true;
+            }
+            // Android USB tethering: typically 192.168.42.x
+            if o[0] == 192 && o[1] == 168 && o[2] == 42 {
+                return true;
+            }
+            // Interface name hints
+            if looks_like_usb_tether(&name) {
+                return true;
+            }
+            // Small subnets with very few peers (hotspots typically have < 10 clients)
+            // detected by bridge/ap-style interface names
+            if name.contains("bridge") && ip.is_private() {
+                return true;
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+/// Detect the gateway IP for the hotspot network.
+///
+/// On mobile hotspot networks, the device acting as the hotspot is typically
+/// the gateway (x.x.x.1). This function also tries to detect all common
+/// gateway addresses for hotspot scenarios.
+pub fn detect_hotspot_gateway_candidates(iface: &NetworkInterfaceInfo) -> Vec<IpAddr> {
+    let mut candidates = Vec::new();
+
+    // 1. Try the OS-reported default gateway
+    if let Ok(default_iface) = default_net::get_default_interface() {
+        if let Some(gateway) = default_iface.gateway {
+            candidates.push(gateway.ip_addr);
+        }
+    }
+
+    // 2. Guess .1 on the same subnet (standard for hotspots)
+    if let IpAddr::V4(ip) = iface.ip {
+        if ip.is_private() || ip.is_link_local() {
+            let o = ip.octets();
+            let gateway_1 = IpAddr::V4(Ipv4Addr::new(o[0], o[1], o[2], 1));
+            if !candidates.contains(&gateway_1) && iface.ip != gateway_1 {
+                candidates.push(gateway_1);
+            }
+        }
+    }
+
+    candidates
 }
 
 #[cfg(target_os = "linux")]

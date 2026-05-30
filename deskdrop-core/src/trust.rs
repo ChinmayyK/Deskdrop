@@ -282,6 +282,27 @@ impl TrustStore {
             .count()
     }
 
+    /// Remove stale `Untrusted` and `Rejected` records not seen in `max_age_secs`.
+    /// Trusted and Revoked records are always kept.
+    /// Returns the number of records pruned.
+    pub fn prune_stale(&mut self, max_age_secs: u64) -> Result<usize> {
+        let now = now_secs();
+        let before = self.data.devices.len();
+        self.data.devices.retain(|_, record| {
+            match record.state {
+                TrustState::Trusted | TrustState::Revoked => true,
+                TrustState::Untrusted | TrustState::Rejected => {
+                    now.saturating_sub(record.last_seen) <= max_age_secs
+                }
+            }
+        });
+        let pruned = before - self.data.devices.len();
+        if pruned > 0 {
+            self.save()?;
+        }
+        Ok(pruned)
+    }
+
     /// Iterator over all `Trusted` records.
     pub fn all_trusted(&self) -> impl Iterator<Item = &TrustRecord> {
         self.data

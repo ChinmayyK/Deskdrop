@@ -64,6 +64,124 @@ impl std::fmt::Display for PairingPin {
     }
 }
 
+// ── Pairing session state machine ─────────────────────────────────────────────
+
+/// State of a pairing attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairingState {
+    /// Connection initiated, waiting for handshake.
+    Initiated,
+    /// Handshake complete, PIN displayed to user.
+    PinDisplayed,
+    /// User confirmed PIN match on this device.
+    Confirmed,
+    /// User rejected the pairing.
+    Rejected,
+    /// Pairing timed out (no user action within PAIRING_TIMEOUT).
+    TimedOut,
+    /// Pairing completed successfully — peer is now trusted.
+    Completed,
+}
+
+/// Tracks an in-progress pairing attempt for the seamless click-to-pair flow.
+///
+/// Created when the user clicks an untrusted device in the UI, or when
+/// an untrusted peer connects to us. The session progresses through states:
+///
+/// ```text
+/// Initiated → PinDisplayed → Confirmed → Completed
+///                           → Rejected
+///                           → TimedOut
+/// ```
+#[derive(Debug)]
+pub struct PairingSession {
+    pub device_id: uuid::Uuid,
+    pub device_name: String,
+    pub pin: PairingPin,
+    pub pubkey_bytes: [u8; 32],
+    pub state: PairingState,
+    created_at: Instant,
+}
+
+impl PairingSession {
+    pub fn new(
+        device_id: uuid::Uuid,
+        device_name: String,
+        shared_secret: &[u8],
+        pubkey_bytes: [u8; 32],
+    ) -> Self {
+        Self {
+            device_id,
+            device_name,
+            pin: derive_pin(shared_secret),
+            pubkey_bytes,
+            state: PairingState::Initiated,
+            created_at: Instant::now(),
+        }
+    }
+
+    /// Transition to PinDisplayed state.
+    pub fn display_pin(&mut self) {
+        if self.state == PairingState::Initiated {
+            self.state = PairingState::PinDisplayed;
+        }
+    }
+
+    /// User confirmed the PIN match.
+    pub fn confirm(&mut self) -> bool {
+        if self.state == PairingState::PinDisplayed {
+            self.state = PairingState::Confirmed;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// User rejected the pairing.
+    pub fn reject(&mut self) -> bool {
+        if self.state == PairingState::PinDisplayed || self.state == PairingState::Initiated {
+            self.state = PairingState::Rejected;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Mark as completed (peer trusted).
+    pub fn complete(&mut self) {
+        if self.state == PairingState::Confirmed {
+            self.state = PairingState::Completed;
+        }
+    }
+
+    /// Check and update timeout.
+    pub fn check_timeout(&mut self) -> bool {
+        if self.is_expired() && self.state != PairingState::Completed
+            && self.state != PairingState::Rejected
+        {
+            self.state = PairingState::TimedOut;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_expired(&self) -> bool {
+        self.created_at.elapsed() > PAIRING_TIMEOUT
+    }
+
+    pub fn time_remaining(&self) -> Duration {
+        PAIRING_TIMEOUT.saturating_sub(self.created_at.elapsed())
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self.state,
+            PairingState::Completed | PairingState::Rejected | PairingState::TimedOut
+        )
+    }
+}
+
 // ── Pairing session ───────────────────────────────────────────────────────────
 
 /// How long a pairing request is valid before it auto-expires.

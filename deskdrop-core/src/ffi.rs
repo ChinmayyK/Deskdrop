@@ -237,6 +237,7 @@ pub const PB_EVENT_CAMERA_STREAM_ACCEPT: c_int = 23;
 pub const PB_EVENT_CAMERA_STREAM_STOP: c_int = 24;
 pub const PB_EVENT_CAMERA_FRAME: c_int = 25;
 pub const PB_EVENT_SYSTEM_HEALTH_UPDATED: c_int = 26;
+pub const PB_EVENT_PEER_DISCOVERED: c_int = 27;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -323,6 +324,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CameraStreamAccept { .. } => PB_EVENT_CAMERA_STREAM_ACCEPT,
         EngineEvent::CameraStreamStop { .. } => PB_EVENT_CAMERA_STREAM_STOP,
         EngineEvent::CameraFrameReceived { .. } => PB_EVENT_CAMERA_FRAME,
+        EngineEvent::PeerDiscovered { .. } => PB_EVENT_PEER_DISCOVERED,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
     }
 }

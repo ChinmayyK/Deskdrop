@@ -83,7 +83,7 @@ final class DeskdropIPCClient {
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
             return "\(runtime)/deskdrop.sock"
         }
-        return "/tmp/deskdrop-\(getuid()).sock"
+        return "/tmp/deskdrop-\(getuid())/deskdrop.sock"
     }
 
     func status() async throws -> IpcStatusResponse {

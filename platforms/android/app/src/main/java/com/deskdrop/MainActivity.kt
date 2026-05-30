@@ -169,13 +169,10 @@ class MainActivity : ComponentActivity() {
                             isDark = isDarkMode.value,
                             peers = peers.value,
                             onConnectPeer = { peer ->
-                                val ip = peer.ip ?: return@OnboardingScreen
-                                val port = 47823 // Default port
                                 ContextCompat.startForegroundService(this@MainActivity,
                                     Intent(this@MainActivity, DeskdropService::class.java).apply {
-                                        action = DeskdropService.ACTION_CONNECT_MANUAL
-                                        putExtra("ip", ip)
-                                        putExtra("port", port)
+                                        action = DeskdropService.ACTION_SEND_PAIRING_REQUEST
+                                        putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
                                     }
                                 )
                             },

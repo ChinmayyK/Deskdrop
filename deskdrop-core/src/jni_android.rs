@@ -341,6 +341,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         CameraFrameReceived { .. } => 25,
         PairingRequest { .. } => 7,
         PairingResponse { .. } => 7,
+        PeerDiscovered { .. } => 5,
         Warning(_) => 7,
     }
 }
@@ -1085,6 +1086,65 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_connectToPeer(
     };
     let h = unsafe { &*(handle as *const AndroidHandle) };
     match rt().block_on(h.engine.connect_to_peer(ip_str, port as u16)) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_reportDiscoveredPeer(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    device_id_jstr: JString,
+    device_name_jstr: JString,
+    ip: JString,
+    port: jint,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let device_id_str: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id_str) else {
+        return -1;
+    };
+    let device_name_str: String = match env.get_string(&device_name_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let ip_str: String = match env.get_string(&ip) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.report_discovered_peer(device_id, device_name_str, ip_str, port as u16)) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_initiatePairing(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    device_id_jstr: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let device_id_str: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id_str) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.initiate_pairing(device_id)) {
         Ok(()) => 0,
         Err(_) => -1,
     }

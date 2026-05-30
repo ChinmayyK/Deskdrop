@@ -222,7 +222,7 @@ final class DeskdropStore: ObservableObject {
             let s = try await ipc.status()
             ipcFailureCount = 0
             isRunning      = true
-            connectedCount = s.peers.filter { $0.status == "connected" }.count
+            connectedCount = s.peers.filter { $0.status == "connected" && $0.trusted }.count
             let reconnectingCount = s.peers.filter { $0.status == "connecting" }.count
             let reconnectableCount = s.peers.filter {
                 $0.status != "connected" &&

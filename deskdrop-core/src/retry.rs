@@ -5,7 +5,7 @@
 //! attempts without hammering the network.
 //!
 //! # Policy
-//! - First retry: 500 ms
+//! - First retry: 200 ms
 //! - Each subsequent retry doubles the interval, up to `MAX_DELAY`.
 //! - ±25 % random jitter prevents thundering herd when many peers restart
 //!   simultaneously (e.g. whole office reboots after a power cut).
@@ -18,11 +18,11 @@ use tracing::debug;
 // ── Configuration ─────────────────────────────────────────────────────────────
 
 /// Default initial retry interval.
-pub const INITIAL_DELAY: Duration = Duration::from_millis(500);
+pub const INITIAL_DELAY: Duration = Duration::from_millis(200);
 /// Maximum back-off interval before we give up / wait for mDNS.
-pub const MAX_DELAY: Duration = Duration::from_secs(30);
+pub const MAX_DELAY: Duration = Duration::from_secs(5);
 /// Give up after this many consecutive failures.
-pub const MAX_ATTEMPTS: u32 = 8;
+pub const MAX_ATTEMPTS: u32 = 5;
 /// Jitter fraction — delay ± this fraction of the current interval.
 const JITTER: f64 = 0.25;
 

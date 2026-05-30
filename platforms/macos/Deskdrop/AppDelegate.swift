@@ -161,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
             path = "\(runtime)/deskdrop.sock"
         } else {
-            path = "/tmp/deskdrop-\(getuid()).sock"
+            path = "/tmp/deskdrop-\(getuid())/deskdrop.sock"
         }
         return FileManager.default.fileExists(atPath: path)
     }
@@ -171,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
             path = "\(runtime)/deskdrop.sock"
         } else {
-            path = "/tmp/deskdrop-\(getuid()).sock"
+            path = "/tmp/deskdrop-\(getuid())/deskdrop.sock"
         }
         if FileManager.default.fileExists(atPath: path) {
             try? FileManager.default.removeItem(atPath: path)
@@ -358,7 +358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // ── Instant "device connected" notification ──────────────────────────
         store.$peers
             .receive(on: RunLoop.main)
-            .map { $0.filter(\.connected).map(ManagedDevice.init) }
+            .map { $0.map(ManagedDevice.init).filter(\.isConnected) }
             .sink { [weak self] (devices: [ManagedDevice]) in
                 guard let self else { return }
                 let count = devices.count

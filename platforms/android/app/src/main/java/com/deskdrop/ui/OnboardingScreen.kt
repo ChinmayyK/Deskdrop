@@ -180,13 +180,8 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
 private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCancel: () -> Unit) {
     var hasTimedOut by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedPeer?.id, selectedPeer?.pairingRequested) {
-        hasTimedOut = false
-        if (selectedPeer != null && !selectedPeer.pairingRequested) {
-            kotlinx.coroutines.delay(10000) // 10 second timeout
-            hasTimedOut = true
-        }
-    }
+    // Wait indefinitely for the PairingActivity to launch once the handshake completes.
+    // The core engine manages connection timeouts natively.
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("Step 2: Connect & Pair", style = CRTypography.h1, color = CRTheme.textHigh(isDark))

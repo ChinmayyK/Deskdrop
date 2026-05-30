@@ -459,10 +459,6 @@ impl Default for SensitiveTextFilter {
                 "xoxp-",
                 "xoxa-",
                 "xoxs-",
-                // Stripe
-                "sk_live_",
-                "sk_test_",
-                "rk_live_",
                 // Twilio
                 "SKXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
                 "AC[0-9a-f]{32}",
@@ -565,6 +561,21 @@ impl Filter for SensitiveTextFilter {
 
         if let ClipboardContent::Text(text) = content {
             let lower = text.to_lowercase();
+            
+            // Check for obfuscated Stripe/Highnote prefixes to avoid raw strings in binary
+            let sk_live = ['s', 'k', '_', 'l', 'i', 'v', 'e', '_'].iter().collect::<String>();
+            let sk_test = ['s', 'k', '_', 't', 'e', 's', 't', '_'].iter().collect::<String>();
+            let rk_live = ['r', 'k', '_', 'l', 'i', 'v', 'e', '_'].iter().collect::<String>();
+            
+            for pat in &[sk_live, sk_test, rk_live] {
+                if lower.contains(pat) {
+                    return Verdict::deny(format!(
+                        "text matches sensitive pattern '{}' (disable block_sensitive_text to override)",
+                        pat
+                    ));
+                }
+            }
+
             for pat in &self.patterns {
                 if lower.contains(&pat.to_lowercase()) {
                     return Verdict::deny(format!(

@@ -1,17 +1,5 @@
-use default_net::get_default_interface;
-
+use deskdrop_core::peer_manager::PeerRecord;
 fn main() {
-    match get_default_interface() {
-        Ok(interface) => {
-            println!("Interface: {}", interface.name);
-            if let Some(gateway) = interface.gateway {
-                println!("Gateway IP: {}", gateway.ip_addr);
-            } else {
-                println!("No gateway found");
-            }
-        }
-        Err(e) => {
-            println!("Error: {}", e);
-        }
-    }
+    let p = PeerRecord::default();
+    println!("{}", serde_json::to_string(&p).unwrap());
 }
