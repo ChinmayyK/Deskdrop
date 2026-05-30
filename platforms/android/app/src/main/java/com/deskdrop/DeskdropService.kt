@@ -1954,7 +1954,7 @@ class DeskdropService : Service() {
         Log.i(TAG, "Call state: $stateStr number=$number contact=$contact")
         val h = engineHandle
         if (h != 0L) {
-            DeskdropJni.pushCallState(h, stateStr, "", "")
+            DeskdropJni.pushCallState(h, stateStr, number, contact)
         }
         // Show/dismiss the Android-side call notification
         when (stateStr) {

@@ -2414,10 +2414,17 @@ fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Disco
                     let name = peer_shared
                         .peer_manager
                         .get(device_id)
-                        .map(|peer| peer.friendly_name);
-                    let _ = peer_shared
-                        .peer_manager
-                        .mark_disconnected(device_id, Some("mDNS announcement lost".to_string()));
+                        .map(|peer| peer.friendly_name.clone());
+                    
+                    if let Some(peer) = peer_shared.peer_manager.get(device_id) {
+                        if !peer.trusted && !peer.remembered {
+                            let _ = peer_shared.peer_manager.forget_device(device_id);
+                        } else {
+                            let _ = peer_shared
+                                .peer_manager
+                                .mark_disconnected(device_id, Some("mDNS announcement lost".to_string()));
+                        }
+                    }
                     let _ = peer_shared
                         .event_tx
                         .send(EngineEvent::PeerDisconnected {

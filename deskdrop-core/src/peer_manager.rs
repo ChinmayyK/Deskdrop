@@ -270,7 +270,18 @@ impl PeerManager {
 
     pub fn save(&self) -> Result<()> {
         let path = self.path.clone();
-        let bytes = serde_json::to_vec_pretty(&*self.store.read().unwrap())?;
+        
+        let store_to_save = {
+            let store = self.store.read().unwrap();
+            PeerStoreData {
+                peers: store.peers.iter()
+                    .filter(|(_, p)| p.trusted || p.remembered)
+                    .map(|(id, p)| (*id, p.clone()))
+                    .collect(),
+            }
+        };
+        
+        let bytes = serde_json::to_vec_pretty(&store_to_save)?;
 
         let save_fn = move || {
             if let Some(parent) = path.parent() {
