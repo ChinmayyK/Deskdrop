@@ -111,14 +111,15 @@ fun PairingScreen(
                 
                 Row(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .background(CRTheme.textHigh(isDark).copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        .padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     pin.forEach { char ->
                         Text(
                             text = char.toString(),
-                            fontSize = 48.sp,
+                            fontSize = 40.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Medium,
                             color = CRTheme.textHigh(isDark)

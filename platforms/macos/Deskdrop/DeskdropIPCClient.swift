@@ -230,8 +230,12 @@ final class DeskdropIPCClient {
         _ = try await send(cmd: ["cmd": "resume_file_transfer", "transfer_id": transferId])
     }
 
-    func latestCameraFrame() async throws -> Data? {
-        let raw = try await send(cmd: ["cmd": "latest_camera_frame"])
+    func latestCameraFrame(targetDeviceId: String? = nil) async throws -> Data? {
+        var cmd: [String: Any] = ["cmd": "latest_camera_frame"]
+        if let id = targetDeviceId {
+            cmd["target_device"] = id
+        }
+        let raw = try await send(cmd: cmd)
         let resp = try JSONDecoder().decode(IpcResponse<IpcCameraFrameResponse>.self, from: raw)
         guard let b64 = resp.data?.frame_base64 else { return nil }
         return Data(base64Encoded: b64)

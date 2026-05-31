@@ -192,7 +192,7 @@ pub enum IpcRequest {
     /// Get a serializable snapshot of global runtime metrics.
     GetMetrics,
     /// Poll the latest camera frame received from any peer.
-    LatestCameraFrame { target_device: String },
+    LatestCameraFrame { target_device: Option<String> },
 
     // ── History tag management ────────────────────────────────────────────────
     /// Add a tag to a history entry.
@@ -697,9 +697,22 @@ pub async fn handle_ipc_request(
                 "device_id": eng.device_id().await,
             }))
         }
-        IpcRequest::LatestCameraFrame { target_device: _ } => {
-            // The FFI / local engine doesn't track this yet, so return empty
-            IpcResponse::ok_empty()
+        IpcRequest::LatestCameraFrame { target_device } => {
+            let peer = target_device.and_then(|id| crate::ipc::parse_uuid(&id).ok());
+            let frame = if let Some(uid) = peer {
+                eng.get_latest_camera_frame(uid)
+            } else {
+                eng.camera_frames().await.values().next().cloned()
+            };
+
+            if let Some(f) = frame {
+                use base64::{engine::general_purpose, Engine as _};
+                IpcResponse::ok(serde_json::json!({
+                    "frame_base64": general_purpose::STANDARD.encode(&f)
+                }))
+            } else {
+                IpcResponse::ok_empty()
+            }
         }
         // ── History ────────────────────────────────────────────────────────
         IpcRequest::History { last } => IpcResponse::ok(eng.history_recent(last).await),

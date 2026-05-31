@@ -4,15 +4,17 @@ import SwiftUI
 class CameraStreamState: ObservableObject {
     @Published var image: NSImage? = nil
     @Published var isWaiting: Bool = true
+    @Published var pulse: Bool = false
 }
 
 struct CameraPreviewView: View {
     @ObservedObject var state: CameraStreamState
     var onClose: () -> Void
+    @State private var isHoveringClose = false
     
     var body: some View {
         ZStack {
-            // Background
+            // Premium glass background
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                 .edgesIgnoringSafeArea(.all)
             
@@ -21,37 +23,70 @@ struct CameraPreviewView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(8)
+                    .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
             
             if state.isWaiting {
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.5)
-                    Text("Waiting for video stream...")
-                        .font(.system(size: 18, weight: .medium, design: .rounded))
-                        .foregroundColor(.white)
+                VStack(spacing: 24) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.2), lineWidth: 4)
+                            .frame(width: 64, height: 64)
+                        
+                        Circle()
+                            .trim(from: 0, to: 0.7)
+                            .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .frame(width: 64, height: 64)
+                            .rotationEffect(Angle(degrees: state.pulse ? 360 : 0))
+                            .animation(Animation.linear(duration: 1).repeatForever(autoreverses: false), value: state.pulse)
+                    }
+                    .onAppear { state.pulse = true }
+                    
+                    Text("Connecting to Camera...")
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.9))
+                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
                 }
+                .transition(.opacity)
             }
             
-            // Floating bottom bar
+            // Floating control bar
             VStack {
                 Spacer()
                 Button(action: onClose) {
-                    HStack {
-                        Image(systemName: "xmark.circle.fill")
-                        Text("Stop Viewing")
+                    HStack(spacing: 8) {
+                        Image(systemName: "video.slash.fill")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("Stop Streaming")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.6))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(
+                        isHoveringClose
+                        ? LinearGradient(colors: [Color.red.opacity(0.9), Color.pink.opacity(0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [Color.black.opacity(0.7), Color.black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
+                    )
+                    .overlay(
+                        Capsule().stroke(Color.white.opacity(isHoveringClose ? 0.3 : 0.1), lineWidth: 1)
+                    )
                     .foregroundColor(.white)
                     .clipShape(Capsule())
+                    .shadow(color: isHoveringClose ? Color.red.opacity(0.4) : Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .scaleEffect(isHoveringClose ? 1.05 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHoveringClose)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .padding(.bottom, 24)
+                .onHover { hovering in
+                    isHoveringClose = hovering
+                }
+                .padding(.bottom, 32)
             }
         }
+        .animation(.easeInOut(duration: 0.3), value: state.isWaiting)
     }
 }
 

@@ -109,40 +109,55 @@ fun CameraScreenContent(activity: CameraStreamActivity) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .padding(horizontal = 24.dp, vertical = 40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Top bar
+                // Sleek Top bar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
-                        color = Color.Black.copy(alpha = 0.4f),
-                        shape = MaterialTheme.shapes.medium
+                        color = Color(0x66000000), // Translucent black
+                        shape = CircleShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x33FFFFFF))
                     ) {
-                        Text(
-                            text = "Continuity Camera",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.Green,
+                                modifier = Modifier.size(16.dp).padding(end = 6.dp)
+                            )
+                            Text(
+                                text = "Continuity Camera",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White
+                            )
+                        }
                     }
                     IconButton(
                         onClick = { activity.finish() },
-                        modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), shape = CircleShape)
+                        modifier = Modifier
+                            .background(Color(0x66000000), shape = CircleShape)
+                            .padding(4.dp)
                     ) {
                         Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Color.White)
                     }
                 }
 
-                // Bottom indicator
+                // Enhanced Bottom indicator
                 Surface(
-                    color = Color.Black.copy(alpha = 0.6f),
+                    color = Color(0x99000000),
                     shape = CircleShape,
-                    modifier = Modifier.padding(bottom = 32.dp)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    shadowElevation = 8.dp
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
@@ -152,13 +167,13 @@ fun CameraScreenContent(activity: CameraStreamActivity) {
                         Box(contentAlignment = Alignment.Center) {
                             Box(
                                 modifier = Modifier
-                                    .size(12.dp)
+                                    .size(16.dp)
                                     .scale(pulseScale)
                                     .background(Color.Green.copy(alpha = pulseAlpha), CircleShape)
                             )
                             Box(
                                 modifier = Modifier
-                                    .size(8.dp)
+                                    .size(10.dp)
                                     .background(Color.Green, CircleShape)
                             )
                         }

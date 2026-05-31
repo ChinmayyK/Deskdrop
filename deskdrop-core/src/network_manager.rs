@@ -114,13 +114,13 @@ pub fn resolve_snapshot(bind_ip: Option<IpAddr>, port: u16) -> Result<NetworkSna
     match get_active_interface() {
         Ok(interface) => Ok(NetworkSnapshot {
             active_interface: Some(interface.clone()),
-            bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+            bind_addr: SocketAddr::new(IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED), port),
         }),
         Err(err) => {
             warn!(error = %err, "no active LAN interface found, falling back to wildcard bind");
             Ok(NetworkSnapshot {
                 active_interface: None,
-                bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+                bind_addr: SocketAddr::new(IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED), port),
             })
         }
     }
@@ -260,7 +260,7 @@ fn interface_rank(
         _ => 4,
     };
 
-    (primary_rank, transport_rank, ip_rank, name)
+    (transport_rank, ip_rank, primary_rank, name)
 }
 
 fn looks_like_wifi_or_ethernet(name: &str) -> bool {
