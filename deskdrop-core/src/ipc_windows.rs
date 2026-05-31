@@ -100,7 +100,10 @@ where
                     .max_instances(MAX_INSTANCES);
 
                 unsafe {
-                    opts.create_with_security_attributes_raw(get_pipe_name(), sec_attrs.as_mut_ptr())
+                    opts.create_with_security_attributes_raw(
+                        get_pipe_name(),
+                        sec_attrs.as_mut_ptr(),
+                    )
                 }
             };
 
