@@ -350,6 +350,27 @@ impl PeerManager {
         let now = now_secs();
         let record = {
             let mut store = self.store.write().unwrap();
+
+            let is_placeholder = |name: &str| {
+                name.starts_with("device-") || name.eq_ignore_ascii_case("Deskdrop Device")
+            };
+
+            // Deduplicate old peers if they have the exact same non-placeholder name
+            if !is_placeholder(&friendly_name) {
+                let mut duplicates = Vec::new();
+                for (id, p) in &store.peers {
+                    if *id != device_id 
+                        && p.friendly_name == friendly_name
+                        && p.status == PeerConnectionState::Disconnected
+                    {
+                        duplicates.push(*id);
+                    }
+                }
+                for id in duplicates {
+                    store.peers.remove(&id);
+                }
+            }
+
             let record = store.peers.entry(device_id).or_insert_with(|| PeerRecord {
                 id: device_id,
                 friendly_name: friendly_name.clone(),
@@ -380,8 +401,8 @@ impl PeerManager {
             });
 
             // Do not overwrite a real name with a placeholder name.
-            if !friendly_name.starts_with("device-")
-                || record.friendly_name.starts_with("device-")
+            if !is_placeholder(&friendly_name)
+                || is_placeholder(&record.friendly_name)
                 || record.friendly_name.is_empty()
             {
                 record.friendly_name = friendly_name;
@@ -1171,5 +1192,83 @@ mod tests {
         assert_eq!(manager.connected_count(), 3, "all three connected");
         // Only id_trusted passes both trusted AND sync_enabled.
         assert_eq!(manager.sync_eligible_count(), 1);
+    }
+
+    #[test]
+    fn does_not_overwrite_real_name_with_placeholder() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+
+        // 1. Initial real name.
+        manager
+            .upsert_peer(
+                id,
+                "My Macbook".into(),
+                SocketAddr::from(([10, 0, 0, 1], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+        assert_eq!(manager.get(id).unwrap().friendly_name, "My Macbook");
+
+        // 2. Try overwriting with "Deskdrop Device" (case insensitive).
+        manager
+            .upsert_peer(
+                id,
+                "Deskdrop Device".into(),
+                SocketAddr::from(([10, 0, 0, 1], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+        assert_eq!(manager.get(id).unwrap().friendly_name, "My Macbook");
+
+        manager
+            .upsert_peer(
+                id,
+                "deskdrop device".into(),
+                SocketAddr::from(([10, 0, 0, 1], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+        assert_eq!(manager.get(id).unwrap().friendly_name, "My Macbook");
+
+        // 3. Try overwriting with "device-" prefix.
+        manager
+            .upsert_peer(
+                id,
+                "device-12345678".into(),
+                SocketAddr::from(([10, 0, 0, 1], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+        assert_eq!(manager.get(id).unwrap().friendly_name, "My Macbook");
+
+        // 4. Overwrite placeholder with real name.
+        let id2 = Uuid::new_v4();
+        manager
+            .upsert_peer(
+                id2,
+                "Deskdrop Device".into(),
+                SocketAddr::from(([10, 0, 0, 2], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+        assert_eq!(manager.get(id2).unwrap().friendly_name, "Deskdrop Device");
+
+        manager
+            .upsert_peer(
+                id2,
+                "My Macbook".into(),
+                SocketAddr::from(([10, 0, 0, 2], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+        assert_eq!(manager.get(id2).unwrap().friendly_name, "My Macbook");
     }
 }

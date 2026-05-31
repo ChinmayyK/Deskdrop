@@ -307,11 +307,27 @@ pub struct EngineConfig {
     pub history_limit: Option<usize>,
 }
 
+pub fn default_device_name() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = std::process::Command::new("scutil")
+            .args(&["--get", "ComputerName"])
+            .output()
+        {
+            let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+    whoami::devicename()
+}
+
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             device_id: Uuid::nil(),
-            device_name: whoami::devicename(),
+            device_name: default_device_name(),
             port: DEFAULT_PORT,
             trust_store_path: default_trust_store_path(),
             peer_store_path: default_peer_store_path(),
@@ -617,7 +633,7 @@ impl Engine {
                                 if let Ok(peer_id) = uuid::Uuid::parse_str(parts[1]) {
                                     if peer_id != shared.config.device_id {
                                         let peer_name =
-                                            format!("Device {}", &peer_id.to_string()[..8]);
+                                            format!("device-{}", &peer_id.to_string()[..8]);
                                         if let Ok(peer_port) = parts[2].parse::<u16>() {
                                             let peer_addr = SocketAddr::new(addr.ip(), peer_port);
 

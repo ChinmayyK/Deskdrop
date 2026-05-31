@@ -16,7 +16,7 @@ use std::os::raw::{c_char, c_int};
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
-use whoami;
+
 
 // ── Tokio runtime (singleton) ─────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ pub unsafe extern "C" fn deskdrop_start(
     port: u16,
 ) -> *mut DeskdropHandle {
     let name = if device_name.is_null() {
-        whoami::devicename()
+        EngineConfig::default().device_name
     } else {
         unsafe { CStr::from_ptr(device_name) }
             .to_string_lossy()
