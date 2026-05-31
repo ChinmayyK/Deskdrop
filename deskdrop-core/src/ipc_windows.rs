@@ -32,7 +32,7 @@ fn get_pipe_name() -> String {
 use std::ptr::null_mut;
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorA;
-use windows_sys::Win32::Security::{SDDL_REVISION_1, SECURITY_ATTRIBUTES};
+use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 
 struct SecurePipeAttributes {
     sa: SECURITY_ATTRIBUTES,
@@ -45,7 +45,7 @@ impl SecurePipeAttributes {
         unsafe {
             let res = ConvertStringSecurityDescriptorToSecurityDescriptorA(
                 sddl.as_ptr() as *const u8,
-                SDDL_REVISION_1,
+                1, // SDDL_REVISION_1
                 &mut sd,
                 null_mut(),
             );
