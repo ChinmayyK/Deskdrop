@@ -44,7 +44,7 @@ impl SecurePipeAttributes {
         let mut sd: *mut std::ffi::c_void = null_mut();
         unsafe {
             let res = ConvertStringSecurityDescriptorToSecurityDescriptorA(
-                sddl.as_ptr() as *const u8,
+                sddl.as_ptr(),
                 1, // SDDL_REVISION_1
                 &mut sd,
                 null_mut(),

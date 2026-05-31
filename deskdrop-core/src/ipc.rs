@@ -383,7 +383,7 @@ pub fn socket_path() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         let username = std::env::var("USERNAME").unwrap_or_else(|_| "default".to_string());
-        return PathBuf::from(format!(r"\\.\pipe\deskdrop_{}", username));
+        PathBuf::from(format!(r"\\.\pipe\deskdrop_{}", username))
     }
 
     #[cfg(not(windows))]
