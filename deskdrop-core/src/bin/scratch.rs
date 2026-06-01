@@ -1,12 +1,10 @@
-fn main() {
-    let raw = "ChinmayK’s MacBook Air".to_string();
-    let patterns = ["'s ", "’s ", "s' ", "s’ "];
-    let mut result = raw.as_str();
-    for p in patterns.iter() {
-        if let Some(idx) = result.rfind(p) {
-            result = &result[idx + p.len()..];
-        }
-    }
-    let cleaned = result.trim().to_string();
-    println!("Cleaned name is: {}", cleaned);
+use deskdrop_core::ipc::{client::IpcClient, IpcRequest};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = IpcClient::connect().await?;
+    println!("Accepting pairing...");
+    let resp = client.request(&IpcRequest::RespondToPairing { device_id: "1537846c-64ba-5640-a3ea-59fb129addcb".to_string(), accepted: true }).await?;
+    println!("Response: {:?}", resp);
+    Ok(())
 }

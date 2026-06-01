@@ -11,8 +11,8 @@ android {
         applicationId "com.deskdrop"
         minSdk 26           // Android 8.0 — foreground service type requires 26+
         targetSdk 34
-        versionCode 28
-        versionName "0.2.26"
+        versionCode 32
+        versionName "0.2.30"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 

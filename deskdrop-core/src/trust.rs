@@ -233,6 +233,23 @@ impl TrustStore {
         Ok(snapshot)
     }
 
+    pub fn unreject_peer(&mut self, device_id: Uuid) -> Result<bool> {
+        let changed = if let Some(record) = self.data.devices.get_mut(&device_id) {
+            if record.state == TrustState::Rejected || record.state == TrustState::Revoked {
+                record.state = TrustState::Untrusted;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if changed {
+            self.save()?;
+        }
+        Ok(changed)
+    }
+
     pub fn revoke_peer(&mut self, device_id: Uuid) -> Result<bool> {
         let changed = if let Some(record) = self.data.devices.get_mut(&device_id) {
             record.state = TrustState::Revoked;

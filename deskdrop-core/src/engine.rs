@@ -2083,7 +2083,18 @@ impl Engine {
         Ok(removed)
     }
 
+    pub async fn unreject_peer(&self, device_id: Uuid) -> Result<bool> {
+        let changed = {
+            let mut trust = self.shared.trust.lock().await;
+            trust.unreject_peer(device_id)?
+        };
+        Ok(changed)
+    }
+
     pub async fn send_pairing_request(&self, target_device: Uuid) {
+        // Clear any previous Rejected or Revoked state so the outbound connection isn't blocked.
+        let _ = self.unreject_peer(target_device).await;
+
         // Mark that WE initiated a pairing request so the PairingResponse
         // handler accepts the response (CRIT-03 anti-spoof check).
         let _ = self
@@ -3265,62 +3276,38 @@ fn register_session(
     let panic_peer_name = peer_name.clone();
     let session_outbox_tx = outbox_tx.clone();
     let session_handle = tokio::spawn(async move {
-        let mut sess = PeerSession {
+        let (mut sess_tx, mut sess_rx) = PeerSession {
             stream,
             session,
             peer_device_id: peer_id,
             peer_device_name: peer_name.clone(),
-        };
+        }.split();
         let mut heartbeat = tokio::time::interval(shared.config.heartbeat_interval);
-        let mut last_seen = Instant::now();
-        // Tracks when we sent the most recent Ping so Pong receipt gives an
-        // accurate RTT sample for the quality probe (HIGH-03).
-        let mut ping_sent_at: Option<Instant> = None;
-        let disconnect_reason = loop {
-            tokio::select! {
-                shutdown = &mut shutdown_rx => {
-                    match shutdown {
-                        Ok(cmd) => {
-                            if cmd.send_bye {
-                                let _ = sess.send(&AppMessage::Bye).await;
-                            }
-                            break cmd.reason;
-                        }
-                        Err(_) => {
-                            break "session shutdown channel dropped".to_string();
-                        }
-                    }
-                }
-                _ = heartbeat.tick() => {
-                    if last_seen.elapsed() > shared.config.heartbeat_timeout {
-                        break "heartbeat timeout".to_string();
-                    }
-                    shared.file_transfers.lock().await.prune_stale_transfers();
-                    // Use probe::make_ping() which embeds a high-resolution
-                    // timestamp, and record the send instant for RTT calc (HIGH-03).
-                    let ping = probe::make_ping();
-                    ping_sent_at = Some(Instant::now());
-                    if let Err(err) = sess.send(&ping).await {
-                        break format!("heartbeat send failed: {err}");
-                    }
-                }
-                Some(msg) = outbox_rx.recv() => {
-                    // Use no-flush send for file chunks to maximize throughput.
-                    // File chunks are the hot path during transfers — skipping
-                    // flush avoids a syscall per 1 MB chunk. All other messages
-                    // (heartbeats, clipboard, ACKs) use the regular flushing send.
-                    let result = match &msg {
-                        AppMessage::FileChunk { .. } => sess.send_no_flush(&msg).await,
-                        _ => sess.send(&msg).await,
-                    };
-                    if let Err(err) = result {
-                        break format!("send failed: {err}");
-                    }
-                }
-                result = sess.recv() => {
-                    match result {
+        
+        let last_seen = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64
+        ));
+        let ping_sent_at = std::sync::Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
+        
+        let rx_last_seen = last_seen.clone();
+        let rx_ping_sent_at = ping_sent_at.clone();
+        let rx_shared = shared.clone();
+        let rx_peer_name = peer_name.clone();
+        let rx_session_outbox_tx = session_outbox_tx.clone();
+        let rx_peer_id = peer_id;
+        
+        let mut rx_task = tokio::spawn(async move {
+            let touch_last_seen = || {
+                rx_last_seen.store(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
+            };
+            let shared = rx_shared;
+            let peer_name = rx_peer_name;
+            let peer_id = rx_peer_id;
+            loop {
+                let result = sess_rx.recv().await;
+                match result {
                         Ok(AppMessage::ClipboardPush { seq, content, origin_device, origin_device_name, relay_path }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if shared.peer_manager.get(peer_id).map(|peer| peer.is_sync_eligible()).unwrap_or(false) {
                                 let _ = shared.peer_manager.update_last_sync(peer_id);
                                 let display_name = if origin_device_name.is_empty() {
@@ -3375,7 +3362,7 @@ fn register_session(
                                     tracing::debug!("suppressing inbound clipboard push (dedup)");
                                     // It is either an echo of our own send, or a duplicate from a second peer.
                                     // Acknowledge it, but skip all local UI/clipboard updates.
-                                    let _ = sess.send(&AppMessage::ClipboardAck { seq }).await;
+                                    let _ = rx_session_outbox_tx.send(AppMessage::ClipboardAck { seq }).await;
                                     continue;
                                 }
 
@@ -3443,7 +3430,7 @@ fn register_session(
                                     relay_path: relay_path.clone(),
                                     activity_id,
                                 }).await;
-                                let _ = sess.send(&AppMessage::ClipboardAck { seq }).await;
+                                let _ = rx_session_outbox_tx.send(AppMessage::ClipboardAck { seq }).await;
 
                                 // Persist the incoming item to history.
                                 {
@@ -3487,9 +3474,9 @@ fn register_session(
                             }
                         }
                         Ok(AppMessage::FileTransferAnnounce { meta }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                let _ = sess.send(&AppMessage::FileTransferCancel {
+                                let _ = rx_session_outbox_tx.send(AppMessage::FileTransferCancel {
                                     transfer_id: meta.transfer_id,
                                     reason: "Device not trusted (Accept pairing request first)".to_string()
                                 }).await;
@@ -3510,7 +3497,7 @@ fn register_session(
                                 .map(|_| ());
                             if let Err(e) = reg_result {
                                 tracing::warn!(error = %e, "rejected file transfer announce");
-                                let _ = sess.send(&AppMessage::FileTransferCancel { transfer_id, reason: e.to_string() }).await;
+                                let _ = rx_session_outbox_tx.send(AppMessage::FileTransferCancel { transfer_id, reason: e.to_string() }).await;
                                 continue;
                             }
 
@@ -3523,7 +3510,7 @@ fn register_session(
                             if auto_accept {
                                 let resume_from = shared.file_transfers.lock().await
                                     .accept_inbound_or_resume(&transfer_id).unwrap_or(0);
-                                let _ = sess.send(&AppMessage::FileTransferAccept {
+                                let _ = rx_session_outbox_tx.send(AppMessage::FileTransferAccept {
                                     transfer_id,
                                     accepted: true,
                                     resume_from_chunk: resume_from,
@@ -3551,7 +3538,7 @@ fn register_session(
                             }
                         }
                         Ok(AppMessage::FileTransferAccept { transfer_id, accepted, resume_from_chunk, reject_reason }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !accepted {
                                 shared.file_transfers.lock().await.cancel_outbound(&transfer_id);
                                 let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
@@ -3628,7 +3615,7 @@ fn register_session(
                             }
                         }
                         Ok(AppMessage::FileChunk { transfer_id, chunk_index, total_chunks: _, data }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -3667,14 +3654,14 @@ fn register_session(
                                     .get_inbound_mut(&transfer_id)
                                     .map(|t| t.last_confirmed_chunk)
                                     .unwrap_or(0);
-                                let _ = sess.send(&AppMessage::FileChunkAck {
+                                let _ = rx_session_outbox_tx.send(AppMessage::FileChunkAck {
                                     transfer_id,
                                     last_confirmed_chunk: last_confirmed,
                                 }).await;
                             }
                         }
                         Ok(AppMessage::FileChunkAck { transfer_id, last_confirmed_chunk }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -3685,7 +3672,7 @@ fn register_session(
                             }
                         }
                         Ok(AppMessage::FileTransferComplete { transfer_id }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -3716,7 +3703,7 @@ fn register_session(
                                         peer_id, peer_name.clone(), file_name.clone(), file_bytes,
                                         hex_tid, Some(dest_path_str)
                                     );
-                                    let _ = sess.send(&AppMessage::FileTransferCompleteAck {
+                                    let _ = rx_session_outbox_tx.send(AppMessage::FileTransferCompleteAck {
                                         transfer_id,
                                         success: true,
                                         error: None,
@@ -3734,7 +3721,7 @@ fn register_session(
                                     shared.activity.lock().await.record_file_transfer_failed(
                                         peer_id, peer_name.clone(), None, hex_tid, e.clone()
                                     );
-                                    let _ = sess.send(&AppMessage::FileTransferCompleteAck {
+                                    let _ = rx_session_outbox_tx.send(AppMessage::FileTransferCompleteAck {
                                         transfer_id,
                                         success: false,
                                         error: Some(e.clone()),
@@ -3748,14 +3735,14 @@ fn register_session(
                             }
                         }
                         Ok(AppMessage::FileTransferCompleteAck { transfer_id, success: _, error: _ }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
                             shared.file_transfers.lock().await.remove_outbound(&transfer_id);
                         }
                         Ok(AppMessage::FileTransferCancel { transfer_id, reason }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -3779,7 +3766,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::FileTransferPause { transfer_id }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -3800,7 +3787,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::FileTransferResume { transfer_id }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -3884,7 +3871,7 @@ fn register_session(
                             }
                         }
                         Ok(AppMessage::HistoryMetadata { entry }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             // MED-03 FIX: Only accept history metadata from trusted peers.
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
@@ -3897,7 +3884,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::ClipboardAck { seq }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             let _ = shared.peer_manager.update_last_sync(peer_id);
                             let _ = shared.event_tx.send(EngineEvent::ClipboardSynced {
                                 peer_device: peer_id,
@@ -3906,11 +3893,11 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::Ping { timestamp_ms }) => {
-                            last_seen = Instant::now();
-                            let _ = sess.send(&AppMessage::Pong { timestamp_ms }).await;
+                            touch_last_seen();
+                            let _ = rx_session_outbox_tx.send(AppMessage::Pong { timestamp_ms }).await;
                         }
                         Ok(AppMessage::PairingRequest { origin_device, origin_device_name }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
 
                             // Re-emit PairingRequested with the REAL name and PIN so the UI updates
@@ -3927,7 +3914,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::PairingResponse { origin_device, accepted }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
 
                             // CRIT-03 FIX: Only process PairingResponse if:
                             //   1. The origin_device matches the actual session peer_id
@@ -4002,12 +3989,13 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::Pong { timestamp_ms: _ }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             // Feed the RTT sample into the peer's quality probe
                             // using the Instant captured at send time, which is
                             // far more accurate than round-tripping wall-clock ms
                             // over the network (HIGH-03).
-                            if let Some(sent_at) = ping_sent_at.take() {
+                            let maybe_sent_at = rx_ping_sent_at.lock().unwrap().take();
+                            if let Some(sent_at) = maybe_sent_at {
                                 let rtt_us = probe::measure_rtt_us(sent_at);
                                 let result = ProbeResult::from_samples(vec![rtt_us]);
                                 let mut probes = shared.quality_probes.lock().await;
@@ -4021,7 +4009,7 @@ fn register_session(
                             state, number, contact_name,
                             origin_device, origin_device_name,
                         }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             // MED-03 FIX: Only process call state from trusted peers.
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
@@ -4055,7 +4043,7 @@ fn register_session(
                             origin_device,
                             origin_device_name,
                         }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             // MED-03 FIX: Only process battery status from trusted peers.
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
@@ -4078,7 +4066,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::CallAction { action, origin_device }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             tracing::info!("Received CallAction: {} from {:?}", action, origin_device);
                             let _ = shared.event_tx.send(EngineEvent::CallActionRequest {
                                 action,
@@ -4100,7 +4088,7 @@ fn register_session(
                             origin_device,
                             origin_device_name,
                         }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             // MED-03 FIX: Only process notifications from trusted peers.
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
@@ -4119,7 +4107,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::CameraStreamRequest { origin_device }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -4128,7 +4116,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::CameraStreamAccept { origin_device, accepted }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -4138,7 +4126,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::CameraStreamStop { origin_device }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -4148,7 +4136,7 @@ fn register_session(
                             }).await;
                         }
                         Ok(AppMessage::CameraFrame { origin_device, data }) => {
-                            last_seen = Instant::now();
+                            touch_last_seen();
                             if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
                                 continue;
                             }
@@ -4164,10 +4152,57 @@ fn register_session(
                             break err.to_string();
                         }
                     }
+            }
+        });
+
+        let disconnect_reason = loop {
+            let now_millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+            let last_seen_millis = last_seen.load(std::sync::atomic::Ordering::Relaxed);
+            
+            tokio::select! {
+                shutdown = &mut shutdown_rx => {
+                    match shutdown {
+                        Ok(cmd) => {
+                            if cmd.send_bye {
+                                let _ = sess_tx.send(&AppMessage::Bye).await;
+                            }
+                            break cmd.reason;
+                        }
+                        Err(_) => {
+                            break "session shutdown channel dropped".to_string();
+                        }
+                    }
+                }
+                _ = heartbeat.tick() => {
+                    if now_millis.saturating_sub(last_seen_millis) > shared.config.heartbeat_timeout.as_millis() as u64 {
+                        break "heartbeat timeout".to_string();
+                    }
+                    shared.file_transfers.lock().await.prune_stale_transfers();
+                    let ping = probe::make_ping();
+                    *ping_sent_at.lock().unwrap() = Some(std::time::Instant::now());
+                    if let Err(err) = sess_tx.send(&ping).await {
+                        break format!("heartbeat send failed: {err}");
+                    }
+                }
+                Some(msg) = outbox_rx.recv() => {
+                    let result = match &msg {
+                        AppMessage::FileChunk { .. } => sess_tx.send_no_flush(&msg).await,
+                        _ => sess_tx.send(&msg).await,
+                    };
+                    if let Err(err) = result {
+                        break format!("send failed: {err}");
+                    }
+                }
+                rx_res = &mut rx_task => {
+                    match rx_res {
+                        Ok(reason) => break reason,
+                        Err(_) => break "rx task panicked".to_string(),
+                    }
                 }
             }
         };
 
+        rx_task.abort();
         let reason = Some(disconnect_reason);
         match shared
             .peer_manager

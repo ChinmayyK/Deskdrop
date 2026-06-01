@@ -191,7 +191,7 @@ async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream, max_size: u32) 
 }
 
 async fn send_encrypted(
-    stream: &mut TcpStream,
+    stream: &mut (impl AsyncWriteExt + Unpin),
     session: &mut SessionKey,
     msg: &AppMessage,
 ) -> Result<()> {
@@ -211,7 +211,7 @@ async fn send_encrypted(
 /// transfers where we want to saturate the socket buffer without per-message
 /// syscall overhead.
 async fn send_encrypted_no_flush(
-    stream: &mut TcpStream,
+    stream: &mut (impl AsyncWriteExt + Unpin),
     session: &mut SessionKey,
     msg: &AppMessage,
 ) -> Result<()> {
@@ -226,7 +226,7 @@ async fn send_encrypted_no_flush(
     Ok(())
 }
 
-async fn recv_encrypted(stream: &mut TcpStream, session: &mut SessionKey) -> Result<AppMessage> {
+async fn recv_encrypted(stream: &mut (impl AsyncReadExt + Unpin), session: &mut SessionKey) -> Result<AppMessage> {
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf).await?;
     let len = u32::from_le_bytes(len_buf);
@@ -464,18 +464,55 @@ pub struct PeerSession {
     pub peer_device_name: String,
 }
 
+pub struct PeerSessionTx {
+    pub stream: tokio::net::tcp::OwnedWriteHalf,
+    pub session: SessionKey,
+}
+
+pub struct PeerSessionRx {
+    pub stream: tokio::net::tcp::OwnedReadHalf,
+    pub session: SessionKey,
+}
+
 impl PeerSession {
+    pub fn split(self) -> (PeerSessionTx, PeerSessionRx) {
+        let (rx, tx) = self.stream.into_split();
+        (
+            PeerSessionTx {
+                stream: tx,
+                session: self.session.clone(),
+            },
+            PeerSessionRx {
+                stream: rx,
+                session: self.session,
+            },
+        )
+    }
+
     pub async fn send(&mut self, msg: &AppMessage) -> Result<()> {
         send_encrypted(&mut self.stream, &mut self.session, msg).await
     }
 
-    /// Send without flush — for high-throughput file chunks where back-to-back
-    /// writes benefit from OS-level batching. TCP_NODELAY is set, so data is
-    /// pushed to the wire immediately, but we skip the extra flush syscall.
     pub async fn send_no_flush(&mut self, msg: &AppMessage) -> Result<()> {
         send_encrypted_no_flush(&mut self.stream, &mut self.session, msg).await
     }
 
+    pub async fn recv(&mut self) -> Result<AppMessage> {
+        recv_encrypted(&mut self.stream, &mut self.session).await
+    }
+}
+
+impl PeerSessionTx {
+    pub async fn send(&mut self, msg: &AppMessage) -> Result<()> {
+        send_encrypted(&mut self.stream, &mut self.session, msg).await
+    }
+
+    pub async fn send_no_flush(&mut self, msg: &AppMessage) -> Result<()> {
+        send_encrypted_no_flush(&mut self.stream, &mut self.session, msg).await
+    }
+}
+
+impl PeerSessionRx {
     pub async fn recv(&mut self) -> Result<AppMessage> {
         recv_encrypted(&mut self.stream, &mut self.session).await
     }

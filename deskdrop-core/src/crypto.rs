@@ -169,6 +169,7 @@ impl EphemeralKeypair {
 
 // ── Symmetric session ─────────────────────────────────────────────────────────
 
+#[derive(Clone)]
 pub struct SessionKey {
     cipher: ChaCha20Poly1305,
     send_counter: u64,
