@@ -2,7 +2,7 @@
 
 <div align="center">
 
-  <p><strong>Proximity-based, local-first shared clipboard and secure file relay</strong></p>
+  <p><strong>Proximity-based, local-first shared clipboard, secure file relay, and continuity camera</strong></p>
 
   <div>
     <img src="https://img.shields.io/badge/Platform-macOS-lightgrey?style=for-the-badge&logo=apple" alt="macOS" />
@@ -39,6 +39,7 @@ Unlike generic clipboard managers or complex sync utilities, Deskdrop focuses on
 1. **Absolute Local-First Privacy (Zero Cloud)**: Your data never contacts an external server. Discovery, handshake, and payload transfers are completely peer-to-peer over the local network using mDNS and secure sockets.
 2. **Timeline-First Clipboard UX**: Say goodbye to remote copies silently hijacking your local clipboard. Deskdrop lands incoming text, images, and files in a rich **Activity Feed** first. You preview, tag, pin, and explicitly apply items when you are ready.
 3. **Premium Hardware Continuity**: Experience high-end ecosystem features (like Apple's Universal Clipboard and Handoff) on *all* your devices—including call continuity controls, background sleep prevention (App Nap / Modern Standby), and resumable file sharing.
+4. **Wireless Continuity Camera**: Transform your Android or iOS device into a high-quality, zero-lag wireless camera feed for your desktop. The feed streams entirely over your local network, ensuring absolute privacy without third-party servers.
 
 ---
 
@@ -105,6 +106,7 @@ Deskdrop employs a modular, decoupled architecture centered around a high-perfor
   * **macOS:** Employs `ProcessInfo.beginActivity` to prevent Apple's App Nap from throttling background daemon syncs.
   * **Windows:** Utilizes `SetThreadExecutionState` to halt Modern Standby sleep transitions during active file transfers.
   * **Android:** Features OEM-specific battery restriction diagnostics (Xiaomi, Samsung) to actively prevent background service termination.
+* **Continuity Camera**: Wirelessly stream your mobile device's camera feed directly to a native, edge-to-edge, bezel-less HUD on macOS. Built on a pure Core Animation layer for high-performance, hardware-accelerated JPEG rendering without UI letterboxing.
 * **Cross-Platform Call Continuity**: Android devices track call states (`ringing`, `offhook`, `idle`) and relay them to macOS peers, bringing premium glassmorphic notification controls to remote screens.
 * **Telemetry & Battery Sync**: Passive battery monitoring synchronizes device charge levels (0-100%) and charging states across peers.
 
