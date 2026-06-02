@@ -817,7 +817,10 @@ fn sanitize_file_name(name: &str) -> String {
         .collect();
 
     // Trim leading dots (hidden file prevention).
-    let trimmed = sanitized.trim_start_matches('.');
+    let mut trimmed = sanitized.trim_start_matches('.');
+
+    // Trim trailing dots and spaces (Windows extension blocklist bypass prevention).
+    trimmed = trimmed.trim_end_matches(|c: char| c == '.' || c == ' ');
 
     if trimmed.is_empty() {
         "file".to_string()
