@@ -324,6 +324,15 @@ impl InboundTransfer {
             chunk_index,
             self.total_chunks
         );
+        // Fix: non-final chunks MUST be exactly FILE_CHUNK_SIZE to prevent null-byte gaps on disk
+        if chunk_index < self.total_chunks - 1 {
+            anyhow::ensure!(
+                data.len() == FILE_CHUNK_SIZE,
+                "non-final chunk size {} != expected {}",
+                data.len(),
+                FILE_CHUNK_SIZE
+            );
+        }
         if chunk_index < self.received_chunk_count {
             return Ok(self.progress_snapshot());
         }
