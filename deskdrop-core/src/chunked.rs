@@ -173,6 +173,13 @@ impl Reassembler {
                 );
                 anyhow::ensure!(!checksum.is_empty(), "transfer Start has empty checksum");
 
+                // Prevent unbounded memory growth from a flood of Start messages
+                const MAX_IN_FLIGHT: usize = 32;
+                anyhow::ensure!(
+                    self.in_flight.len() < MAX_IN_FLIGHT,
+                    "too many in-flight transfers"
+                );
+
                 self.in_flight.insert(
                     transfer_id,
                     Transfer {

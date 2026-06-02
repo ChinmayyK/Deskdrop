@@ -356,12 +356,15 @@ impl PeerManager {
             };
 
             // Deduplicate old peers if they have the exact same non-placeholder name
+            // DO NOT deduplicate if the old peer is trusted to prevent unauthenticated
+            // attackers from spoofing a name and deleting a trusted pairing (Unauthenticated DoS on Trust).
             if !is_placeholder(&friendly_name) {
                 let mut duplicates = Vec::new();
                 for (id, p) in &store.peers {
                     if *id != device_id 
                         && p.friendly_name == friendly_name
                         && p.status == PeerConnectionState::Disconnected
+                        && !p.trusted
                     {
                         duplicates.push(*id);
                     }
