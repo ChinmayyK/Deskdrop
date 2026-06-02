@@ -216,6 +216,7 @@ pub enum AppMessage {
         device_id: Uuid,
         device_name: String,
         identity_pubkey: [u8; 32],
+        identity_proof: [u8; 32],
         metadata_json: Option<String>,
     },
     HelloAck {
@@ -223,6 +224,7 @@ pub enum AppMessage {
         device_name: String,
         identity_pubkey: [u8; 32],
         nonce_response: [u8; 16],
+        identity_proof: [u8; 32],
         trusted: bool,
         metadata_json: Option<String>,
     },
@@ -377,7 +379,7 @@ pub enum AppMessage {
 // ── mDNS / defaults ──────────────────────────────────────────────────────────
 
 pub const MDNS_SERVICE_TYPE: &str = "_deskdrop._tcp.local.";
-pub const PROTOCOL_VERSION: u16 = 3;
+pub const PROTOCOL_VERSION: u16 = 4;
 pub const DEFAULT_PORT: u16 = 47823;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -466,6 +468,7 @@ mod tests {
             device_name: "PeerB".into(),
             identity_pubkey: [4u8; 32],
             nonce_response: [6u8; 16],
+            identity_proof: [5u8; 32],
             trusted: false,
             metadata_json: None,
         };

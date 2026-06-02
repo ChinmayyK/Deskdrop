@@ -18,9 +18,10 @@ use chacha20poly1305::{
     ChaCha20Poly1305, Key, Nonce,
 };
 use hkdf::Hkdf;
+use hmac::Mac;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
-use x25519_dalek::{EphemeralSecret, PublicKey, StaticSecret};
+use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroize;
 
 // ── Long-term identity key ────────────────────────────────────────────────────
@@ -92,13 +93,15 @@ pub fn fingerprint_of(pubkey_bytes: &[u8]) -> [u8; 32] {
 // ── Ephemeral session handshake ───────────────────────────────────────────────
 
 pub struct EphemeralKeypair {
-    secret: Option<EphemeralSecret>,
+    secret: Option<StaticSecret>,
     pub public_bytes: [u8; 32],
 }
 
 impl EphemeralKeypair {
     pub fn generate() -> Self {
-        let secret = EphemeralSecret::random_from_rng(rand::thread_rng());
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        let secret = StaticSecret::from(bytes);
         let public = PublicKey::from(&secret);
         Self {
             secret: Some(secret),
@@ -108,23 +111,24 @@ impl EphemeralKeypair {
 
     /// Consume the ephemeral secret, perform ECDH, derive session key and PIN.
     pub fn derive_session_key(
-        mut self,
+        &self,
         peer_pubkey_bytes: [u8; 32],
-    ) -> Result<(SessionKey, crate::pairing::PairingPin)> {
-        let secret = self.secret.take().context("keypair already consumed")?;
+    ) -> Result<(SessionKey, crate::pairing::PairingPin, [u8; 32])> {
+        let secret = self.secret.as_ref().context("keypair already consumed")?;
         let peer_public = PublicKey::from(peer_pubkey_bytes);
         let shared = secret.diffie_hellman(&peer_public);
 
         // Copy the shared secret bytes so we can zeroize them independently of
         // the opaque `SharedSecret` wrapper (which provides no zeroize method).
         let mut shared_bytes: [u8; 32] = *shared.as_bytes();
+        anyhow::ensure!(shared_bytes != [0u8; 32], "ECDH resulted in all-zero shared secret (potential low-order point attack)");
 
         // HIGH-01 FIX: Use a deterministic salt derived from both ephemeral
         // public keys in canonical byte order. This provides defense-in-depth:
         // even if the ECDH shared secret has low entropy (weak RNG), the salt
         // ensures session keys remain unpredictable. This follows TLS 1.3 and
         // Noise protocol conventions.
-        let salt = {
+        let salt: [u8; 32] = {
             let mut hasher = Sha256::new();
             if self.public_bytes <= peer_pubkey_bytes {
                 hasher.update(self.public_bytes);
@@ -133,7 +137,7 @@ impl EphemeralKeypair {
                 hasher.update(peer_pubkey_bytes);
                 hasher.update(self.public_bytes);
             }
-            hasher.finalize()
+            hasher.finalize().into()
         };
 
         // HKDF-SHA256: IKM = shared secret, salt = hash(sorted ephemeral pubkeys).
@@ -146,7 +150,7 @@ impl EphemeralKeypair {
         let hk = Hkdf::<Sha256>::new(Some(&salt), &shared_bytes);
 
         // Derive the pairing PIN before zeroizing shared_bytes.
-        let pin = crate::pairing::derive_pin(&shared_bytes);
+        let pin = crate::pairing::derive_pin(&shared_bytes, &salt);
 
         // Zeroize the raw DH secret immediately after feeding it into HKDF;
         // it must not linger in process memory (CRIT-02).
@@ -163,7 +167,18 @@ impl EphemeralKeypair {
         };
 
         okm.zeroize();
-        Ok((key, pin))
+        Ok((key, pin, salt))
+    }
+
+    /// Verify an identity proof MAC using a static-ephemeral Diffie-Hellman exchange.
+    pub fn verify_proof(&self, peer_identity_pubkey: &[u8; 32], session_salt: &[u8; 32], proof: &[u8; 32]) -> bool {
+        let peer_public = PublicKey::from(*peer_identity_pubkey);
+        let shared = self.secret.as_ref().expect("not consumed").diffie_hellman(&peer_public);
+        let mut mac = <hmac::Hmac<sha2::Sha256> as hmac::Mac>::new_from_slice(session_salt).unwrap();
+        mac.update(shared.as_bytes());
+        mac.update(b"deskdrop-identity-proof");
+        
+        mac.verify_slice(proof).is_ok()
     }
 }
 
@@ -339,8 +354,8 @@ mod tests {
         let alice_pub = alice.public_bytes;
         let bob_pub = bob.public_bytes;
 
-        let (mut alice_sess, _) = alice.derive_session_key(bob_pub).unwrap();
-        let (mut bob_sess, _) = bob.derive_session_key(alice_pub).unwrap();
+        let (mut alice_sess, _, _) = alice.derive_session_key(bob_pub).unwrap();
+        let (mut bob_sess, _, _) = bob.derive_session_key(alice_pub).unwrap();
 
         let msg = b"hello deskdrop!";
         let ct = alice_sess.encrypt(msg).unwrap();
@@ -354,8 +369,8 @@ mod tests {
         let bob = EphemeralKeypair::generate();
         let alice_pub = alice.public_bytes;
         let bob_pub = bob.public_bytes;
-        let (mut alice_sess, _) = alice.derive_session_key(bob_pub).unwrap();
-        let (mut bob_sess, _) = bob.derive_session_key(alice_pub).unwrap();
+        let (mut alice_sess, _, _) = alice.derive_session_key(bob_pub).unwrap();
+        let (mut bob_sess, _, _) = bob.derive_session_key(alice_pub).unwrap();
 
         let ct = alice_sess.encrypt(b"first").unwrap();
         bob_sess.decrypt(&ct).unwrap();

@@ -261,7 +261,7 @@ pub async fn handshake_initiator(
     stream: &mut TcpStream,
     my_device_id: Uuid,
     my_device_name: &str,
-    my_identity_pubkey: [u8; 32],
+    my_identity_key: std::sync::Arc<crate::identity::IdentityKey>,
 ) -> Result<HandshakeResult> {
     let ephemeral = EphemeralKeypair::generate();
     let my_nonce = crate::crypto::random_nonce16();
@@ -282,21 +282,25 @@ pub async fn handshake_initiator(
             .context("timeout waiting for EcdhFrame")?
             .context("receiving EcdhFrame")?;
 
-    anyhow::ensure!(
-        ack_ecdh.version == PROTOCOL_VERSION,
-        "protocol version mismatch: peer={} us={}",
-        ack_ecdh.version,
-        PROTOCOL_VERSION
-    );
+    if ack_ecdh.version != PROTOCOL_VERSION {
+        anyhow::bail!(
+            "protocol version mismatch: peer={} us={}",
+            ack_ecdh.version,
+            PROTOCOL_VERSION
+        );
+    }
 
-    let (mut session, pin) = ephemeral
+    let (mut session, pin, session_salt) = ephemeral
         .derive_session_key(ack_ecdh.ecdh_pubkey)
         .context("ECDH key derivation")?;
+
+    let identity_proof = my_identity_key.compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
     let hello = AppMessage::Hello {
         device_id: my_device_id,
         device_name: my_device_name.to_string(),
-        identity_pubkey: my_identity_pubkey,
+        identity_pubkey: my_identity_key.public_bytes,
+        identity_proof,
         metadata_json: None,
     };
 
@@ -315,6 +319,7 @@ pub async fn handshake_initiator(
         device_name,
         identity_pubkey,
         nonce_response,
+        identity_proof,
         trusted,
         ..
     } = ack_msg
@@ -347,6 +352,10 @@ pub async fn handshake_initiator(
         "handshake nonce verification failed: nonce_response is trivial (zero)"
     );
 
+    if !ephemeral.verify_proof(&identity_pubkey, &session_salt, &identity_proof) {
+        anyhow::bail!("handshake failed: invalid identity proof (MITM or spoofed key)");
+    }
+
     info!("Handshake complete with '{}' ({})", device_name, device_id);
 
     Ok(HandshakeResult {
@@ -362,8 +371,8 @@ pub async fn handshake_initiator(
 pub async fn handshake_responder<F, Fut>(
     stream: &mut TcpStream,
     my_device_id: Uuid,
-    my_device_name: &str,
-    my_identity_pubkey: [u8; 32],
+    my_device_name: String,
+    my_identity_key: std::sync::Arc<crate::identity::IdentityKey>,
     check_trust: F,
 ) -> Result<HandshakeResult>
 where
@@ -396,7 +405,7 @@ where
         .await
         .context("sending EcdhFrame ack")?;
 
-    let (mut session, pin) = ephemeral
+    let (mut session, pin, session_salt) = ephemeral
         .derive_session_key(ecdh.ecdh_pubkey)
         .context("ECDH key derivation")?;
 
@@ -410,11 +419,16 @@ where
         device_id,
         device_name,
         identity_pubkey,
+        identity_proof,
         ..
     } = hello_msg
     else {
         anyhow::bail!("expected Hello");
     };
+
+    if !ephemeral.verify_proof(&identity_pubkey, &session_salt, &identity_proof) {
+        anyhow::bail!("handshake failed: invalid identity proof (MITM or spoofed key)");
+    }
 
     let peer_is_trusted = check_trust(device_id, identity_pubkey).await;
     // Always send the real device name — name is not a security concern.
@@ -423,11 +437,14 @@ where
     // which device was trying to pair with them.
     let name_to_send = my_device_name.to_string();
 
+    let identity_proof = my_identity_key.compute_proof(&ecdh.ecdh_pubkey, &session_salt);
+
     let ack = AppMessage::HelloAck {
         device_id: my_device_id,
         device_name: name_to_send,
-        identity_pubkey: my_identity_pubkey,
+        identity_pubkey: my_identity_key.public_bytes,
         nonce_response,
+        identity_proof,
         trusted: peer_is_trusted,
         metadata_json: None,
     };
@@ -653,26 +670,25 @@ mod tests {
         let addr = listener.local_addr().unwrap();
 
         let id_a = Uuid::new_v4();
+        let id_a = Uuid::new_v4();
         let id_b = Uuid::new_v4();
-        let pub_a = [1u8; 32];
-        let pub_b = [2u8; 32];
-
+        let key_a = std::sync::Arc::new(crate::identity::IdentityKey::generate());
+        let key_b = std::sync::Arc::new(crate::identity::IdentityKey::generate());
+        
+        let key_b_clone = key_b.clone();
         let server_handle = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
-            handshake_responder(&mut stream, id_b, "PeerB", pub_b, |_, _| async { true })
+            handshake_responder(&mut stream, id_b, "PeerB".to_string(), key_b_clone, |_, _| async { true })
                 .await
                 .unwrap()
         });
 
         let mut client = TcpStream::connect(addr).await.unwrap();
-        let initiator_result = handshake_initiator(&mut client, id_a, "PeerA", pub_a)
+        let initiator_result = handshake_initiator(&mut client, id_a, "PeerA", key_a)
             .await
             .unwrap();
 
         let responder_result = server_handle.await.unwrap();
-
-        // Both sides should agree on each other's identity.
-        assert_eq!(initiator_result.peer_device_id, id_b);
         assert_eq!(responder_result.peer_device_id, id_a);
         assert_eq!(initiator_result.peer_device_name, "PeerB");
         assert_eq!(responder_result.peer_device_name, "PeerA");

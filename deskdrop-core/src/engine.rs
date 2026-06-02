@@ -400,7 +400,7 @@ struct EngineShared {
     trust: Arc<Mutex<TrustStore>>,
     peer_manager: Arc<PeerManager>,
     event_tx: mpsc::Sender<EngineEvent>,
-    identity_pubkey: [u8; 32],
+    identity_key: Arc<crate::identity::IdentityKey>,
     network_state: Arc<Mutex<RuntimeNetworkState>>,
     listener_tx: mpsc::Sender<ListenerCommand>,
     discovery_tx: Option<mpsc::Sender<DiscoveryCommand>>,
@@ -479,7 +479,7 @@ impl Engine {
             trust,
             peer_manager,
             event_tx: event_tx.clone(),
-            identity_pubkey: identity.public_bytes,
+            identity_key: Arc::new(identity),
             network_state: Arc::new(Mutex::new(RuntimeNetworkState {
                 bind_addr,
                 active_interface,
@@ -548,6 +548,8 @@ impl Engine {
                 .map(|i| i.ip)
                 .unwrap_or(initial_bind.ip())
         };
+        let identity_pubkey = shared.identity_key.public_bytes;
+
         if let Some(discovery_tx) = &engine.shared.discovery_tx {
             let _ = discovery_tx
                 .send(DiscoveryCommand::Restart {
@@ -1906,7 +1908,7 @@ impl Engine {
     /// Displayed in the Mac Security pane and Android pairing screen for manual verification.
     pub fn local_fingerprint(&self) -> String {
         self.shared
-            .identity_pubkey
+            .identity_key.public_bytes
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect::<Vec<_>>()
@@ -2884,8 +2886,8 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
     let hs = network::handshake_responder(
         &mut stream,
         shared.config.device_id,
-        &shared.config.device_name,
-        shared.identity_pubkey,
+        shared.config.device_name.clone(),
+        shared.identity_key.clone(),
         |peer_id, peer_identity| async move {
             let store = shared_clone.trust.lock().await;
             if store.is_trusted(peer_id) {
@@ -3068,7 +3070,7 @@ async fn connect_once(
         &mut stream,
         shared.config.device_id,
         name_to_send,
-        shared.identity_pubkey,
+        shared.identity_key.clone(),
     )
     .await?;
 

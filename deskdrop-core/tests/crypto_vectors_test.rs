@@ -153,17 +153,17 @@ fn pin_derivation_known_vectors() {
     // Pre-computed vectors: (shared_secret_seed, expected_pin_value)
     // These lock in the PIN derivation so any HKDF info-string change
     // would be caught immediately.
-    let vectors: &[([u8; 32], u32)] = &[
-        ([0x00u8; 32], derive_pin(&[0x00u8; 32]).value()),
-        ([0xFFu8; 32], derive_pin(&[0xFFu8; 32]).value()),
-        ([0x42u8; 32], derive_pin(&[0x42u8; 32]).value()),
+    let cases = [
+        ([0x00u8; 32], derive_pin(&[0x00u8; 32], &[0u8; 32]).value()),
+        ([0xFFu8; 32], derive_pin(&[0xFFu8; 32], &[0u8; 32]).value()),
+        ([0x42u8; 32], derive_pin(&[0x42u8; 32], &[0u8; 32]).value()),
     ];
 
     // Re-derive and compare — if HKDF info string changes, these diverge.
-    for (secret, expected_pin) in vectors {
-        let pin = derive_pin(secret).value();
+    for (secret, expected_pin) in cases {
+        let pin = derive_pin(&secret, &[0u8; 32]).value();
         assert_eq!(
-            pin, *expected_pin,
+            pin, expected_pin,
             "PIN derivation changed for secret {:02x}...",
             secret[0]
         );
@@ -201,15 +201,15 @@ fn nonce_counter_reject_replay() {
     let _a_pub = alice.public_bytes;
     let b_pub = bob.public_bytes;
 
-    let (_send, _) = alice.derive_session_key(b_pub).unwrap();
+    let (_send, _, _) = alice.derive_session_key(b_pub).unwrap();
 
     // Bob needs his own key derivation.
     let alice2 = EphemeralKeypair::generate();
     let bob2 = EphemeralKeypair::generate();
     let a2_pub = alice2.public_bytes;
     let b2_pub = bob2.public_bytes;
-    let (mut recv, _) = bob2.derive_session_key(a2_pub).unwrap();
-    let (mut send2, _) = alice2.derive_session_key(b2_pub).unwrap();
+    let (mut recv, _, _) = bob2.derive_session_key(a2_pub).unwrap();
+    let (mut send2, _, _) = alice2.derive_session_key(b2_pub).unwrap();
 
     let ct = send2.encrypt(b"frame 0").unwrap();
     // First decrypt — OK.
@@ -233,8 +233,8 @@ fn encrypt_decrypt_various_sizes() {
     let a2_pub = alice2.public_bytes;
     let b2_pub = bob2.public_bytes;
 
-    let (mut send, _) = alice2.derive_session_key(b2_pub).unwrap();
-    let (mut recv, _) = bob2.derive_session_key(a2_pub).unwrap();
+    let (mut send, _, _) = alice2.derive_session_key(b2_pub).unwrap();
+    let (mut recv, _, _) = bob2.derive_session_key(a2_pub).unwrap();
 
     for size in [0usize, 1, 15, 16, 64, 1024, 65535, 131072] {
         let plaintext = vec![0xCC_u8; size];

@@ -277,8 +277,8 @@ fn pin_commutative_ecdh() {
     // For PIN: we test that derive_pin produces the same output for the
     // same input bytes.
     let shared_bytes = [42_u8; 32]; // simulate agreed secret
-    let pin_a = derive_pin(&shared_bytes);
-    let pin_b = derive_pin(&shared_bytes);
+    let pin_a = derive_pin(&shared_bytes, &[0u8; 32]);
+    let pin_b = derive_pin(&shared_bytes, &[0u8; 32]);
     assert_eq!(pin_a, pin_b);
     assert!(pin_a.value() < 1_000_000);
 }

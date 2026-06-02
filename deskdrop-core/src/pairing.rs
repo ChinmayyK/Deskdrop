@@ -31,8 +31,8 @@ use std::time::{Duration, Instant};
 ///
 /// Both devices compute the same PIN because ECDH is commutative:
 /// alice.dh(bob_pub) == bob.dh(alice_pub).
-pub fn derive_pin(shared_secret_bytes: &[u8]) -> PairingPin {
-    let hk = Hkdf::<Sha256>::new(None, shared_secret_bytes);
+pub fn derive_pin(shared_secret_bytes: &[u8], salt: &[u8]) -> PairingPin {
+    let hk = Hkdf::<Sha256>::new(Some(salt), shared_secret_bytes);
     let mut okm = [0u8; 8];
     hk.expand(b"deskdrop-pin", &mut okm)
         .expect("HKDF expand never fails for 8 bytes");
@@ -108,12 +108,13 @@ impl PairingSession {
         device_id: uuid::Uuid,
         device_name: String,
         shared_secret: &[u8],
+        salt: &[u8],
         pubkey_bytes: [u8; 32],
     ) -> Self {
         Self {
             device_id,
             device_name,
-            pin: derive_pin(shared_secret),
+            pin: derive_pin(shared_secret, salt),
             pubkey_bytes,
             state: PairingState::Initiated,
             created_at: Instant::now(),
@@ -210,12 +211,13 @@ impl PendingPairing {
         device_id: uuid::Uuid,
         device_name: String,
         shared_secret: &[u8],
+        salt: &[u8],
         pubkey_bytes: [u8; 32],
     ) -> Self {
         Self {
             device_id,
             device_name,
-            pin: derive_pin(shared_secret),
+            pin: derive_pin(shared_secret, salt),
             pubkey_bytes,
             created_at: Instant::now(),
         }
@@ -357,10 +359,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pin_derivation_deterministic() {
-        let secret = [0xAB; 32];
-        let p1 = derive_pin(&secret);
-        let p2 = derive_pin(&secret);
+    fn deterministic_pin() {
+        let mut secret = [0u8; 32];
+        secret[0] = 42;
+        let p1 = derive_pin(&secret, &[0u8; 32]);
+        let p2 = derive_pin(&secret, &[0u8; 32]);
         assert_eq!(p1, p2);
     }
 
@@ -378,8 +381,8 @@ mod tests {
 
     #[test]
     fn different_secrets_different_pins() {
-        let p1 = derive_pin(&[0xAA; 32]);
-        let p2 = derive_pin(&[0xBB; 32]);
+        let p1 = derive_pin(&[0xAA; 32], &[0u8; 32]);
+        let p2 = derive_pin(&[0xBB; 32], &[0u8; 32]);
         // Extremely unlikely to collide.
         assert_ne!(p1.value(), p2.value());
     }
@@ -387,7 +390,7 @@ mod tests {
     #[test]
     fn pin_in_valid_range() {
         for seed in 0u8..=255 {
-            let p = derive_pin(&[seed; 32]);
+            let p = derive_pin(&[seed; 32], &[0u8; 32]);
             assert!(p.value() < 1_000_000);
         }
     }
@@ -402,7 +405,7 @@ mod tests {
                 let mut secret = [0u8; 32];
                 secret[0] = (i & 0xFF) as u8;
                 secret[1] = ((i >> 8) & 0xFF) as u8;
-                derive_pin(&secret).value() / 1000
+                derive_pin(&secret, &[0u8; 32]).value() / 1000
             })
             .collect();
         // Should hit at least 5 different thousand-buckets.
@@ -416,7 +419,7 @@ mod tests {
     #[test]
     fn pending_pairing_is_not_immediately_expired() {
         let id = Uuid::new_v4();
-        let pairing = PendingPairing::new(id, "TestDevice".into(), &[0xAB; 32], [0u8; 32]);
+        let pairing = PendingPairing::new(id, "TestDevice".into(), &[0xAB; 32], &[0u8; 32], [0u8; 32]);
         assert!(!pairing.is_expired());
         assert!(pairing.time_remaining() > Duration::from_secs(25));
     }
@@ -426,7 +429,7 @@ mod tests {
         let (ui_tx, mut ui_rx) = tokio::sync::mpsc::channel(4);
         let mgr = PairingManager::new(ui_tx);
         let id = Uuid::new_v4();
-        let pairing = PendingPairing::new(id, "Phone".into(), &[0xCC; 32], [0u8; 32]);
+        let pairing = PendingPairing::new(id, "Phone".into(), &[0xCC; 32], &[0u8; 32], [0u8; 32]);
 
         let mgr_ref = std::sync::Arc::new(mgr);
         let mgr2 = mgr_ref.clone();

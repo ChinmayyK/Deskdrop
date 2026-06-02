@@ -28,6 +28,7 @@
 //!      fingerprint mismatch on next connect).
 
 use anyhow::{Context, Result};
+use hmac::Mac;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -98,6 +99,16 @@ impl IdentityKey {
     /// Raw secret bytes for persistence. Zeroize the returned array after use.
     pub fn secret_bytes(&self) -> [u8; 32] {
         self.secret_bytes
+    }
+
+    /// Compute an identity proof MAC using a static-ephemeral Diffie-Hellman exchange.
+    pub fn compute_proof(&self, peer_ephemeral_pubkey: &[u8; 32], session_salt: &[u8; 32]) -> [u8; 32] {
+        let peer_public = PublicKey::from(*peer_ephemeral_pubkey);
+        let shared = self._secret.diffie_hellman(&peer_public);
+        let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(session_salt).unwrap();
+        mac.update(shared.as_bytes());
+        mac.update(b"deskdrop-identity-proof");
+        mac.finalize().into_bytes().into()
     }
 }
 
