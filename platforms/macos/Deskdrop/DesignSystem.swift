@@ -544,6 +544,8 @@ struct CREmptyState: View {
     var accent: Color = CRTheme.accentBlue
     var actionLabel: String? = nil
     var onAction: (() -> Void)? = nil
+    @State private var isFloating = false
+
     var body: some View {
         VStack(spacing: 14) {
             ZStack {
@@ -552,7 +554,10 @@ struct CREmptyState: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 24, weight: .light)).foregroundStyle(accent.opacity(0.48))
                     .symbolRenderingMode(.hierarchical)
+                    .offset(y: isFloating ? -4 : 4)
+                    .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: isFloating)
             }
+            .onAppear { isFloating = true }
             VStack(spacing: 5) {
                 Text(title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
                 Text(message).font(.system(size: 12)).foregroundStyle(CRTheme.inkSoft)

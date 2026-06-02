@@ -314,16 +314,19 @@ private struct CompanionDeviceCard: View {
         HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(CRTheme.brandElectric.opacity(0.10))
-                    .frame(width: 72, height: 72)
-                    .scaleEffect(isPulsing ? 1.06 : 0.94)
-                    .opacity(isPulsing ? 0.38 : 0.18)
+                    .strokeBorder(CRTheme.brandElectric.opacity(isPulsing ? 0 : 0.4), lineWidth: 1.5)
+                    .frame(width: 60, height: 60)
+                    .scaleEffect(isPulsing ? 1.8 : 0.8)
                 Circle()
-                    .strokeBorder(CRTheme.brandElectric.opacity(0.16), lineWidth: 1)
-                    .frame(width: 72, height: 72)
-                    .scaleEffect(isPulsing ? 1.12 : 0.98)
+                    .strokeBorder(CRTheme.brandElectric.opacity(isPulsing ? 0 : 0.2), lineWidth: 1)
+                    .frame(width: 60, height: 60)
+                    .scaleEffect(isPulsing ? 1.4 : 0.8)
+                
+                Circle()
+                    .fill(CRTheme.brandElectric.opacity(0.12))
+                    .frame(width: 64, height: 64)
 
-                HStack(spacing: 8) {
+                HStack(spacing: 4) {
                     Image(systemName: "laptopcomputer")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(CRTheme.ink.opacity(0.72))
@@ -369,7 +372,7 @@ private struct CompanionDeviceCard: View {
                 .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+            withAnimation(.easeOut(duration: 2.0).repeatForever(autoreverses: false)) {
                 isPulsing = true
             }
         }
@@ -479,6 +482,28 @@ private struct ContinuityStagingDrawer: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
             }
+            .offset(x: offset)
+            .opacity(isDismissed ? 0 : (1.0 - Double(offset / 100.0)))
+            .gesture(
+                DragGesture()
+                    .onChanged { gesture in
+                        if gesture.translation.width > 0 {
+                            offset = gesture.translation.width
+                        }
+                    }
+                    .onEnded { gesture in
+                        if gesture.translation.width > 100 {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                offset = 300
+                                isDismissed = true
+                            }
+                        } else {
+                            withAnimation(.crSpring) {
+                                offset = 0
+                            }
+                        }
+                    }
+            )
             .onAppear {
                 progress = 1.0
                 withAnimation(.linear(duration: 5.0)) {
@@ -489,6 +514,8 @@ private struct ContinuityStagingDrawer: View {
     }
     
     @State private var progress: CGFloat = 1.0
+    @State private var offset: CGFloat = 0
+    @State private var isDismissed: Bool = false
 
     private func isLikelyOTP(_ text: String?) -> Bool {
         guard let text else { return false }

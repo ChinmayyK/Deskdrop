@@ -9,11 +9,14 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -238,26 +241,6 @@ fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus
         ambientStatus
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "status_pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 2.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse_scale"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse_alpha"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -273,15 +256,6 @@ fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus
         ) {
             Box(contentAlignment = Alignment.Center) {
                 val color = if (connectedPeersCount > 0) CRTheme.statusGreen else if (isSearching) CRTheme.blueSoft else CRTheme.statusAmber
-                
-                if (connectedPeersCount > 0 || isSearching) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .scale(pulseScale)
-                            .background(color.copy(alpha = pulseAlpha), CircleShape)
-                    )
-                }
                 
                 Box(
                     modifier = Modifier
@@ -988,17 +962,52 @@ fun TimelineActivityRow(
         else -> CRTheme.brandElectric
     }
 
+    val offsetX = remember { androidx.compose.animation.core.Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
+    
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onApply(entry)
-            }
+            .background(if (offsetX.value < -20f) CRTheme.statusRed.copy(alpha = 0.15f) else Color.Transparent, RoundedCornerShape(8.dp))
     ) {
+        if (offsetX.value < -20f) {
+            Box(modifier = Modifier.fillMaxSize().padding(end = 16.dp), contentAlignment = Alignment.CenterEnd) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = CRTheme.statusRed, modifier = Modifier.size(20.dp))
+            }
+        }
+        
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { androidx.compose.ui.unit.IntOffset(offsetX.value.toInt(), 0) }
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { change, dragAmount ->
+                            if (offsetX.value + dragAmount <= 0) {
+                                coroutineScope.launch { offsetX.snapTo(offsetX.value + dragAmount) }
+                            }
+                        },
+                        onDragEnd = {
+                            if (offsetX.value < -200f) {
+                                coroutineScope.launch { 
+                                    offsetX.animateTo(-1000f)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onDelete(entry)
+                                }
+                            } else {
+                                coroutineScope.launch { offsetX.animateTo(0f, androidx.compose.animation.core.spring()) }
+                            }
+                        }
+                    )
+                }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onApply(entry)
+                }
+        ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1061,6 +1070,7 @@ fun TimelineActivityRow(
                 text = { Text("Delete history", color = CRTheme.accentRed) },
                 onClick = { showMenu = false; onDelete(entry) }
             )
+        }
         }
     }
 }

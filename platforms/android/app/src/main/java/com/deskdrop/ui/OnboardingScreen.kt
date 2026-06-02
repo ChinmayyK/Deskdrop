@@ -39,6 +39,7 @@ fun OnboardingScreen(
     var forceCompletion by remember { mutableStateOf(false) }
     val sessionStartTimeSecs = remember { System.currentTimeMillis() / 1000 }
     val selectedPeer = peers.find { it.id == selectedPeerId }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     val currentStep = when {
         forceCompletion -> 3
@@ -73,12 +74,14 @@ fun OnboardingScreen(
             Box(modifier = Modifier.weight(1f)) {
                 AnimatedContent(targetState = currentStep, label = "step") { step ->
                     when (step) {
-                        0 -> StepOneFindDevice(isDark, peers, selectedPeer, onScanQr = onScanQr, onManualIp = onManualIp, onPeerSelect = {
+                        0 -> StepOneFindDevice(isDark, peers, selectedPeer, onScanQr = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); onScanQr() }, onManualIp = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); onManualIp() }, onPeerSelect = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             selectedPeerId = it.id
                             onConnectPeer(it)
                         })
-                        1 -> StepTwoPairing(isDark, selectedPeer, onCancel = { selectedPeerId = null })
+                        1 -> StepTwoPairing(isDark, selectedPeer, onCancel = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); selectedPeerId = null })
                         2 -> StepThreeSendSample(isDark, selectedPeer, onSend = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                             if (it != null) onSendSampleText(it)
                             forceCompletion = true
                         })
@@ -94,11 +97,11 @@ fun OnboardingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (currentStep == 0) {
-                    TextButton(onClick = onComplete) {
+                    TextButton(onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); onComplete() }) {
                         Text("SKIP FOR NOW", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
                     }
                 } else if (currentStep > 0 && currentStep < 3) {
-                    TextButton(onClick = { selectedPeerId = null }) {
+                    TextButton(onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); selectedPeerId = null }) {
                         Text("CANCEL", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
                     }
                 } else {
@@ -107,7 +110,7 @@ fun OnboardingScreen(
 
                 if (currentStep == 3) {
                     Button(
-                        onClick = onComplete,
+                        onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); onComplete() },
                         colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft)
                     ) {
                         Text("GET STARTED", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)

@@ -132,7 +132,11 @@ private struct StepOneFindDevice: View {
             ScrollView {
                 VStack(spacing: 8) {
                     if store.peers.isEmpty {
-                        Text("Searching for nearby devices...").foregroundStyle(CRTheme.inkSoft).padding()
+                        VStack(spacing: 24) {
+                            RadarPulseView()
+                            Text("Scanning local network...").foregroundStyle(CRTheme.inkSoft).font(.system(size: 14, weight: .medium))
+                        }
+                        .padding(.vertical, 32)
                     } else {
                         ForEach(store.peers) { peer in
                             Button {
@@ -141,6 +145,7 @@ private struct StepOneFindDevice: View {
                             } label: {
                                 HStack {
                                     Image(systemName: peer.displayName.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
+                                        .symbolEffect(.bounce, value: selectedPeerId == peer.id)
                                     Text(peer.displayName).font(.system(size: 16, weight: .semibold))
                                     Spacer()
                                 }
@@ -259,18 +264,64 @@ private struct StepFourCompletion: View {
             ZStack {
                 Circle().fill(CRTheme.accentGreen.opacity(0.1))
                     .frame(width: 100, height: 100)
+                    .scaleEffect(isAppeared ? 1 : 0.5)
+                    .opacity(isAppeared ? 1 : 0)
                 Image(systemName: "checkmark")
                     .font(.system(size: 40, weight: .bold))
                     .foregroundStyle(CRTheme.accentGreen)
+                    .symbolEffect(.bounce, value: isAppeared)
+            }
+            .onAppear {
+                withAnimation(.crSpring.delay(0.1)) {
+                    isAppeared = true
+                }
             }
             
             Text("You're all set!")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
+                .opacity(isAppeared ? 1 : 0)
+                .offset(y: isAppeared ? 0 : 10)
+                .animation(.crSpring.delay(0.2), value: isAppeared)
             
             Text("Received files will automatically land in your Downloads folder.\nClipboard text will be instantly available to paste.")
                 .foregroundStyle(CRTheme.inkSoft)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
+                .opacity(isAppeared ? 1 : 0)
+                .offset(y: isAppeared ? 0 : 10)
+                .animation(.crSpring.delay(0.3), value: isAppeared)
+        }
+    }
+    
+    @State private var isAppeared = false
+}
+
+private struct RadarPulseView: View {
+    @State private var isPulsing = false
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(CRTheme.brandElectric.opacity(0.1))
+                .frame(width: 70, height: 70)
+                .scaleEffect(isPulsing ? 1.8 : 0.5)
+                .opacity(isPulsing ? 0 : 1)
+            
+            Circle()
+                .fill(CRTheme.brandElectric.opacity(0.2))
+                .frame(width: 50, height: 50)
+                .scaleEffect(isPulsing ? 1.5 : 0.8)
+                .opacity(isPulsing ? 0 : 1)
+            
+            Image(systemName: "antenna.radiowaves.left.and.right")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(CRTheme.brandElectric)
+                .symbolEffect(.variableColor.cumulative, options: .repeating)
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 2.0).repeatForever(autoreverses: false)) {
+                isPulsing = true
+            }
         }
     }
 }

@@ -155,6 +155,7 @@ private struct PopoverActionButton: View {
                 Image(systemName: icon)
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(tint)
+                    .symbolEffect(.bounce, value: isHovered)
                     .shadow(color: tint.opacity(isHovered ? 0.4 : 0), radius: 4, y: 2)
                 
                 Text(title)
