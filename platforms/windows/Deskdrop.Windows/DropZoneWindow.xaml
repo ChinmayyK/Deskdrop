@@ -20,7 +20,7 @@
                 <DropShadowEffect x:Name="WidgetShadow" Color="Black" Opacity="0.3" BlurRadius="24" ShadowDepth="12"/>
             </Border.Effect>
             
-            <Grid.Triggers>
+            <Border.Triggers>
                 <!-- Remove loaded continuous bounce, rely on drag state -->
                 <EventTrigger RoutedEvent="DragEnter">
                     <BeginStoryboard>
@@ -77,7 +77,7 @@
                         </Storyboard>
                     </BeginStoryboard>
                 </EventTrigger>
-            </Grid.Triggers>
+            </Border.Triggers>
             
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0">
                 
