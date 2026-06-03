@@ -102,7 +102,11 @@ impl IdentityKey {
     }
 
     /// Compute an identity proof MAC using a static-ephemeral Diffie-Hellman exchange.
-    pub fn compute_proof(&self, peer_ephemeral_pubkey: &[u8; 32], session_salt: &[u8; 32]) -> [u8; 32] {
+    pub fn compute_proof(
+        &self,
+        peer_ephemeral_pubkey: &[u8; 32],
+        session_salt: &[u8; 32],
+    ) -> [u8; 32] {
         let peer_public = PublicKey::from(*peer_ephemeral_pubkey);
         let shared = self._secret.diffie_hellman(&peer_public);
         let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(session_salt).unwrap();

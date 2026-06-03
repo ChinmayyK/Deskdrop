@@ -104,10 +104,7 @@ pub enum IpcRequest {
     /// Generate a short-lived QR authentication token for this device.
     GenerateQrToken,
     /// Trust a device using a scanned QR code token.
-    TrustPeerFromQr {
-        device_id: String,
-        token: String,
-    },
+    TrustPeerFromQr { device_id: String, token: String },
     /// Push clipboard text to all peers.
     PushText { text: String },
     /// Push clipboard text to one peer.
@@ -404,12 +401,12 @@ pub fn socket_path() -> PathBuf {
             // ownership and symlink status, panicking if an attacker hijacked it.
             let uid = unsafe { libc::getuid() };
             let dir = PathBuf::from(format!("/tmp/deskdrop-{}", uid));
-            
+
             #[cfg(unix)]
             {
                 use std::os::unix::fs::DirBuilderExt;
                 use std::os::unix::fs::MetadataExt;
-                
+
                 if !dir.exists() {
                     let mut builder = std::fs::DirBuilder::new();
                     builder.mode(0o700);
@@ -419,7 +416,7 @@ pub fn socket_path() -> PathBuf {
                         }
                     }
                 }
-                
+
                 if let Ok(meta) = dir.symlink_metadata() {
                     if !meta.is_dir() {
                         panic!("IPC path {:?} is not a directory (symlink attack?)", dir);
@@ -434,7 +431,7 @@ pub fn socket_path() -> PathBuf {
                     panic!("Could not verify ownership of IPC directory {:?}", dir);
                 }
             }
-            
+
             #[cfg(not(unix))]
             {
                 if !dir.exists() {

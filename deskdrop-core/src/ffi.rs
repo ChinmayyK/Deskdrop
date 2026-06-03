@@ -17,7 +17,6 @@ use std::sync::OnceLock;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
-
 // ── Tokio runtime (singleton) ─────────────────────────────────────────────────
 
 static RT: OnceLock<Runtime> = OnceLock::new();

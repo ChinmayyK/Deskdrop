@@ -226,7 +226,10 @@ async fn send_encrypted_no_flush(
     Ok(())
 }
 
-async fn recv_encrypted(stream: &mut (impl AsyncReadExt + Unpin), session: &mut SessionKey) -> Result<AppMessage> {
+async fn recv_encrypted(
+    stream: &mut (impl AsyncReadExt + Unpin),
+    session: &mut SessionKey,
+) -> Result<AppMessage> {
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf).await?;
     let len = u32::from_le_bytes(len_buf);
@@ -294,7 +297,10 @@ pub async fn handshake_initiator(
         .derive_session_key(ack_ecdh.ecdh_pubkey)
         .context("ECDH key derivation")?;
 
-    let identity_proof = my_identity_key.read().unwrap().compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
+    let identity_proof = my_identity_key
+        .read()
+        .unwrap()
+        .compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
     let hello = AppMessage::Hello {
         device_id: my_device_id,
@@ -437,7 +443,10 @@ where
     // which device was trying to pair with them.
     let name_to_send = my_device_name.to_string();
 
-    let identity_proof = my_identity_key.read().unwrap().compute_proof(&ecdh.ecdh_pubkey, &session_salt);
+    let identity_proof = my_identity_key
+        .read()
+        .unwrap()
+        .compute_proof(&ecdh.ecdh_pubkey, &session_salt);
 
     let ack = AppMessage::HelloAck {
         device_id: my_device_id,
@@ -672,15 +681,21 @@ mod tests {
         let id_a = Uuid::new_v4();
         let id_a = Uuid::new_v4();
         let id_b = Uuid::new_v4();
-        let key_a = std::sync::Arc::new(crate::identity::IdentityKey::generate());
-        let key_b = std::sync::Arc::new(crate::identity::IdentityKey::generate());
-        
+        let key_a = std::sync::Arc::new(std::sync::RwLock::new(crate::identity::IdentityKey::generate()));
+        let key_b = std::sync::Arc::new(std::sync::RwLock::new(crate::identity::IdentityKey::generate()));
+
         let key_b_clone = key_b.clone();
         let server_handle = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
-            handshake_responder(&mut stream, id_b, "PeerB".to_string(), key_b_clone, |_, _| async { true })
-                .await
-                .unwrap()
+            handshake_responder(
+                &mut stream,
+                id_b,
+                "PeerB".to_string(),
+                key_b_clone,
+                |_, _| async { true },
+            )
+            .await
+            .unwrap()
         });
 
         let mut client = TcpStream::connect(addr).await.unwrap();

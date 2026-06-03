@@ -121,7 +121,10 @@ impl EphemeralKeypair {
         // Copy the shared secret bytes so we can zeroize them independently of
         // the opaque `SharedSecret` wrapper (which provides no zeroize method).
         let mut shared_bytes: [u8; 32] = *shared.as_bytes();
-        anyhow::ensure!(shared_bytes != [0u8; 32], "ECDH resulted in all-zero shared secret (potential low-order point attack)");
+        anyhow::ensure!(
+            shared_bytes != [0u8; 32],
+            "ECDH resulted in all-zero shared secret (potential low-order point attack)"
+        );
 
         // HIGH-01 FIX: Use a deterministic salt derived from both ephemeral
         // public keys in canonical byte order. This provides defense-in-depth:
@@ -171,13 +174,23 @@ impl EphemeralKeypair {
     }
 
     /// Verify an identity proof MAC using a static-ephemeral Diffie-Hellman exchange.
-    pub fn verify_proof(&self, peer_identity_pubkey: &[u8; 32], session_salt: &[u8; 32], proof: &[u8; 32]) -> bool {
+    pub fn verify_proof(
+        &self,
+        peer_identity_pubkey: &[u8; 32],
+        session_salt: &[u8; 32],
+        proof: &[u8; 32],
+    ) -> bool {
         let peer_public = PublicKey::from(*peer_identity_pubkey);
-        let shared = self.secret.as_ref().expect("not consumed").diffie_hellman(&peer_public);
-        let mut mac = <hmac::Hmac<sha2::Sha256> as hmac::Mac>::new_from_slice(session_salt).unwrap();
+        let shared = self
+            .secret
+            .as_ref()
+            .expect("not consumed")
+            .diffie_hellman(&peer_public);
+        let mut mac =
+            <hmac::Hmac<sha2::Sha256> as hmac::Mac>::new_from_slice(session_salt).unwrap();
         mac.update(shared.as_bytes());
         mac.update(b"deskdrop-identity-proof");
-        
+
         mac.verify_slice(proof).is_ok()
     }
 }
@@ -261,7 +274,7 @@ impl SessionKey {
             .cipher
             .decrypt(nonce, ct)
             .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e));
-            
+
         // FIX: High-stakes Denial-of-Service vulnerability.
         // Only increment the replay counter if the ciphertext is successfully
         // authenticated (MAC validation passes). Incrementing before authentication

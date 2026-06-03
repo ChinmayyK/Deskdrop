@@ -156,11 +156,7 @@ impl TrustStore {
         self.save()?;
         Ok(snapshot)
     }
-    pub fn rotate_peer_key(
-        &mut self,
-        device_id: Uuid,
-        new_public_key: &[u8; 32],
-    ) -> Result<()> {
+    pub fn rotate_peer_key(&mut self, device_id: Uuid, new_public_key: &[u8; 32]) -> Result<()> {
         let fingerprint = fingerprint_of(new_public_key);
         if let Some(record) = self.data.devices.get_mut(&device_id) {
             record.public_key = *new_public_key;

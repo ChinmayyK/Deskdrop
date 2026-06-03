@@ -410,11 +410,14 @@ pub async fn spawn_multicast_beacon(
     let mut initial_socket = match create_multicast_send_socket(Ipv4Addr::UNSPECIFIED) {
         Ok(s) => Some(s),
         Err(e) => {
-            debug!("udp multicast beacon: failed to create initial socket: {}", e);
+            debug!(
+                "udp multicast beacon: failed to create initial socket: {}",
+                e
+            );
             None
         }
     };
-    
+
     if let Some(ref socket) = initial_socket {
         for i in 0..3u8 {
             match socket.send_to(&payload, multicast_dest).await {
@@ -427,8 +430,9 @@ pub async fn spawn_multicast_beacon(
 
     let mut interval = tokio::time::interval(config.beacon_interval);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    
-    let mut cached_sockets: std::collections::HashMap<Ipv4Addr, std::sync::Arc<UdpSocket>> = std::collections::HashMap::new();
+
+    let mut cached_sockets: std::collections::HashMap<Ipv4Addr, std::sync::Arc<UdpSocket>> =
+        std::collections::HashMap::new();
 
     loop {
         tokio::select! {
@@ -452,7 +456,7 @@ pub async fn spawn_multicast_beacon(
                         }
                     }
                 }
-                
+
                 // Fallback if no interfaces found
                 if active_sockets.is_empty() {
                     let fallback_ip = Ipv4Addr::UNSPECIFIED;
@@ -461,7 +465,7 @@ pub async fn spawn_multicast_beacon(
                     });
                     active_sockets.push(sock.clone());
                 }
-                
+
                 for socket in active_sockets {
                     match socket.send_to(&payload, multicast_dest).await {
                         Ok(n) => trace!("udp multicast beacon: sent {} bytes to {}", n, multicast_dest),

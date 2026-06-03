@@ -840,7 +840,6 @@ impl Engine {
         }
     }
 
-
     /// Relay a push notification to all connected, trusted peers.
     pub async fn push_notification(
         &self,
@@ -1306,9 +1305,11 @@ impl Engine {
         // Broadcast to all active connected peers
         let peers = self.shared.peer_manager.active_senders();
         for (peer_id, tx) in peers {
-            let _ = tx.send(crate::protocol::AppMessage::KeyRotated {
-                new_pubkey_bytes: new_key,
-            }).await;
+            let _ = tx
+                .send(crate::protocol::AppMessage::KeyRotated {
+                    new_pubkey_bytes: new_key,
+                })
+                .await;
         }
         Ok(())
     }
@@ -1997,7 +1998,10 @@ impl Engine {
     /// Displayed in the Mac Security pane and Android pairing screen for manual verification.
     pub fn local_fingerprint(&self) -> String {
         self.shared
-            .identity_key.read().unwrap().public_bytes
+            .identity_key
+            .read()
+            .unwrap()
+            .public_bytes
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect::<Vec<_>>()
@@ -3311,10 +3315,10 @@ async fn observe_trust(
                 .set_pairing_pin(device_id, Some(pin.display()));
 
             // We NO LONGER emit PairingRequested or OutgoingPairingWaiting here.
-            // Eager TCP connections should be silent. 
-            // Pairing prompts are now exclusively triggered by explicit 
+            // Eager TCP connections should be silent.
+            // Pairing prompts are now exclusively triggered by explicit
             // AppMessage::PairingRequest packets sent when the user taps 'Pair'.
-            
+
             Ok(false)
         }
     }
@@ -3412,24 +3416,34 @@ fn register_session(
             session,
             peer_device_id: peer_id,
             peer_device_name: peer_name.clone(),
-        }.split();
+        }
+        .split();
         let mut heartbeat = tokio::time::interval(shared.config.heartbeat_interval);
-        
+
         let last_seen = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
         ));
         let ping_sent_at = std::sync::Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
-        
+
         let rx_last_seen = last_seen.clone();
         let rx_ping_sent_at = ping_sent_at.clone();
         let rx_shared = shared.clone();
         let rx_peer_name = peer_name.clone();
         let rx_session_outbox_tx = session_outbox_tx.clone();
         let rx_peer_id = peer_id;
-        
+
         let mut rx_task = tokio::spawn(async move {
             let touch_last_seen = || {
-                rx_last_seen.store(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
+                rx_last_seen.store(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis() as u64,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
             };
             let shared = rx_shared;
             let peer_name = rx_peer_name;
@@ -3437,267 +3451,358 @@ fn register_session(
             loop {
                 let result = sess_rx.recv().await;
                 match result {
-                        Ok(AppMessage::ClipboardPush { seq, content, origin_device, origin_device_name, relay_path }) => {
-                            touch_last_seen();
-                            if shared.peer_manager.get(peer_id).map(|peer| peer.is_sync_eligible()).unwrap_or(false) {
-                                let _ = shared.peer_manager.update_last_sync(peer_id);
-                                let display_name = if origin_device_name.is_empty() {
-                                    peer_name.clone()
-                                } else {
-                                    origin_device_name.clone()
-                                };
+                    Ok(AppMessage::ClipboardPush {
+                        seq,
+                        content,
+                        origin_device,
+                        origin_device_name,
+                        relay_path,
+                    }) => {
+                        touch_last_seen();
+                        if shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|peer| peer.is_sync_eligible())
+                            .unwrap_or(false)
+                        {
+                            let _ = shared.peer_manager.update_last_sync(peer_id);
+                            let display_name = if origin_device_name.is_empty() {
+                                peer_name.clone()
+                            } else {
+                                origin_device_name.clone()
+                            };
 
-                                // --- Clipboard Security & Throttling ---
-                                let payload_size = match &*content {
-                                    ClipboardContent::Text(t) => t.len(),
-                                    ClipboardContent::Image { data, .. } => data.len(),
-                                    ClipboardContent::File { data, .. } => data.len(),
-                                };
+                            // --- Clipboard Security & Throttling ---
+                            let payload_size = match &*content {
+                                ClipboardContent::Text(t) => t.len(),
+                                ClipboardContent::Image { data, .. } => data.len(),
+                                ClipboardContent::File { data, .. } => data.len(),
+                            };
 
-                                // Limit sizes to prevent OOM
-                                const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
-                                const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
+                            // Limit sizes to prevent OOM
+                            const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
+                            const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
 
-                                let allowed = match &*content {
-                                    ClipboardContent::Text(t) => t.len() <= MAX_TEXT_BYTES,
-                                    ClipboardContent::Image { data, .. } => data.len() <= MAX_IMAGE_BYTES,
-                                    ClipboardContent::File { data, .. } => data.len() <= MAX_IMAGE_BYTES,
-                                };
-
-                                if !allowed {
-                                    tracing::warn!(peer_id = %peer_id, size = payload_size, "dropped oversized clipboard payload");
-                                    continue;
+                            let allowed = match &*content {
+                                ClipboardContent::Text(t) => t.len() <= MAX_TEXT_BYTES,
+                                ClipboardContent::Image { data, .. } => {
+                                    data.len() <= MAX_IMAGE_BYTES
                                 }
-
-                                // Run inbound payload through the FilterChain (e.g. executable blocking, etc.)
-                                let filter_chain = crate::filter::FilterChain::from_settings(&*shared.settings.lock().await);
-                                if let crate::filter::Verdict::Deny { reason } = filter_chain.run(&content) {
-                                    tracing::warn!(peer_id = %peer_id, reason, "inbound clipboard payload denied by filter");
-                                    continue;
+                                ClipboardContent::File { data, .. } => {
+                                    data.len() <= MAX_IMAGE_BYTES
                                 }
+                            };
 
-                                // Apply TokenBucket throttling for large payloads
-                                shared.throttle.acquire(payload_size).await;
+                            if !allowed {
+                                tracing::warn!(peer_id = %peer_id, size = payload_size, "dropped oversized clipboard payload");
+                                continue;
+                            }
 
-                                // ── Timeline-first clipboard UX ───────────────
-                                let hash = hash_content(&content);
-                                let hash_hex = hex::encode(hash);
+                            // Run inbound payload through the FilterChain (e.g. executable blocking, etc.)
+                            let filter_chain = crate::filter::FilterChain::from_settings(
+                                &*shared.settings.lock().await,
+                            );
+                            if let crate::filter::Verdict::Deny { reason } =
+                                filter_chain.run(&content)
+                            {
+                                tracing::warn!(peer_id = %peer_id, reason, "inbound clipboard payload denied by filter");
+                                continue;
+                            }
 
-                                // ── Deduplicator Check ───────────────
-                                let should_apply = {
-                                    let mut dedup = shared.dedup.lock().await;
-                                    dedup.should_apply(origin_device, hash)
-                                };
+                            // Apply TokenBucket throttling for large payloads
+                            shared.throttle.acquire(payload_size).await;
 
-                                if !should_apply {
-                                    tracing::debug!("suppressing inbound clipboard push (dedup)");
-                                    // It is either an echo of our own send, or a duplicate from a second peer.
-                                    // Acknowledge it, but skip all local UI/clipboard updates.
-                                    let _ = rx_session_outbox_tx.send(AppMessage::ClipboardAck { seq }).await;
-                                    continue;
+                            // ── Timeline-first clipboard UX ───────────────
+                            let hash = hash_content(&content);
+                            let hash_hex = hex::encode(hash);
+
+                            // ── Deduplicator Check ───────────────
+                            let should_apply = {
+                                let mut dedup = shared.dedup.lock().await;
+                                dedup.should_apply(origin_device, hash)
+                            };
+
+                            if !should_apply {
+                                tracing::debug!("suppressing inbound clipboard push (dedup)");
+                                // It is either an echo of our own send, or a duplicate from a second peer.
+                                // Acknowledge it, but skip all local UI/clipboard updates.
+                                let _ = rx_session_outbox_tx
+                                    .send(AppMessage::ClipboardAck { seq })
+                                    .await;
+                                continue;
+                            }
+
+                            let auto_apply = shared
+                                .apply_policy
+                                .lock()
+                                .await
+                                .should_auto_apply(origin_device);
+
+                            // Record in activity feed.
+                            let activity_id = {
+                                if let ClipboardContent::Text(ref text) = *content {
+                                    shared
+                                        .clipboard_store
+                                        .lock()
+                                        .await
+                                        .insert(hash_hex.clone(), text.clone());
                                 }
-
-                                let auto_apply = shared.apply_policy.lock().await
-                                    .should_auto_apply(origin_device);
-
-                                // Record in activity feed.
-                                let activity_id = {
-                                    if let ClipboardContent::Text(ref text) = *content {
-                                        shared
-                                            .clipboard_store
-                                            .lock()
-                                            .await
-                                            .insert(hash_hex.clone(), text.clone());
-                                    }
-                                    let mut feed = shared.activity.lock().await;
-                                    match &*content {
-                                        ClipboardContent::Text(ref text) => {
-                                            feed.record_remote_clipboard_text(
-                                                origin_device,
-                                                display_name.clone(),
-                                                text,
-                                                hash_hex.clone(),
-                                                relay_path.clone(),
-                                            )
-                                        }
-                                        ClipboardContent::Image { mime, data } => {
-                                            feed.record_remote_clipboard_image(
-                                                origin_device,
-                                                display_name.clone(),
-                                                mime,
-                                                data.len() as u64,
-                                                hash_hex.clone(),
-                                                relay_path.clone(),
-                                            )
-                                        }
-                                        ClipboardContent::File { name, data } => {
-                                            feed.record_file_transfer_started(
-                                                origin_device,
-                                                display_name.clone(),
-                                                name.clone(),
-                                                data.len() as u64,
-                                                hash_hex.clone(),
-                                                false,
-                                            )
-                                        }
-                                    }
-                                };
-
-                                // If auto-applying, mark immediately applied.
-                                if auto_apply {
-                                    let mut feed = shared.activity.lock().await;
-                                    feed.record_clipboard_applied(origin_device, display_name.clone(), hash_hex.clone());
+                                let mut feed = shared.activity.lock().await;
+                                match &*content {
+                                    ClipboardContent::Text(ref text) => feed
+                                        .record_remote_clipboard_text(
+                                            origin_device,
+                                            display_name.clone(),
+                                            text,
+                                            hash_hex.clone(),
+                                            relay_path.clone(),
+                                        ),
+                                    ClipboardContent::Image { mime, data } => feed
+                                        .record_remote_clipboard_image(
+                                            origin_device,
+                                            display_name.clone(),
+                                            mime,
+                                            data.len() as u64,
+                                            hash_hex.clone(),
+                                            relay_path.clone(),
+                                        ),
+                                    ClipboardContent::File { name, data } => feed
+                                        .record_file_transfer_started(
+                                            origin_device,
+                                            display_name.clone(),
+                                            name.clone(),
+                                            data.len() as u64,
+                                            hash_hex.clone(),
+                                            false,
+                                        ),
                                 }
+                            };
 
-                                // Wrap content in Arc here so all downstream users — the
-                                // EngineEvent and every relay-fanout hop — share one heap
-                                // allocation instead of N independent clones (MED-01).
-                                // (content is already Arc<ClipboardContent>)
-                                let _ = shared.event_tx.send(EngineEvent::ClipboardReceived {
+                            // If auto-applying, mark immediately applied.
+                            if auto_apply {
+                                let mut feed = shared.activity.lock().await;
+                                feed.record_clipboard_applied(
+                                    origin_device,
+                                    display_name.clone(),
+                                    hash_hex.clone(),
+                                );
+                            }
+
+                            // Wrap content in Arc here so all downstream users — the
+                            // EngineEvent and every relay-fanout hop — share one heap
+                            // allocation instead of N independent clones (MED-01).
+                            // (content is already Arc<ClipboardContent>)
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::ClipboardReceived {
                                     from_device: origin_device,
                                     from_name: display_name.clone(),
                                     content: content.clone(),
                                     auto_applied: auto_apply,
                                     relay_path: relay_path.clone(),
                                     activity_id,
-                                }).await;
-                                let _ = rx_session_outbox_tx.send(AppMessage::ClipboardAck { seq }).await;
+                                })
+                                .await;
+                            let _ = rx_session_outbox_tx
+                                .send(AppMessage::ClipboardAck { seq })
+                                .await;
 
-                                // Persist the incoming item to history.
+                            // Persist the incoming item to history.
+                            {
+                                let max_bytes = shared.settings.lock().await.max_history_text_bytes;
+                                let source = display_name.clone();
+                                let _ = shared
+                                    .history
+                                    .lock()
+                                    .await
+                                    .push_with_options(&content, source, max_bytes);
+                            }
+
+                            // ── Mesh fanout relay ──────────────────────────
+                            // If we received from a direct peer but there are other
+                            // peers in the mesh, relay onwards (excluding origin + seen).
+                            // Wrap content in Arc so each relay hop shares the same
+                            // heap allocation instead of cloning the full payload
+                            // (MED-01 — AppMessage::clone on relay hops).
+                            let fanout_peers = shared.peer_manager.active_senders();
+                            let mut router = shared.mesh_router.lock().await;
+                            // shared_content is already Arc-wrapped above; no further
+                            // full clone needed here — each fan-out is a pointer clone
+                            // plus one cheap metadata-struct clone (MED-01).
+                            for (fp_id, fp_tx) in fanout_peers {
+                                if fp_id == peer_id {
+                                    continue;
+                                }
+                                let Some(fp) = shared.peer_manager.get(fp_id) else {
+                                    continue;
+                                };
+                                if !fp.is_sync_eligible() {
+                                    continue;
+                                }
+                                if !router.should_relay_to(hash, origin_device, fp_id, &relay_path)
                                 {
-                                    let max_bytes = shared.settings.lock().await.max_history_text_bytes;
-                                    let source = display_name.clone();
-                                    let _ = shared.history.lock().await
-                                        .push_with_options(&content, source, max_bytes);
+                                    continue;
                                 }
-
-                                // ── Mesh fanout relay ──────────────────────────
-                                // If we received from a direct peer but there are other
-                                // peers in the mesh, relay onwards (excluding origin + seen).
-                                // Wrap content in Arc so each relay hop shares the same
-                                // heap allocation instead of cloning the full payload
-                                // (MED-01 — AppMessage::clone on relay hops).
-                                let fanout_peers = shared.peer_manager.active_senders();
-                                let mut router = shared.mesh_router.lock().await;
-                                // shared_content is already Arc-wrapped above; no further
-                                // full clone needed here — each fan-out is a pointer clone
-                                // plus one cheap metadata-struct clone (MED-01).
-                                for (fp_id, fp_tx) in fanout_peers {
-                                    if fp_id == peer_id { continue; }
-                                    let Some(fp) = shared.peer_manager.get(fp_id) else { continue; };
-                                    if !fp.is_sync_eligible() { continue; }
-                                    if !router.should_relay_to(hash, origin_device, fp_id, &relay_path) { continue; }
-                                    let mut extended_path = relay_path.clone();
-                                    extended_path.push(shared.config.device_name.clone());
-                                    let _ = fp_tx.try_send(AppMessage::ClipboardPush {
-                                        seq,
-                                        content: content.clone(),
-                                        origin_device,
-                                        origin_device_name: display_name.clone(),
-                                        relay_path: extended_path,
-                                    });
-                                }
-                            } else {
-                                let _ = shared.event_tx.send(EngineEvent::Warning(format!(
+                                let mut extended_path = relay_path.clone();
+                                extended_path.push(shared.config.device_name.clone());
+                                let _ = fp_tx.try_send(AppMessage::ClipboardPush {
+                                    seq,
+                                    content: content.clone(),
+                                    origin_device,
+                                    origin_device_name: display_name.clone(),
+                                    relay_path: extended_path,
+                                });
+                            }
+                        } else {
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::Warning(format!(
                                     "ignoring clipboard payload from untrusted/paused peer {}",
                                     peer_name
-                                ))).await;
-                            }
+                                )))
+                                .await;
                         }
-                        Ok(AppMessage::FileTransferAnnounce { meta }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                let _ = rx_session_outbox_tx.send(AppMessage::FileTransferCancel {
+                    }
+                    Ok(AppMessage::FileTransferAnnounce { meta }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            let _ = rx_session_outbox_tx
+                                .send(AppMessage::FileTransferCancel {
                                     transfer_id: meta.transfer_id,
-                                    reason: "Device not trusted (Accept pairing request first)".to_string()
-                                }).await;
-                                let _ = shared.event_tx.send(EngineEvent::Warning(format!(
+                                    reason: "Device not trusted (Accept pairing request first)"
+                                        .to_string(),
+                                })
+                                .await;
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::Warning(format!(
                                     "ignoring file transfer from untrusted peer {}",
                                     peer_name
-                                ))).await;
-                                continue;
-                            }
-                            let transfer_id = meta.transfer_id;
-                            let file_name = meta.file_name.clone();
-                            let file_bytes = meta.size_bytes;
-                            let mime_type = meta.mime_type.clone();
+                                )))
+                                .await;
+                            continue;
+                        }
+                        let transfer_id = meta.transfer_id;
+                        let file_name = meta.file_name.clone();
+                        let file_bytes = meta.size_bytes;
+                        let mime_type = meta.mime_type.clone();
 
-                            // Register inbound transfer.
-                            let reg_result = shared.file_transfers.lock().await
-                                .register_inbound(meta, peer_id, peer_name.clone())
-                                .map(|_| ());
-                            if let Err(e) = reg_result {
-                                tracing::warn!(error = %e, "rejected file transfer announce");
-                                let _ = rx_session_outbox_tx.send(AppMessage::FileTransferCancel { transfer_id, reason: e.to_string() }).await;
-                                continue;
-                            }
+                        // Register inbound transfer.
+                        let reg_result = shared
+                            .file_transfers
+                            .lock()
+                            .await
+                            .register_inbound(meta, peer_id, peer_name.clone())
+                            .map(|_| ());
+                        if let Err(e) = reg_result {
+                            tracing::warn!(error = %e, "rejected file transfer announce");
+                            let _ = rx_session_outbox_tx
+                                .send(AppMessage::FileTransferCancel {
+                                    transfer_id,
+                                    reason: e.to_string(),
+                                })
+                                .await;
+                            continue;
+                        }
 
-                            // Check auto-accept policy.
-                            let settings = shared.settings.lock().await.clone();
-                            let auto_accept = settings.auto_accept_file_transfers
-                                && (settings.auto_accept_max_bytes == 0 || file_bytes <= settings.auto_accept_max_bytes)
-                                && shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false);
+                        // Check auto-accept policy.
+                        let settings = shared.settings.lock().await.clone();
+                        let auto_accept = settings.auto_accept_file_transfers
+                            && (settings.auto_accept_max_bytes == 0
+                                || file_bytes <= settings.auto_accept_max_bytes)
+                            && shared
+                                .peer_manager
+                                .get(peer_id)
+                                .map(|p| p.trusted)
+                                .unwrap_or(false);
 
-                            if auto_accept {
-                                let resume_from = shared.file_transfers.lock().await
-                                    .accept_inbound_or_resume(&transfer_id).unwrap_or(0);
-                                let _ = rx_session_outbox_tx.send(AppMessage::FileTransferAccept {
+                        if auto_accept {
+                            let resume_from = shared
+                                .file_transfers
+                                .lock()
+                                .await
+                                .accept_inbound_or_resume(&transfer_id)
+                                .unwrap_or(0);
+                            let _ = rx_session_outbox_tx
+                                .send(AppMessage::FileTransferAccept {
                                     transfer_id,
                                     accepted: true,
                                     resume_from_chunk: resume_from,
                                     reject_reason: None,
-                                }).await;
-                                // Record in feed.
-                                shared.activity.lock().await.record_file_transfer_started(
-                                    peer_id,
-                                    peer_name.clone(),
-                                    file_name.clone(),
-                                    file_bytes,
-                                    hex::encode(transfer_id),
-                                    false,
-                                );
-                            } else {
-                                // Prompt the user via event.
-                                let _ = shared.event_tx.send(EngineEvent::FileTransferIncoming {
+                                })
+                                .await;
+                            // Record in feed.
+                            shared.activity.lock().await.record_file_transfer_started(
+                                peer_id,
+                                peer_name.clone(),
+                                file_name.clone(),
+                                file_bytes,
+                                hex::encode(transfer_id),
+                                false,
+                            );
+                        } else {
+                            // Prompt the user via event.
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::FileTransferIncoming {
                                     transfer_id,
                                     from_device: peer_id,
                                     from_name: peer_name.clone(),
                                     file_name,
                                     file_bytes,
                                     mime_type,
-                                }).await;
-                            }
+                                })
+                                .await;
                         }
-                        Ok(AppMessage::FileTransferAccept { transfer_id, accepted, resume_from_chunk, reject_reason }) => {
-                            touch_last_seen();
-                            if !accepted {
-                                shared.file_transfers.lock().await.cancel_outbound(&transfer_id);
-                                let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
+                    }
+                    Ok(AppMessage::FileTransferAccept {
+                        transfer_id,
+                        accepted,
+                        resume_from_chunk,
+                        reject_reason,
+                    }) => {
+                        touch_last_seen();
+                        if !accepted {
+                            shared
+                                .file_transfers
+                                .lock()
+                                .await
+                                .cancel_outbound(&transfer_id);
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::FileTransferFailed {
                                     transfer_id,
                                     from_device: peer_id,
                                     reason: reject_reason.unwrap_or_else(|| "rejected".into()),
-                                }).await;
-                            } else {
-                                {
-                                    let mut mgr = shared.file_transfers.lock().await;
-                                    if let Some(transfer) = mgr.get_outbound_mut(&transfer_id) {
-                                        transfer.resume_from(resume_from_chunk);
-                                    }
+                                })
+                                .await;
+                        } else {
+                            {
+                                let mut mgr = shared.file_transfers.lock().await;
+                                if let Some(transfer) = mgr.get_outbound_mut(&transfer_id) {
+                                    transfer.resume_from(resume_from_chunk);
                                 }
-                                let bg_outbox = session_outbox_tx.clone();
-                                let bg_shared = shared.clone();
-                                let bg_transfer_id = transfer_id;
-                                tokio::spawn(async move {
-                                    // Batch multiple chunk reads per mutex lock to reduce contention.
-                                    // With 1 MB chunks, reading 8 at a time = 8 MB per lock cycle.
-                                    const BATCH_SIZE: usize = 8;
-                                    'outer: loop {
-                                        let batch: Vec<AppMessage> = {
-                                            let mut mgr = bg_shared.file_transfers.lock().await;
-                                            let mut msgs = Vec::with_capacity(BATCH_SIZE);
-                                            for _ in 0..BATCH_SIZE {
-                                                match mgr.get_outbound_mut(&bg_transfer_id) {
-                                                    Some(transfer) => match transfer.next_chunk_message() {
+                            }
+                            let bg_outbox = session_outbox_tx.clone();
+                            let bg_shared = shared.clone();
+                            let bg_transfer_id = transfer_id;
+                            tokio::spawn(async move {
+                                // Batch multiple chunk reads per mutex lock to reduce contention.
+                                // With 1 MB chunks, reading 8 at a time = 8 MB per lock cycle.
+                                const BATCH_SIZE: usize = 8;
+                                'outer: loop {
+                                    let batch: Vec<AppMessage> = {
+                                        let mut mgr = bg_shared.file_transfers.lock().await;
+                                        let mut msgs = Vec::with_capacity(BATCH_SIZE);
+                                        for _ in 0..BATCH_SIZE {
+                                            match mgr.get_outbound_mut(&bg_transfer_id) {
+                                                Some(transfer) => {
+                                                    match transfer.next_chunk_message() {
                                                         Ok(Some(FileTransferMessage::Chunk {
                                                             transfer_id,
                                                             chunk_index,
@@ -3716,60 +3821,86 @@ fn register_session(
                                                             mgr.cancel_outbound(&bg_transfer_id);
                                                             break 'outer;
                                                         }
-                                                    },
-                                                    None => break,
+                                                    }
                                                 }
-                                            }
-                                            msgs
-                                        };
-
-                                        if batch.is_empty() {
-                                            break;
-                                        }
-                                        for wire_msg in batch {
-                                            if bg_outbox.send(wire_msg).await.is_err() {
-                                                break 'outer;
+                                                None => break,
                                             }
                                         }
-                                    }
-
-                                    let all_sent = {
-                                        let mut mgr = bg_shared.file_transfers.lock().await;
-                                        mgr.get_outbound_mut(&bg_transfer_id)
-                                            .map(|transfer| transfer.is_all_sent())
-                                            .unwrap_or(false)
+                                        msgs
                                     };
-                                    if all_sent {
-                                        let _ = bg_outbox.send(AppMessage::FileTransferComplete { transfer_id: bg_transfer_id }).await;
+
+                                    if batch.is_empty() {
+                                        break;
                                     }
-                                });
-                            }
-                        }
-                        Ok(AppMessage::FileChunk { transfer_id, chunk_index, total_chunks: _, data }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            let (progress, should_ack) = {
-                                let mut mgr = shared.file_transfers.lock().await;
-                                if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
-                                    if transfer.from_device != peer_id {
-                                        continue;
+                                    for wire_msg in batch {
+                                        if bg_outbox.send(wire_msg).await.is_err() {
+                                            break 'outer;
+                                        }
                                     }
-                                    let prog = match transfer.receive_chunk(chunk_index, data) { Ok(p) => Some(p), Err(e) => { tracing::error!("Failed to receive chunk: {:?}", e); None } };
-                                    let ack = transfer.should_ack();
-                                    (prog, ack)
-                                } else {
-                                    (None, false)
                                 }
-                            };
-                            if let Some(prog) = progress {
-                                let from_device = peer_id;
-                                let file_name = shared.file_transfers.lock().await
-                                    .get_inbound_mut(&transfer_id)
-                                    .map(|t| t.meta.file_name.clone())
-                                    .unwrap_or_default();
-                                let _ = shared.event_tx.send(EngineEvent::FileTransferProgress {
+
+                                let all_sent = {
+                                    let mut mgr = bg_shared.file_transfers.lock().await;
+                                    mgr.get_outbound_mut(&bg_transfer_id)
+                                        .map(|transfer| transfer.is_all_sent())
+                                        .unwrap_or(false)
+                                };
+                                if all_sent {
+                                    let _ = bg_outbox
+                                        .send(AppMessage::FileTransferComplete {
+                                            transfer_id: bg_transfer_id,
+                                        })
+                                        .await;
+                                }
+                            });
+                        }
+                    }
+                    Ok(AppMessage::FileChunk {
+                        transfer_id,
+                        chunk_index,
+                        total_chunks: _,
+                        data,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        let (progress, should_ack) = {
+                            let mut mgr = shared.file_transfers.lock().await;
+                            if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
+                                if transfer.from_device != peer_id {
+                                    continue;
+                                }
+                                let prog = match transfer.receive_chunk(chunk_index, data) {
+                                    Ok(p) => Some(p),
+                                    Err(e) => {
+                                        tracing::error!("Failed to receive chunk: {:?}", e);
+                                        None
+                                    }
+                                };
+                                let ack = transfer.should_ack();
+                                (prog, ack)
+                            } else {
+                                (None, false)
+                            }
+                        };
+                        if let Some(prog) = progress {
+                            let from_device = peer_id;
+                            let file_name = shared
+                                .file_transfers
+                                .lock()
+                                .await
+                                .get_inbound_mut(&transfer_id)
+                                .map(|t| t.meta.file_name.clone())
+                                .unwrap_or_default();
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::FileTransferProgress {
                                     transfer_id,
                                     from_device,
                                     file_name,
@@ -3778,182 +3909,267 @@ fn register_session(
                                     total_bytes: prog.total_bytes,
                                     speed_bps: prog.speed_bps,
                                     eta_secs: prog.eta_secs,
-                                }).await;
-                            }
-                            if should_ack {
-                                let last_confirmed = shared.file_transfers.lock().await
-                                    .get_inbound_mut(&transfer_id)
-                                    .map(|t| t.last_confirmed_chunk)
-                                    .unwrap_or(0);
-                                let _ = rx_session_outbox_tx.send(AppMessage::FileChunkAck {
+                                })
+                                .await;
+                        }
+                        if should_ack {
+                            let last_confirmed = shared
+                                .file_transfers
+                                .lock()
+                                .await
+                                .get_inbound_mut(&transfer_id)
+                                .map(|t| t.last_confirmed_chunk)
+                                .unwrap_or(0);
+                            let _ = rx_session_outbox_tx
+                                .send(AppMessage::FileChunkAck {
                                     transfer_id,
                                     last_confirmed_chunk: last_confirmed,
-                                }).await;
+                                })
+                                .await;
+                        }
+                    }
+                    Ok(AppMessage::FileChunkAck {
+                        transfer_id,
+                        last_confirmed_chunk,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        if let Some(transfer) = shared
+                            .file_transfers
+                            .lock()
+                            .await
+                            .get_outbound_mut(&transfer_id)
+                        {
+                            if transfer.target_device == Some(peer_id)
+                                || transfer.target_device.is_none()
+                            {
+                                transfer.on_chunk_ack(last_confirmed_chunk);
                             }
                         }
-                        Ok(AppMessage::FileChunkAck { transfer_id, last_confirmed_chunk }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            if let Some(transfer) = shared.file_transfers.lock().await.get_outbound_mut(&transfer_id) {
-                                if transfer.target_device == Some(peer_id) || transfer.target_device.is_none() {
-                                    transfer.on_chunk_ack(last_confirmed_chunk);
-                                }
-                            }
+                    }
+                    Ok(AppMessage::FileTransferComplete { transfer_id }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
                         }
-                        Ok(AppMessage::FileTransferComplete { transfer_id }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            // Finalize: verify SHA-256 and write to disk.
-                            let result = {
-                                let mut mgr = shared.file_transfers.lock().await;
-                                if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
-                                    if transfer.from_device != peer_id {
-                                        Err("transfer not from this peer".into())
-                                    } else {
-                                        let file_name = transfer.meta.file_name.clone();
-                                        let file_bytes = transfer.meta.size_bytes;
-                                        match transfer.finalize() {
-                                            Ok(dest) => Ok((dest, file_name, file_bytes)),
-                                            Err(e) => Err(e.to_string()),
-                                        }
-                                    }
+                        // Finalize: verify SHA-256 and write to disk.
+                        let result = {
+                            let mut mgr = shared.file_transfers.lock().await;
+                            if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
+                                if transfer.from_device != peer_id {
+                                    Err("transfer not from this peer".into())
                                 } else {
-                                    Err("transfer not found".into())
+                                    let file_name = transfer.meta.file_name.clone();
+                                    let file_bytes = transfer.meta.size_bytes;
+                                    match transfer.finalize() {
+                                        Ok(dest) => Ok((dest, file_name, file_bytes)),
+                                        Err(e) => Err(e.to_string()),
+                                    }
                                 }
-                            };
-                            match result {
-                                Ok((dest, file_name, file_bytes)) => {
-                                    shared.file_transfers.lock().await.remove_inbound(&transfer_id);
-                                    let hex_tid = hex::encode(transfer_id);
-                                    let dest_path_str = dest.to_string_lossy().to_string();
-                                    shared.activity.lock().await.record_file_transfer_complete(
-                                        peer_id, peer_name.clone(), file_name.clone(), file_bytes,
-                                        hex_tid, Some(dest_path_str)
-                                    );
-                                    let _ = rx_session_outbox_tx.send(AppMessage::FileTransferCompleteAck {
+                            } else {
+                                Err("transfer not found".into())
+                            }
+                        };
+                        match result {
+                            Ok((dest, file_name, file_bytes)) => {
+                                shared
+                                    .file_transfers
+                                    .lock()
+                                    .await
+                                    .remove_inbound(&transfer_id);
+                                let hex_tid = hex::encode(transfer_id);
+                                let dest_path_str = dest.to_string_lossy().to_string();
+                                shared.activity.lock().await.record_file_transfer_complete(
+                                    peer_id,
+                                    peer_name.clone(),
+                                    file_name.clone(),
+                                    file_bytes,
+                                    hex_tid,
+                                    Some(dest_path_str),
+                                );
+                                let _ = rx_session_outbox_tx
+                                    .send(AppMessage::FileTransferCompleteAck {
                                         transfer_id,
                                         success: true,
                                         error: None,
-                                    }).await;
-                                    let _ = shared.event_tx.send(EngineEvent::FileTransferComplete {
+                                    })
+                                    .await;
+                                let _ = shared
+                                    .event_tx
+                                    .send(EngineEvent::FileTransferComplete {
                                         transfer_id,
                                         from_device: peer_id,
                                         from_name: peer_name.clone(),
                                         file_name,
                                         dest_path: dest,
-                                    }).await;
-                                }
-                                Err(e) => {
-                                    let hex_tid = hex::encode(transfer_id);
-                                    shared.activity.lock().await.record_file_transfer_failed(
-                                        peer_id, peer_name.clone(), None, hex_tid, e.clone()
-                                    );
-                                    let _ = rx_session_outbox_tx.send(AppMessage::FileTransferCompleteAck {
+                                    })
+                                    .await;
+                            }
+                            Err(e) => {
+                                let hex_tid = hex::encode(transfer_id);
+                                shared.activity.lock().await.record_file_transfer_failed(
+                                    peer_id,
+                                    peer_name.clone(),
+                                    None,
+                                    hex_tid,
+                                    e.clone(),
+                                );
+                                let _ = rx_session_outbox_tx
+                                    .send(AppMessage::FileTransferCompleteAck {
                                         transfer_id,
                                         success: false,
                                         error: Some(e.clone()),
-                                    }).await;
-                                    let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
+                                    })
+                                    .await;
+                                let _ = shared
+                                    .event_tx
+                                    .send(EngineEvent::FileTransferFailed {
                                         transfer_id,
                                         from_device: peer_id,
                                         reason: e,
-                                    }).await;
+                                    })
+                                    .await;
+                            }
+                        }
+                    }
+                    Ok(AppMessage::FileTransferCompleteAck {
+                        transfer_id,
+                        success: _,
+                        error: _,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        shared
+                            .file_transfers
+                            .lock()
+                            .await
+                            .remove_outbound(&transfer_id);
+                    }
+                    Ok(AppMessage::FileTransferCancel {
+                        transfer_id,
+                        reason,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        {
+                            let mut mgr = shared.file_transfers.lock().await;
+                            if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                if t.from_device == peer_id {
+                                    mgr.cancel_inbound(&transfer_id, &reason);
+                                }
+                            }
+                            if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                                if t.target_device == Some(peer_id) || t.target_device.is_none() {
+                                    mgr.cancel_outbound(&transfer_id);
                                 }
                             }
                         }
-                        Ok(AppMessage::FileTransferCompleteAck { transfer_id, success: _, error: _ }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            shared.file_transfers.lock().await.remove_outbound(&transfer_id);
-                        }
-                        Ok(AppMessage::FileTransferCancel { transfer_id, reason }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            {
-                                let mut mgr = shared.file_transfers.lock().await;
-                                if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                    if t.from_device == peer_id {
-                                        mgr.cancel_inbound(&transfer_id, &reason);
-                                    }
-                                }
-                                if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-                                    if t.target_device == Some(peer_id) || t.target_device.is_none() {
-                                        mgr.cancel_outbound(&transfer_id);
-                                    }
-                                }
-                            }
-                            let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::FileTransferFailed {
                                 transfer_id,
                                 from_device: peer_id,
                                 reason,
-                            }).await;
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::FileTransferPause { transfer_id }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
                         }
-                        Ok(AppMessage::FileTransferPause { transfer_id }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            {
-                                let mut mgr = shared.file_transfers.lock().await;
-                                if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-                                    if t.target_device == Some(peer_id) || t.target_device.is_none() {
-                                        t.paused = true;
-                                    }
-                                } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                    if t.from_device == peer_id {
-                                        t.paused = true;
-                                    }
+                        {
+                            let mut mgr = shared.file_transfers.lock().await;
+                            if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                                if t.target_device == Some(peer_id) || t.target_device.is_none() {
+                                    t.paused = true;
+                                }
+                            } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                if t.from_device == peer_id {
+                                    t.paused = true;
                                 }
                             }
-                            let _ = shared.event_tx.send(EngineEvent::FileTransferPaused {
-                                transfer_id,
-                            }).await;
                         }
-                        Ok(AppMessage::FileTransferResume { transfer_id }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            let mut was_outbound = false;
-                            {
-                                let mut mgr = shared.file_transfers.lock().await;
-                                if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-                                    if t.target_device == Some(peer_id) || t.target_device.is_none() {
-                                        t.paused = false;
-                                        was_outbound = true;
-                                    }
-                                } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                    if t.from_device == peer_id {
-                                        t.paused = false;
-                                    }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::FileTransferPaused { transfer_id })
+                            .await;
+                    }
+                    Ok(AppMessage::FileTransferResume { transfer_id }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        let mut was_outbound = false;
+                        {
+                            let mut mgr = shared.file_transfers.lock().await;
+                            if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                                if t.target_device == Some(peer_id) || t.target_device.is_none() {
+                                    t.paused = false;
+                                    was_outbound = true;
+                                }
+                            } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                if t.from_device == peer_id {
+                                    t.paused = false;
                                 }
                             }
-                            let _ = shared.event_tx.send(EngineEvent::FileTransferResumed {
-                                transfer_id,
-                            }).await;
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::FileTransferResumed { transfer_id })
+                            .await;
 
-                            if was_outbound {
-                                // Resume the background chunk loop if we are the sender
-                                let bg_outbox = session_outbox_tx.clone();
-                                let bg_shared = shared.clone();
-                                let bg_transfer_id = transfer_id;
-                                tokio::spawn(async move {
-                                    const BATCH_SIZE: usize = 8;
-                                    'outer: loop {
-                                        let batch: Vec<AppMessage> = {
-                                            let mut mgr = bg_shared.file_transfers.lock().await;
-                                            let mut msgs = Vec::with_capacity(BATCH_SIZE);
-                                            for _ in 0..BATCH_SIZE {
-                                                match mgr.get_outbound_mut(&bg_transfer_id) {
-                                                    Some(transfer) => match transfer.next_chunk_message() {
+                        if was_outbound {
+                            // Resume the background chunk loop if we are the sender
+                            let bg_outbox = session_outbox_tx.clone();
+                            let bg_shared = shared.clone();
+                            let bg_transfer_id = transfer_id;
+                            tokio::spawn(async move {
+                                const BATCH_SIZE: usize = 8;
+                                'outer: loop {
+                                    let batch: Vec<AppMessage> = {
+                                        let mut mgr = bg_shared.file_transfers.lock().await;
+                                        let mut msgs = Vec::with_capacity(BATCH_SIZE);
+                                        for _ in 0..BATCH_SIZE {
+                                            match mgr.get_outbound_mut(&bg_transfer_id) {
+                                                Some(transfer) => {
+                                                    match transfer.next_chunk_message() {
                                                         Ok(Some(FileTransferMessage::Chunk {
                                                             transfer_id,
                                                             chunk_index,
@@ -3972,411 +4188,567 @@ fn register_session(
                                                             mgr.cancel_outbound(&bg_transfer_id);
                                                             break 'outer;
                                                         }
-                                                    },
-                                                    None => break,
+                                                    }
                                                 }
-                                            }
-                                            msgs
-                                        };
-
-                                        if batch.is_empty() {
-                                            break;
-                                        }
-                                        for wire_msg in batch {
-                                            if bg_outbox.send(wire_msg).await.is_err() {
-                                                break 'outer;
+                                                None => break,
                                             }
                                         }
-                                    }
-
-                                    let all_sent = {
-                                        let mut mgr = bg_shared.file_transfers.lock().await;
-                                        mgr.get_outbound_mut(&bg_transfer_id)
-                                            .map(|transfer| transfer.is_all_sent())
-                                            .unwrap_or(false)
+                                        msgs
                                     };
-                                    if all_sent {
-                                        let _ = bg_outbox.send(AppMessage::FileTransferComplete { transfer_id: bg_transfer_id }).await;
+
+                                    if batch.is_empty() {
+                                        break;
                                     }
-                                });
-                            }
+                                    for wire_msg in batch {
+                                        if bg_outbox.send(wire_msg).await.is_err() {
+                                            break 'outer;
+                                        }
+                                    }
+                                }
+
+                                let all_sent = {
+                                    let mut mgr = bg_shared.file_transfers.lock().await;
+                                    mgr.get_outbound_mut(&bg_transfer_id)
+                                        .map(|transfer| transfer.is_all_sent())
+                                        .unwrap_or(false)
+                                };
+                                if all_sent {
+                                    let _ = bg_outbox
+                                        .send(AppMessage::FileTransferComplete {
+                                            transfer_id: bg_transfer_id,
+                                        })
+                                        .await;
+                                }
+                            });
                         }
-                        Ok(AppMessage::HistoryMetadata { entry }) => {
-                            touch_last_seen();
-                            // MED-03 FIX: Only accept history metadata from trusted peers.
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            let _ = shared.peer_manager.update_last_sync(peer_id);
-                            let _ = shared.event_tx.send(EngineEvent::HistoryMetadataReceived {
+                    }
+                    Ok(AppMessage::HistoryMetadata { entry }) => {
+                        touch_last_seen();
+                        // MED-03 FIX: Only accept history metadata from trusted peers.
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        let _ = shared.peer_manager.update_last_sync(peer_id);
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::HistoryMetadataReceived {
                                 from_device: peer_id,
                                 from_name: peer_name.clone(),
                                 entry,
-                            }).await;
-                        }
-                        Ok(AppMessage::ClipboardAck { seq }) => {
-                            touch_last_seen();
-                            let _ = shared.peer_manager.update_last_sync(peer_id);
-                            let _ = shared.event_tx.send(EngineEvent::ClipboardSynced {
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::ClipboardAck { seq }) => {
+                        touch_last_seen();
+                        let _ = shared.peer_manager.update_last_sync(peer_id);
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::ClipboardSynced {
                                 peer_device: peer_id,
                                 peer_name: peer_name.clone(),
                                 seq,
-                            }).await;
-                        }
-                        Ok(AppMessage::KeyRotated { new_pubkey_bytes }) => {
-                            touch_last_seen();
-                            // Only accept key rotation from currently trusted peers over the established AEAD tunnel.
-                            if shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                let mut trust = shared.trust.lock().await;
-                                if let Ok(_) = trust.rotate_peer_key(peer_id, &new_pubkey_bytes) {
-                                    tracing::info!(peer_id = %peer_id, "Successfully processed KeyRotated from peer");
-                                }
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::KeyRotated { new_pubkey_bytes }) => {
+                        touch_last_seen();
+                        // Only accept key rotation from currently trusted peers over the established AEAD tunnel.
+                        if shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            let mut trust = shared.trust.lock().await;
+                            if let Ok(_) = trust.rotate_peer_key(peer_id, &new_pubkey_bytes) {
+                                tracing::info!(peer_id = %peer_id, "Successfully processed KeyRotated from peer");
                             }
                         }
-                        Ok(AppMessage::Ping { timestamp_ms }) => {
-                            touch_last_seen();
-                            let _ = rx_session_outbox_tx.send(AppMessage::Pong { timestamp_ms }).await;
-                        }
-                        Ok(AppMessage::PairingRequest { origin_device, origin_device_name }) => {
-                            touch_last_seen();
-                            
-                            // Self-healing trust: if we already trust this peer cryptographically,
-                            // and they are asking to pair again (perhaps they lost their app data),
-                            // automatically accept the request so they can trust us back.
-                            let is_trusted = shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false);
-                            if is_trusted {
-                                tracing::info!(peer_id = %peer_id, "Auto-accepting pairing request from already trusted device");
-                                let _ = rx_session_outbox_tx.send(AppMessage::PairingResponse {
+                    }
+                    Ok(AppMessage::Ping { timestamp_ms }) => {
+                        touch_last_seen();
+                        let _ = rx_session_outbox_tx
+                            .send(AppMessage::Pong { timestamp_ms })
+                            .await;
+                    }
+                    Ok(AppMessage::PairingRequest {
+                        origin_device,
+                        origin_device_name,
+                    }) => {
+                        touch_last_seen();
+
+                        // Self-healing trust: if we already trust this peer cryptographically,
+                        // and they are asking to pair again (perhaps they lost their app data),
+                        // automatically accept the request so they can trust us back.
+                        let is_trusted = shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false);
+                        if is_trusted {
+                            tracing::info!(peer_id = %peer_id, "Auto-accepting pairing request from already trusted device");
+                            let _ = rx_session_outbox_tx
+                                .send(AppMessage::PairingResponse {
                                     origin_device: shared.config.device_id,
                                     accepted: true,
-                                }).await;
-                                continue;
-                            }
+                                })
+                                .await;
+                            continue;
+                        }
 
-                            let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
+                        let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
 
-                            // Re-emit PairingRequested with the REAL name and PIN so the UI updates
-                            let pin = shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin).unwrap_or_else(|| "0000".to_string());
-                            let _ = shared.event_tx.send(EngineEvent::PairingRequested {
+                        // Re-emit PairingRequested with the REAL name and PIN so the UI updates
+                        let pin = shared
+                            .peer_manager
+                            .get(peer_id)
+                            .and_then(|p| p.pairing_pin)
+                            .unwrap_or_else(|| "0000".to_string());
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::PairingRequested {
                                 device_id: origin_device,
                                 device_name: origin_device_name.clone(),
                                 pin,
-                            }).await;
+                            })
+                            .await;
 
-                            let _ = shared.event_tx.send(EngineEvent::PairingRequest {
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::PairingRequest {
                                 device_id: origin_device,
                                 device_name: origin_device_name,
-                            }).await;
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::PairingResponse {
+                        origin_device,
+                        accepted,
+                    }) => {
+                        touch_last_seen();
+
+                        // CRIT-03 FIX: Only process PairingResponse if:
+                        //   1. The origin_device matches the actual session peer_id
+                        //      (prevents a connected peer from spoofing trust for a different device).
+                        //   2. We previously sent a PairingRequest to this peer
+                        //      (tracked via the pairing_requested flag set in respond_to_pairing).
+                        //   3. The peer is not already trusted (prevents re-trust of revoked peers).
+                        if origin_device != peer_id {
+                            tracing::warn!(
+                                peer_id = %peer_id,
+                                claimed_device = %origin_device,
+                                "ignoring PairingResponse: origin_device does not match session peer"
+                            );
+                            continue;
                         }
-                        Ok(AppMessage::PairingResponse { origin_device, accepted }) => {
-                            touch_last_seen();
 
-                            // CRIT-03 FIX: Only process PairingResponse if:
-                            //   1. The origin_device matches the actual session peer_id
-                            //      (prevents a connected peer from spoofing trust for a different device).
-                            //   2. We previously sent a PairingRequest to this peer
-                            //      (tracked via the pairing_requested flag set in respond_to_pairing).
-                            //   3. The peer is not already trusted (prevents re-trust of revoked peers).
-                            if origin_device != peer_id {
-                                tracing::warn!(
-                                    peer_id = %peer_id,
-                                    claimed_device = %origin_device,
-                                    "ignoring PairingResponse: origin_device does not match session peer"
-                                );
-                                continue;
-                            }
+                        // Check that we actually initiated pairing with this peer.
+                        // The `pairing_requested` flag is set to true in observe_trust()
+                        // when we emit PairingRequested, and cleared in respond_to_pairing().
+                        // A remote peer sending an unsolicited PairingResponse is rejected.
+                        let we_requested_pairing = shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.pairing_requested || p.outgoing_pairing_waiting)
+                            .unwrap_or(false);
+                        let we_already_trust_them = shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false);
 
-                            // Check that we actually initiated pairing with this peer.
-                            // The `pairing_requested` flag is set to true in observe_trust()
-                            // when we emit PairingRequested, and cleared in respond_to_pairing().
-                            // A remote peer sending an unsolicited PairingResponse is rejected.
-                            let we_requested_pairing = shared.peer_manager
-                                .get(peer_id)
-                                .map(|p| p.pairing_requested || p.outgoing_pairing_waiting)
-                                .unwrap_or(false);
-                            let we_already_trust_them = shared.peer_manager
-                                .get(peer_id)
-                                .map(|p| p.trusted)
-                                .unwrap_or(false);
-
-                            if !we_requested_pairing && !we_already_trust_them {
-                                tracing::warn!(
-                                    peer_id = %peer_id,
-                                    "ignoring unsolicited PairingResponse — no pending pairing request and not already trusted"
-                                );
-                                continue;
-                            }
-
-                            // Clear the pairing_requested flag now that we've received the response.
-                            let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
-                            let _ = shared.peer_manager.set_outgoing_pairing_waiting(peer_id, false);
-
-                            if !accepted {
-                                tracing::info!(peer_id = %peer_id, "peer rejected pairing request");
-                                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
-                                break "peer rejected pairing request".to_string();
-                            } else {
-                                // ── CRITICAL: Establish mutual trust ──────────────
-                                // The remote peer accepted our pairing request and
-                                // already trusts us (set in respond_to_pairing).
-                                // We must trust them back so the connection is fully
-                                // bidirectional — otherwise the dashboard shows
-                                // "not connected" and file transfers fail.
-                                tracing::info!(peer_id = %peer_id, "peer accepted pairing — establishing mutual trust");
-                                if !we_already_trust_them {
-                                    let mut trust = shared.trust.lock().await;
-                                    let _ = trust.trust_peer(peer_id);
-                                    let _ = shared.peer_manager.update_trust(peer_id, true);
-                                }
-                                let _ = shared.peer_manager.set_auto_connect(peer_id, true);
-                                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
-
-                                // Emit PeerConnected so the UI updates immediately.
-                                let _ = shared.event_tx.send(EngineEvent::PeerConnected {
-                                    device_id: peer_id,
-                                    device_name: peer_name.clone(),
-                                    addr: endpoint,
-                                    trusted: true,
-                                }).await;
-                            }
-                            let _ = shared.event_tx.send(EngineEvent::PairingResponse {
-                                device_id: origin_device,
-                                accepted,
-                            }).await;
+                        if !we_requested_pairing && !we_already_trust_them {
+                            tracing::warn!(
+                                peer_id = %peer_id,
+                                "ignoring unsolicited PairingResponse — no pending pairing request and not already trusted"
+                            );
+                            continue;
                         }
-                        Ok(AppMessage::QrAuth { token }) => {
-                            let valid = {
-                                let mut stored = shared.qr_auth_token.lock().await;
-                                if let Some(t) = stored.as_ref() {
-                                    if t == &token {
-                                        *stored = None; // Single-use token
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            };
-                            
-                            if valid {
-                                tracing::info!(peer_id = %peer_id, "peer provided valid QR auth token — establishing mutual trust");
-                                let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
-                                let _ = shared.peer_manager.set_outgoing_pairing_waiting(peer_id, false);
-                                
+
+                        // Clear the pairing_requested flag now that we've received the response.
+                        let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
+                        let _ = shared
+                            .peer_manager
+                            .set_outgoing_pairing_waiting(peer_id, false);
+
+                        if !accepted {
+                            tracing::info!(peer_id = %peer_id, "peer rejected pairing request");
+                            let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                            break "peer rejected pairing request".to_string();
+                        } else {
+                            // ── CRITICAL: Establish mutual trust ──────────────
+                            // The remote peer accepted our pairing request and
+                            // already trusts us (set in respond_to_pairing).
+                            // We must trust them back so the connection is fully
+                            // bidirectional — otherwise the dashboard shows
+                            // "not connected" and file transfers fail.
+                            tracing::info!(peer_id = %peer_id, "peer accepted pairing — establishing mutual trust");
+                            if !we_already_trust_them {
                                 let mut trust = shared.trust.lock().await;
                                 let _ = trust.trust_peer(peer_id);
                                 let _ = shared.peer_manager.update_trust(peer_id, true);
-                                let _ = shared.peer_manager.set_auto_connect(peer_id, true);
-                                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
-                                
-                                
-                                
-                                // Emit PeerConnected so the UI updates immediately.
-                                let _ = shared.event_tx.send(EngineEvent::PeerConnected {
+                            }
+                            let _ = shared.peer_manager.set_auto_connect(peer_id, true);
+                            let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+
+                            // Emit PeerConnected so the UI updates immediately.
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::PeerConnected {
                                     device_id: peer_id,
                                     device_name: peer_name.clone(),
                                     addr: endpoint,
                                     trusted: true,
-                                }).await;
-                            } else {
-                                tracing::warn!(peer_id = %peer_id, "peer provided invalid QR auth token");
-                            }
+                                })
+                                .await;
                         }
-                        Ok(AppMessage::Pong { timestamp_ms: _ }) => {
-                            touch_last_seen();
-                            // Feed the RTT sample into the peer's quality probe
-                            // using the Instant captured at send time, which is
-                            // far more accurate than round-tripping wall-clock ms
-                            // over the network (HIGH-03).
-                            let maybe_sent_at = rx_ping_sent_at.lock().unwrap().take();
-                            if let Some(sent_at) = maybe_sent_at {
-                                let rtt_us = probe::measure_rtt_us(sent_at);
-                                let result = ProbeResult::from_samples(vec![rtt_us]);
-                                let mut probes = shared.quality_probes.lock().await;
-                                probes
-                                    .entry(peer_id)
-                                    .or_insert_with(|| QualityProbe::new(peer_name.as_str()))
-                                    .record(result);
-                            }
-                        }
-                        Ok(AppMessage::CallStateUpdate {
-                            state, number, contact_name,
-                            origin_device, origin_device_name,
-                        }) => {
-                            touch_last_seen();
-                            // MED-03 FIX: Only process call state from trusted peers.
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            // Persist in shared state for IPC status polling.
-                            {
-                                let mut call = shared.active_call.lock().await;
-                                if state == "idle" {
-                                    *call = None;
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::PairingResponse {
+                                device_id: origin_device,
+                                accepted,
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::QrAuth { token }) => {
+                        let valid = {
+                            let mut stored = shared.qr_auth_token.lock().await;
+                            if let Some(t) = stored.as_ref() {
+                                if t == &token {
+                                    *stored = None; // Single-use token
+                                    true
                                 } else {
-                                    *call = Some(ActiveCallState {
-                                        device_id: origin_device,
-                                        device_name: origin_device_name.clone(),
-                                        state: state.clone(),
-                                        number: number.clone(),
-                                        contact_name: contact_name.clone(),
-                                    });
+                                    false
                                 }
+                            } else {
+                                false
                             }
-                            let _ = shared.event_tx.send(EngineEvent::CallStateChanged {
+                        };
+
+                        if valid {
+                            tracing::info!(peer_id = %peer_id, "peer provided valid QR auth token — establishing mutual trust");
+                            let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
+                            let _ = shared
+                                .peer_manager
+                                .set_outgoing_pairing_waiting(peer_id, false);
+
+                            let mut trust = shared.trust.lock().await;
+                            let _ = trust.trust_peer(peer_id);
+                            let _ = shared.peer_manager.update_trust(peer_id, true);
+                            let _ = shared.peer_manager.set_auto_connect(peer_id, true);
+                            let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+
+                            // Emit PeerConnected so the UI updates immediately.
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::PeerConnected {
+                                    device_id: peer_id,
+                                    device_name: peer_name.clone(),
+                                    addr: endpoint,
+                                    trusted: true,
+                                })
+                                .await;
+                        } else {
+                            tracing::warn!(peer_id = %peer_id, "peer provided invalid QR auth token");
+                        }
+                    }
+                    Ok(AppMessage::Pong { timestamp_ms: _ }) => {
+                        touch_last_seen();
+                        // Feed the RTT sample into the peer's quality probe
+                        // using the Instant captured at send time, which is
+                        // far more accurate than round-tripping wall-clock ms
+                        // over the network (HIGH-03).
+                        let maybe_sent_at = rx_ping_sent_at.lock().unwrap().take();
+                        if let Some(sent_at) = maybe_sent_at {
+                            let rtt_us = probe::measure_rtt_us(sent_at);
+                            let result = ProbeResult::from_samples(vec![rtt_us]);
+                            let mut probes = shared.quality_probes.lock().await;
+                            probes
+                                .entry(peer_id)
+                                .or_insert_with(|| QualityProbe::new(peer_name.as_str()))
+                                .record(result);
+                        }
+                    }
+                    Ok(AppMessage::CallStateUpdate {
+                        state,
+                        number,
+                        contact_name,
+                        origin_device,
+                        origin_device_name,
+                    }) => {
+                        touch_last_seen();
+                        // MED-03 FIX: Only process call state from trusted peers.
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        // Persist in shared state for IPC status polling.
+                        {
+                            let mut call = shared.active_call.lock().await;
+                            if state == "idle" {
+                                *call = None;
+                            } else {
+                                *call = Some(ActiveCallState {
+                                    device_id: origin_device,
+                                    device_name: origin_device_name.clone(),
+                                    state: state.clone(),
+                                    number: number.clone(),
+                                    contact_name: contact_name.clone(),
+                                });
+                            }
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::CallStateChanged {
                                 from_device: origin_device,
                                 from_name: origin_device_name,
                                 state,
                                 number,
                                 contact_name,
-                            }).await;
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::BatteryStatus {
+                        level,
+                        charging,
+                        origin_device,
+                        origin_device_name,
+                    }) => {
+                        touch_last_seen();
+                        // MED-03 FIX: Only process battery status from trusted peers.
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
                         }
-                        Ok(AppMessage::BatteryStatus {
-                            level,
-                            charging,
-                            origin_device,
-                            origin_device_name,
-                        }) => {
-                            touch_last_seen();
-                            // MED-03 FIX: Only process battery status from trusted peers.
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            // Persist in shared state for IPC status polling.
-                            {
-                                let mut batteries = shared.peer_batteries.lock().await;
-                                batteries.insert(origin_device, PeerBatteryState {
+                        // Persist in shared state for IPC status polling.
+                        {
+                            let mut batteries = shared.peer_batteries.lock().await;
+                            batteries.insert(
+                                origin_device,
+                                PeerBatteryState {
                                     device_id: origin_device,
                                     device_name: origin_device_name.clone(),
                                     level,
                                     charging,
-                                });
-                            }
-                            let _ = shared.event_tx.send(EngineEvent::BatteryStateChanged {
+                                },
+                            );
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::BatteryStateChanged {
                                 from_device: origin_device,
                                 from_name: origin_device_name,
                                 level,
                                 charging,
-                            }).await;
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::NetworkStatus {
+                        network_type,
+                        origin_device,
+                        origin_device_name,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
                         }
-                        Ok(AppMessage::NetworkStatus {
-                            network_type,
-                            origin_device,
-                            origin_device_name,
-                        }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            {
-                                let mut networks = shared.peer_networks.lock().await;
-                                networks.insert(origin_device, PeerNetworkState {
+                        {
+                            let mut networks = shared.peer_networks.lock().await;
+                            networks.insert(
+                                origin_device,
+                                PeerNetworkState {
                                     device_id: origin_device,
                                     device_name: origin_device_name.clone(),
                                     network_type: network_type.clone(),
-                                });
-                            }
-                            let _ = shared.event_tx.send(EngineEvent::NetworkStateChanged {
+                                },
+                            );
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::NetworkStateChanged {
                                 from_device: origin_device,
                                 from_name: origin_device_name,
                                 network_type,
-                            }).await;
-                        }
-                        Ok(AppMessage::CallAction { action, origin_device }) => {
-                            touch_last_seen();
-                            tracing::info!("Received CallAction: {} from {:?}", action, origin_device);
-                            let _ = shared.event_tx.send(EngineEvent::CallActionRequest {
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::CallAction {
+                        action,
+                        origin_device,
+                    }) => {
+                        touch_last_seen();
+                        tracing::info!("Received CallAction: {} from {:?}", action, origin_device);
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::CallActionRequest {
                                 action,
                                 from_device: origin_device,
-                            }).await;
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::Bye) => {
+                        // Do NOT set explicit_disconnect here — receiving Bye from
+                        // the remote peer (e.g., Android OS killed the socket) is
+                        // not a user-initiated disconnect. Auto-reconnect must stay
+                        // enabled so the watchdog can re-establish the link.
+                        break "peer closed session".to_string();
+                    }
+                    Ok(AppMessage::NotificationRelay {
+                        id,
+                        package,
+                        title,
+                        text,
+                        origin_device,
+                        origin_device_name,
+                    }) => {
+                        touch_last_seen();
+                        // MED-03 FIX: Only process notifications from trusted peers.
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
                         }
-                        Ok(AppMessage::Bye) => {
-                            // Do NOT set explicit_disconnect here — receiving Bye from
-                            // the remote peer (e.g., Android OS killed the socket) is
-                            // not a user-initiated disconnect. Auto-reconnect must stay
-                            // enabled so the watchdog can re-establish the link.
-                            break "peer closed session".to_string();
-                        }
-                        Ok(AppMessage::NotificationRelay {
-                            id,
-                            package,
-                            title,
-                            text,
-                            origin_device,
-                            origin_device_name,
-                        }) => {
-                            touch_last_seen();
-                            // MED-03 FIX: Only process notifications from trusted peers.
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            let _activity_id = {
-                                let mut feed = shared.activity.lock().await;
-                                feed.record_remote_notification(origin_device, origin_device_name.clone(), package.clone(), title.clone(), text.clone())
-                            };
-                            let _ = shared.event_tx.send(EngineEvent::NotificationReceived {
+                        let _activity_id = {
+                            let mut feed = shared.activity.lock().await;
+                            feed.record_remote_notification(
+                                origin_device,
+                                origin_device_name.clone(),
+                                package.clone(),
+                                title.clone(),
+                                text.clone(),
+                            )
+                        };
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::NotificationReceived {
                                 id,
                                 package,
                                 title,
                                 text,
                                 from_device: origin_device,
                                 from_name: origin_device_name,
-                            }).await;
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::CameraStreamRequest { origin_device }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
                         }
-                        Ok(AppMessage::CameraStreamRequest { origin_device }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            let _ = shared.event_tx.send(EngineEvent::CameraStreamRequest {
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::CameraStreamRequest {
                                 from_device: origin_device,
-                            }).await;
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::CameraStreamAccept {
+                        origin_device,
+                        accepted,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
                         }
-                        Ok(AppMessage::CameraStreamAccept { origin_device, accepted }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            let _ = shared.event_tx.send(EngineEvent::CameraStreamAccept {
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::CameraStreamAccept {
                                 from_device: origin_device,
                                 accepted,
-                            }).await;
-                        }
-                        Ok(AppMessage::CameraStreamStop { origin_device }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            shared.camera_frames.lock().await.remove(&origin_device);
-                            let _ = shared.event_tx.send(EngineEvent::CameraStreamStop {
-                                from_device: origin_device,
-                            }).await;
-                        }
-                        Ok(AppMessage::CameraFrame { origin_device, data }) => {
-                            touch_last_seen();
-                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
-                                continue;
-                            }
-                            shared.camera_frames.lock().await.insert(origin_device, data);
-                            let _ = shared.event_tx.send(EngineEvent::CameraFrameReceived {
-                                from_device: origin_device,
-                            }).await;
-                        }
-                        Ok(AppMessage::Hello { .. }) | Ok(AppMessage::HelloAck { .. }) => {
-                            // Ignored in session loop
-                        }
-                        Err(err) => {
-                            break err.to_string();
-                        }
+                            })
+                            .await;
                     }
+                    Ok(AppMessage::CameraStreamStop { origin_device }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        shared.camera_frames.lock().await.remove(&origin_device);
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::CameraStreamStop {
+                                from_device: origin_device,
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::CameraFrame {
+                        origin_device,
+                        data,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        shared
+                            .camera_frames
+                            .lock()
+                            .await
+                            .insert(origin_device, data);
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::CameraFrameReceived {
+                                from_device: origin_device,
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::Hello { .. }) | Ok(AppMessage::HelloAck { .. }) => {
+                        // Ignored in session loop
+                    }
+                    Err(err) => {
+                        break err.to_string();
+                    }
+                }
             }
         });
 
         let disconnect_reason = loop {
-            let now_millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+            let now_millis = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
             let last_seen_millis = last_seen.load(std::sync::atomic::Ordering::Relaxed);
-            
+
             tokio::select! {
                 shutdown = &mut shutdown_rx => {
                     match shutdown {
@@ -4452,7 +4824,9 @@ fn register_session(
 
                 // FIX: Phantom Pairing Prompts. Clear pairing state if connection drops.
                 let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
-                let _ = shared.peer_manager.set_outgoing_pairing_waiting(peer_id, false);
+                let _ = shared
+                    .peer_manager
+                    .set_outgoing_pairing_waiting(peer_id, false);
                 let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
 
                 // Record in activity feed.

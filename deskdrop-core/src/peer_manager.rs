@@ -363,7 +363,7 @@ impl PeerManager {
             if !is_placeholder(&friendly_name) {
                 let mut duplicates = Vec::new();
                 for (id, p) in &store.peers {
-                    if *id != device_id 
+                    if *id != device_id
                         && p.friendly_name == friendly_name
                         && p.status == PeerConnectionState::Disconnected
                         && !p.trusted
@@ -476,7 +476,9 @@ impl PeerManager {
                 status: PeerConnectionState::Connecting,
                 ..PeerRecord::default()
             });
-            if entry.status == PeerConnectionState::Connecting || entry.status == PeerConnectionState::Connected {
+            if entry.status == PeerConnectionState::Connecting
+                || entry.status == PeerConnectionState::Connected
+            {
                 return Ok(false);
             }
             if let Some(endpoint) = endpoint {

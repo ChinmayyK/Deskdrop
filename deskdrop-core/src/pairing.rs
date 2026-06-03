@@ -281,15 +281,17 @@ impl PairingManager {
 
         {
             let mut pending = self.pending.lock().await;
-            
+
             // SECURITY FIX: Bounded pairing queue to prevent DoS via UI spam and OOM.
             // If an attacker initiates thousands of handshakes, we cap the pending
             // UI prompts at 5. Any further requests are automatically denied.
             if pending.len() >= 5 && !pending.contains_key(&device_id) {
-                tracing::warn!("Pairing request dropped: too many pending requests (DoS protection)");
+                tracing::warn!(
+                    "Pairing request dropped: too many pending requests (DoS protection)"
+                );
                 return Ok(false);
             }
-            
+
             pending.insert(pairing.device_id, (pairing, decision_tx));
         }
 
@@ -428,7 +430,8 @@ mod tests {
     #[test]
     fn pending_pairing_is_not_immediately_expired() {
         let id = Uuid::new_v4();
-        let pairing = PendingPairing::new(id, "TestDevice".into(), &[0xAB; 32], &[0u8; 32], [0u8; 32]);
+        let pairing =
+            PendingPairing::new(id, "TestDevice".into(), &[0xAB; 32], &[0u8; 32], [0u8; 32]);
         assert!(!pairing.is_expired());
         assert!(pairing.time_remaining() > Duration::from_secs(25));
     }
