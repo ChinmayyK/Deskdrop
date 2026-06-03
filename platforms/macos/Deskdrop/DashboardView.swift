@@ -2058,7 +2058,7 @@ struct DeviceListRow: View {
 // MARK: - Continuity Orb
 
 struct FloatingContinuityOrb: View {
-    @State private var phase = 0.0
+    @State private var isAnimating = false
     var activeCount: Int
     
     var body: some View {
@@ -2068,7 +2068,8 @@ struct FloatingContinuityOrb: View {
                 .fill(CRTheme.brandCyan.opacity(0.15))
                 .frame(width: 60, height: 60)
                 .blur(radius: 8)
-                .scaleEffect(1.0 + phase * 0.1)
+                .scaleEffect(isAnimating ? 1.1 : 1.0)
+                .animation(.easeInOut(duration: 4.0).repeatForever(autoreverses: true), value: isAnimating)
             
             Circle()
                 .stroke(CRTheme.brandCyan.opacity(0.4), lineWidth: 1)
@@ -2085,14 +2086,14 @@ struct FloatingContinuityOrb: View {
                         .fill(CRTheme.brandElectric)
                         .frame(width: 6, height: 6)
                         .offset(x: 40)
-                        .rotationEffect(.degrees(Double(i) * (360.0 / Double(activeCount)) + phase * 360))
+                        .rotationEffect(.degrees(Double(i) * (360.0 / Double(activeCount))))
+                        .rotationEffect(.degrees(isAnimating ? 360 : 0))
+                        .animation(.linear(duration: 8).repeatForever(autoreverses: false), value: isAnimating)
                 }
             }
         }
         .onAppear {
-            withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
-                phase = 1.0
-            }
+            isAnimating = true
         }
     }
 }

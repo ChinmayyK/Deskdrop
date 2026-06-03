@@ -223,17 +223,6 @@ impl IdentityStore {
     }
 }
 
-// ── AppMessage extension: KeyRotated ─────────────────────────────────────────
-// (To be added to protocol.rs AppMessage enum in a real refactor)
-//
-// KeyRotated {
-//     device_id: Uuid,
-//     new_pubkey_bytes: [u8; 32],
-//     /// Signature of new_pubkey_bytes using the OLD private key,
-//     /// proving continuity of identity.
-//     proof_signature: [u8; 64],
-// }
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

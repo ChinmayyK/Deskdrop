@@ -419,7 +419,7 @@ struct EngineShared {
     trust: Arc<Mutex<TrustStore>>,
     peer_manager: Arc<PeerManager>,
     event_tx: mpsc::Sender<EngineEvent>,
-    identity_key: Arc<crate::identity::IdentityKey>,
+    identity_key: Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
     network_state: Arc<Mutex<RuntimeNetworkState>>,
     listener_tx: mpsc::Sender<ListenerCommand>,
     discovery_tx: Option<mpsc::Sender<DiscoveryCommand>>,
@@ -502,7 +502,7 @@ impl Engine {
             trust,
             peer_manager,
             event_tx: event_tx.clone(),
-            identity_key: Arc::new(identity),
+            identity_key: Arc::new(std::sync::RwLock::new(identity)),
             network_state: Arc::new(Mutex::new(RuntimeNetworkState {
                 bind_addr,
                 active_interface,
@@ -573,7 +573,7 @@ impl Engine {
                 .map(|i| i.ip)
                 .unwrap_or(initial_bind.ip())
         };
-        let _identity_pubkey = shared.identity_key.public_bytes;
+        let _identity_pubkey = shared.identity_key.read().unwrap().public_bytes;
 
         if let Some(discovery_tx) = &engine.shared.discovery_tx {
             let _ = discovery_tx
@@ -1295,6 +1295,24 @@ impl Engine {
         Ok(())
     }
 
+    pub async fn rotate_identity_key(&self) -> Result<()> {
+        let new_key = {
+            let mut key_lock = self.shared.identity_key.write().unwrap();
+            let store = crate::identity::IdentityStore::new(&self.shared.config.identity_path);
+            *key_lock = store.rotate()?;
+            key_lock.public_bytes
+        };
+
+        // Broadcast to all active connected peers
+        let peers = self.shared.peer_manager.active_senders();
+        for (peer_id, tx) in peers {
+            let _ = tx.send(crate::protocol::AppMessage::KeyRotated {
+                new_pubkey_bytes: new_key,
+            }).await;
+        }
+        Ok(())
+    }
+
     pub async fn set_sync_enabled(&self, enabled: bool) {
         self.shared.settings.lock().await.sync_enabled = enabled;
     }
@@ -1979,7 +1997,7 @@ impl Engine {
     /// Displayed in the Mac Security pane and Android pairing screen for manual verification.
     pub fn local_fingerprint(&self) -> String {
         self.shared
-            .identity_key.public_bytes
+            .identity_key.read().unwrap().public_bytes
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect::<Vec<_>>()
@@ -3055,7 +3073,6 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         hs.peer_device_name.clone(),
         hs.peer_identity_pubkey_bytes,
         hs.pin,
-        true,
     )
     .await?;
 
@@ -3223,7 +3240,6 @@ async fn connect_once(
         hs.peer_device_name.clone(),
         hs.peer_identity_pubkey_bytes,
         hs.pin,
-        false,
     )
     .await?;
 
@@ -3262,7 +3278,6 @@ async fn observe_trust(
     device_name: String,
     identity_pubkey: [u8; 32],
     pin: crate::pairing::PairingPin,
-    is_incoming: bool,
 ) -> Result<bool> {
     let record = {
         let mut trust = shared.trust.lock().await;
@@ -3295,25 +3310,11 @@ async fn observe_trust(
                 .peer_manager
                 .set_pairing_pin(device_id, Some(pin.display()));
 
-            if is_incoming {
-                let _ = shared
-                    .event_tx
-                    .send(EngineEvent::PairingRequested {
-                        device_id,
-                        device_name,
-                        pin: pin.display(),
-                    })
-                    .await;
-            } else {
-                let _ = shared
-                    .event_tx
-                    .send(EngineEvent::OutgoingPairingWaiting {
-                        device_id,
-                        device_name,
-                        pin: pin.display(),
-                    })
-                    .await;
-            }
+            // We NO LONGER emit PairingRequested or OutgoingPairingWaiting here.
+            // Eager TCP connections should be silent. 
+            // Pairing prompts are now exclusively triggered by explicit 
+            // AppMessage::PairingRequest packets sent when the user taps 'Pair'.
+            
             Ok(false)
         }
     }
@@ -4022,12 +4023,36 @@ fn register_session(
                                 seq,
                             }).await;
                         }
+                        Ok(AppMessage::KeyRotated { new_pubkey_bytes }) => {
+                            touch_last_seen();
+                            // Only accept key rotation from currently trusted peers over the established AEAD tunnel.
+                            if shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                let mut trust = shared.trust.lock().await;
+                                if let Ok(_) = trust.rotate_peer_key(peer_id, &new_pubkey_bytes) {
+                                    tracing::info!(peer_id = %peer_id, "Successfully processed KeyRotated from peer");
+                                }
+                            }
+                        }
                         Ok(AppMessage::Ping { timestamp_ms }) => {
                             touch_last_seen();
                             let _ = rx_session_outbox_tx.send(AppMessage::Pong { timestamp_ms }).await;
                         }
                         Ok(AppMessage::PairingRequest { origin_device, origin_device_name }) => {
                             touch_last_seen();
+                            
+                            // Self-healing trust: if we already trust this peer cryptographically,
+                            // and they are asking to pair again (perhaps they lost their app data),
+                            // automatically accept the request so they can trust us back.
+                            let is_trusted = shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false);
+                            if is_trusted {
+                                tracing::info!(peer_id = %peer_id, "Auto-accepting pairing request from already trusted device");
+                                let _ = rx_session_outbox_tx.send(AppMessage::PairingResponse {
+                                    origin_device: shared.config.device_id,
+                                    accepted: true,
+                                }).await;
+                                continue;
+                            }
+
                             let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
 
                             // Re-emit PairingRequested with the REAL name and PIN so the UI updates

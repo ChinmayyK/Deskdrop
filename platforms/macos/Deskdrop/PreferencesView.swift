@@ -15,6 +15,7 @@ struct PreferencesView: View {
     @State private var isDirty          = false
     @State private var portString       = "47823"
     @State private var portIsInvalid    = false
+    @StateObject private var virtualCamera = VirtualCameraInstaller.shared
 
     var body: some View {
         HStack(spacing: 0) {
@@ -96,7 +97,7 @@ struct PreferencesView: View {
 
     @ViewBuilder private var pane: some View {
         switch tab {
-        case .general:  GeneralPane(copy: $copy)
+        case .general:  GeneralPane(copy: $copy, virtualCamera: virtualCamera)
         case .sync:     SyncPane(copy: $copy, patternDraft: $patternDraft)
         case .network:  NetworkPane(copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
                             .onChange(of: portString) { v in
@@ -218,6 +219,7 @@ private struct PrefsFooter: View {
 
 private struct GeneralPane: View {
     @Binding var copy: DeskdropSettingsSnapshot
+    @ObservedObject var virtualCamera: VirtualCameraInstaller
     @AppStorage("cr_app_theme") private var appTheme: String = "system"
     @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
 
@@ -246,6 +248,17 @@ private struct GeneralPane: View {
             PrefsRow(icon: "iphone.radiowaves.left.and.right", label: "Mirror Android Notifications",
                      description: "Receive notifications from connected Android devices.") {
                 Toggle("", isOn: $mirrorAndroidNotifications).labelsHidden()
+            }
+        }
+        
+        PrefsSection(title: "Experimental", icon: "flask.fill", tint: CRTheme.accentRed) {
+            PrefsRow(icon: "camera.fill", label: "Virtual Camera (Beta)",
+                     description: "Use your Android camera in Zoom, OBS, etc. Requires System Extension installation.") {
+                Button(virtualCamera.status == "Not Installed" ? "Install Extension" : virtualCamera.status) {
+                    virtualCamera.install()
+                }
+                .buttonStyle(CRSecondaryButtonStyle())
+                .disabled(virtualCamera.status == "Installed Successfully" || virtualCamera.status == "Installing...")
             }
         }
 

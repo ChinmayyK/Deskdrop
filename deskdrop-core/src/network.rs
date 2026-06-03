@@ -261,7 +261,7 @@ pub async fn handshake_initiator(
     stream: &mut TcpStream,
     my_device_id: Uuid,
     my_device_name: &str,
-    my_identity_key: std::sync::Arc<crate::identity::IdentityKey>,
+    my_identity_key: std::sync::Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
 ) -> Result<HandshakeResult> {
     let ephemeral = EphemeralKeypair::generate();
     let my_nonce = crate::crypto::random_nonce16();
@@ -294,12 +294,12 @@ pub async fn handshake_initiator(
         .derive_session_key(ack_ecdh.ecdh_pubkey)
         .context("ECDH key derivation")?;
 
-    let identity_proof = my_identity_key.compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
+    let identity_proof = my_identity_key.read().unwrap().compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
     let hello = AppMessage::Hello {
         device_id: my_device_id,
         device_name: my_device_name.to_string(),
-        identity_pubkey: my_identity_key.public_bytes,
+        identity_pubkey: my_identity_key.read().unwrap().public_bytes,
         identity_proof,
         metadata_json: None,
     };
@@ -372,7 +372,7 @@ pub async fn handshake_responder<F, Fut>(
     stream: &mut TcpStream,
     my_device_id: Uuid,
     my_device_name: String,
-    my_identity_key: std::sync::Arc<crate::identity::IdentityKey>,
+    my_identity_key: std::sync::Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
     check_trust: F,
 ) -> Result<HandshakeResult>
 where
@@ -437,12 +437,12 @@ where
     // which device was trying to pair with them.
     let name_to_send = my_device_name.to_string();
 
-    let identity_proof = my_identity_key.compute_proof(&ecdh.ecdh_pubkey, &session_salt);
+    let identity_proof = my_identity_key.read().unwrap().compute_proof(&ecdh.ecdh_pubkey, &session_salt);
 
     let ack = AppMessage::HelloAck {
         device_id: my_device_id,
         device_name: name_to_send,
-        identity_pubkey: my_identity_key.public_bytes,
+        identity_pubkey: my_identity_key.read().unwrap().public_bytes,
         nonce_response,
         identity_proof,
         trusted: peer_is_trusted,

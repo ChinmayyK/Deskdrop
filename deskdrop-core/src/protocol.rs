@@ -228,6 +228,10 @@ pub enum AppMessage {
         trusted: bool,
         metadata_json: Option<String>,
     },
+    /// Broadcast when a device generates a new identity key.
+    KeyRotated {
+        new_pubkey_bytes: [u8; 32],
+    },
     QrAuth {
         token: String,
     },

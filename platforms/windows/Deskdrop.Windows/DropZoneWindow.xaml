@@ -8,42 +8,38 @@
         AllowDrop="True" Drop="Window_Drop" DragEnter="Window_DragEnter" DragLeave="Window_DragLeave"
         MouseLeftButtonDown="Window_MouseLeftButtonDown" Loaded="Window_Loaded">
     <Grid>
-        <Grid x:Name="DropGrid" Margin="100" Opacity="0.5" RenderTransformOrigin="0.5,0.5">
-            <Grid.RenderTransform>
+        <!-- Center the widget on screen -->
+        <Border x:Name="DropGrid" HorizontalAlignment="Center" VerticalAlignment="Center" Width="260" Height="260" 
+                Background="#B31C1C1E" CornerRadius="24" BorderBrush="#26FFFFFF" BorderThickness="1.5"
+                Opacity="0.8" RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
                 <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
-            </Grid.RenderTransform>
+            </Border.RenderTransform>
             
-            <!-- Glowing Drop Shadow -->
-            <Border Background="#4032ADE6" CornerRadius="20">
-                <Border.Effect>
-                    <DropShadowEffect x:Name="PulseGlow" Color="#32ADE6" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
-                </Border.Effect>
-            </Border>
+            <Border.Effect>
+                <DropShadowEffect x:Name="WidgetShadow" Color="Black" Opacity="0.3" BlurRadius="24" ShadowDepth="12"/>
+            </Border.Effect>
             
-            <!-- Dashed Border -->
-            <Rectangle Stroke="#32ADE6" StrokeThickness="4" StrokeDashArray="4 4" RadiusX="20" RadiusY="20" Fill="Transparent"/>
-
             <Grid.Triggers>
-                <EventTrigger RoutedEvent="Loaded">
-                    <BeginStoryboard>
-                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                            <DoubleAnimation Storyboard.TargetName="PulseGlow" Storyboard.TargetProperty="BlurRadius" From="20" To="60" Duration="0:0:2">
-                                <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetName="PulseGlow" Storyboard.TargetProperty="Opacity" From="0.3" To="0.7" Duration="0:0:2">
-                                <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                        </Storyboard>
-                    </BeginStoryboard>
-                </EventTrigger>
+                <!-- Remove loaded continuous bounce, rely on drag state -->
                 <EventTrigger RoutedEvent="DragEnter">
                     <BeginStoryboard>
                         <Storyboard>
                             <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1.0" Duration="0:0:0.15"/>
-                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.05" Duration="0:0:0.25">
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.02" Duration="0:0:0.25">
                                 <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.5"/></DoubleAnimation.EasingFunction>
                             </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.05" Duration="0:0:0.25">
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.02" Duration="0:0:0.25">
+                                <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.5"/></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)" To="#0055CC" Duration="0:0:0.2"/>
+                            <ThicknessAnimation Storyboard.TargetProperty="BorderThickness" To="3" Duration="0:0:0.2"/>
+                            <ColorAnimation Storyboard.TargetName="WidgetShadow" Storyboard.TargetProperty="Color" To="#0055CC" Duration="0:0:0.2"/>
+                            
+                            <!-- Icon Circle Glow -->
+                            <DoubleAnimation Storyboard.TargetName="IconGlow" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:0:0.2"/>
+                            <ColorAnimation Storyboard.TargetName="IconBg" Storyboard.TargetProperty="(SolidColorBrush.Color)" To="#400055CC" Duration="0:0:0.2"/>
+                            <DoubleAnimation Storyboard.TargetName="IconTranslate" Storyboard.TargetProperty="Y" To="8" Duration="0:0:0.2">
                                 <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.5"/></DoubleAnimation.EasingFunction>
                             </DoubleAnimation>
                         </Storyboard>
@@ -52,11 +48,21 @@
                 <EventTrigger RoutedEvent="DragLeave">
                     <BeginStoryboard>
                         <Storyboard>
-                            <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0.5" Duration="0:0:0.15"/>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0.8" Duration="0:0:0.15"/>
                             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.0" Duration="0:0:0.25">
                                 <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
                             </DoubleAnimation>
                             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.0" Duration="0:0:0.25">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)" To="#26FFFFFF" Duration="0:0:0.2"/>
+                            <ThicknessAnimation Storyboard.TargetProperty="BorderThickness" To="1.5" Duration="0:0:0.2"/>
+                            <ColorAnimation Storyboard.TargetName="WidgetShadow" Storyboard.TargetProperty="Color" To="Black" Duration="0:0:0.2"/>
+                            
+                            <!-- Icon Circle Revert -->
+                            <DoubleAnimation Storyboard.TargetName="IconGlow" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2"/>
+                            <ColorAnimation Storyboard.TargetName="IconBg" Storyboard.TargetProperty="(SolidColorBrush.Color)" To="#1AFFFFFF" Duration="0:0:0.2"/>
+                            <DoubleAnimation Storyboard.TargetName="IconTranslate" Storyboard.TargetProperty="Y" To="-2" Duration="0:0:0.2">
                                 <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
                             </DoubleAnimation>
                         </Storyboard>
@@ -72,11 +78,30 @@
                     </BeginStoryboard>
                 </EventTrigger>
             </Grid.Triggers>
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                <iconPacks:PackIconLucide Kind="UploadCloud" Width="120" Height="120" Foreground="#32ADE6" HorizontalAlignment="Center" Margin="0,0,0,20"/>
-                <TextBlock Text="Drop files anywhere to send" Foreground="White" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="Click anywhere to cancel" Foreground="#AAAAAA" FontSize="20" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+            
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0">
+                
+                <Grid Width="88" Height="88" Margin="0,0,0,20">
+                    <Border CornerRadius="44">
+                        <Border.Background>
+                            <SolidColorBrush x:Name="IconBg" Color="#1AFFFFFF"/>
+                        </Border.Background>
+                        <Border.Effect>
+                            <DropShadowEffect x:Name="IconGlow" Color="#0055CC" BlurRadius="12" ShadowDepth="0" Opacity="0"/>
+                        </Border.Effect>
+                    </Border>
+                    
+                    <iconPacks:PackIconLucide Kind="ArrowDownSquare" Width="38" Height="38" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <iconPacks:PackIconLucide.RenderTransform>
+                            <TranslateTransform x:Name="IconTranslate" Y="-2"/>
+                        </iconPacks:PackIconLucide.RenderTransform>
+                    </iconPacks:PackIconLucide>
+                </Grid>
+                
+                <TextBlock Text="Drop to Send" Foreground="White" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Sends to all connected devices" Foreground="#99FFFFFF" FontSize="13" FontWeight="Medium" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                
             </StackPanel>
-        </Grid>
+        </Border>
     </Grid>
 </Window>

@@ -799,7 +799,7 @@ struct CRSectionToolbar<TrailingContent: View>: View {
 // MARK: - Fluid Background
 
 struct CRFluidBackgroundView: View {
-    @State private var phase: CGFloat = 0.0
+    @State private var isAnimating = false
 
     var body: some View {
         ZStack {
@@ -810,23 +810,25 @@ struct CRFluidBackgroundView: View {
                     Circle()
                         .fill(CRTheme.brandElectric.opacity(0.08))
                         .frame(width: geo.size.width * 0.8)
-                        .offset(x: cos(phase) * geo.size.width * 0.2, y: sin(phase) * geo.size.height * 0.2)
+                        .offset(x: geo.size.width * 0.2)
+                        .rotationEffect(.degrees(isAnimating ? 360 : 0))
                         .blur(radius: 80)
+                        .animation(.linear(duration: 20.0).repeatForever(autoreverses: false), value: isAnimating)
                     
                     Circle()
                         .fill(CRTheme.brandViolet.opacity(0.06))
                         .frame(width: geo.size.width * 0.6)
-                        .offset(x: -sin(phase) * geo.size.width * 0.3, y: -cos(phase) * geo.size.height * 0.2)
+                        .offset(x: geo.size.width * 0.3)
+                        .rotationEffect(.degrees(isAnimating ? -360 : 0))
                         .blur(radius: 60)
+                        .animation(.linear(duration: 25.0).repeatForever(autoreverses: false), value: isAnimating)
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
             }
         }
         .ignoresSafeArea()
         .onAppear {
-            withAnimation(.linear(duration: 20.0).repeatForever(autoreverses: true)) {
-                phase = .pi * 2
-            }
+            isAnimating = true
         }
     }
 }

@@ -256,8 +256,8 @@ private fun processImage(image: ImageProxy) {
 
             val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
             val out = ByteArrayOutputStream()
-            // High compression for low-latency network transfer
-            yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 40, out)
+            // Improved quality for clearer video feed while maintaining reasonable network usage
+            yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 85, out)
             val jpegBytes = out.toByteArray()
 
             val handle = DeskdropService.activeEngineHandle

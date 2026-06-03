@@ -53,7 +53,7 @@ echo -e "${BLUE}▶ [macOS] Installing new version to /Applications...${NC}"
 cp -a platforms/macos/build/Deskdrop.app /Applications/
 
 echo -e "${GREEN}▶ [macOS] ✅ Installed! Launching...${NC}"
-open -a /Applications/Deskdrop.app
+open /Applications/Deskdrop.app
 
 echo -e "\n----------------------------------------\n"
 
@@ -79,7 +79,7 @@ if adb install -r "$APK_PATH"; then
     echo -e "${BLUE}▶ [Android] Wiping app data to prevent backup restore...${NC}"
     adb shell pm clear "$APP_ID" || true
     echo -e "${GREEN}▶ [Android] ✅ Installed! Launching...${NC}"
-    adb shell am start -n "$APP_ID/com.deskdrop.MainActivity"
+    adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
 else
     echo -e "${RED}▶ [Android] ❌ Failed to install APK. Is a device connected?${NC}"
 fi

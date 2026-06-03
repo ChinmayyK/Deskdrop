@@ -270,40 +270,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func statusBarImage() -> NSImage? {
-        let size = NSSize(width: 28, height: 22)
+        let size = NSSize(width: 16, height: 16)
         let image = NSImage(size: size)
+        
+        guard let symbol = NSImage(systemSymbolName: "arrow.down.doc.fill", accessibilityDescription: "Deskdrop") else { return nil }
+        
+        // Use standard menu bar icon point size
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        let configuredSymbol = symbol.withSymbolConfiguration(config) ?? symbol
+        
         image.lockFocus()
         
-        let path = NSBezierPath()
-        let center = NSPoint(x: 14, y: 11)
-        let radius: CGFloat = 9.0
+        // Calculate centered rect
+        let symbolSize = configuredSymbol.size
+        let x = (size.width - symbolSize.width) / 2.0
+        let y = (size.height - symbolSize.height) / 2.0
+        let rect = NSRect(x: x, y: y, width: symbolSize.width, height: symbolSize.height)
         
-        for i in 0..<6 {
-            let angle = CGFloat(i) * CGFloat.pi / 3.0 + CGFloat.pi / 6.0
-            let point = NSPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
-            if i == 0 { path.move(to: point) } else { path.line(to: point) }
-        }
-        path.close()
-        
-        NSColor.black.set()
-        path.fill()
-        
-        NSGraphicsContext.current?.compositingOperation = .destinationOut
-        
-        let arrowPath = NSBezierPath()
-        arrowPath.move(to: NSPoint(x: 14, y: 14))
-        arrowPath.line(to: NSPoint(x: 14, y: 7))
-        
-        arrowPath.move(to: NSPoint(x: 11, y: 10))
-        arrowPath.line(to: NSPoint(x: 14, y: 7))
-        arrowPath.line(to: NSPoint(x: 17, y: 10))
-        
-        arrowPath.lineWidth = 2.0
-        arrowPath.lineCapStyle = .round
-        arrowPath.lineJoinStyle = .round
-        arrowPath.stroke()
-        
+        configuredSymbol.draw(in: rect)
         image.unlockFocus()
+        
         image.isTemplate = true
         return image
     }

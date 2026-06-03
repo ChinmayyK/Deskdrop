@@ -156,6 +156,22 @@ impl TrustStore {
         self.save()?;
         Ok(snapshot)
     }
+    pub fn rotate_peer_key(
+        &mut self,
+        device_id: Uuid,
+        new_public_key: &[u8; 32],
+    ) -> Result<()> {
+        let fingerprint = fingerprint_of(new_public_key);
+        if let Some(record) = self.data.devices.get_mut(&device_id) {
+            record.public_key = *new_public_key;
+            record.key_fingerprint = fingerprint;
+            record.last_seen = now_secs();
+            self.save()?;
+            Ok(())
+        } else {
+            anyhow::bail!("Cannot rotate key for unknown peer {}", device_id)
+        }
+    }
 
     fn migrate_matching_identity(
         &mut self,
