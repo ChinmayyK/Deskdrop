@@ -383,6 +383,10 @@ class DeskdropService : Service() {
     // NSD — peer discovery on Android (replaces stubbed Rust mDNS)
     private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
     private var nsdDiscoveryListener: NsdManager.DiscoveryListener? = null
+    private val isNsdRegistered = AtomicBoolean(false)
+    private val pendingNsdUnregister = AtomicBoolean(false)
+    private var currentNsdResolveTimeoutRunnable: Runnable? = null
+    private var delayedNetworkAction: Runnable? = null
 
     // Self-connection filter: first 8 chars of our UUID match the NSD service name suffix.
     // Set once the engine starts; used in makeResolveListener() to skip our own advertisement.
@@ -418,11 +422,7 @@ class DeskdropService : Service() {
             val h = engineHandle
             if (h == 0L) return
 
-            val result = if (approved) {
-                DeskdropJni.trustPeer(h, deviceId)
-            } else {
-                DeskdropJni.rejectPeer(h, deviceId)
-            }
+            val result = DeskdropJni.respondToPairing(h, deviceId, approved)
 
             Log.i(TAG, "Pairing result for $deviceId approved=$approved result=$result")
             notificationManager.cancel(NOTIF_ID_TOFU)
@@ -704,7 +704,7 @@ class DeskdropService : Service() {
                 Log.i(TAG, "Engine started — $deviceName")
                 scheduleEventDrain()
                 scheduleClipboardWatch()
-                acquireMulticastLock()  // must precede NSD so mDNS packets aren't filtered
+                // acquireMulticastLock() handled by onAvailable
                 // Cache our own UUID prefix so NSD can filter self-connections.
                 myDeviceId = DeskdropJni.getDeviceId(engineHandle)
                 myDeviceUuidPrefix = myDeviceId?.take(8)
@@ -2235,22 +2235,35 @@ class DeskdropService : Service() {
 
         val regListener = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(info: NsdServiceInfo) {
-                // Store the ACTUAL registered name (Android may have renamed it on collision).
-                // The self-filter in makeResolveListener() uses this to skip our own service.
                 myActualNsdName = info.serviceName
+                isNsdRegistered.set(true)
                 Log.i(TAG, "NSD: registered '${info.serviceName}'")
+                
+                // Fix: If stopNsdDiscovery was called while in-flight, unregister now.
+                if (pendingNsdUnregister.compareAndSet(true, false)) {
+                    runCatching {
+                        val n = getSystemService(NSD_SERVICE) as? NsdManager
+                        n?.unregisterService(this)
+                    }
+                    isNsdRegistered.set(false)
+                    if (nsdRegistrationListener === this) nsdRegistrationListener = null
+                }
             }
             override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {
                 Log.w(TAG, "NSD: registration failed (code=$code)")
+                pendingNsdUnregister.set(false)
             }
             override fun onServiceUnregistered(info: NsdServiceInfo) {
                 myActualNsdName = null
+                isNsdRegistered.set(false)
                 Log.i(TAG, "NSD: unregistered '${info.serviceName}'")
             }
             override fun onUnregistrationFailed(info: NsdServiceInfo, code: Int) {
                 Log.w(TAG, "NSD: unregistration failed (code=$code)")
             }
         }
+        isNsdRegistered.set(false)
+        pendingNsdUnregister.set(false)
         nsdRegistrationListener = regListener
         runCatching { nm.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, regListener) }
             .onFailure { Log.w(TAG, "NSD: registerService error", it) }
@@ -2275,6 +2288,11 @@ class DeskdropService : Service() {
                 val actual = myActualNsdName
                 if (actual != null && info.serviceName == actual) {
                     Log.d(TAG, "NSD: skipping self (pre-resolve) '${info.serviceName}'")
+                    return
+                }
+                val prefix = myDeviceUuidPrefix
+                if (prefix != null && info.serviceName.contains(prefix, ignoreCase = true)) {
+                    Log.d(TAG, "NSD: skipping self by UUID prefix (pre-resolve) '${info.serviceName}'")
                     return
                 }
                 Log.i(TAG, "NSD: found '${info.serviceName}'")
@@ -2318,78 +2336,90 @@ class DeskdropService : Service() {
         return ips
     }
 
-    /** Creates a one-shot resolve listener. NSD requires a unique instance per call. */
+    private fun handleResolvedNsdService(info: NsdServiceInfo) {
+        try {
+            // Android 14+ fix: hostAddresses vs host
+            val ip = if (Build.VERSION.SDK_INT >= 34) {
+                info.hostAddresses.firstOrNull()?.hostAddress
+            } else {
+                info.host?.hostAddress
+            } ?: return
+
+            val port = info.port
+            Log.i(TAG, "NSD: resolved peer at $ip:$port (service='${info.serviceName}')")
+            // Skip loopback addresses (self-discovery)
+            if (ip.startsWith("127.") || ip == "::1") return
+            
+            // Bulletproof self-connection filter: check if IP is one of our own interfaces
+            if (getLocalIpAddresses().contains(ip)) {
+                Log.i(TAG, "NSD: skipping self by local IP $ip")
+                return
+            }
+            
+            // Skip IPv6 link-local — they require a scope ID the engine can't supply.
+            if (ip.startsWith("fe80:") || ip.startsWith("FE80:")) {
+                Log.d(TAG, "NSD: skipping link-local address $ip")
+                return
+            }
+            // Skip our own service using the actual registered name (set in onServiceRegistered).
+            val actual = myActualNsdName
+            if (actual != null && info.serviceName == actual) {
+                Log.d(TAG, "NSD: skipping self-resolved service '${info.serviceName}'")
+                return
+            }
+            // Belt-and-suspenders: also skip by UUID prefix embedded in service name.
+            val prefix = myDeviceUuidPrefix
+            if (prefix != null && info.serviceName.contains(prefix, ignoreCase = true)) {
+                Log.d(TAG, "NSD: skipping self by UUID prefix '${info.serviceName}'")
+                return
+            }
+
+            val peerVersion = if (Build.VERSION.SDK_INT >= 21) info.attributes["v"]?.let { String(it) } else null
+            if (peerVersion != null && peerVersion != "3") {
+                Log.i(TAG, "NSD: skipping ${info.serviceName} due to protocol version $peerVersion")
+                return
+            }
+
+            val peerDeviceId = if (Build.VERSION.SDK_INT >= 21) info.attributes["id"]?.let { String(it) } else null
+            if (peerDeviceId.isNullOrBlank()) {
+                Log.w(TAG, "NSD: peer missing device id, skipping")
+                return
+            }
+            val myId = myDeviceId
+            if (myId != null && peerDeviceId.equals(myId, ignoreCase = true)) {
+                Log.d(TAG, "NSD: skipping self-resolved peer id $peerDeviceId")
+                return
+            }
+
+            val h = engineHandle
+            if (h != 0L) {
+                val fallbackName = "Deskdrop Device" // Name is discovered during handshake
+                val result = DeskdropJni.reportDiscoveredPeer(h, peerDeviceId, fallbackName, ip, port)
+                if (result == 0) {
+                    Log.i(TAG, "NSD: reportDiscoveredPeer($ip:$port, id=$peerDeviceId) pushed to DiscoveryManager")
+                    nsdRetryCount.set(0L)
+                } else {
+                    Log.w(TAG, "NSD: reportDiscoveredPeer failed (result=$result)")
+                }
+            }
+        } finally {
+            isResolvingNsd.set(false)
+            handler.post { processNextNsdResolve() }
+        }
+    }
+
+    /** Creates a one-shot resolve listener for pre-API 34. */
     private fun makeResolveListener(): NsdManager.ResolveListener {
         return object : NsdManager.ResolveListener {
             override fun onResolveFailed(info: NsdServiceInfo, code: Int) {
                 Log.w(TAG, "NSD: resolve failed for '${info.serviceName}' (code=$code)")
+                currentNsdResolveTimeoutRunnable?.let { handler.removeCallbacks(it) }
                 isResolvingNsd.set(false)
                 handler.post { processNextNsdResolve() }
             }
             override fun onServiceResolved(info: NsdServiceInfo) {
-                try {
-                val ip   = info.host?.hostAddress ?: return
-                val port = info.port
-                Log.i(TAG, "NSD: resolved peer at $ip:$port (service='${info.serviceName}')")
-                // Skip loopback addresses (self-discovery)
-                if (ip.startsWith("127.") || ip == "::1") return
-                
-                // Bulletproof self-connection filter: check if IP is one of our own interfaces
-                if (getLocalIpAddresses().contains(ip)) {
-                    Log.i(TAG, "NSD: skipping self by local IP $ip")
-                    return
-                }
-                
-                // Skip IPv6 link-local — they require a scope ID the engine can't supply.
-                if (ip.startsWith("fe80:") || ip.startsWith("FE80:")) {
-                    Log.d(TAG, "NSD: skipping link-local address $ip")
-                    return
-                }
-                // Skip our own service using the actual registered name (set in onServiceRegistered).
-                val actual = myActualNsdName
-                if (actual != null && info.serviceName == actual) {
-                    Log.d(TAG, "NSD: skipping self-resolved service '${info.serviceName}'")
-                    return
-                }
-                // Belt-and-suspenders: also skip by UUID prefix embedded in service name.
-                val prefix = myDeviceUuidPrefix
-                if (prefix != null && info.serviceName.contains(prefix, ignoreCase = true)) {
-                    Log.d(TAG, "NSD: skipping self by UUID prefix '${info.serviceName}'")
-                    return
-                }
-
-                val peerVersion = info.attributeString("v")
-                if (peerVersion != null && peerVersion != "3") {
-                    Log.i(TAG, "NSD: skipping ${info.serviceName} due to protocol version $peerVersion")
-                    return
-                }
-
-                val peerDeviceId = info.attributeString("id")
-                if (peerDeviceId.isNullOrBlank()) {
-                    Log.w(TAG, "NSD: peer missing device id, skipping")
-                    return
-                }
-                val myId = myDeviceId
-                if (myId != null && peerDeviceId.equals(myId, ignoreCase = true)) {
-                    Log.d(TAG, "NSD: skipping self-resolved peer id $peerDeviceId")
-                    return
-                }
-
-                val h = engineHandle
-                if (h != 0L) {
-                    val fallbackName = "Deskdrop Device" // Name is discovered during handshake
-                    val result = DeskdropJni.reportDiscoveredPeer(h, peerDeviceId, fallbackName, ip, port)
-                    if (result == 0) {
-                        Log.i(TAG, "NSD: reportDiscoveredPeer($ip:$port, id=$peerDeviceId) pushed to DiscoveryManager")
-                        nsdRetryCount.set(0L)
-                    } else {
-                        Log.w(TAG, "NSD: reportDiscoveredPeer failed (result=$result)")
-                    }
-                }
-                } finally {
-                    isResolvingNsd.set(false)
-                    handler.post { processNextNsdResolve() }
-                }
+                currentNsdResolveTimeoutRunnable?.let { handler.removeCallbacks(it) }
+                handleResolvedNsdService(info)
             }
         }
     }
@@ -2406,21 +2436,73 @@ class DeskdropService : Service() {
             isResolvingNsd.set(false)
             return
         }
-        runCatching { nm.resolveService(info, makeResolveListener()) }
-            .onFailure {
-                Log.w(TAG, "NSD: resolveService error", it)
+        
+        // Add timeout to prevent resolution queue deadlocks
+        currentNsdResolveTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        val timeoutRunnable = Runnable {
+            Log.w(TAG, "NSD: resolution timed out for '${info.serviceName}', skipping")
+            isResolvingNsd.set(false)
+            processNextNsdResolve()
+        }
+        currentNsdResolveTimeoutRunnable = timeoutRunnable
+        handler.postDelayed(timeoutRunnable, 3000L)
+
+        if (Build.VERSION.SDK_INT >= 34) {
+            runCatching {
+                nm.registerServiceInfoCallback(info, { it.run() }, object : NsdManager.ServiceInfoCallback {
+                    override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
+                        Log.w(TAG, "NSD: registerServiceInfoCallback failed (code=$errorCode)")
+                        currentNsdResolveTimeoutRunnable?.let { handler.removeCallbacks(it) }
+                        isResolvingNsd.set(false)
+                        handler.post { processNextNsdResolve() }
+                    }
+                    override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
+                        currentNsdResolveTimeoutRunnable?.let { handler.removeCallbacks(it) }
+                        runCatching { nm.unregisterServiceInfoCallback(this) }
+                        handleResolvedNsdService(serviceInfo)
+                    }
+                    override fun onServiceLost() {}
+                    override fun onServiceInfoCallbackUnregistered() {}
+                })
+            }.onFailure {
+                Log.w(TAG, "NSD: registerServiceInfoCallback error", it)
+                currentNsdResolveTimeoutRunnable?.let { handler.removeCallbacks(it) }
                 isResolvingNsd.set(false)
                 handler.post { processNextNsdResolve() }
             }
+        } else {
+            runCatching { nm.resolveService(info, makeResolveListener()) }
+                .onFailure {
+                    Log.w(TAG, "NSD: resolveService error", it)
+                    currentNsdResolveTimeoutRunnable?.let { handler.removeCallbacks(it) }
+                    isResolvingNsd.set(false)
+                    handler.post { processNextNsdResolve() }
+                }
+        }
     }
 
     private fun stopNsdDiscovery() {
         val nm = runCatching { getSystemService(NSD_SERVICE) as NsdManager }.getOrNull() ?: return
+        
         nsdDiscoveryListener?.let  { runCatching { nm.stopServiceDiscovery(it) } }
-        nsdRegistrationListener?.let { runCatching { nm.unregisterService(it) } }
-        nsdDiscoveryListener    = null
-        nsdRegistrationListener = null
+        nsdDiscoveryListener = null
+        
+        val regListener = nsdRegistrationListener
+        if (regListener != null) {
+            if (isNsdRegistered.get()) {
+                // Safely unregister if fully registered
+                runCatching { nm.unregisterService(regListener) }
+                nsdRegistrationListener = null
+                isNsdRegistered.set(false)
+            } else {
+                // In-flight registration — set flag to unregister once it completes
+                pendingNsdUnregister.set(true)
+            }
+        }
+        
         pendingNsdResolves.clear()
+        currentNsdResolveTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        currentNsdResolveTimeoutRunnable = null
         isResolvingNsd.set(false)
     }
 
@@ -2439,8 +2521,11 @@ class DeskdropService : Service() {
             override fun onAvailable(network: Network) {
                 Log.i(TAG, "Network: default network available — restarting discovery + reconnecting peers")
                 handler.post {
+                    acquireMulticastLock() // Fix: Acquire multicast lock only when network is available
+                    
                     // Brief delay lets the IP stack settle before mDNS re-registers.
-                    handler.postDelayed({
+                    delayedNetworkAction?.let { handler.removeCallbacks(it) }
+                    val action = Runnable {
                         restartDiscoveryNow()
                         // Immediately tell the Rust engine to reconnect all known peers.
                         val h = engineHandle
@@ -2449,7 +2534,9 @@ class DeskdropService : Service() {
                                 DeskdropJni.notifyNetworkRestored(h)
                             }.start()
                         }
-                    }, 1_500L)
+                    }
+                    delayedNetworkAction = action
+                    handler.postDelayed(action, 1_500L)
                 }
             }
 
@@ -2473,6 +2560,9 @@ class DeskdropService : Service() {
                     Thread { DeskdropJni.pushNetworkStatus(h, "offline") }.start()
                 }
                 handler.post {
+                    delayedNetworkAction?.let { handler.removeCallbacks(it) }
+                    delayedNetworkAction = null
+                    releaseMulticastLock() // Fix: Release multicast lock to save battery when offline
                     stopNsdDiscovery()
                     scheduleNsdRetry()
                 }

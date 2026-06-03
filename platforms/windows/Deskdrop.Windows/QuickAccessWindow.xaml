@@ -8,11 +8,11 @@
         Deactivated="Window_Deactivated" Loaded="Window_Loaded">
     
     <Window.Resources>
-        <SolidColorBrush x:Key="BrandElectric" Color="#007AFF"/>
-        <SolidColorBrush x:Key="SurfaceElevated" Color="#F3FFFFFF"/>
-        <SolidColorBrush x:Key="Ink" Color="#1C1C1E"/>
-        <SolidColorBrush x:Key="InkSoft" Color="#8E8E93"/>
-        <SolidColorBrush x:Key="Stroke" Color="#E5E5EA"/>
+        <SolidColorBrush x:Key="BrandElectric" Color="#0055CC"/>
+        <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Ink" Color="#D9000000"/>
+        <SolidColorBrush x:Key="InkSoft" Color="#8C000000"/>
+        <SolidColorBrush x:Key="Stroke" Color="#1A000000"/>
         <SolidColorBrush x:Key="BrandRed" Color="#FF3B30"/>
 
         <!-- Hover Card Style -->
@@ -92,8 +92,13 @@
                                         <ControlTemplate TargetType="TextBox">
                                             <Border Background="{TemplateBinding Background}" CornerRadius="6">
                                                 <Grid>
-                                                    <TextBlock Text="Search clipboard..." Foreground="{StaticResource InkSoft}" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="{Binding Text.IsEmpty, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                                    <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <iconPacks:PackIconLucide Kind="Search" Width="14" Height="14" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                                    <TextBlock Grid.Column="1" Text="Search clipboard..." Foreground="{StaticResource InkSoft}" Margin="0,0,0,0" VerticalAlignment="Center" Visibility="{Binding Text.IsEmpty, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                    <ScrollViewer Grid.Column="1" x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
                                                 </Grid>
                                             </Border>
                                         </ControlTemplate>
@@ -112,7 +117,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="#F2F2F7" CornerRadius="8" Padding="12,6" Margin="0,0,8,0" Cursor="Hand" MouseLeftButtonDown="DeviceTarget_Click">
+                                    <Border Style="{StaticResource HoverCardStyle}" Background="#F2F2F7" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" CornerRadius="8" Padding="12,6" Margin="0,0,8,4" Cursor="Hand" MouseLeftButtonDown="DeviceTarget_Click">
                                         <StackPanel Orientation="Horizontal">
                                             <iconPacks:PackIconLucide Kind="Smartphone" Width="12" Height="12"    Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                             <TextBlock Text="{Binding friendly_name}" FontSize="12" FontWeight="Medium" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
@@ -125,7 +130,7 @@
                 </Grid>
             </Border>
 
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden">
                 <ItemsControl x:Name="TimelineList" Padding="8">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

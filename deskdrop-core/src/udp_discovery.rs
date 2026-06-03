@@ -406,28 +406,29 @@ pub async fn spawn_multicast_beacon(
 
     let multicast_dest = SocketAddr::new(IpAddr::V4(config.multicast_addr), config.multicast_port);
 
-    // Create a standard UDP socket for sending multicast.
-    let socket = create_multicast_send_socket(config.multicast_addr)?;
-
-    info!(
-        "udp multicast beacon: starting (interval={:?}, group={}:{}, device={})",
-        config.beacon_interval,
-        config.multicast_addr,
-        config.multicast_port,
-        &config.device_id.to_string()[..8]
-    );
-
     // ── AirDrop-style startup burst ──────────────────────────────────────
-    for i in 0..3u8 {
-        match socket.send_to(&payload, multicast_dest).await {
-            Ok(_) => trace!("udp multicast beacon: startup burst {}/3 sent", i + 1),
-            Err(e) => debug!("udp multicast beacon: startup burst send failed: {}", e),
+    let mut initial_socket = match create_multicast_send_socket(Ipv4Addr::UNSPECIFIED) {
+        Ok(s) => Some(s),
+        Err(e) => {
+            debug!("udp multicast beacon: failed to create initial socket: {}", e);
+            None
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    
+    if let Some(ref socket) = initial_socket {
+        for i in 0..3u8 {
+            match socket.send_to(&payload, multicast_dest).await {
+                Ok(_) => trace!("udp multicast beacon: startup burst {}/3 sent", i + 1),
+                Err(e) => debug!("udp multicast beacon: startup burst send failed: {}", e),
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     let mut interval = tokio::time::interval(config.beacon_interval);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    
+    let mut cached_sockets: std::collections::HashMap<Ipv4Addr, std::sync::Arc<UdpSocket>> = std::collections::HashMap::new();
 
     loop {
         tokio::select! {
@@ -436,9 +437,36 @@ pub async fn spawn_multicast_beacon(
                 return Ok(());
             }
             _ = interval.tick() => {
-                match socket.send_to(&payload, multicast_dest).await {
-                    Ok(n) => trace!("udp multicast beacon: sent {} bytes to {}", n, multicast_dest),
-                    Err(e) => debug!("udp multicast beacon: send failed: {}", e),
+                let mut active_sockets = Vec::new();
+                if let Ok(ifaces) = if_addrs::get_if_addrs() {
+                    for iface in ifaces {
+                        if iface.is_loopback() { continue; }
+                        if let IpAddr::V4(ipv4) = iface.ip() {
+                            let sock = cached_sockets.entry(ipv4).or_insert_with(|| {
+                                match create_multicast_send_socket(ipv4) {
+                                    Ok(s) => std::sync::Arc::new(s),
+                                    Err(_) => std::sync::Arc::new(create_multicast_send_socket(Ipv4Addr::UNSPECIFIED).unwrap_or_else(|_| initial_socket.take().unwrap()))
+                                }
+                            });
+                            active_sockets.push(sock.clone());
+                        }
+                    }
+                }
+                
+                // Fallback if no interfaces found
+                if active_sockets.is_empty() {
+                    let fallback_ip = Ipv4Addr::UNSPECIFIED;
+                    let sock = cached_sockets.entry(fallback_ip).or_insert_with(|| {
+                        std::sync::Arc::new(create_multicast_send_socket(fallback_ip).unwrap_or_else(|_| initial_socket.take().unwrap()))
+                    });
+                    active_sockets.push(sock.clone());
+                }
+                
+                for socket in active_sockets {
+                    match socket.send_to(&payload, multicast_dest).await {
+                        Ok(n) => trace!("udp multicast beacon: sent {} bytes to {}", n, multicast_dest),
+                        Err(e) => debug!("udp multicast beacon: send failed: {}", e),
+                    }
                 }
             }
         }
@@ -588,7 +616,7 @@ fn create_broadcast_recv_socket(port: u16) -> Result<UdpSocket, anyhow::Error> {
 }
 
 /// Create a UDP socket suitable for sending multicast packets.
-fn create_multicast_send_socket(multicast_addr: Ipv4Addr) -> Result<UdpSocket, anyhow::Error> {
+fn create_multicast_send_socket(interface_ipv4: Ipv4Addr) -> Result<UdpSocket, anyhow::Error> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
 
     socket.set_reuse_address(true)?;
@@ -610,16 +638,12 @@ fn create_multicast_send_socket(multicast_addr: Ipv4Addr) -> Result<UdpSocket, a
     // can discover each other (useful during development).
     socket.set_multicast_loop_v4(true)?;
 
-    // Set the outgoing multicast interface to all interfaces (0.0.0.0).
-    socket.set_multicast_if_v4(&Ipv4Addr::UNSPECIFIED)?;
+    // Set the outgoing multicast interface
+    socket.set_multicast_if_v4(&interface_ipv4)?;
 
     let bind_addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0);
     socket.bind(&SockAddr::from(bind_addr))?;
     socket.set_nonblocking(true)?;
-
-    // Suppress unused variable warning — multicast_addr is used to validate
-    // the caller's intent but the actual group join happens on the receiver.
-    let _ = multicast_addr;
 
     let std_socket: std::net::UdpSocket = socket.into();
     Ok(UdpSocket::from_std(std_socket)?)

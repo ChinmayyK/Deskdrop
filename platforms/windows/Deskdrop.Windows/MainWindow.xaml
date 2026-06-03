@@ -38,23 +38,23 @@
         </Storyboard>
         
         <!-- macOS CRTheme Palette -->
-        <Color x:Key="BrandElectricColor">#007AFF</Color>
+        <Color x:Key="BrandElectricColor">#0055CC</Color>
         <SolidColorBrush x:Key="BrandElectric" Color="{StaticResource BrandElectricColor}"/>
-        <SolidColorBrush x:Key="BrandViolet" Color="#5856D6"/>
-        <SolidColorBrush x:Key="BrandCyan" Color="#5AC8FA"/>
+        <SolidColorBrush x:Key="BrandViolet" Color="#5E5CE6"/>
+        <SolidColorBrush x:Key="BrandCyan" Color="#32ADE6"/>
         <SolidColorBrush x:Key="BrandGreen" Color="#34C759"/>
         <SolidColorBrush x:Key="BrandRed" Color="#FF3B30"/>
         
         <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceStrong" Color="#F2F2F7"/>
+        <SolidColorBrush x:Key="SurfaceStrong" Color="#E5F2F2F7"/>
         <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceGlass" Color="#B3FFFFFF"/> <!-- More translucent for Mica -->
+        <SolidColorBrush x:Key="SurfaceGlass" Color="#80FFFFFF"/> <!-- More translucent for Mica -->
         
-        <SolidColorBrush x:Key="Ink" Color="#1C1C1E"/>
-        <SolidColorBrush x:Key="InkSoft" Color="#6E6E73"/> <!-- Improved contrast -->
-        <SolidColorBrush x:Key="InkSubtle" Color="#8A8A8E"/> <!-- Improved contrast -->
-        <SolidColorBrush x:Key="Stroke" Color="#D1D1D6"/> <!-- Darker for visibility -->
-        <SolidColorBrush x:Key="StrokeSoft" Color="#E5E5EA"/>
+        <SolidColorBrush x:Key="Ink" Color="#D9000000"/>
+        <SolidColorBrush x:Key="InkSoft" Color="#8C000000"/> <!-- Improved contrast -->
+        <SolidColorBrush x:Key="InkSubtle" Color="#66000000"/> <!-- Improved contrast -->
+        <SolidColorBrush x:Key="Stroke" Color="#1A000000"/> <!-- Darker for visibility -->
+        <SolidColorBrush x:Key="StrokeSoft" Color="#0D000000"/>
 
         <!-- macOS Traffic Light Colors -->
         <SolidColorBrush x:Key="MacRed" Color="#FF5F56"/>
@@ -127,14 +127,15 @@
             <Setter Property="Background" Value="{StaticResource BrandElectric}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Padding" Value="16,8"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#1A000000"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
                         </Border>
                         <ControlTemplate.Triggers>
