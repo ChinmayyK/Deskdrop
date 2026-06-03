@@ -237,6 +237,7 @@ struct ManagedDevice: Identifiable {
     let lastSync: Date?
     let lastError: String?
     let pairingRequested: Bool
+    let outgoingPairingWaiting: Bool
     let pairingPin: String?
     var isConnected: Bool { connectionState == .connected && trustState == .trusted }
     var canReconnect: Bool { trustState == .trusted && remembered && autoConnect && connectionState != .connected }
@@ -273,6 +274,7 @@ struct ManagedDevice: Identifiable {
         self.lastSync        = peer.lastSync
         self.lastError       = peer.lastError
         self.pairingRequested = peer.pairingRequested
+        self.outgoingPairingWaiting = peer.outgoingPairingWaiting
         self.pairingPin      = peer.pairingPin
     }
 }

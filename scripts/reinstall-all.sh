@@ -23,8 +23,9 @@ echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE}
 # ==========================================
 # 0. Version Bump & Clean
 # ==========================================
-echo -e "${BLUE}▶ Bumping version numbers...${NC}"
-python3 scripts/bump-version.py
+# echo -e "${BLUE}▶ Bumping version numbers...${NC}"
+# python3 scripts/bump-version.py
+
 
 echo -e "${BLUE}▶ Wiping macOS app data (~/Library/Application Support/deskdrop)...${NC}"
 rm -rf ~/Library/Application\ Support/deskdrop
@@ -38,6 +39,7 @@ pkill -x Deskdrop || true
 pkill -x deskdrop-daemon || true
 
 echo -e "${BLUE}▶ [macOS] Building latest version...${NC}"
+export SKIP_DMG=true
 if [ "$BUILD_TYPE" = "release" ]; then
     bash scripts/build-macos.sh --release
 else
@@ -60,11 +62,11 @@ echo -e "\n----------------------------------------\n"
 # ==========================================
 echo -e "${BLUE}▶ [Android] Building latest APK...${NC}"
 if [ "$BUILD_TYPE" = "release" ]; then
-    bash scripts/build-android.sh --release
+    bash scripts/build-android.sh --release --fast-abi
     APK_PATH="platforms/android/app/build/outputs/apk/release/app-release.apk"
     APP_ID="com.deskdrop"
 else
-    bash scripts/build-android.sh --debug
+    bash scripts/build-android.sh --debug --fast-abi
     APK_PATH="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
     APP_ID="com.deskdrop.debug"
 fi

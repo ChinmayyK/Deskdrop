@@ -133,7 +133,7 @@ log "✅ Built: ${APP_BUNDLE}"
 
 # ── 7. Optional: create DMG ──────────────────────────────────────────────────
 
-if command -v create-dmg &>/dev/null; then
+if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
     log "Creating DMG..."
     create-dmg \
         --volname "Deskdrop" \

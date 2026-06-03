@@ -101,6 +101,13 @@ pub enum IpcRequest {
     RespondToPairing { device_id: String, accepted: bool },
     /// Revoke a trusted device by UUID.
     RevokeTrustedDevice { device_id: String },
+    /// Generate a short-lived QR authentication token for this device.
+    GenerateQrToken,
+    /// Trust a device using a scanned QR code token.
+    TrustPeerFromQr {
+        device_id: String,
+        token: String,
+    },
     /// Push clipboard text to all peers.
     PushText { text: String },
     /// Push clipboard text to one peer.
@@ -391,21 +398,50 @@ pub fn socket_path() -> PathBuf {
         if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR") {
             PathBuf::from(runtime).join("deskdrop.sock")
         } else {
-            // MED-01 FIX: Use a private subdirectory instead of placing the
-            // socket directly in /tmp. This prevents symlink attacks where an
-            // attacker pre-creates a symlink at the socket path to hijack
-            // file deletion or socket binding.
+            // FIX: High-stakes Local Privilege Escalation / IPC Hijacking.
+            // Create the directory securely with atomic permissions (0o700) using
+            // DirBuilderExt to prevent TOCTOU attacks. Also explicitly verify
+            // ownership and symlink status, panicking if an attacker hijacked it.
             let uid = unsafe { libc::getuid() };
             let dir = PathBuf::from(format!("/tmp/deskdrop-{}", uid));
-            // Create with mode 0o700 — only the owner can list or create files.
-            if !dir.exists() {
-                let _ = std::fs::create_dir(&dir);
-            }
+            
             #[cfg(unix)]
             {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+                use std::os::unix::fs::DirBuilderExt;
+                use std::os::unix::fs::MetadataExt;
+                
+                if !dir.exists() {
+                    let mut builder = std::fs::DirBuilder::new();
+                    builder.mode(0o700);
+                    if let Err(e) = builder.create(&dir) {
+                        if e.kind() != std::io::ErrorKind::AlreadyExists {
+                            panic!("Failed to securely create IPC directory: {}", e);
+                        }
+                    }
+                }
+                
+                if let Ok(meta) = dir.symlink_metadata() {
+                    if !meta.is_dir() {
+                        panic!("IPC path {:?} is not a directory (symlink attack?)", dir);
+                    }
+                    if meta.uid() != uid as u32 {
+                        panic!("IPC directory {:?} is owned by UID {} instead of {}! Hijack attempt detected.", dir, meta.uid(), uid);
+                    }
+                    // Defense in depth: enforce permissions just in case.
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+                } else {
+                    panic!("Could not verify ownership of IPC directory {:?}", dir);
+                }
             }
+            
+            #[cfg(not(unix))]
+            {
+                if !dir.exists() {
+                    let _ = std::fs::create_dir(&dir);
+                }
+            }
+
             dir.join("deskdrop.sock")
         }
     }
@@ -583,6 +619,8 @@ pub async fn handle_ipc_request(
                 "last_sync_at": snap.last_sync_at,
                 "pending_clipboard_count": pending,
                 "local_fingerprint": fp,
+                "local_device_id": eng.local_device_id().to_string(),
+                "local_device_name": eng.local_device_name(),
                 "active_call": active_call,
                 "peer_batteries": peer_batteries,
                 "active_transfers": active_transfers,
@@ -623,6 +661,20 @@ pub async fn handle_ipc_request(
                     Err(e) => IpcResponse::err(e.to_string()),
                 },
                 None => IpcResponse::err("invalid device id"),
+            }
+        }
+        IpcRequest::GenerateQrToken => {
+            let token = eng.generate_qr_token().await;
+            IpcResponse::ok(serde_json::json!({ "token": token }))
+        }
+        IpcRequest::TrustPeerFromQr { device_id, token } => {
+            match crate::ipc::parse_uuid(&device_id) {
+                Ok(uuid) => {
+                    let _ = eng.trust_peer(uuid).await;
+                    eng.send_qr_auth(uuid, token).await;
+                    IpcResponse::ok_empty()
+                }
+                Err(_) => IpcResponse::err("invalid device id"),
             }
         }
         IpcRequest::RejectPeer { device_id } => {
@@ -694,7 +746,7 @@ pub async fn handle_ipc_request(
             IpcResponse::ok(serde_json::json!({
                 "connected_peers": snap.peers.len(),
                 "sync_eligible": snap.peers.iter().filter(|p| p.is_sync_eligible()).count(),
-                "device_id": eng.device_id().await,
+                "device_id": eng.device_id(),
             }))
         }
         IpcRequest::LatestCameraFrame { target_device } => {

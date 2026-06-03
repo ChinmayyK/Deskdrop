@@ -27,6 +27,7 @@ struct PeerViewModel: Identifiable, Equatable {
     let autoConnect: Bool
     let lastError: String?
     let pairingRequested: Bool
+    let outgoingPairingWaiting: Bool
     let pairingPin: String?
 
     // ── Timing ────────────────────────────────────────────────────────────────
@@ -207,4 +208,12 @@ struct DeviceBatteryState: Equatable, Identifiable {
     let deviceName: String
     let level: Int
     let charging: Bool
+}
+
+/// Device network status.
+struct DeviceNetworkState: Equatable, Identifiable {
+    var id: String { deviceId }
+    let deviceId: String
+    let deviceName: String
+    let networkType: String
 }

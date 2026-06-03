@@ -152,11 +152,18 @@ private struct PopoverActionButton: View {
             action()
         }) {
             VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(tint)
-                    .symbolEffect(.bounce, value: isHovered)
-                    .shadow(color: tint.opacity(isHovered ? 0.4 : 0), radius: 4, y: 2)
+                if #available(macOS 14.0, *) {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(tint)
+                        .symbolEffect(.bounce, value: isHovered)
+                        .shadow(color: tint.opacity(isHovered ? 0.4 : 0), radius: 4, y: 2)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(tint)
+                        .shadow(color: tint.opacity(isHovered ? 0.4 : 0), radius: 4, y: 2)
+                }
                 
                 Text(title)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))

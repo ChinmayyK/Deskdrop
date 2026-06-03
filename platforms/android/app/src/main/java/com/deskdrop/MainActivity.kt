@@ -266,6 +266,32 @@ class MainActivity : ComponentActivity() {
                         showSnack("Rejected ${peer.name}")
                         window.decorView.postDelayed({ refreshDashboardState() }, 200)
                     },
+                    onConnectPeer = { peer ->
+                        val ipStr = peer.ip
+                        if (!ipStr.isNullOrBlank()) {
+                            val ip = if (ipStr.contains(":")) ipStr.substringBefore(":") else ipStr
+                            val port = if (ipStr.contains(":")) ipStr.substringAfter(":").toIntOrNull() ?: 47823 else 47823
+                            ContextCompat.startForegroundService(this@MainActivity,
+                                Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                    action = DeskdropService.ACTION_CONNECT_MANUAL
+                                    putExtra("ip", ip)
+                                    putExtra("port", port)
+                                }
+                            )
+                            showSnack("Connecting to ${peer.name}...")
+                        } else {
+                            showSnack("Cannot connect: no IP known for ${peer.name}")
+                        }
+                    },
+                    onDisconnectPeer = { peer ->
+                        ContextCompat.startForegroundService(this@MainActivity,
+                            Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_DISCONNECT_PEER
+                                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                            }
+                        )
+                        showSnack("Disconnected from ${peer.name}")
+                    },
                     onSendPairingRequest = { peer ->
                         ContextCompat.startForegroundService(this@MainActivity,
                             Intent(this@MainActivity, DeskdropService::class.java).apply {
@@ -507,12 +533,29 @@ class MainActivity : ComponentActivity() {
         val ctx = this
         if (cleaned.startsWith("deskdrop://pair") || cleaned.startsWith("deskdrop://pair")) {
             val uri = android.net.Uri.parse(cleaned)
-            val ip = uri.getQueryParameter("ip")
-            val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 47823
+            
+            // New QR Code Pairing format with Auth Token
+            val id = uri.getQueryParameter("id")
+            val token = uri.getQueryParameter("token")
             val peerName = uri.getQueryParameter("name")?.let {
                 java.net.URLDecoder.decode(it, "UTF-8")
-            } ?: ip ?: "Mac"
-            val fingerprint = uri.getQueryParameter("fingerprint") ?: ""
+            } ?: "Mac"
+
+            if (id != null && token != null) {
+                ContextCompat.startForegroundService(ctx,
+                    Intent(ctx, DeskdropService::class.java).apply {
+                        action = DeskdropService.ACTION_TRUST_PEER_FROM_QR
+                        putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, id)
+                        putExtra(DeskdropService.EXTRA_TOKEN, token)
+                    }
+                )
+                showSnack("Connecting securely to $peerName...")
+                return true
+            }
+
+            // Legacy IP-based Magic Link format
+            val ip = uri.getQueryParameter("ip")
+            val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 47823
             if (ip != null) {
                 ContextCompat.startForegroundService(ctx,
                     Intent(ctx, DeskdropService::class.java).apply {
@@ -521,7 +564,6 @@ class MainActivity : ComponentActivity() {
                         putExtra("port", port)
                     }
                 )
-
                 showSnack("Connecting to $peerName ($ip)...")
                 return true
             }

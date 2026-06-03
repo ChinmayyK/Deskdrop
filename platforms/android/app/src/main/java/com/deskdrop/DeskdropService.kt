@@ -69,9 +69,9 @@ object DeskdropJni {
     const val CR_EVENT_ACTIVITY_UPDATED        = 16
     const val CR_EVENT_CALL_STATE_CHANGED       = 17
     const val CR_EVENT_CAMERA_FRAME          = 25
-    const val CR_EVENT_SYSTEM_HEALTH_UPDATED = 26
     const val CR_EVENT_CALL_ACTION              = 18
     const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
+    const val CR_EVENT_NETWORK_STATE_CHANGED    = 28
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
@@ -83,6 +83,8 @@ object DeskdropJni {
     @JvmStatic external fun pushFile(handle: Long, name: String, data: ByteArray): Int
     @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
     @JvmStatic external fun pushVideoFrame(handle: Long, data: ByteArray): Int
+    @JvmStatic external fun pushBatteryStatus(handle: Long, level: Int, charging: Boolean): Int
+    @JvmStatic external fun pushNetworkStatus(handle: Long, networkType: String): Int
     @JvmStatic external fun stopCameraStream(handle: Long): Int
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
@@ -107,6 +109,8 @@ object DeskdropJni {
     @JvmStatic external fun applyClipboardByHash(engineHandle: Long, hash: String): Int
     /** Mark a peer as trusted after the user approves the pairing prompt. */
     @JvmStatic external fun trustPeer(engineHandle: Long, deviceId: String): Int
+    /** Trust a peer via QR code and send the auth token. */
+    @JvmStatic external fun trustPeerFromQr(engineHandle: Long, deviceId: String, token: String): Int
     /** Reject a peer after the user denies the pairing prompt. */
     @JvmStatic external fun rejectPeer(engineHandle: Long, deviceId: String): Int
     /** Forget a previously connected device. */
@@ -187,10 +191,6 @@ object DeskdropJni {
     /** Get the action string ("accept"/"decline") from a CR_EVENT_CALL_ACTION event. */
     @JvmStatic external fun eventCallAction(event: Long): String?
     // ── Battery synchronization (F20) ─────────────────────────────────────────
-    @JvmStatic external fun pushBatteryStatus(
-        handle: Long, level: Int, charging: Boolean
-    ): Int
-
     // ── Network lifecycle ─────────────────────────────────────────────────────
     /**
      * Notify the Rust engine that Android's default network is available again
@@ -320,15 +320,18 @@ class DeskdropService : Service() {
         const val ACTION_RESUME_FILE_TRANSFER = "com.deskdrop.RESUME_FILE_TRANSFER"
         const val ACTION_CONNECT_MANUAL     = "com.deskdrop.CONNECT_MANUAL"
         const val ACTION_TRUST_PEER         = "com.deskdrop.TRUST_PEER"
+        const val ACTION_TRUST_PEER_FROM_QR = "com.deskdrop.TRUST_PEER_FROM_QR"
         const val ACTION_REJECT_PEER = "com.deskdrop.REJECT_PEER"
         const val ACTION_HANDLE_CALL_STATE = "com.deskdrop.HANDLE_CALL_STATE"
         const val ACTION_FORGET_PEER        = "com.deskdrop.FORGET_PEER"
         const val ACTION_SEND_PAIRING_REQUEST = "com.deskdrop.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "com.deskdrop.RESPOND_TO_PAIRING"
+        const val ACTION_DISCONNECT_PEER    = "com.deskdrop.DISCONNECT_PEER"
 
         // Intent extras
         const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
         const val EXTRA_CONTENT_HASH        = "content_hash"   // SHA-256 hex; used for full-content apply via engine
+        const val EXTRA_TOKEN               = "token"          // QR Code Auth Token
         const val EXTRA_TRANSFER_ID         = "transfer_id"
         const val EXTRA_SHARED_URI          = "shared_uri"
         const val EXTRA_SHARED_URIS         = "shared_uris"
@@ -533,6 +536,7 @@ class DeskdropService : Service() {
                 return START_STICKY
             }
             ACTION_TRUST_PEER -> handleTrustPeer(intent)
+            ACTION_TRUST_PEER_FROM_QR -> handleTrustPeerFromQr(intent)
             ACTION_REJECT_PEER -> handleRejectPeer(intent)
             ACTION_HANDLE_CALL_STATE -> handleCallStateIntent(intent)
             ACTION_FORGET_PEER        -> {
@@ -580,6 +584,16 @@ class DeskdropService : Service() {
                 if (h != 0L) {
                     val result = DeskdropJni.respondToPairing(h, deviceId, accepted)
                     Log.i(TAG, "Pairing response for $deviceId accepted=$accepted result=$result")
+                    persistStatus()
+                }
+                return START_STICKY
+            }
+            ACTION_DISCONNECT_PEER -> {
+                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
+                val h = engineHandle
+                if (h != 0L) {
+                    val result = DeskdropJni.disconnectPeer(h, deviceId)
+                    Log.i(TAG, "Manual disconnect request for $deviceId: result=$result")
                     persistStatus()
                 }
                 return START_STICKY
@@ -1154,9 +1168,7 @@ class DeskdropService : Service() {
                 }
                 startActivity(intent)
             }
-            DeskdropJni.CR_EVENT_SYSTEM_HEALTH_UPDATED -> {
-                // TODO: Update system health state model
-            }
+
 
             // ── Peer discovered ───────────────────────────────────────────────
             DeskdropJni.CR_EVENT_PEER_DISCOVERED -> {
@@ -1992,6 +2004,17 @@ class DeskdropService : Service() {
         }
     }
 
+    private fun handleTrustPeerFromQr(intent: Intent) {
+        val deviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return
+        val token = intent.getStringExtra(EXTRA_TOKEN) ?: return
+        val h = engineHandle
+        if (h != 0L) {
+            val result = DeskdropJni.trustPeerFromQr(h, deviceId, token)
+            Log.i(TAG, "QR trust request for $deviceId: result=$result")
+            persistStatus()
+        }
+    }
+
     private fun handleRejectPeer(intent: Intent) {
         val deviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return
         val h = engineHandle
@@ -2163,8 +2186,9 @@ class DeskdropService : Service() {
             }
         }
         val filter = android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        registerReceiver(receiver, filter)
+        val stickyIntent = registerReceiver(receiver, filter)
         batteryReceiver = receiver
+        stickyIntent?.let { receiver.onReceive(this, it) }
         Log.i(TAG, "Battery status monitor started")
     }
 
@@ -2429,8 +2453,25 @@ class DeskdropService : Service() {
                 }
             }
 
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: android.net.NetworkCapabilities) {
+                super.onCapabilitiesChanged(network, networkCapabilities)
+                val type = if (networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) "wifi"
+                           else if (networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)) "cellular"
+                           else "unknown"
+                val h = engineHandle
+                if (h != 0L) {
+                    Thread {
+                        DeskdropJni.pushNetworkStatus(h, type)
+                    }.start()
+                }
+            }
+
             override fun onLost(network: Network) {
                 Log.i(TAG, "Network: default network lost — stopping discovery, scheduling retry")
+                val h = engineHandle
+                if (h != 0L) {
+                    Thread { DeskdropJni.pushNetworkStatus(h, "offline") }.start()
+                }
                 handler.post {
                     stopNsdDiscovery()
                     scheduleNsdRetry()

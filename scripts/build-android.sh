@@ -11,6 +11,8 @@
 
 set -euo pipefail
 
+log() { echo "▶ $*"; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CORE_DIR="${REPO_ROOT}/deskdrop-core"
@@ -30,13 +32,36 @@ for arg in "$@"; do
         --debug)   BUILD_TYPE="debug" ;;
         --release) BUILD_TYPE="release" ;;
         --install) DO_INSTALL=true ;;
+        --fast-abi) FAST_ABI=true ;;
     esac
 done
 
 ABIS=("aarch64-linux-android" "armv7-linux-androideabi" "x86_64-linux-android")
+if [[ "${FAST_ABI:-}" == "true" ]]; then
+    if command -v adb &>/dev/null && adb get-state 1>/dev/null 2>&1; then
+        TARGET_ABI=$(adb shell getprop ro.product.cpu.abi | tr -d '\r')
+        if [[ "$TARGET_ABI" == "arm64-v8a" ]]; then
+            ABIS=("aarch64-linux-android")
+            log "FAST_ABI enabled: Device connected. Building only for arm64-v8a (aarch64)."
+        elif [[ "$TARGET_ABI" == "armeabi-v7a" ]]; then
+            ABIS=("armv7-linux-androideabi")
+            log "FAST_ABI enabled: Device connected. Building only for armeabi-v7a (armv7)."
+        elif [[ "$TARGET_ABI" == "x86_64" ]]; then
+            ABIS=("x86_64-linux-android")
+            log "FAST_ABI enabled: Device connected. Building only for x86_64."
+        else
+            ABIS=("aarch64-linux-android")
+            log "FAST_ABI enabled: Device connected but ABI ($TARGET_ABI) unknown. Defaulting to arm64-v8a (aarch64)."
+        fi
+    else
+        ABIS=("aarch64-linux-android")
+        log "FAST_ABI enabled: No device connected. Defaulting to arm64-v8a (aarch64)."
+    fi
+fi
+
 JNI_DIR="${ANDROID_DIR}/app/src/main/jniLibs"
 
-log() { echo "▶ $*"; }
+
 
 generate_android_icons() {
     if [[ ! -f "${ICON_SRC}" ]]; then
@@ -138,10 +163,13 @@ cd "${CORE_DIR}"
 # Always build Rust in release mode — debug Rust is 5-10x slower for crypto
 # (ChaCha20-Poly1305 encryption dominates transfer throughput).
 # The --debug/--release flag only affects the APK signing and Gradle build type.
+CARGO_NDK_ARGS=()
+for abi in "${ABIS[@]}"; do
+    CARGO_NDK_ARGS+=("-t" "$abi")
+done
+
 cargo ndk \
-    -t aarch64-linux-android \
-    -t armv7-linux-androideabi \
-    -t x86_64-linux-android \
+    "${CARGO_NDK_ARGS[@]}" \
     -o "${JNI_DIR}" \
     build --features compress --lib --release
 

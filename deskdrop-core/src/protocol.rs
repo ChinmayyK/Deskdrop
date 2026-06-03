@@ -228,6 +228,9 @@ pub enum AppMessage {
         trusted: bool,
         metadata_json: Option<String>,
     },
+    QrAuth {
+        token: String,
+    },
     ClipboardPush {
         seq: u64,
         content: std::sync::Arc<ClipboardContent>,
@@ -332,6 +335,13 @@ pub enum AppMessage {
         level: u8,
         /// Whether the device is currently charging
         charging: bool,
+        origin_device: Uuid,
+        origin_device_name: String,
+    },
+    /// Network connection state from a connected device (e.g. Wi-Fi, Cellular, Offline).
+    NetworkStatus {
+        /// "wifi", "cellular", or "offline"
+        network_type: String,
         origin_device: Uuid,
         origin_device_name: String,
     },

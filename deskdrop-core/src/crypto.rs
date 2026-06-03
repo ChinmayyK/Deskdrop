@@ -252,14 +252,24 @@ impl SessionKey {
             counter,
             self.recv_counter
         );
-        self.recv_counter = self
+        let next_counter = self
             .recv_counter
             .checked_add(1)
             .context("recv counter overflow")?;
 
-        self.cipher
+        let res = self
+            .cipher
             .decrypt(nonce, ct)
-            .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e))
+            .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e));
+            
+        // FIX: High-stakes Denial-of-Service vulnerability.
+        // Only increment the replay counter if the ciphertext is successfully
+        // authenticated (MAC validation passes). Incrementing before authentication
+        // allows an attacker to inject garbage packets to permanently desync the session.
+        if res.is_ok() {
+            self.recv_counter = next_counter;
+        }
+        res
     }
 
     /// Decrypt a frame in-place. The first 12 bytes of the buffer must be the nonce,
@@ -286,7 +296,7 @@ impl SessionKey {
             counter,
             self.recv_counter
         );
-        self.recv_counter = self
+        let next_counter = self
             .recv_counter
             .checked_add(1)
             .context("recv counter overflow")?;
@@ -298,6 +308,8 @@ impl SessionKey {
             .decrypt_in_place(nonce, &[], buffer)
             .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e))?;
 
+        // FIX: Update counter only on successful decryption.
+        self.recv_counter = next_counter;
         Ok(())
     }
 }

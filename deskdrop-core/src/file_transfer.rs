@@ -377,11 +377,19 @@ impl InboundTransfer {
         self.file_handle = None;
 
         let tmp = self.tmp_path.as_ref().context("no temp path")?;
-        let dest = self.dest_path.as_ref().context("no dest path")?;
+        
+        // FIX: Recalculate unique_dest_path at the exact moment of rename
+        // to prevent Time-of-Check to Time-of-Use (TOCTOU) attacks where an
+        // attacker places a file/symlink at the pre-calculated dest_path
+        // during the long transfer window.
+        let save_dir = tmp.parent().unwrap_or(Path::new("."));
+        let safe_name = sanitize_file_name(&self.meta.file_name);
+        let dest = unique_dest_path(save_dir, &safe_name);
+        
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent).context("creating save dir")?;
         }
-        std::fs::rename(tmp, dest).with_context(|| {
+        std::fs::rename(tmp, &dest).with_context(|| {
             format!(
                 "moving completed transfer from {} to {}",
                 tmp.display(),
@@ -389,8 +397,9 @@ impl InboundTransfer {
             )
         })?;
         self.tmp_path = None;
+        self.dest_path = Some(dest.clone());
         self.status = TransferStatus::Complete;
-        Ok(dest.clone())
+        Ok(dest)
     }
 
     /// Should we send a chunk ack now?
@@ -407,11 +416,25 @@ impl InboundTransfer {
             let offset = (self.received_chunk_count as u64) * (FILE_CHUNK_SIZE as u64);
             file.seek(std::io::SeekFrom::Start(offset))
                 .context("seeking to chunk offset")?;
+            
+            // FIX: if the sender sends a short non-final chunk, the pre-allocated
+            // space will leave null bytes. We must hash the data AND the null gap
+            // up to FILE_CHUNK_SIZE so the checksum verifies the ACTUAL disk state.
+            let mut padding = 0;
+            if self.received_chunk_count < self.total_chunks - 1 && data.len() < FILE_CHUNK_SIZE {
+                padding = FILE_CHUNK_SIZE - data.len();
+            }
+            
             file.write_all(data).context("writing chunk to temp file")?;
+            self.hasher.update(data);
+            
+            if padding > 0 {
+                let nulls = vec![0u8; padding];
+                self.hasher.update(&nulls);
+            }
         } else {
             anyhow::bail!("transfer has not been accepted or file handle is missing");
         }
-        self.hasher.update(data);
         Ok(())
     }
 

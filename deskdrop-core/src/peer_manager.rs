@@ -108,6 +108,7 @@ pub struct PeerRecord {
     /// Indicates that this untrusted peer has requested pairing.
     pub pairing_requested: bool,
     /// The generated pairing PIN to display, if pairing is requested.
+    pub outgoing_pairing_waiting: bool,
     pub pairing_pin: Option<String>,
 
     // ── Multi-layer discovery state ──────────────────────────────────────────
@@ -149,6 +150,7 @@ impl Default for PeerRecord {
             last_error: None,
             explicit_disconnect: false,
             pairing_requested: false,
+            outgoing_pairing_waiting: false,
             pairing_pin: None,
             last_discovery_at: None,
             discovery_sources: Vec::new(),
@@ -391,6 +393,7 @@ impl PeerManager {
                 last_error: None,
                 explicit_disconnect: false,
                 pairing_requested: false,
+                outgoing_pairing_waiting: false,
                 pairing_pin: None,
                 last_discovery_at: Some(now),
                 discovery_sources: vec![discovery],
@@ -473,7 +476,7 @@ impl PeerManager {
                 status: PeerConnectionState::Connecting,
                 ..PeerRecord::default()
             });
-            if entry.status == PeerConnectionState::Connecting {
+            if entry.status == PeerConnectionState::Connecting || entry.status == PeerConnectionState::Connected {
                 return Ok(false);
             }
             if let Some(endpoint) = endpoint {
@@ -656,7 +659,7 @@ impl PeerManager {
 
     /// Sets whether this peer has an active pairing request pending.
     pub fn set_pairing_requested(&self, device_id: Uuid, requested: bool) -> Result<bool> {
-        let found = {
+        let changed = {
             let mut store = self.store.write().unwrap();
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.pairing_requested = requested;
@@ -665,10 +668,26 @@ impl PeerManager {
                 false
             }
         };
-        if found {
+        if changed {
             self.save()?;
         }
-        Ok(found)
+        Ok(changed)
+    }
+
+    pub fn set_outgoing_pairing_waiting(&self, device_id: Uuid, waiting: bool) -> Result<bool> {
+        let changed = {
+            let mut store = self.store.write().unwrap();
+            if let Some(entry) = store.peers.get_mut(&device_id) {
+                entry.outgoing_pairing_waiting = waiting;
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
+            self.save()?;
+        }
+        Ok(changed)
     }
 
     /// Sets the pairing PIN for this peer.

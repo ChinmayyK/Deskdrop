@@ -43,6 +43,9 @@ struct DashboardRootView: View {
                 onSave:   { store.rename(device, to: $0); renameTarget = nil }
             )
         }
+        .sheet(isPresented: $store.showQrCodeSheet) {
+            QRCodeSheetView(store: store)
+        }
     }
 
     private func beginRename(_ device: ManagedDevice) {
@@ -237,6 +240,10 @@ private struct ContinuityHeaderView: View {
                     }
                     HeaderActionButton(icon: "paperplane.fill", tooltip: "Send File") {
                         // Triggers file picker
+                    }
+                    
+                    HeaderActionButton(icon: "qrcode", tooltip: "Show QR Code") {
+                        store.showQrCodeSheet = true
                     }
                     
                     Divider()
@@ -947,6 +954,9 @@ private struct DeviceCard: View {
                         if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
                             BatteryIndicatorPill(level: battery.level, charging: battery.charging)
                         }
+                        if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
+                            NetworkIndicatorPill(type: net.networkType)
+                        }
                     }
                     HStack(spacing: 6) {
                         CRTag(text: device.trustState.rawValue.capitalized, tint: device.trustState.color)
@@ -1001,15 +1011,21 @@ private struct DeviceCard: View {
                         .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                 }
                 if device.trustState != .trusted {
-                    if device.pairingRequested {
+                    if device.pairingRequested || device.outgoingPairingWaiting {
                         if let pin = device.pairingPin, !pin.isEmpty {
                             Text("PIN: \(pin)")
                                 .font(.system(.body, design: .monospaced).weight(.bold))
                                 .foregroundStyle(CRTheme.ink)
                                 .padding(.horizontal, 8)
                         }
-                        Button("Accept") { store.respondToPairing(device, accepted: true) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
-                        Button("Decline") { store.respondToPairing(device, accepted: false) }.buttonStyle(CRDestructiveButtonStyle())
+                        if device.pairingRequested {
+                            Button("Accept") { store.respondToPairing(device, accepted: true) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
+                            Button("Decline") { store.respondToPairing(device, accepted: false) }.buttonStyle(CRDestructiveButtonStyle())
+                        } else {
+                            Text("Waiting...")
+                                .foregroundStyle(CRTheme.inkSoft)
+                                .font(.system(size: 13))
+                        }
                     } else {
                         Button("Pair") { store.sendPairingRequest(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                     }
@@ -1262,6 +1278,9 @@ private struct CompactDeviceCard: View {
                     if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
                         BatteryIndicatorPill(level: battery.level, charging: battery.charging)
                     }
+                    if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
+                        NetworkIndicatorPill(type: net.networkType)
+                    }
                 }
             }
             
@@ -1269,25 +1288,45 @@ private struct CompactDeviceCard: View {
             
             // Actions
             HStack(spacing: 8) {
-                Button(action: onSendFiles) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("Files")
-                            .font(.system(size: 12, weight: .medium))
+                if device.connected {
+                    Button(action: onSendFiles) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("Files")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .foregroundStyle(CRTheme.brandElectric)
+                        .background(CRTheme.brandElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
-                    .foregroundStyle(CRTheme.ink)
+                    .buttonStyle(.plain)
+                    .help("Send Files")
+                    
+                    Button(action: { store.disconnect(device) }) {
+                        Image(systemName: "link.badge.minus")
+                            .font(.system(size: 13, weight: .semibold))
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .foregroundStyle(CRTheme.accentRed)
+                            .background(CRTheme.accentRed.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Disconnect")
+                } else {
+                    Button(action: { store.connect(device) }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "antenna.radiowaves.left.and.right")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("Connect")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .foregroundStyle(CRTheme.brandElectric)
+                        .background(CRTheme.brandElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Connect")
                 }
-                .buttonStyle(CRSecondaryButtonStyle())
-                .help("Send Files")
-                
-                Button(action: { store.disconnect(device) }) {
-                    Image(systemName: "link.badge.minus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(CRTheme.accentRed)
-                }
-                .buttonStyle(CRSecondaryButtonStyle())
-                .help("Disconnect")
             }
         }
         .padding(16)
@@ -1339,6 +1378,10 @@ private struct UntrustedDeviceCard: View {
                         Text("Wants to pair with this Mac")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(CRTheme.inkSoft)
+                    } else if device.outgoingPairingWaiting {
+                        Text("Waiting for device to accept...")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(CRTheme.inkSoft)
                     } else {
                         Text(device.isConnected ? "Connected, but untrusted" : "Previously paired device")
                             .font(.system(size: 13, weight: .medium))
@@ -1351,7 +1394,7 @@ private struct UntrustedDeviceCard: View {
             
             // Actions & PIN
             HStack(spacing: 12) {
-                if device.pairingRequested {
+                if device.pairingRequested || device.outgoingPairingWaiting {
                     if let pin = device.pairingPin, !pin.isEmpty {
                         VStack(spacing: 2) {
                             Text("SECURITY PIN")
@@ -1375,38 +1418,33 @@ private struct UntrustedDeviceCard: View {
                         .padding(.trailing, 8)
                     }
                     
-                    Button {
-                        store.respondToPairing(device, accepted: false)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(CRTheme.inkSoft)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(CRTheme.surfaceStrong))
-                    }
-                    .buttonStyle(.plain)
-                    .scaleEffect(isHovered ? 1.05 : 1.0)
-                    
-                    Button {
-                        store.respondToPairing(device, accepted: true)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark")
+                    if device.pairingRequested {
+                        Button {
+                            store.respondToPairing(device, accepted: false)
+                        } label: {
+                            Image(systemName: "xmark")
                                 .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(CRTheme.inkSoft)
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(CRTheme.surfaceStrong))
+                        }
+                        .buttonStyle(.plain)
+                        .scaleEffect(isHovered ? 1.05 : 1.0)
+                        
+                        Button {
+                            store.respondToPairing(device, accepted: true)
+                        } label: {
                             Text("Accept")
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 16)
+                                .frame(height: 36)
+                                .background(CRTheme.accentGreen)
+                                .clipShape(Capsule())
                         }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 20)
-                        .frame(height: 36)
-                        .background {
-                            Capsule()
-                                .fill(LinearGradient(colors: [CRTheme.accentGreen, Color(red: 40/255, green: 167/255, blue: 69/255)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .shadow(color: CRTheme.accentGreen.opacity(0.3), radius: 8, y: 4)
-                        }
+                        .buttonStyle(.plain)
+                        .scaleEffect(isHovered ? 1.05 : 1.0)
                     }
-                    .buttonStyle(.plain)
-                    
                 } else {
                     Button("Pair Device") { store.sendPairingRequest(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                     Button("Remove") { store.forget(device) }.buttonStyle(CRSecondaryButtonStyle())
@@ -1460,6 +1498,37 @@ struct BatteryIndicatorPill: View {
                 .font(.system(size: 9.5, weight: .semibold))
             Text("\(level)%")
                 .font(.system(size: 9.5, weight: .bold, design: .rounded))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .foregroundStyle(tintColor)
+        .background(
+            Capsule()
+                .fill(tintColor.opacity(0.12))
+        )
+    }
+}
+
+// MARK: - Network Indicator Pill
+struct NetworkIndicatorPill: View {
+    let type: String
+
+    private var iconName: String {
+        switch type.lowercased() {
+        case "wifi": return "wifi"
+        case "cellular": return "antenna.radiowaves.left.and.right"
+        default: return "network.slash"
+        }
+    }
+    
+    private var tintColor: Color {
+        type.lowercased() == "offline" ? CRTheme.accentRed : CRTheme.accentBlue
+    }
+    
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: iconName)
+                .font(.system(size: 9.5, weight: .semibold))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
@@ -2025,5 +2094,105 @@ struct FloatingContinuityOrb: View {
                 phase = 1.0
             }
         }
+    }
+}
+
+// MARK: - QR Code Sheet
+
+struct QRCodeSheetView: View {
+    @ObservedObject var store: DeskdropStore
+    @Environment(\.dismiss) var dismiss
+    @State private var qrImage: NSImage?
+    @State private var errorMessage: String?
+    @State private var isLoading = true
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            VStack(spacing: 8) {
+                Text("Pair Device")
+                    .font(.system(size: 20, weight: .bold))
+                
+                Text("Scan this QR code from the Deskdrop Android app to pair securely.")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13))
+            }
+            
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(CRTheme.surfaceElevated)
+                    .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
+                    .frame(width: 240, height: 240)
+                
+                if isLoading {
+                    ProgressView()
+                } else if let img = qrImage {
+                    Image(nsImage: img)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 200, height: 200)
+                        .padding(20)
+                } else if let error = errorMessage {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                }
+            }
+            
+            Button("Done") {
+                dismiss()
+            }
+            .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+            .frame(width: 120)
+        }
+        .padding(32)
+        .frame(width: 360)
+        .task {
+            await loadQR()
+        }
+    }
+    
+    private func loadQR() async {
+        do {
+            let token = try await store.generateQrToken()
+            let id = store.localDeviceId ?? ""
+            let name = store.localDeviceName ?? ""
+            
+            var components = URLComponents()
+            components.scheme = "deskdrop"
+            components.host = "pair"
+            components.queryItems = [
+                URLQueryItem(name: "id", value: id),
+                URLQueryItem(name: "name", value: name),
+                URLQueryItem(name: "token", value: token)
+            ]
+            
+            guard let urlString = components.url?.absoluteString else {
+                errorMessage = "Failed to construct pairing URL."
+                isLoading = false
+                return
+            }
+            
+            let context = CIContext()
+            let filter = CIFilter.qrCodeGenerator()
+            filter.message = Data(urlString.utf8)
+            filter.correctionLevel = "H"
+            
+            if let outputImage = filter.outputImage {
+                let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+                if let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) {
+                    qrImage = NSImage(cgImage: cgImage, size: .zero)
+                } else {
+                    errorMessage = "Failed to render QR Code."
+                }
+            } else {
+                errorMessage = "Failed to generate QR Code."
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
     }
 }

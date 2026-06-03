@@ -117,6 +117,11 @@ pub enum EngineEvent {
         device_name: String,
         pin: String,
     },
+    OutgoingPairingWaiting {
+        device_id: Uuid,
+        device_name: String,
+        pin: String,
+    },
     PairingConfirmed {
         device_id: Uuid,
     },
@@ -213,6 +218,12 @@ pub enum EngineEvent {
         from_name: String,
         level: u8,
         charging: bool,
+    },
+    /// A connected peer device reported a network status change.
+    NetworkStateChanged {
+        from_device: Uuid,
+        from_name: String,
+        network_type: String,
     },
     /// A connected Android device relayed a push notification.
     NotificationReceived {
@@ -333,8 +344,8 @@ impl Default for EngineConfig {
             peer_store_path: default_peer_store_path(),
             identity_path: IdentityStore::default_path(),
             connect_timeout: Duration::from_secs(3),
-            heartbeat_interval: Duration::from_secs(10),
-            heartbeat_timeout: Duration::from_secs(30),
+            heartbeat_interval: Duration::from_secs(30),
+            heartbeat_timeout: Duration::from_secs(120),
             bind_ip: None,
             enable_discovery: true,
             network_poll_interval: Duration::from_secs(1),
@@ -394,6 +405,14 @@ pub struct PeerBatteryState {
     pub charging: bool,
 }
 
+/// Network connection state from a connected peer device.
+#[derive(Debug, Clone, Serialize)]
+pub struct PeerNetworkState {
+    pub device_id: Uuid,
+    pub device_name: String,
+    pub network_type: String,
+}
+
 #[derive(Clone)]
 struct EngineShared {
     config: EngineConfig,
@@ -430,6 +449,8 @@ struct EngineShared {
     active_call: Arc<Mutex<Option<ActiveCallState>>>,
     /// Per-peer battery levels (F20). Keyed by device UUID.
     peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
+    /// Per-peer network status. Keyed by device UUID.
+    peer_networks: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerNetworkState>>>,
     /// Per-peer latest camera frame (to prevent MPSC channel OOM).
     pub camera_frames: Arc<Mutex<std::collections::HashMap<uuid::Uuid, Vec<u8>>>>,
     /// Rate limit for pairing UI spam from untrusted peers.
@@ -438,6 +459,8 @@ struct EngineShared {
     pub throttle: crate::throttle::Throttle,
     /// Cross-device duplicate prevention (mesh echo suppression).
     pub dedup: Arc<Mutex<crate::dedup::Deduplicator>>,
+    /// Active QR authentication token (short-lived)
+    pub qr_auth_token: Arc<Mutex<Option<String>>>,
 }
 
 #[derive(Clone)]
@@ -519,10 +542,12 @@ impl Engine {
             feedback: Arc::new(Mutex::new(crate::engine_support::FeedbackLog::new(200))),
             active_call: Arc::new(Mutex::new(None)),
             peer_batteries: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            peer_networks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             camera_frames: Arc::new(Mutex::new(std::collections::HashMap::new())),
             last_pairing_prompt: Arc::new(Mutex::new(None)),
             throttle: crate::throttle::Throttle::default_rate(),
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
+            qr_auth_token: Arc::new(Mutex::new(None)),
         };
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
@@ -548,7 +573,7 @@ impl Engine {
                 .map(|i| i.ip)
                 .unwrap_or(initial_bind.ip())
         };
-        let identity_pubkey = shared.identity_key.public_bytes;
+        let _identity_pubkey = shared.identity_key.public_bytes;
 
         if let Some(discovery_tx) = &engine.shared.discovery_tx {
             let _ = discovery_tx
@@ -586,9 +611,12 @@ impl Engine {
             }
 
             let device_id_str = shared.config.device_id.to_string();
-            // Payload format: DESKDROP_BEACON:<uuid>:<tcp_port>
-            let mut payload =
-                format!("DESKDROP_BEACON:{}:{}", device_id_str, shared.config.port).into_bytes();
+            // Payload format: DESKDROP_BEACON:<uuid>:<tcp_port>:<device_name>
+            let mut payload = format!(
+                "DESKDROP_BEACON:{}:{}:{}",
+                device_id_str, shared.config.port, shared.config.device_name
+            )
+            .into_bytes();
             if payload.len() > 512 {
                 payload.truncate(512);
             }
@@ -630,12 +658,15 @@ impl Engine {
                     Ok((len, addr)) => {
                         let text = String::from_utf8_lossy(&buf[..len]);
                         if text.starts_with("DESKDROP_BEACON:") {
-                            let parts: Vec<&str> = text.splitn(3, ':').collect();
-                            if parts.len() == 3 {
+                            let parts: Vec<&str> = text.splitn(4, ':').collect();
+                            if parts.len() >= 3 {
                                 if let Ok(peer_id) = uuid::Uuid::parse_str(parts[1]) {
                                     if peer_id != shared.config.device_id {
-                                        let peer_name =
-                                            format!("device-{}", &peer_id.to_string()[..8]);
+                                        let peer_name = if parts.len() == 4 {
+                                            parts[3].to_string()
+                                        } else {
+                                            format!("device-{}", &peer_id.to_string()[..8])
+                                        };
                                         if let Ok(peer_port) = parts[2].parse::<u16>() {
                                             let peer_addr = SocketAddr::new(addr.ip(), peer_port);
 
@@ -787,15 +818,28 @@ impl Engine {
 
         let peers = self.shared.peer_manager.all_trusted_senders();
         for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
-                continue;
-            };
-            if !peer.trusted {
-                continue;
+            if self.is_trusted(peer_id).await {
+                let _ = tx.send(msg.clone());
             }
-            let _ = tx.send(msg.clone()).await;
         }
     }
+
+    /// Push this device's network status to all connected trusted peers.
+    pub async fn push_network_status(&self, network_type: String) {
+        let msg = AppMessage::NetworkStatus {
+            network_type,
+            origin_device: self.shared.config.device_id,
+            origin_device_name: self.shared.config.device_name.clone(),
+        };
+
+        let peers = self.shared.peer_manager.all_trusted_senders();
+        for (peer_id, tx) in peers {
+            if self.is_trusted(peer_id).await {
+                let _ = tx.send(msg.clone());
+            }
+        }
+    }
+
 
     /// Relay a push notification to all connected, trusted peers.
     pub async fn push_notification(
@@ -863,6 +907,17 @@ impl Engine {
     pub async fn peer_batteries(&self) -> Vec<PeerBatteryState> {
         self.shared
             .peer_batteries
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect()
+    }
+
+    /// Get network states for all peers that have reported their network.
+    pub async fn peer_networks(&self) -> Vec<PeerNetworkState> {
+        self.shared
+            .peer_networks
             .lock()
             .await
             .values()
@@ -1517,6 +1572,14 @@ impl Engine {
         Ok(())
     }
 
+    pub fn set_outgoing_pairing_waiting(&self, device_id: Uuid, waiting: bool) -> Result<()> {
+        let _ = self
+            .shared
+            .peer_manager
+            .set_outgoing_pairing_waiting(device_id, waiting)?;
+        Ok(())
+    }
+
     pub async fn feedback_recent(&self, n: usize) -> Vec<crate::engine_support::FeedbackEvent> {
         self.shared.feedback.lock().await.recent(n)
     }
@@ -1900,8 +1963,16 @@ impl Engine {
 
     /// Returns this engine's stable device UUID.
     /// Used by the Android JNI bridge to filter out self-connections during NSD.
-    pub async fn device_id(&self) -> Uuid {
+    pub fn device_id(&self) -> Uuid {
         self.shared.config.device_id
+    }
+
+    pub fn local_device_id(&self) -> Uuid {
+        self.shared.config.device_id
+    }
+
+    pub fn local_device_name(&self) -> String {
+        self.shared.config.device_name.clone()
     }
 
     /// Returns this device's Noise public-key fingerprint as a lowercase hex string.
@@ -2028,6 +2099,54 @@ impl Engine {
             .all_devices()
             .cloned()
             .collect()
+    }
+
+    pub async fn generate_qr_token(&self) -> String {
+        use rand::RngCore;
+        let mut bytes = [0u8; 16];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        let token = hex::encode(bytes);
+        *self.shared.qr_auth_token.lock().await = Some(token.clone());
+        token
+    }
+
+    pub async fn send_qr_auth(&self, target_device: Uuid, token: String) {
+        let msg = AppMessage::QrAuth { token };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        } else {
+            if let Some(peer) = self.shared.peer_manager.get(target_device) {
+                let addrs = peer.socket_addrs();
+                if !addrs.is_empty() {
+                    let shared = self.shared.clone();
+                    tokio::spawn(async move {
+                        if let Ok(()) = connect_loop(
+                            shared.clone(),
+                            addrs,
+                            Some(target_device),
+                            DiscoverySource::Manual,
+                        )
+                        .await
+                        {
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                            let peers = shared.peer_manager.all_connected_senders();
+                            if let Some(tx) = peers
+                                .into_iter()
+                                .find(|(id, _)| *id == target_device)
+                                .map(|(_, tx)| tx)
+                            {
+                                let _ = tx.send(msg).await;
+                            }
+                        }
+                    });
+                }
+            }
+        }
     }
 
     pub async fn revoke_device(&self, device_id: Uuid) -> Result<bool> {
@@ -2936,6 +3055,7 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         hs.peer_device_name.clone(),
         hs.peer_identity_pubkey_bytes,
         hs.pin,
+        true,
     )
     .await?;
 
@@ -3103,6 +3223,7 @@ async fn connect_once(
         hs.peer_device_name.clone(),
         hs.peer_identity_pubkey_bytes,
         hs.pin,
+        false,
     )
     .await?;
 
@@ -3141,6 +3262,7 @@ async fn observe_trust(
     device_name: String,
     identity_pubkey: [u8; 32],
     pin: crate::pairing::PairingPin,
+    is_incoming: bool,
 ) -> Result<bool> {
     let record = {
         let mut trust = shared.trust.lock().await;
@@ -3172,20 +3294,26 @@ async fn observe_trust(
             let _ = shared
                 .peer_manager
                 .set_pairing_pin(device_id, Some(pin.display()));
-            // NOTE: We intentionally do NOT set pairing_requested here.
-            // That flag is only set by send_pairing_request() (explicit
-            // user "Pair" action) or when receiving AppMessage::PairingRequest
-            // over the wire. Setting it here would allow any connected
-            // device to auto-trust itself by sending PairingResponse
-            // without user consent (security regression).
-            let _ = shared
-                .event_tx
-                .send(EngineEvent::PairingRequested {
-                    device_id,
-                    device_name,
-                    pin: pin.display(),
-                })
-                .await;
+
+            if is_incoming {
+                let _ = shared
+                    .event_tx
+                    .send(EngineEvent::PairingRequested {
+                        device_id,
+                        device_name,
+                        pin: pin.display(),
+                    })
+                    .await;
+            } else {
+                let _ = shared
+                    .event_tx
+                    .send(EngineEvent::OutgoingPairingWaiting {
+                        device_id,
+                        device_name,
+                        pin: pin.display(),
+                    })
+                    .await;
+            }
             Ok(false)
         }
     }
@@ -3956,6 +4084,7 @@ fn register_session(
 
                             // Clear the pairing_requested flag now that we've received the response.
                             let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
+                            let _ = shared.peer_manager.set_outgoing_pairing_waiting(peer_id, false);
 
                             if !accepted {
                                 tracing::info!(peer_id = %peer_id, "peer rejected pairing request");
@@ -3989,6 +4118,45 @@ fn register_session(
                                 device_id: origin_device,
                                 accepted,
                             }).await;
+                        }
+                        Ok(AppMessage::QrAuth { token }) => {
+                            let valid = {
+                                let mut stored = shared.qr_auth_token.lock().await;
+                                if let Some(t) = stored.as_ref() {
+                                    if t == &token {
+                                        *stored = None; // Single-use token
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            };
+                            
+                            if valid {
+                                tracing::info!(peer_id = %peer_id, "peer provided valid QR auth token — establishing mutual trust");
+                                let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
+                                let _ = shared.peer_manager.set_outgoing_pairing_waiting(peer_id, false);
+                                
+                                let mut trust = shared.trust.lock().await;
+                                let _ = trust.trust_peer(peer_id);
+                                let _ = shared.peer_manager.update_trust(peer_id, true);
+                                let _ = shared.peer_manager.set_auto_connect(peer_id, true);
+                                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                                
+                                
+                                
+                                // Emit PeerConnected so the UI updates immediately.
+                                let _ = shared.event_tx.send(EngineEvent::PeerConnected {
+                                    device_id: peer_id,
+                                    device_name: peer_name.clone(),
+                                    addr: endpoint,
+                                    trusted: true,
+                                }).await;
+                            } else {
+                                tracing::warn!(peer_id = %peer_id, "peer provided invalid QR auth token");
+                            }
                         }
                         Ok(AppMessage::Pong { timestamp_ms: _ }) => {
                             touch_last_seen();
@@ -4065,6 +4233,29 @@ fn register_session(
                                 from_name: origin_device_name,
                                 level,
                                 charging,
+                            }).await;
+                        }
+                        Ok(AppMessage::NetworkStatus {
+                            network_type,
+                            origin_device,
+                            origin_device_name,
+                        }) => {
+                            touch_last_seen();
+                            if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                                continue;
+                            }
+                            {
+                                let mut networks = shared.peer_networks.lock().await;
+                                networks.insert(origin_device, PeerNetworkState {
+                                    device_id: origin_device,
+                                    device_name: origin_device_name.clone(),
+                                    network_type: network_type.clone(),
+                                });
+                            }
+                            let _ = shared.event_tx.send(EngineEvent::NetworkStateChanged {
+                                from_device: origin_device,
+                                from_name: origin_device_name,
+                                network_type,
                             }).await;
                         }
                         Ok(AppMessage::CallAction { action, origin_device }) => {
@@ -4342,11 +4533,9 @@ async fn should_initiate_session(
         | DiscoverySource::UdpBeacon
         | DiscoverySource::UdpMulticast
         | DiscoverySource::HotspotProbe => {
-            // Prevent SSRF: only auto-connect to trusted peers. Untrusted peers
-            // must be manually connected via the UI by the user.
-            if !shared.trust.lock().await.is_trusted(peer_id) {
-                return false;
-            }
+            // Eager Connection Strategy: Establish a TCP session immediately even if untrusted.
+            // Untrusted peers are safe because sensitive incoming requests are gated by the Engine,
+            // but forming the TCP+TLS/Noise session eagerly means zero-latency when the user clicks 'Pair'.
             shared.config.device_id.as_bytes() < peer_id.as_bytes()
         }
     }

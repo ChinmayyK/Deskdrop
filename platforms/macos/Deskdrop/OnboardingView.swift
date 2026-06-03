@@ -144,8 +144,12 @@ private struct StepOneFindDevice: View {
                                 store.connectAndPair(deviceId: peer.id)
                             } label: {
                                 HStack {
-                                    Image(systemName: peer.displayName.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
-                                        .symbolEffect(.bounce, value: selectedPeerId == peer.id)
+                                    if #available(macOS 14.0, *) {
+                                        Image(systemName: peer.displayName.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
+                                            .symbolEffect(.bounce, value: selectedPeerId == peer.id)
+                                    } else {
+                                        Image(systemName: peer.displayName.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
+                                    }
                                     Text(peer.displayName).font(.system(size: 16, weight: .semibold))
                                     Spacer()
                                 }
@@ -266,10 +270,16 @@ private struct StepFourCompletion: View {
                     .frame(width: 100, height: 100)
                     .scaleEffect(isAppeared ? 1 : 0.5)
                     .opacity(isAppeared ? 1 : 0)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundStyle(CRTheme.accentGreen)
-                    .symbolEffect(.bounce, value: isAppeared)
+                if #available(macOS 14.0, *) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 40, weight: .bold))
+                        .foregroundStyle(CRTheme.accentGreen)
+                        .symbolEffect(.bounce, value: isAppeared)
+                } else {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 40, weight: .bold))
+                        .foregroundStyle(CRTheme.accentGreen)
+                }
             }
             .onAppear {
                 withAnimation(.crSpring.delay(0.1)) {
@@ -313,10 +323,16 @@ private struct RadarPulseView: View {
                 .scaleEffect(isPulsing ? 1.5 : 0.8)
                 .opacity(isPulsing ? 0 : 1)
             
-            Image(systemName: "antenna.radiowaves.left.and.right")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(CRTheme.brandElectric)
-                .symbolEffect(.variableColor.cumulative, options: .repeating)
+            if #available(macOS 14.0, *) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(CRTheme.brandElectric)
+                    .symbolEffect(.variableColor.cumulative, options: .repeating)
+            } else {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(CRTheme.brandElectric)
+            }
         }
         .onAppear {
             withAnimation(.easeOut(duration: 2.0).repeatForever(autoreverses: false)) {

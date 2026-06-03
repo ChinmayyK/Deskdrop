@@ -63,6 +63,7 @@ fun SettingsScreen(
     syncImages: Boolean,
     syncFiles: Boolean,
     callContinuityEnabled: Boolean,
+    notificationMirroringEnabled: Boolean,
     isDarkMode: Boolean,
     peers: List<com.deskdrop.PeerSnapshot>,
     onSyncEnabledChange: (Boolean) -> Unit,
@@ -70,6 +71,7 @@ fun SettingsScreen(
     onSyncImagesChange: (Boolean) -> Unit,
     onSyncFilesChange: (Boolean) -> Unit,
     onCallContinuityChange: (Boolean) -> Unit,
+    onNotificationMirroringChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     onRenameClicked: () -> Unit,
     onBatterySettingsClicked: () -> Unit,
@@ -285,14 +287,25 @@ fun SettingsScreen(
                         accentColor = CRTheme.statusAmber,
                         icon = Icons.Rounded.Star
                     ) {
-                        SettingsSwitchRow(
-                            isDark = isDarkMode,
-                            icon = Icons.Rounded.Phone,
-                            title = "Call Continuity",
-                            subtitle = "Requires Phone, Contacts, and Call Log permissions",
-                            checked = callContinuityEnabled,
-                            onCheckedChange = onCallContinuityChange
-                        )
+                        Column {
+                            SettingsSwitchRow(
+                                isDark = isDarkMode,
+                                icon = Icons.Rounded.Phone,
+                                title = "Call Continuity",
+                                subtitle = "Requires Phone, Contacts, and Call Log permissions",
+                                checked = callContinuityEnabled,
+                                onCheckedChange = onCallContinuityChange
+                            )
+                            HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                            SettingsSwitchRow(
+                                isDark = isDarkMode,
+                                icon = Icons.Rounded.Notifications,
+                                title = "Notification Mirroring",
+                                subtitle = "Mirror Android notifications to your Mac",
+                                checked = notificationMirroringEnabled,
+                                onCheckedChange = onNotificationMirroringChange
+                            )
+                        }
                     }
                 }
 

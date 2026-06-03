@@ -312,14 +312,16 @@ struct CRPrimaryButtonStyle: ButtonStyle {
 
 struct CRSecondaryButtonStyle: ButtonStyle {
     @State private var isHovered = false
+    @Environment(\.colorScheme) var scheme
+    
     func makeBody(configuration: Configuration) -> some View {
+        let isDark = scheme == .dark
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(CRTheme.ink)
             .padding(.horizontal, 12).padding(.vertical, 5)
             .background {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isHovered ? CRTheme.rowHover : CRTheme.surface)
+                    .fill(isHovered ? CRTheme.rowHover : (isDark ? Color.white.opacity(0.08) : CRTheme.surface))
                     .overlay {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .strokeBorder(CRTheme.stroke.opacity(isHovered ? 0.8 : 0.5), lineWidth: 0.5)

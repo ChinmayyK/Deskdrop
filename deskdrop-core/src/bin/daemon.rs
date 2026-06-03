@@ -312,6 +312,25 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
         } => {
             tracing::info!("[DELIVERY] Activity {} status: {:?}", activity_id, status);
         }
+        EngineEvent::OutgoingPairingWaiting {
+            device_id,
+            device_name,
+            pin,
+        } => {
+            let _ = state.engine.set_outgoing_pairing_waiting(device_id, true);
+            push_feedback(
+                &state,
+                FeedbackEvent {
+                    timestamp: now_secs(),
+                    kind: "trust_waiting".into(),
+                    message: format!("Waiting for {device_name} to accept. PIN: {pin}"),
+                    device_id: Some(device_id.to_string()),
+                    device_name: Some(device_name),
+                    clipboard_id: None,
+                },
+            )
+            .await;
+        }
         EngineEvent::PairingRequested {
             device_id,
             device_name,
@@ -521,6 +540,8 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             let fingerprint = state.engine.local_fingerprint();
             let active_call = state.engine.active_call().await;
             let active_transfers = state.engine.active_transfers().await;
+            let peer_batteries = state.engine.peer_batteries().await;
+            let peer_networks = state.engine.peer_networks().await;
             Ok(IpcResponse::ok(json!({
                 "device_name":           settings.resolved_device_name(),
                 "port":                  settings.port,
@@ -532,6 +553,8 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "local_fingerprint":     fingerprint,
                 "active_call":           active_call,
                 "active_transfers":      active_transfers,
+                "peer_batteries":        peer_batteries,
+                "peer_networks":         peer_networks,
             })))
         }
         // Re-trigger mDNS discovery — called by the Mac "Scan" button and
@@ -618,6 +641,16 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .engine
                 .respond_to_pairing(parse_uuid(&device_id)?, accepted)
                 .await;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::GenerateQrToken => {
+            let token = state.engine.generate_qr_token().await;
+            Ok(IpcResponse::ok(serde_json::json!({ "token": token })))
+        }
+        IpcRequest::TrustPeerFromQr { device_id, token } => {
+            let uuid = parse_uuid(&device_id)?;
+            state.engine.trust_peer(uuid).await?;
+            let _ = state.engine.send_qr_auth(uuid, token).await;
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::RevokeTrustedDevice { device_id } => {

@@ -172,33 +172,39 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
                 )
             )
     ) {
-        // Single controlled soft light source using radial gradient (100x faster than blur)
         androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            val centerOffset = Offset(size.width * 0.5f, size.height * (0.2f + (breatheShift * 0.1f)))
+            val centerOffset = Offset(size.width * 0.3f, size.height * (0.2f + (breatheShift * 0.1f)))
+            val centerOffset2 = Offset(size.width * 0.8f, size.height * (0.6f - (breatheShift * 0.1f)))
             
             if (hasConnectedDevices) {
-                // Signature ambient glow when devices are connected
-                val radius = size.width * (0.85f + (breatheShift * 0.05f))
-                val color = CRTheme.blueSoft.copy(alpha = if (isDark) 0.15f else 0.12f)
+                // Orb 1 (Electric Blue)
                 drawCircle(
                     brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(color, Color.Transparent),
+                        colors = listOf(CRTheme.blueSoft.copy(alpha = if (isDark) 0.2f else 0.15f), Color.Transparent),
                         center = centerOffset,
-                        radius = radius
+                        radius = size.width * 0.8f
                     ),
-                    radius = radius,
+                    radius = size.width * 0.8f,
                     center = centerOffset
                 )
-            } else {
-                val radius = size.width * (0.7f + (breatheShift * 0.05f))
-                val color = (if (isDark) Color.White else Color.Black).copy(alpha = 0.04f)
+                // Orb 2 (Violet)
                 drawCircle(
                     brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(color, Color.Transparent),
-                        center = centerOffset,
-                        radius = radius
+                        colors = listOf(CRTheme.brandViolet.copy(alpha = if (isDark) 0.15f else 0.12f), Color.Transparent),
+                        center = centerOffset2,
+                        radius = size.width * 0.7f
                     ),
-                    radius = radius,
+                    radius = size.width * 0.7f,
+                    center = centerOffset2
+                )
+            } else {
+                drawCircle(
+                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf((if (isDark) Color.White else Color.Black).copy(alpha = 0.06f), Color.Transparent),
+                        center = centerOffset,
+                        radius = size.width * 0.8f
+                    ),
+                    radius = size.width * 0.8f,
                     center = centerOffset
                 )
             }

@@ -318,6 +318,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         ClipboardSynced { .. } => 8,
         ClipboardSyncFailed { .. } => 7,
         PairingRequested { .. } => 4,
+        OutgoingPairingWaiting { .. } => 7,
         SystemHealthUpdated(_) => 26,
         ClipboardDeliveryStatus { .. } => 7,
         PairingConfirmed { .. } => 7,
@@ -334,6 +335,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         CallStateChanged { .. } => 17,
         CallActionRequest { .. } => 18,
         BatteryStateChanged { .. } => 19,
+        NetworkStateChanged { .. } => 28,
         NotificationReceived { .. } => 16,
         CameraStreamRequest { .. } => 22,
         CameraStreamAccept { .. } => 23,
@@ -415,6 +417,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
         ClipboardSynced { peer_name, .. } => Some(peer_name.as_str()),
         ClipboardSyncFailed { peer_name, .. } => Some(peer_name.as_str()),
         PairingRequested { device_name, .. } => Some(device_name.as_str()),
+        OutgoingPairingWaiting { device_name, .. } => Some(device_name.as_str()),
         ClipboardDeliveryStatus { .. } => None,
         PeerConnected { device_name, .. } => Some(device_name.as_str()),
         PeerDisconnected { device_name, .. } => device_name.as_deref(),
@@ -444,6 +447,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         ClipboardSynced { peer_device, .. } => Some(*peer_device),
         ClipboardSyncFailed { peer_device, .. } => Some(*peer_device),
         PairingRequested { device_id, .. } => Some(*device_id),
+        OutgoingPairingWaiting { device_id, .. } => Some(*device_id),
         PairingConfirmed { device_id, .. } => Some(*device_id),
         PairingRejected { device_id, .. } => Some(*device_id),
         ClipboardDeliveryStatus { .. } => None,
@@ -811,6 +815,38 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_trustPeer(
     let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
     match rt().block_on(h.engine.trust_peer(device_id)) {
         Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_trustPeerFromQr(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    device_id_jstr: JString,
+    token_jstr: JString,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let device_id: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let token: String = match env.get_string(&token_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id) else {
+        return 0;
+    };
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    match rt().block_on(h.engine.trust_peer(device_id)) {
+        Ok(()) => {
+            rt().block_on(h.engine.send_qr_auth(device_id, token));
+            1
+        }
         Err(_) => 0,
     }
 }
@@ -1289,7 +1325,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_getDeviceId(
         return std::ptr::null_mut();
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
-    let uuid_str = rt().block_on(h.engine.device_id()).to_string();
+    let uuid_str = h.engine.device_id().to_string();
     match env.new_string(&uuid_str) {
         Ok(s) => s.into_raw(),
         Err(_) => std::ptr::null_mut(),
@@ -1436,6 +1472,25 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushBatteryStatus(
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
     rt().block_on(h.engine.push_battery_status(level as u8, charging != 0));
+    0
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushNetworkStatus(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    network_type: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let ntype = env
+        .get_string(&network_type)
+        .map(|s| s.into())
+        .unwrap_or_else(|_| "offline".to_string());
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.push_network_status(ntype));
     0
 }
 

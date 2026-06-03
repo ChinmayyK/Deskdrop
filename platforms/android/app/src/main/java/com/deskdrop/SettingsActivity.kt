@@ -24,6 +24,7 @@ class SettingsActivity : ComponentActivity() {
     private val syncImages = mutableStateOf(true)
     private val syncFiles = mutableStateOf(true)
     private val callContinuityEnabled = mutableStateOf(false)
+    private val notificationMirroringEnabled = mutableStateOf(false)
     private val isDarkMode = mutableStateOf(false)
     private val peers = mutableStateOf(emptyList<PeerSnapshot>())
 
@@ -52,6 +53,7 @@ class SettingsActivity : ComponentActivity() {
                     syncImages = syncImages.value,
                     syncFiles = syncFiles.value,
                     callContinuityEnabled = callContinuityEnabled.value,
+                    notificationMirroringEnabled = notificationMirroringEnabled.value,
                     isDarkMode = isDarkMode.value,
                     peers = peers.value,
                     onSyncEnabledChange = {
@@ -75,6 +77,13 @@ class SettingsActivity : ComponentActivity() {
                         saveBooleanPref("call_continuity_enabled", it)
                         if (it) {
                             requestCallContinuityPermissions()
+                        }
+                    },
+                    onNotificationMirroringChange = {
+                        notificationMirroringEnabled.value = it
+                        saveBooleanPref("notification_mirroring", it)
+                        if (it) {
+                            requestNotificationListenerPermission()
                         }
                     },
                     onDarkModeChange = {
@@ -111,6 +120,7 @@ class SettingsActivity : ComponentActivity() {
         syncImages.value = prefs.getBoolean("sync_images", true)
         syncFiles.value = prefs.getBoolean("sync_files", true)
         callContinuityEnabled.value = prefs.getBoolean("call_continuity_enabled", false)
+        notificationMirroringEnabled.value = prefs.getBoolean("notification_mirroring", false)
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
         peers.value = prefs.peerSnapshots()
     }
@@ -204,6 +214,30 @@ class SettingsActivity : ComponentActivity() {
             ContextCompat.startForegroundService(this, Intent(this, DeskdropService::class.java).apply {
                 action = DeskdropService.ACTION_SETTINGS_CHANGED
             })
+        }
+    }
+
+    private fun requestNotificationListenerPermission() {
+        val enabledListeners = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        val hasPermission = enabledListeners?.contains(packageName) == true
+        if (!hasPermission) {
+            Toast.makeText(this, "Please allow Deskdrop to read notifications", Toast.LENGTH_LONG).show()
+            startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
+        if (prefs.getBoolean("notification_mirroring", false)) {
+            val enabledListeners = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+            val hasPermission = enabledListeners?.contains(packageName) == true
+            if (!hasPermission) {
+                notificationMirroringEnabled.value = false
+                saveBooleanPref("notification_mirroring", false)
+            } else {
+                notificationMirroringEnabled.value = true
+            }
         }
     }
 }

@@ -239,6 +239,7 @@ pub const PB_EVENT_CAMERA_STREAM_STOP: c_int = 24;
 pub const PB_EVENT_CAMERA_FRAME: c_int = 25;
 pub const PB_EVENT_SYSTEM_HEALTH_UPDATED: c_int = 26;
 pub const PB_EVENT_PEER_DISCOVERED: c_int = 27;
+pub const PB_EVENT_NETWORK_STATE_CHANGED: c_int = 28;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -320,12 +321,14 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CallStateChanged { .. } => PB_EVENT_CALL_STATE_CHANGED,
         EngineEvent::CallActionRequest { .. } => PB_EVENT_CALL_ACTION,
         EngineEvent::BatteryStateChanged { .. } => PB_EVENT_BATTERY_STATE_CHANGED,
+        EngineEvent::NetworkStateChanged { .. } => PB_EVENT_NETWORK_STATE_CHANGED,
         EngineEvent::NotificationReceived { .. } => PB_EVENT_ACTIVITY_UPDATED,
         EngineEvent::CameraStreamRequest { .. } => PB_EVENT_CAMERA_STREAM_REQUEST,
         EngineEvent::CameraStreamAccept { .. } => PB_EVENT_CAMERA_STREAM_ACCEPT,
         EngineEvent::CameraStreamStop { .. } => PB_EVENT_CAMERA_STREAM_STOP,
         EngineEvent::CameraFrameReceived { .. } => PB_EVENT_CAMERA_FRAME,
         EngineEvent::PeerDiscovered { .. } => PB_EVENT_PEER_DISCOVERED,
+        EngineEvent::OutgoingPairingWaiting { .. } => PB_EVENT_WARNING,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
     }
 }
@@ -345,6 +348,7 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
         }
         EngineEvent::Warning(s) => Some(s.clone()),
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
+        EngineEvent::NetworkStateChanged { network_type, .. } => Some(network_type.clone()),
         EngineEvent::ActivityFeedUpdated { entries, .. } => serde_json::to_string(entries).ok(),
         _ => None,
     };
@@ -371,6 +375,8 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::PeerConnected { device_name, .. } => Some(device_name.as_str()),
         EngineEvent::FileTransferIncoming { from_name, .. } => Some(from_name.as_str()),
         EngineEvent::FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
+        EngineEvent::BatteryStateChanged { from_name, .. } => Some(from_name.as_str()),
+        EngineEvent::NetworkStateChanged { from_name, .. } => Some(from_name.as_str()),
         _ => None,
     };
     if let Some(n) = name {
@@ -522,6 +528,8 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
     let id_str = match &e.inner {
         EngineEvent::PairingRequested { device_id, .. } => Some(device_id.to_string()),
         EngineEvent::CallStateChanged { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::BatteryStateChanged { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::NetworkStateChanged { from_device, .. } => Some(from_device.to_string()),
         _ => None,
     };
     if let Some(s) = id_str {

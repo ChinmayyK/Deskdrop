@@ -72,8 +72,8 @@ final class CallBannerWindowManager: NSObject {
     @objc private func layoutPanel() {
         guard let screen = activeScreen else { return }
         let visible = screen.visibleFrame
-        let width: CGFloat = 350
-        let height: CGFloat = 80
+        let width: CGFloat = 320
+        let height: CGFloat = 72
         let frame = NSRect(
             x: visible.midX - width / 2,
             y: visible.maxY - height - 16,
@@ -145,7 +145,7 @@ private final class CallBannerHostingView<Content: View>: NSHostingView<Content>
 private final class CallBannerPanel: NSPanel {
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 350, height: 80),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 72),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -192,7 +192,7 @@ private struct CallBannerContainerView: View {
                 ))
             }
         }
-        .frame(width: 350, height: 80, alignment: .center)
+        .frame(width: 320, height: 72, alignment: .center)
         .animation(.spring(response: 0.5, dampingFraction: 0.65, blendDuration: 0.1), value: store.activeCall)
     }
 }
@@ -233,29 +233,16 @@ private struct CallBannerView: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             // ── Caller avatar ───────────────────────────────────────────────
             ZStack {
-                // Remove the bleeding radial glow and just use a clean background for the pulse effect
-
                 if call.isRinging {
                     Circle()
-                        .fill(acceptGreen.opacity(0.2))
-                        .frame(width: 56, height: 56)
-                        .scaleEffect(ringPulse ? 1.25 : 1.0)
+                        .fill(acceptGreen.opacity(0.15))
+                        .frame(width: 52, height: 52)
+                        .scaleEffect(ringPulse ? 1.3 : 1.0)
                         .opacity(ringPulse ? 0.0 : 0.8)
                 }
-
-                // Embedded well effect
-                Circle()
-                    .fill(Color.black.opacity(0.1))
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Circle()
-                            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-                            .blendMode(.overlay)
-                    )
-                    .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
 
                 Circle()
                     .fill(LinearGradient(colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -263,7 +250,7 @@ private struct CallBannerView: View {
                     .shadow(color: Color.purple.opacity(0.3), radius: 6, y: 3)
                     
                 Text(String(call.displayName.prefix(1)).uppercased())
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .font(.system(size: 19, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
             }
             .onAppear {
@@ -275,22 +262,24 @@ private struct CallBannerView: View {
             }
 
             // ── Caller info ─────────────────────────────────────────────────
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 if call.isOffhook {
-                    Text("ONGOING CALL • \(formatDuration)")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    Text(formatDuration)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(activeBlue)
-                        .tracking(0.5)
                         .onReceive(timer) { _ in callDuration += 1 }
                 } else {
-                    Text("INCOMING CALL")
+                    Text("INCOMING")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(acceptGreen)
+                        .foregroundStyle(
+                            LinearGradient(colors: [acceptGreen, acceptGreen.opacity(0.7)], startPoint: .leading, endPoint: .trailing)
+                        )
+                        .opacity(ringPulse ? 0.6 : 1.0)
                         .tracking(0.5)
                 }
 
                 Text(call.displayName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(Color.primary)
                     .lineLimit(1)
             }
@@ -298,38 +287,32 @@ private struct CallBannerView: View {
             Spacer(minLength: 0)
 
             // ── Action buttons ──────────────────────────────────────────────
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 if call.isRinging {
                     Button(action: onDecline) {
                         ZStack {
-                            Circle().fill(declineRed)
-                            Circle().strokeBorder(
-                                LinearGradient(colors: [Color.white.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom),
-                                lineWidth: 1
-                            )
+                            Circle()
+                                .fill(declineRed)
+                                .shadow(color: declineRed.opacity(0.4), radius: 6, y: 3)
                             Image(systemName: "phone.down.fill")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(.white)
                         }
-                        .frame(width: 38, height: 38)
-                        .shadow(color: Color.black.opacity(0.15), radius: 2, y: 1)
+                        .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
                     .buttonStyle(CallButtonStyle())
 
                     Button(action: onAccept) {
                         ZStack {
-                            Circle().fill(acceptGreen)
-                            Circle().strokeBorder(
-                                LinearGradient(colors: [Color.white.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom),
-                                lineWidth: 1
-                            )
+                            Circle()
+                                .fill(acceptGreen)
+                                .shadow(color: acceptGreen.opacity(0.4), radius: 6, y: 3)
                             Image(systemName: "phone.fill")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(.white)
                         }
-                        .frame(width: 38, height: 38)
-                        .shadow(color: Color.black.opacity(0.15), radius: 2, y: 1)
+                        .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
                     .buttonStyle(CallButtonStyle())
@@ -347,48 +330,44 @@ private struct CallBannerView: View {
                         }
                     } label: {
                         Image(systemName: "speaker.wave.2.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.primary)
-                            .frame(width: 38, height: 38)
-                            .background(Circle().fill(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.1)))
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.4)))
                     }
                     .menuStyle(.borderlessButton)
-                    .frame(width: 38, height: 38)
+                    .frame(width: 44, height: 44)
                     .buttonStyle(CallButtonStyle())
 
                     Button(action: onDecline) {
                         ZStack {
-                            Circle().fill(declineRed)
-                            Circle().strokeBorder(
-                                LinearGradient(colors: [Color.white.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom),
-                                lineWidth: 1
-                            )
+                            Circle()
+                                .fill(declineRed)
+                                .shadow(color: declineRed.opacity(0.4), radius: 6, y: 3)
                             Image(systemName: "phone.down.fill")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(.white)
                         }
-                        .frame(width: 38, height: 38)
-                        .shadow(color: Color.black.opacity(0.15), radius: 2, y: 1)
+                        .frame(width: 44, height: 44)
                         .contentShape(Circle())
                     }
                     .buttonStyle(CallButtonStyle())
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(width: 350, height: 80)
+        .padding(.leading, 12)
+        .padding(.trailing, 14)
+        .padding(.vertical, 10)
+        .frame(width: 320, height: 72)
         .background(
             ZStack {
                 CRHUDMaterial()
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .clipShape(Capsule())
                 
-                // Clean macOS Glass Border (thin, light-catching stroke)
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
+                Capsule()
+                    .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
             }
-            // Standard macOS drop shadow (tight radius to prevent NSWindow clipping/bleeding)
-            .shadow(color: Color.black.opacity(0.2), radius: 12, x: 0, y: 6)
+            .shadow(color: Color.black.opacity(0.3), radius: 24, x: 0, y: 12)
         )
     }
 }

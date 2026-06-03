@@ -31,6 +31,8 @@ final class DeskdropStore: ObservableObject {
     /// This Mac's public-key fingerprint — shown in Security pane for peer verification.
     /// Populated from the daemon status response; nil until first successful poll.
     @Published var localFingerprint: String? = nil
+    @Published var localDeviceId: String? = nil
+    @Published var localDeviceName: String? = nil
 
     // ── Activity feed ─────────────────────────────────────────────────────────
     @Published var activityFeed: [IpcActivityEntry] = []
@@ -51,6 +53,8 @@ final class DeskdropStore: ObservableObject {
     private var suppressCallUpdatesUntil: Date? = nil
     /// Battery levels for connected peer devices.
     @Published var peerBatteries: [DeviceBatteryState] = []
+    /// Network status for connected peer devices.
+    @Published var peerNetworks: [DeviceNetworkState] = []
 
     private var lastActivityId: Int64 = 0
     private var lastMirroredAutoAppliedEntryId: Int64 = 0
@@ -61,6 +65,7 @@ final class DeskdropStore: ObservableObject {
     private var ipcFailureCount: Int = 0
     private var isCameraPolling = false
 
+    @Published var showQrCodeSheet: Bool = false
     @AppStorage("lastUsedDeviceId") private var lastUsedDeviceId: String = ""
 
     private var cameraWindowClosedObserver: Any?
@@ -68,9 +73,10 @@ final class DeskdropStore: ObservableObject {
     init(ipc: DeskdropIPCClient = .shared) {
         self.ipc = ipc
         startPolling()
-        
         cameraWindowClosedObserver = NotificationCenter.default.addObserver(forName: .deskdropCameraWindowClosed, object: nil, queue: .main) { [weak self] _ in
-            self?.stopCameraPolling()
+            Task { @MainActor [weak self] in
+                self?.stopCameraPolling()
+            }
         }
     }
     
@@ -262,6 +268,8 @@ final class DeskdropStore: ObservableObject {
 
             pendingClipboardCount = s.pending_clipboard_count ?? 0
             if let fp = s.local_fingerprint { localFingerprint = fp }
+            if let id = s.local_device_id { localDeviceId = id }
+            if let name = s.local_device_name { localDeviceName = name }
             
             if let ats = s.active_transfers {
                 activeTransfers = ats.map { t in
@@ -324,6 +332,18 @@ final class DeskdropStore: ObservableObject {
             }
             if peerBatteries != incomingBatteries {
                 peerBatteries = incomingBatteries
+            }
+
+            // ── Network Sync ──────────────────────────────────────────────────
+            let incomingNetworks = (s.peer_networks ?? []).map { pn in
+                DeviceNetworkState(
+                    deviceId: pn.device_id,
+                    deviceName: pn.device_name,
+                    networkType: pn.network_type
+                )
+            }
+            if peerNetworks != incomingNetworks {
+                peerNetworks = incomingNetworks
             }
 
             // ── Camera Streaming ──────────────────────────────────────────────
@@ -401,6 +421,15 @@ final class DeskdropStore: ObservableObject {
     func disconnect(_ device: ManagedDevice) {
         Task { try? await ipc.disconnectPeer(deviceId: device.id); await refresh() }
     }
+    func connect(_ device: ManagedDevice) {
+        Task {
+            try? await ipc.setAutoConnect(deviceId: device.id, enabled: true)
+            if let ip = device.ip, !ip.isEmpty {
+                try? await ipc.connectManual(address: ip)
+            }
+            await refresh()
+        }
+    }
     func trust(_ device: ManagedDevice) {
         Task { try? await ipc.approveTrust(deviceId: device.id, deviceName: device.name, pubkeyBytes: Data()); await refresh() }
     }
@@ -422,6 +451,10 @@ final class DeskdropStore: ObservableObject {
     }
     func respondToPairing(_ device: ManagedDevice, accepted: Bool) {
         Task { try? await ipc.respondToPairing(deviceId: device.id, accepted: accepted); await refresh() }
+    }
+    
+    func generateQrToken() async throws -> String {
+        try await ipc.generateQrToken()
     }
     
     func connectAndPair(deviceId: String) {
@@ -1017,6 +1050,7 @@ final class DeskdropStore: ObservableObject {
             autoConnect: raw.auto_connect ?? true,
             lastError:   raw.last_error,
             pairingRequested: raw.pairing_requested ?? false,
+            outgoingPairingWaiting: raw.outgoing_pairing_waiting ?? false,
             pairingPin: raw.pairing_pin,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) },

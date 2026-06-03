@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.filled.SettingsInputAntenna
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -48,6 +50,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.asImageBitmap
@@ -105,6 +108,8 @@ fun MainScreen(
     onApplyClipboard: (ActivityEntry) -> Unit,
     onTrustPeer: (PeerSnapshot) -> Unit,
     onRejectPeer: (PeerSnapshot) -> Unit,
+    onConnectPeer: (PeerSnapshot) -> Unit,
+    onDisconnectPeer: (PeerSnapshot) -> Unit,
     onForgetPeer: (PeerSnapshot) -> Unit,
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
@@ -120,7 +125,7 @@ fun MainScreen(
     CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices) {
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             Column(modifier = Modifier.fillMaxSize()) {
-                CompactStatusStrip(isDark = isDark, peers = peers, ambientStatus = ambientStatus)
+
                 
                 Box(modifier = Modifier.weight(1f)) {
                     AnimatedContent(
@@ -229,50 +234,53 @@ fun MainScreen(
 }
 
 @Composable
-fun CompactStatusStrip(isDark: Boolean, peers: List<PeerSnapshot>, ambientStatus: String) {
-    val connectedPeersCount = peers.count { it.isConnected }
-    val isSearching = ambientStatus.contains("Looking", ignoreCase = true)
-    
-    val statusText = if (connectedPeersCount > 0) {
-        "$connectedPeersCount nearby device${if (connectedPeersCount > 1) "s" else ""} available"
-    } else if (isSearching) {
-        "Scanning nearby devices"
-    } else {
-        ambientStatus
-    }
-
-    Box(
+fun EmptyStateGlassCard(
+    isDark: Boolean,
+    icon: ImageVector,
+    title: String,
+    description: String
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp, bottom = 8.dp),
-        contentAlignment = Alignment.Center
+            .crGlassCard(isDark = isDark, cornerRadius = 24.dp, dashed = true)
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .crGlassCard(isDark = isDark, cornerRadius = 24.dp, elevated = true)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+                .size(64.dp)
+                .background(CRTheme.surfaceElevated(isDark), CircleShape)
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                val color = if (connectedPeersCount > 0) CRTheme.statusGreen else if (isSearching) CRTheme.blueSoft else CRTheme.statusAmber
-                
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(color, CircleShape)
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = statusText,
-                style = CRTypography.caption,
-                color = CRTheme.textHigh(isDark),
-                fontWeight = FontWeight.Medium
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = CRTheme.textMedium(isDark).copy(alpha = 0.8f),
+                modifier = Modifier.fillMaxSize()
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = title,
+            style = CRTypography.h2,
+            color = CRTheme.textHigh(isDark),
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = description,
+            style = CRTypography.bodyMedium,
+            color = CRTheme.textMedium(isDark),
+            textAlign = TextAlign.Center
+        )
     }
 }
+
+
 
 @Composable
 fun HomeTab(
@@ -406,19 +414,19 @@ fun HomeTab(
                     
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Inline Add Action
+                    // Inline Add Action (Scan QR)
                     Row(
                         modifier = Modifier
                             .crPressScale(0.95f)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { onActionPairMagicLink() }
-                            .background(CRTheme.blueSoft.copy(alpha = 0.15f))
+                            .background(CRTheme.brandElectric.copy(alpha = 0.15f))
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
+                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = null, tint = CRTheme.brandElectric, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add", style = CRTypography.caption, color = CRTheme.blueSoft)
+                        Text("Scan QR", style = CRTypography.caption, color = CRTheme.brandElectric)
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1241,16 +1249,27 @@ fun ActivityTab(
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(feed) { entry ->
-                ActivityFeedCardNew(
-                    isDark = isDark,
-                    entry = entry,
-                    onClick = {
-                        if (entry.kind == ActivityKind.CLIPBOARD_TEXT || entry.kind == ActivityKind.CLIPBOARD_IMAGE) {
-                            onApplyClipboard(entry)
+            if (feed.isEmpty()) {
+                item {
+                    EmptyStateGlassCard(
+                        isDark = isDark,
+                        icon = Icons.Default.List,
+                        title = "No Activity Yet",
+                        description = "Incoming files, text, and clipboard syncs will appear here safely sandboxed."
+                    )
+                }
+            } else {
+                items(feed) { entry ->
+                    ActivityFeedCardNew(
+                        isDark = isDark,
+                        entry = entry,
+                        onClick = {
+                            if (entry.kind == ActivityKind.CLIPBOARD_TEXT || entry.kind == ActivityKind.CLIPBOARD_IMAGE) {
+                                onApplyClipboard(entry)
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -1327,6 +1346,8 @@ fun DevicesTab(
     peers: List<PeerSnapshot>,
     onTrustPeer: (PeerSnapshot) -> Unit,
     onRejectPeer: (PeerSnapshot) -> Unit,
+    onConnectPeer: (PeerSnapshot) -> Unit,
+    onDisconnectPeer: (PeerSnapshot) -> Unit,
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit
 ) {
@@ -1344,15 +1365,28 @@ fun DevicesTab(
             item {
                 HotspotTipCard(isDark = isDark)
             }
-            items(peers) { peer ->
-                PeerListCard(
-                    isDark = isDark,
-                    peer = peer,
-                    onTrust = { onTrustPeer(peer) },
-                    onReject = { onRejectPeer(peer) },
-                    onPair = { onSendPairingRequest(peer) },
-                    onRespond = { accepted -> onRespondPairing(peer, accepted) }
-                )
+            if (peers.isEmpty()) {
+                item {
+                    EmptyStateGlassCard(
+                        isDark = isDark,
+                        icon = Icons.Default.Devices,
+                        title = "No Devices Found",
+                        description = "Make sure Deskdrop is running on your other devices on the same Wi-Fi network."
+                    )
+                }
+            } else {
+                items(peers) { peer ->
+                    PeerListCard(
+                        isDark = isDark,
+                        peer = peer,
+                        onTrust = { onTrustPeer(peer) },
+                        onReject = { onRejectPeer(peer) },
+                        onPair = { onSendPairingRequest(peer) },
+                        onConnect = { onConnectPeer(peer) },
+                        onDisconnect = { onDisconnectPeer(peer) },
+                        onRespond = { accepted -> onRespondPairing(peer, accepted) }
+                    )
+                }
             }
         }
     }
@@ -1433,6 +1467,8 @@ fun PeerListCard(
     onTrust: () -> Unit,
     onReject: () -> Unit,
     onPair: () -> Unit,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
     onRespond: (Boolean) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
@@ -1497,6 +1533,22 @@ fun PeerListCard(
                     onPair()
                 }) {
                     Icon(Icons.Default.Link, contentDescription = "Pair", tint = CRTheme.brandElectric)
+                }
+            }
+        } else {
+            if (peer.isConnected) {
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onDisconnect()
+                }) {
+                    Icon(Icons.Default.LinkOff, contentDescription = "Disconnect", tint = CRTheme.accentRed)
+                }
+            } else {
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onConnect()
+                }) {
+                    Icon(Icons.Default.SettingsInputAntenna, contentDescription = "Connect", tint = CRTheme.brandElectric)
                 }
             }
         }

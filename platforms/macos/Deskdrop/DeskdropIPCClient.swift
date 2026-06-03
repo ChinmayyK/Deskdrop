@@ -21,6 +21,7 @@ struct IpcPeerRecord: Codable {
     let last_sync: Int?
     let ip: String?
     let pairing_requested: Bool?
+    let outgoing_pairing_waiting: Bool?
     let pairing_pin: String?
 }
 
@@ -31,9 +32,12 @@ struct IpcStatusResponse: Codable {
     let pending_clipboard_count: Int?
     /// This device's public-key fingerprint (hex) for display in the Security pane.
     let local_fingerprint: String?
+    let local_device_id: String?
+    let local_device_name: String?
     /// Active phone call state from a connected Android device (nil if no active call).
     let active_call: IpcActiveCallState?
     let peer_batteries: [IpcPeerBatteryState]?
+    let peer_networks: [IpcPeerNetworkState]?
     let active_transfers: [IpcFileTransferState]?
 }
 
@@ -62,6 +66,13 @@ struct IpcPeerBatteryState: Codable {
     let device_name: String
     let level: Int
     let charging: Bool
+}
+
+/// Peer network status.
+struct IpcPeerNetworkState: Codable {
+    let device_id: String
+    let device_name: String
+    let network_type: String
 }
 
 struct IpcCameraFrameResponse: Codable {
@@ -152,7 +163,35 @@ final class DeskdropIPCClient {
     }
 
     func respondToPairing(deviceId: String, accepted: Bool) async throws {
-        _ = try await send(cmd: ["cmd": "respond_to_pairing", "device_id": deviceId, "accepted": accepted])
+        _ = try await send(cmd: [
+            "cmd": "respond_to_pairing",
+            "device_id": deviceId,
+            "accepted": accepted
+        ])
+    }
+    
+    func generateQrToken() async throws -> String {
+        let resp = try await send(cmd: [
+            "cmd": "generate_qr_token"
+        ])
+        
+        struct TokenResponse: Decodable {
+            let data: TokenData
+        }
+        struct TokenData: Decodable {
+            let token: String
+        }
+        
+        let parsed = try JSONDecoder().decode(TokenResponse.self, from: resp)
+        return parsed.data.token
+    }
+    
+    func trustPeerFromQr(deviceId: String, token: String) async throws {
+        _ = try await send(cmd: [
+            "cmd": "trust_peer_from_qr",
+            "device_id": deviceId,
+            "token": token
+        ])
     }
 
     // ── Activity Feed ─────────────────────────────────────────────────────────
