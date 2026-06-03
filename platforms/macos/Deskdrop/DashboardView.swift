@@ -1288,7 +1288,7 @@ private struct CompactDeviceCard: View {
             
             // Actions
             HStack(spacing: 8) {
-                if device.connected {
+                if device.isConnected {
                     Button(action: onSendFiles) {
                         HStack(spacing: 6) {
                             Image(systemName: "folder.fill")
