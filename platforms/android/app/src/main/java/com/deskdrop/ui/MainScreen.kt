@@ -181,6 +181,8 @@ fun MainScreen(
                                 peers = peers,
                                 onTrustPeer = onTrustPeer,
                                 onRejectPeer = onRejectPeer,
+                                onConnectPeer = onConnectPeer,
+                                onDisconnectPeer = onDisconnectPeer,
                                 onSendPairingRequest = onSendPairingRequest,
                                 onRespondPairing = onRespondPairing
                             )

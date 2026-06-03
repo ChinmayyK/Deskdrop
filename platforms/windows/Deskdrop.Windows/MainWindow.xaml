@@ -38,6 +38,20 @@
         </Storyboard>
 
         
+        <Storyboard x:Key="FadeInTransition">
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="10" To="0" Duration="0:0:0.25">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        
         <!-- Windows 11 Fluent Palette -->
         <Color x:Key="BrandElectricColor">#005FB8</Color>
         <SolidColorBrush x:Key="BrandElectric" Color="{StaticResource BrandElectricColor}"/>
@@ -332,6 +346,7 @@
                 <!-- ACTIVITY VIEW -->
                 <Grid x:Name="ActivityView" Visibility="Visible" Margin="48,16,48,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
+                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -372,6 +387,7 @@
 
                 <!-- TRANSFERS VIEW -->
                 <Grid x:Name="TransfersView" Visibility="Collapsed" Margin="48,16,48,0">
+                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -443,6 +459,7 @@
 
                 <!-- DEVICES VIEW -->
                 <Grid x:Name="DevicesView" Visibility="Collapsed" Margin="48,16,48,0">
+                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -558,6 +575,7 @@
                 <!-- SETTINGS VIEW -->
                 <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="48,16,48,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
+                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -617,6 +635,7 @@
                 
                 <!-- DIAGNOSTICS VIEW -->
                 <Grid x:Name="DiagnosticsView" Visibility="Collapsed" Margin="48,16,48,0">
+                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
