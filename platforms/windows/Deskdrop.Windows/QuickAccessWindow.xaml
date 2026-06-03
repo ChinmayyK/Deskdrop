@@ -9,7 +9,7 @@
     
     <Window.Resources>
         <SolidColorBrush x:Key="BrandElectric" Color="#007AFF"/>
-        <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="SurfaceElevated" Color="#F3FFFFFF"/>
         <SolidColorBrush x:Key="Ink" Color="#1C1C1E"/>
         <SolidColorBrush x:Key="InkSoft" Color="#8E8E93"/>
         <SolidColorBrush x:Key="Stroke" Color="#E5E5EA"/>
@@ -59,7 +59,7 @@
         </Style>
     </Window.Resources>
 
-    <Border CornerRadius="12" Background="#F2F2F7" BorderThickness="1" BorderBrush="#E5E5EA" Margin="16">
+    <Border CornerRadius="8" Background="#F2F2F7" BorderThickness="1" BorderBrush="#E5E5EA" Margin="16">
         <Border.Effect>
             <DropShadowEffect Color="Black" Opacity="0.2" BlurRadius="16" ShadowDepth="4"/>
         </Border.Effect>
@@ -112,7 +112,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="#F2F2F7" CornerRadius="16" Padding="12,6" Margin="0,0,8,0" Cursor="Hand" MouseLeftButtonDown="DeviceTarget_Click">
+                                    <Border Background="#F2F2F7" CornerRadius="8" Padding="12,6" Margin="0,0,8,0" Cursor="Hand" MouseLeftButtonDown="DeviceTarget_Click">
                                         <StackPanel Orientation="Horizontal">
                                             <iconPacks:PackIconLucide Kind="Smartphone" Width="12" Height="12"    Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                             <TextBlock Text="{Binding friendly_name}" FontSize="12" FontWeight="Medium" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>

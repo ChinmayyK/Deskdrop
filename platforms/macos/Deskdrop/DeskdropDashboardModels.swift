@@ -239,6 +239,7 @@ struct ManagedDevice: Identifiable {
     let pairingRequested: Bool
     let outgoingPairingWaiting: Bool
     let pairingPin: String?
+    let ip: String?
     var isConnected: Bool { connectionState == .connected && trustState == .trusted }
     var canReconnect: Bool { trustState == .trusted && remembered && autoConnect && connectionState != .connected }
 
@@ -247,6 +248,7 @@ struct ManagedDevice: Identifiable {
         self.name            = peer.displayName
         self.rawName         = peer.displayName
         self.endpoint        = nil
+        self.ip              = peer.ip
         self.connectionState = if peer.connectionStatus == "connecting" {
             .connecting
         } else if peer.connectionStatus == "failed" {

@@ -16,7 +16,7 @@
         <SolidColorBrush x:Key="InkSoft" Color="#6E6E73"/>
     </Window.Resources>
 
-    <Border Background="{StaticResource AppBackground}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" ClipToBounds="True">
+    <Border Background="{StaticResource AppBackground}" CornerRadius="8" BorderBrush="{StaticResource Stroke}" BorderThickness="1" ClipToBounds="True">
         <Border.Effect>
             <DropShadowEffect Color="Black" Opacity="0.1" BlurRadius="20" ShadowDepth="4" Direction="270"/>
         </Border.Effect>
@@ -37,7 +37,7 @@
                 <TextBlock Grid.Row="1" Text="Scan the QR code below from the Deskdrop Android app to pair instantly." 
                            Foreground="{StaticResource InkSoft}" FontSize="14" TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,32"/>
                 
-                <Border Grid.Row="2" Background="White" CornerRadius="16" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="{StaticResource Stroke}" BorderThickness="1">
+                <Border Grid.Row="2" Background="White" CornerRadius="8" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="{StaticResource Stroke}" BorderThickness="1">
                     <Border.Effect>
                         <DropShadowEffect Color="Black" Opacity="0.05" BlurRadius="12" ShadowDepth="2" Direction="270"/>
                     </Border.Effect>

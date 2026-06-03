@@ -9,7 +9,7 @@
         <StackPanel>
             <TextBlock Text="Scan this QR Code from your Deskdrop mobile app to pair instantly." 
                        TextWrapping="Wrap" TextAlignment="Center" Foreground="#8E8E93" FontSize="13" Margin="0,0,0,24"/>
-            <Border Background="White" Width="200" Height="200" CornerRadius="12" Margin="0,0,0,32">
+            <Border Background="White" Width="200" Height="200" CornerRadius="8" Margin="0,0,0,32">
                 <Border.Effect>
                     <DropShadowEffect Color="Black" BlurRadius="12" ShadowDepth="4" Opacity="0.1"/>
                 </Border.Effect>

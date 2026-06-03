@@ -8,11 +8,11 @@
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-        <Color x:Key="BrandElectricColor">#007AFF</Color>
+        <Color x:Key="BrandElectricColor">#005FB8</Color>
         <SolidColorBrush x:Key="BrandElectric" Color="{StaticResource BrandElectricColor}"/>
         <SolidColorBrush x:Key="BrandGreen" Color="#34C759"/>
         <SolidColorBrush x:Key="BrandRed" Color="#FF3B30"/>
-        <SolidColorBrush x:Key="SurfaceStrong" Color="#F2F2F7"/>
+        <SolidColorBrush x:Key="SurfaceStrong" Color="#A0F3F3F3"/>
         <SolidColorBrush x:Key="Stroke" Color="#D1D1D6"/>
         <SolidColorBrush x:Key="Ink" Color="#1C1C1E"/>
         <SolidColorBrush x:Key="InkSoft" Color="#6E6E73"/>
@@ -39,7 +39,7 @@
         </Style>
     </Window.Resources>
     
-    <Border Background="{StaticResource SurfaceStrong}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="24">
+    <Border Background="{StaticResource SurfaceStrong}" CornerRadius="8" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="24">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="32" ShadowDepth="8" Opacity="0.2"/>
         </Border.Effect>
