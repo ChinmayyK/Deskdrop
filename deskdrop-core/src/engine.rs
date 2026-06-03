@@ -2221,7 +2221,7 @@ impl Engine {
         let _ = self
             .shared
             .peer_manager
-            .set_pairing_requested(target_device, true);
+            .set_outgoing_pairing_waiting(target_device, true);
 
         let msg = AppMessage::PairingRequest {
             origin_device: self.shared.config.device_id,
@@ -4067,7 +4067,7 @@ fn register_session(
                             // A remote peer sending an unsolicited PairingResponse is rejected.
                             let we_requested_pairing = shared.peer_manager
                                 .get(peer_id)
-                                .map(|p| p.pairing_requested)
+                                .map(|p| p.pairing_requested || p.outgoing_pairing_waiting)
                                 .unwrap_or(false);
                             let we_already_trust_them = shared.peer_manager
                                 .get(peer_id)
@@ -4427,6 +4427,7 @@ fn register_session(
 
                 // FIX: Phantom Pairing Prompts. Clear pairing state if connection drops.
                 let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
+                let _ = shared.peer_manager.set_outgoing_pairing_waiting(peer_id, false);
                 let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
 
                 // Record in activity feed.

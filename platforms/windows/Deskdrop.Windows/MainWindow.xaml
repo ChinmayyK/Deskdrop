@@ -9,7 +9,7 @@
         Title="Deskdrop" Height="720" Width="960"
         WindowStartupLocation="Manual"
         WindowStyle="None"
-        AllowsTransparency="False"
+        AllowsTransparency="True"
         Background="Transparent"
         Topmost="True" ShowInTaskbar="False"
         AllowDrop="True" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave" Drop="Grid_Drop"
@@ -18,7 +18,7 @@
         FontFamily="Segoe UI">
 
     <WindowChrome.WindowChrome>
-        <WindowChrome GlassFrameThickness="-1" CaptionHeight="88" ResizeBorderThickness="24" CornerRadius="8" />
+        <WindowChrome GlassFrameThickness="-1" CaptionHeight="88" ResizeBorderThickness="24" CornerRadius="12" />
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
@@ -36,34 +36,19 @@
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
         </Storyboard>
-
         
-        <Storyboard x:Key="FadeInTransition">
-            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25">
-                <DoubleAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut"/>
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="10" To="0" Duration="0:0:0.25">
-                <DoubleAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut"/>
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
-        </Storyboard>
-
-        
-        <!-- Windows 11 Fluent Palette -->
-        <Color x:Key="BrandElectricColor">#005FB8</Color>
+        <!-- macOS CRTheme Palette -->
+        <Color x:Key="BrandElectricColor">#007AFF</Color>
         <SolidColorBrush x:Key="BrandElectric" Color="{StaticResource BrandElectricColor}"/>
         <SolidColorBrush x:Key="BrandViolet" Color="#5856D6"/>
         <SolidColorBrush x:Key="BrandCyan" Color="#5AC8FA"/>
         <SolidColorBrush x:Key="BrandGreen" Color="#34C759"/>
         <SolidColorBrush x:Key="BrandRed" Color="#FF3B30"/>
         
-        <SolidColorBrush x:Key="SurfaceElevated" Color="#F3FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceStrong" Color="#A0F3F3F3"/>
+        <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="SurfaceStrong" Color="#F2F2F7"/>
         <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceGlass" Color="#80FFFFFF"/> <!-- More translucent for Mica -->
+        <SolidColorBrush x:Key="SurfaceGlass" Color="#B3FFFFFF"/> <!-- More translucent for Mica -->
         
         <SolidColorBrush x:Key="Ink" Color="#1C1C1E"/>
         <SolidColorBrush x:Key="InkSoft" Color="#6E6E73"/> <!-- Improved contrast -->
@@ -71,7 +56,7 @@
         <SolidColorBrush x:Key="Stroke" Color="#D1D1D6"/> <!-- Darker for visibility -->
         <SolidColorBrush x:Key="StrokeSoft" Color="#E5E5EA"/>
 
-        <!-- Fluent Colors -->
+        <!-- macOS Traffic Light Colors -->
         <SolidColorBrush x:Key="MacRed" Color="#FF5F56"/>
         <SolidColorBrush x:Key="MacYellow" Color="#FFBD2E"/>
         <SolidColorBrush x:Key="MacGreen" Color="#27C93F"/>
@@ -80,7 +65,7 @@
         <SolidColorBrush x:Key="MacYellowBorder" Color="#DEA123"/>
         <SolidColorBrush x:Key="MacGreenBorder" Color="#1AAB29"/>
 
-        <!-- Fluent Button Style -->
+        <!-- macOS Traffic Light Button Style -->
         <Style x:Key="TrafficLightButton" TargetType="Button">
             <Setter Property="Width" Value="12"/>
             <Setter Property="Height" Value="12"/>
@@ -102,14 +87,14 @@
             </Setter>
         </Style>
 
-        <!-- Fluent Navigation Bar Style (Capsule expanding) -->
+        <!-- macOS Deskdrop Floating Navbar Style (Capsule expanding) -->
         <Style x:Key="CapsuleNavButtonStyle" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="border" Background="Transparent" CornerRadius="8" Padding="14,10" Margin="4,0">
+                        <Border x:Name="border" Background="Transparent" CornerRadius="16" Padding="14,10" Margin="4,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <iconPacks:PackIconLucide Kind="{Binding Tag}" Width="16" Height="16" x:Name="icon"    VerticalAlignment="Center"/>
                                 <!-- The text label will expand when checked -->
@@ -125,7 +110,7 @@
                                 <Setter TargetName="border" Property="Background" Value="{StaticResource BrandElectric}"/>
                                 <Setter TargetName="border" Property="Effect">
                                     <Setter.Value>
-                                        <DropShadowEffect Color="#005FB8" Opacity="0.2" BlurRadius="4" ShadowDepth="1"/>
+                                        <DropShadowEffect Color="#007AFF" Opacity="0.35" BlurRadius="8" ShadowDepth="3"/>
                                     </Setter.Value>
                                 </Setter>
                                 <Setter Property="Foreground" Value="White"/>
@@ -137,7 +122,7 @@
             </Setter>
         </Style>
 
-        <!-- Fluent Style Button -->
+        <!-- macOS Style Modern Button -->
         <Style x:Key="ModernButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource BrandElectric}"/>
             <Setter Property="Foreground" Value="White"/>
@@ -170,7 +155,7 @@
             </Setter>
         </Style>
 
-        <!-- Fluent Search/TextBox with Blue Halo Focus -->
+        <!-- macOS Style Search/TextBox with Blue Halo Focus -->
         <Style x:Key="MacTextBox" TargetType="TextBox">
             <Setter Property="Background" Value="{StaticResource SurfaceStrong}"/>
             <Setter Property="Foreground" Value="{StaticResource Ink}"/>
@@ -187,7 +172,7 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsFocused" Value="True">
                                 <Setter TargetName="border" Property="BorderBrush" Value="#80007AFF"/>
-                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="3"/>
                                 <Setter TargetName="border" Property="Margin" Value="-2"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -296,7 +281,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
-                        <Border Background="#E5FFFFFF" CornerRadius="8" BorderThickness="1" BorderBrush="#20000000" Padding="8" Margin="0,0,12,12">
+                        <Border Background="#E5FFFFFF" CornerRadius="12" BorderThickness="1" BorderBrush="#20000000" Padding="8" Margin="0,0,12,12">
                             <Border.Effect>
                                 <DropShadowEffect Color="Black" Opacity="0.15" BlurRadius="16" ShadowDepth="4"/>
                             </Border.Effect>
@@ -332,7 +317,7 @@
     </Window.Resources>
 
     <Grid Background="Transparent">
-        <Border Margin="24" CornerRadius="8" BorderThickness="1" ClipToBounds="True" BorderBrush="{StaticResource Stroke}" Background="{StaticResource SurfaceStrong}">
+        <Border Margin="24" CornerRadius="12" BorderThickness="1" ClipToBounds="True" BorderBrush="{StaticResource Stroke}" Background="{StaticResource SurfaceStrong}">
             <Border.Effect>
                 <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="4" Opacity="0.15"/>
             </Border.Effect>
@@ -345,7 +330,6 @@
 
                 <!-- ACTIVITY VIEW -->
                 <Grid x:Name="ActivityView" Visibility="Visible" Margin="48,16,48,0">
-                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -361,7 +345,7 @@
                             <ItemsControl x:Name="ActivityFeedList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,4" Padding="12" Cursor="Hand" MouseLeftButtonDown="ActivityFeedItem_Click">
+                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,4" Padding="12" Cursor="Hand" MouseLeftButtonDown="ActivityFeedItem_Click">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
@@ -388,7 +372,6 @@
                 <!-- TRANSFERS VIEW -->
                 <Grid x:Name="TransfersView" Visibility="Collapsed" Margin="48,16,48,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
-                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -403,7 +386,7 @@
                             <ItemsControl x:Name="ActiveTransfersList" Margin="0,0,0,24">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
+                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
@@ -432,7 +415,7 @@
                             <ItemsControl x:Name="TransfersHistoryList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,4" Padding="8" Cursor="Hand" MouseLeftButtonDown="TransferHistoryItem_Click">
+                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,4" Padding="8" Cursor="Hand" MouseLeftButtonDown="TransferHistoryItem_Click">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
@@ -460,7 +443,6 @@
                 <!-- DEVICES VIEW -->
                 <Grid x:Name="DevicesView" Visibility="Collapsed" Margin="48,16,48,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
-                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -473,7 +455,7 @@
                         <StackPanel>
                             
                             <!-- Magic Link Pairing Card -->
-                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
+                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -492,7 +474,7 @@
                             </Border>
 
                             <!-- Manual Connect Card -->
-                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
+                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -514,7 +496,7 @@
                             </Border>
 
                             <!-- File Share Card -->
-                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,16" Padding="16">
+                            <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,16" Padding="16">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -535,7 +517,7 @@
                             <ItemsControl x:Name="DevicesList" Margin="0,0,0,24">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
+                                        <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
@@ -575,7 +557,6 @@
                 <!-- SETTINGS VIEW -->
                 <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="48,16,48,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
-                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -586,7 +567,7 @@
                     
                     <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
                         <StackPanel>
-                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="8" Padding="24" Margin="0,0,0,24">
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="140"/>
@@ -597,7 +578,7 @@
                                 </Grid>
                             </Border>
 
-                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="8" Padding="24" Margin="0,0,0,24">
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
                                 <StackPanel>
                                     <CheckBox x:Name="ChkLaunchOnStartup" Content="Launch at login" Margin="0,0,0,16"/>
                                     <CheckBox x:Name="ChkSyncEnabled" Content="Sync clipboard automatically" Margin="0,0,0,16"/>
@@ -607,14 +588,14 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="8" Padding="24" Margin="0,0,0,24">
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
                                 <StackPanel>
                                     <TextBlock Text="Global Hotkeys" FontWeight="SemiBold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
                                     <CheckBox x:Name="ChkEnableHotkeys" Content="Enable global keyboard shortcuts (Ctrl+Shift+D, etc.)" Margin="0,0,0,16"/>
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="8" Padding="24" Margin="0,0,0,24">
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -636,7 +617,6 @@
                 <!-- DIAGNOSTICS VIEW -->
                 <Grid x:Name="DiagnosticsView" Visibility="Collapsed" Margin="48,16,48,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
-                    <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -647,7 +627,7 @@
                     
                     <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
                         <StackPanel>
-                            <Border CornerRadius="8" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
+                            <Border CornerRadius="12" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="48"/>
@@ -664,7 +644,7 @@
                                 </Grid>
                             </Border>
 
-                            <Border CornerRadius="8" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
+                            <Border CornerRadius="12" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="48"/>
@@ -680,7 +660,7 @@
                                 </Grid>
                             </Border>
 
-                            <Border CornerRadius="8" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
+                            <Border CornerRadius="12" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Performance Metrics" FontWeight="SemiBold" Foreground="{StaticResource Ink}" FontSize="14" Margin="0,0,0,12"/>
                                     <TextBlock x:Name="TxtMetricsContent" Text="Loading metrics..." Foreground="{StaticResource InkSoft}" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"/>
@@ -694,7 +674,7 @@
             <!-- TOP CHROME: ContinuityHeaderView -->
             <Border VerticalAlignment="Top" Height="64" Panel.ZIndex="100" WindowChrome.IsHitTestVisibleInChrome="True">
                 <Border.Background>
-                    <SolidColorBrush Color="Transparent" />
+                    <SolidColorBrush Color="#FFFFFF" Opacity="0.95"/>
                 </Border.Background>
                 <Grid>
                     <!-- Search Bar (Left-aligned to leave room for Windows Buttons on Right) -->
@@ -712,7 +692,7 @@
                         <TextBlock Text="Active" Foreground="{StaticResource InkSoft}" FontSize="13" VerticalAlignment="Center" Margin="0,0,16,0"/>
                         
                         <!-- Quick Actions Capsule -->
-                        <Border Background="{StaticResource SurfaceElevated}" CornerRadius="8" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="4">
+                        <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="4">
                             <StackPanel Orientation="Horizontal">
                                 <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Click="NavDiagnostics_Click" ToolTip="Diagnostics (Ctrl+D)" AutomationProperties.Name="Diagnostics">
                                     <iconPacks:PackIconLucide Kind="Maximize" Width="14" Height="14"   />
@@ -740,7 +720,7 @@
 
 
             <!-- BOTTOM CHROME: FloatingNavBar Capsule -->
-            <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,32" CornerRadius="8" Background="{StaticResource SurfaceGlass}" BorderBrush="#30000000" BorderThickness="1" Padding="6" Panel.ZIndex="200" WindowChrome.IsHitTestVisibleInChrome="True">
+            <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,32" CornerRadius="24" Background="{StaticResource SurfaceGlass}" BorderBrush="#30000000" BorderThickness="1" Padding="6" Panel.ZIndex="200" WindowChrome.IsHitTestVisibleInChrome="True">
                 <Border.Effect>
                     <DropShadowEffect Color="Black" Opacity="0.12" BlurRadius="24" ShadowDepth="12"/>
                 </Border.Effect>
@@ -752,7 +732,7 @@
             </Border>
 
             <!-- MODULE 4: INCOMING CALL BANNER -->
-            <Border x:Name="IncomingCallBanner" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,32,0,0" Width="400" Background="{StaticResource SurfaceElevated}" CornerRadius="8" Panel.ZIndex="1000" Padding="16">
+            <Border x:Name="IncomingCallBanner" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,32,0,0" Width="400" Background="{StaticResource SurfaceElevated}" CornerRadius="16" Panel.ZIndex="1000" Padding="16">
                 <Border.Effect>
                     <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="8" Opacity="0.15"/>
                 </Border.Effect>
@@ -764,7 +744,7 @@
                     </Grid.RowDefinitions>
                     
                     <StackPanel Orientation="Horizontal" Grid.Row="0">
-                        <Border Width="48" Height="48" CornerRadius="8" Background="#E5E5EA" Margin="0,0,16,0">
+                        <Border Width="48" Height="48" CornerRadius="24" Background="#E5E5EA" Margin="0,0,16,0">
                             <iconPacks:PackIconLucide Kind="Plus" Width="24" Height="24"    Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <StackPanel VerticalAlignment="Center">
@@ -788,7 +768,7 @@
 
             <!-- MODULE 1: DROP ZONE OVERLAY -->
             <Grid x:Name="DropZoneOverlay" Visibility="Collapsed" Panel.ZIndex="999" Background="#80FFFFFF">
-                <Border Margin="32" BorderBrush="{StaticResource BrandElectric}" BorderThickness="4" CornerRadius="8" Background="#E5F0FAFF">
+                <Border Margin="32" BorderBrush="{StaticResource BrandElectric}" BorderThickness="4" CornerRadius="24" Background="#E5F0FAFF">
                     <Border.Effect>
                         <DropShadowEffect Color="{StaticResource BrandElectricColor}" BlurRadius="32" ShadowDepth="0" Opacity="0.5"/>
                     </Border.Effect>
@@ -805,7 +785,7 @@
                 <Border Background="#A0000000" MouseLeftButtonDown="CommandPaletteBackdrop_Click"/>
                 
                 <Border Width="600" Height="400" VerticalAlignment="Center" HorizontalAlignment="Center" 
-                        Background="{StaticResource SurfaceElevated}" CornerRadius="8" 
+                        Background="{StaticResource SurfaceElevated}" CornerRadius="12" 
                         BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="0,-100,0,0">
                     <Border.Effect>
                         <DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="16" Opacity="0.3"/>
