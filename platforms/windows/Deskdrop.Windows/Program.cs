@@ -604,7 +604,8 @@ namespace Deskdrop.Windows
                 case NativeCore.PB_EVENT_PAIRING_REQUESTED:
                 {
                     var name = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                    var id   = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? name;
+                    string id;
+                    try { id = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? name; } catch (EntryPointNotFoundException) { id = name; }
                     var fp   = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_fingerprint(ev)) ?? "";
                     TofuPromptRequested?.Invoke(id, name, fp);
                     break;
@@ -640,7 +641,8 @@ namespace Deskdrop.Windows
                 case NativeCore.PB_EVENT_CALL_STATE_CHANGED:
                 {
                     var caller = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                    var deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? caller;
+                    string deviceId;
+                    try { deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? caller; } catch (EntryPointNotFoundException) { deviceId = caller; }
                     var state = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? "idle";
                     IncomingCallRequested?.Invoke(caller, deviceId, state);
                     break;
@@ -688,7 +690,7 @@ namespace Deskdrop.Windows
         {
             if (_handle != IntPtr.Zero)
             {
-                NativeCore.deskdrop_send_call_action(_handle, action, deviceId);
+                try { NativeCore.deskdrop_send_call_action(_handle, action, deviceId); } catch (EntryPointNotFoundException) {}
             }
         }
 
@@ -1245,9 +1247,13 @@ namespace Deskdrop.Windows
         {
             try
             {
+                File.AppendAllText(@"C:\Users\CHINMAY KUDALKAR\Desktop\crash.txt", $"[{DateTime.Now:u}] App Start\n");
                 using var mutex = new Mutex(true, $"Deskdrop_SingleInstance_v1_{Environment.UserName}", out bool isNew);
+                File.AppendAllText(@"C:\Users\CHINMAY KUDALKAR\Desktop\crash.txt", $"[{DateTime.Now:u}] Mutex isNew: {isNew}\n");
+                
                 if (!isNew)
                 {
+                    File.AppendAllText(@"C:\Users\CHINMAY KUDALKAR\Desktop\crash.txt", $"[{DateTime.Now:u}] Exiting due to isNew=false\n");
                     if (args.Length > 0)
                     {
                         try
@@ -1490,12 +1496,16 @@ namespace Deskdrop.Windows
         {
             try
             {
-                var dir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Deskdrop");
-                Directory.CreateDirectory(dir);
-                File.AppendAllText(Path.Combine(dir, "error.log"),
-                    $"[{DateTime.Now:u}] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n\n");
+                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+                string errorMsg = $"[{DateTime.Now:u}] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+                var inner = ex.InnerException;
+                while (inner != null)
+                {
+                    errorMsg += $"\n--- Inner Exception: {inner.GetType().Name}: {inner.Message}\n{inner.StackTrace}";
+                    inner = inner.InnerException;
+                }
+                errorMsg += "\n\n";
+                File.AppendAllText(Path.Combine(dir, "crash.txt"), errorMsg);
             }
             catch { }
         }

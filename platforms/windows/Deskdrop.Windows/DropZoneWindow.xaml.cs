@@ -38,7 +38,7 @@ namespace Deskdrop.Windows
             if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
             {
                 e.Effects = System.Windows.DragDropEffects.Copy;
-                DropBorder.Opacity = 1.0;
+                DropGrid.Opacity = 1.0;
             }
             else
             {
@@ -48,7 +48,7 @@ namespace Deskdrop.Windows
 
         private void Window_DragLeave(object sender, System.Windows.DragEventArgs e)
         {
-            DropBorder.Opacity = 0.5;
+            DropGrid.Opacity = 0.5;
         }
 
         private void Window_Drop(object sender, System.Windows.DragEventArgs e)

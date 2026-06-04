@@ -54,7 +54,7 @@ namespace Deskdrop.Windows
 
         private void Window_Deactivated(object sender, EventArgs e)
         {
-            Close();
+            try { Close(); } catch (InvalidOperationException) { }
         }
 
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
@@ -95,6 +95,36 @@ namespace Deskdrop.Windows
                 }
                 Close();
             }
+        }
+
+        private void QuickSendStrip_Click(object sender, MouseButtonEventArgs e)
+        {
+            System.Threading.Tasks.Task.Run(() => 
+            {
+                try 
+                {
+                    var clipboardText = "";
+                    Dispatcher.Invoke(() => {
+                        if (System.Windows.Forms.Clipboard.ContainsText())
+                            clipboardText = System.Windows.Forms.Clipboard.GetText();
+                    });
+                    
+                    if (!string.IsNullOrEmpty(clipboardText))
+                    {
+                        var req = new {
+                            cmd = "push_clipboard",
+                            text = clipboardText
+                        };
+                        DaemonClient.Send(req);
+                        Dispatcher.Invoke(() => NotificationHelper.ShowToast("Deskdrop", "Clipboard sent"));
+                    }
+                } 
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() => NotificationHelper.ShowToast("Deskdrop", $"Failed to send: {ex.Message}"));
+                }
+            });
+            Close();
         }
 
         private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
