@@ -88,6 +88,8 @@ object DeskdropJni {
     @JvmStatic external fun stopCameraStream(handle: Long): Int
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
+    @JvmStatic external fun waitEvent(handle: Long): Long
+    @JvmStatic external fun interruptWait(handle: Long)
     @JvmStatic external fun eventType(event: Long): Int
     @JvmStatic external fun freeEvent(event: Long)
 
@@ -434,9 +436,7 @@ class DeskdropService : Service() {
     private val nsdRetryCount = AtomicLong(0L)
     private var nsdRetryRunnable: Runnable? = null
 
-    // WakeLock & WifiLock — held continuously to prevent sleep disconnections.
-    private var wakeLock: PowerManager.WakeLock? = null
-    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+    // WakeLock & WifiLock removed — rely on connectedDevice foreground service type.
 
     // MulticastLock — held for the lifetime of the service.
     // Many OEM WiFi drivers (Samsung, Xiaomi, OnePlus, Realme) suppress
@@ -452,6 +452,11 @@ class DeskdropService : Service() {
     private fun prefs() = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
     private fun isSyncEnabled()           = prefs().getBoolean("sync_enabled", true)
     private fun isClipboardNotifyEnabled()= prefs().getBoolean("notify_on_remote_copy", false)
+
+    // ── Engine Threading ──────────────────────────────────────────────────────
+    @Volatile private var isRunning = true
+    private var eventDrainThread: Thread? = null
+    private val engineLock = java.util.concurrent.locks.ReentrantReadWriteLock()
     private fun syncMode(): BackgroundSyncMode =
         if (prefs().getString("sync_mode", "always") == "battery") BackgroundSyncMode.BATTERY_OPTIMIZED
         else BackgroundSyncMode.ALWAYS_ACTIVE
@@ -465,7 +470,6 @@ class DeskdropService : Service() {
         super.onCreate()
         createNotificationChannels()
         registerPairingReceiver()
-        acquireWakeLockIfNeeded()
         setServiceRunning(true)
     }
 
@@ -702,7 +706,7 @@ class DeskdropService : Service() {
 
                 activeEngineHandle = engineHandle
                 Log.i(TAG, "Engine started — $deviceName")
-                scheduleEventDrain()
+                startEventDrainThread()
                 scheduleClipboardWatch()
                 // acquireMulticastLock() handled by onAvailable
                 // Cache our own UUID prefix so NSD can filter self-connections.
@@ -777,14 +781,26 @@ class DeskdropService : Service() {
         cancelNsdRetry()
         releaseMulticastLock()
         handler.removeCallbacksAndMessages(null)
+        
+        isRunning = false
         if (engineHandle != 0L) {
-            DeskdropJni.stop(engineHandle)
-            engineHandle = 0L
-            activeEngineHandle = 0L
+            DeskdropJni.interruptWait(engineHandle)
         }
+        eventDrainThread?.join(1000)
+
+        engineLock.writeLock().lock()
+        try {
+            if (engineHandle != 0L) {
+                DeskdropJni.stop(engineHandle)
+                engineHandle = 0L
+                activeEngineHandle = 0L
+            }
+        } finally {
+            engineLock.writeLock().unlock()
+        }
+        
         engineStarted.set(false)
         connectedPeerIds.clear()
-        releaseWakeLock()
         setServiceRunning(false)
         persistStatus()
         unregisterPairingReceiver()
@@ -806,43 +822,7 @@ class DeskdropService : Service() {
         super.onTaskRemoved(rootIntent)
     }
 
-    // ── WakeLock & WifiLock ───────────────────────────────────────────────────
-
-    private fun acquireWakeLockIfNeeded() {
-        if (wakeLock == null) {
-            wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
-                .newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK,
-                    "Deskdrop::ContinuousLock"
-                ).apply {
-                    setReferenceCounted(false)
-                    acquire()
-                }
-            
-            val wm = runCatching {
-                applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager
-            }.getOrNull()
-            
-            if (wm != null) {
-                wifiLock = wm.createWifiLock(
-                    android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-                    "Deskdrop::WifiLock"
-                ).apply {
-                    setReferenceCounted(false)
-                    acquire()
-                }
-            }
-        }
-    }
-
-    private fun releaseWakeLock() {
-        runCatching {
-            wakeLock?.let { if (it.isHeld) it.release() }
-            wifiLock?.let { if (it.isHeld) it.release() }
-        }
-        wakeLock = null
-        wifiLock = null
-    }
+    // ── WakeLock & WifiLock removed ───────────────────────────────────────────
 
     // ── Multicast lock ────────────────────────────────────────────────────────
     //
@@ -919,30 +899,35 @@ class DeskdropService : Service() {
 
     // ── Event drain (Rust → Kotlin) ───────────────────────────────────────────
 
-    private fun scheduleEventDrain() {
-        val interval = pollInterval
-        handler.postDelayed(object : Runnable {
-            override fun run() {
-                if (engineHandle != 0L) {
-                    drainEvents()
+    private fun startEventDrainThread() {
+        isRunning = true
+        eventDrainThread = Thread {
+            while (isRunning) {
+                engineLock.readLock().lock()
+                val ev = try {
+                    if (engineHandle != 0L) {
+                        DeskdropJni.waitEvent(engineHandle)
+                    } else 0L
+                } finally {
+                    engineLock.readLock().unlock()
                 }
-                if (engineHandle != 0L) {
-                    handler.postDelayed(this, pollInterval)
+                
+                if (ev != 0L) {
+                    if (DeskdropJni.eventType(ev) == DeskdropJni.CR_EVENT_WARNING) {
+                        val text = DeskdropJni.eventText(ev)
+                        if (text == "interrupt") {
+                            DeskdropJni.freeEvent(ev)
+                            continue
+                        }
+                    }
+                    handler.post {
+                        try { handleEvent(ev) } finally { DeskdropJni.freeEvent(ev) }
+                    }
+                } else if (engineHandle == 0L) {
+                    Thread.sleep(100)
                 }
             }
-        }, interval)
-    }
-
-    private fun drainEvents() {
-        try {
-            while (engineHandle != 0L) {
-                val ev = DeskdropJni.pollEvent(engineHandle)
-                if (ev == 0L) break
-                try { handleEvent(ev) } finally { DeskdropJni.freeEvent(ev) }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception during event drain", e)
-        }
+        }.apply { start() }
     }
 
     private fun handleEvent(ev: Long) {
@@ -2771,7 +2756,7 @@ class DeskdropService : Service() {
 
     private fun startForegroundCompat(notification: Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID_SERVICE, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIF_ID_SERVICE, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } else {
             startForeground(NOTIF_ID_SERVICE, notification)
         }

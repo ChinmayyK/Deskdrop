@@ -78,7 +78,7 @@ const BEACON_MAGIC: &str = "DESKDROP3";
 const MAX_BEACON_SIZE: usize = 512;
 
 /// Default beacon send interval.
-const DEFAULT_BEACON_INTERVAL: Duration = Duration::from_secs(2);
+const DEFAULT_BEACON_INTERVAL: Duration = Duration::from_secs(15);
 
 /// Default receive buffer size.
 const RECV_BUF_SIZE: usize = 1024;

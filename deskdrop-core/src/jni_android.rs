@@ -28,6 +28,7 @@ fn rt() -> &'static Runtime {
 struct AndroidHandle {
     engine: Engine,
     event_rx: mpsc::Receiver<crate::engine::EngineEvent>,
+    event_tx: mpsc::Sender<crate::engine::EngineEvent>,
 }
 
 // ── start ─────────────────────────────────────────────────────────────────────
@@ -68,11 +69,13 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_start(
     let config = config_with_android_paths(config, data_root, file_save_root);
 
     let (tx, rx) = mpsc::channel(256);
+    let event_tx = tx.clone();
     match rt().block_on(Engine::start(config, tx)) {
         Ok(engine) => {
             let handle = Box::new(AndroidHandle {
                 engine,
                 event_rx: rx,
+                event_tx,
             });
             Box::into_raw(handle) as jlong
         }
@@ -252,6 +255,40 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pollEvent(
         Ok(event) => Box::into_raw(Box::new(event)) as jlong,
         Err(_) => 0,
     }
+}
+
+// ── waitEvent ─────────────────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_waitEvent(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jlong {
+    if handle == 0 {
+        return 0;
+    }
+    let h = unsafe { &mut *(handle as *mut AndroidHandle) };
+    let fut = h.event_rx.recv();
+    match rt().block_on(fut) {
+        Some(event) => Box::into_raw(Box::new(event)) as jlong,
+        None => 0,
+    }
+}
+
+// ── interruptWait ─────────────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_interruptWait(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    if handle == 0 {
+        return;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    let _ = h.event_tx.try_send(crate::engine::EngineEvent::Warning("interrupt".into()));
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────

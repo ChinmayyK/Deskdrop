@@ -32,8 +32,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// v3 fix: TCP keepalive — detect silently-dropped Wi-Fi connections.
 /// Idle time before the first probe, then interval between probes.
-const KEEPALIVE_IDLE: Duration = Duration::from_secs(15);
-const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(3);
+const KEEPALIVE_IDLE: Duration = Duration::from_secs(300);
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 #[allow(dead_code)]
 const KEEPALIVE_RETRIES: u32 = 3;
 const SOCKET_BUFFER_MIN: usize = 4 * 1024 * 1024; // 4 MB

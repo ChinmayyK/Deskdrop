@@ -14,10 +14,9 @@
 
     <!-- ── Foreground service ────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
-    <!-- ── WakeLock — held only during event drain, released immediately -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- ── WakeLock removed (battery optimization) ─────────── -->
 
     <!-- ── Boot / restart ────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -116,15 +115,15 @@
 
         <!-- ── Foreground service ─────────────────────────────────────── -->
         <!--
-            foregroundServiceType="dataSync" satisfies the Android 14
-            foreground service requirements without requiring camera/mic.
-            The service uses a PARTIAL_WAKE_LOCK only during event drain.
+            foregroundServiceType="connectedDevice" tells Android this service
+            maintains a local network connection, bypassing aggressive Doze mode
+            restrictions on networking without requiring a WakeLock.
         -->
         <service
             android:name=".DeskdropService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="connectedDevice"
             android:stopWithTask="false" />
 
         <!-- ── Notification listener service ─────────────────────────── -->
