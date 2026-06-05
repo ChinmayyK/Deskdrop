@@ -24,8 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var cancellables = Set<AnyCancellable>()
     private var daemonProcess: Process?
     private var dropCanvasWindow: NSPanel?
-    private var dropZoneController: NSWindowController?
     private var activityToken: NSObjectProtocol?
+    
+    // Screenshot observing
+    private var screenshotQuery: NSMetadataQuery?
+    private let observerStartDate = Date()
+    private var sentScreenshotPaths = Set<String>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ensureSingleRunningInstance() else { return }
@@ -50,13 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         store.start()
+        startMacScreenshotObserver()
         
         // Prevent App Nap to ensure background daemon and network sync stay responsive
         activityToken = ProcessInfo.processInfo.beginActivity(options: [.userInitiated], reason: "Deskdrop Background Sync")
-
-        // Initialize Drop Zone feature
-        GlobalDragMonitor.shared.startMonitoring()
-        self.dropZoneController = DropZoneWindowController(store: store)
     }
 
     /// Observe notifications posted by DeskdropStore so it stays decoupled from AppKit.
@@ -486,9 +487,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             // Only notify for incoming files where dest_path is populated
             guard let destPath = entry.dest_path else { return }
             
-            let title = "File Received"
-            let body = entry.file_name ?? "A file was received from \(entry.device_name)."
+            let fileName = entry.file_name ?? URL(fileURLWithPath: destPath).lastPathComponent
+            let isScreenshot = fileName.lowercased().contains("screenshot")
 
+            if isScreenshot {
+                let currentUrl = URL(fileURLWithPath: destPath)
+                let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+                let deskdropDir = downloadsDir.appendingPathComponent("Deskdrop")
+                let screenshotsDir = deskdropDir.appendingPathComponent("android_screenshot")
+                
+                try? FileManager.default.createDirectory(at: screenshotsDir, withIntermediateDirectories: true)
+                let newDestUrl = screenshotsDir.appendingPathComponent(fileName)
+                
+                do {
+                    if FileManager.default.fileExists(atPath: newDestUrl.path) {
+                        try FileManager.default.removeItem(at: newDestUrl)
+                    }
+                    try FileManager.default.moveItem(at: currentUrl, to: newDestUrl)
+                    
+                    if let image = NSImage(contentsOf: newDestUrl) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.writeObjects([image])
+                    }
+                    
+                    store.showToast(
+                        title: "Screenshot Synced",
+                        body: "Copied to clipboard",
+                        tint: CRTheme.accentBlue,
+                        systemImage: "camera.viewfinder",
+                        ttl: 4.0,
+                        primaryAction: ToastAction(title: "Reveal", role: .primary) {
+                            NSWorkspace.shared.activateFileViewerSelecting([newDestUrl])
+                        }
+                    )
+                    return // Skip the standard notification
+                } catch {
+                    print("Failed to handle screenshot sync: \(error)")
+                }
+            }
+            
+            let title = "File Received"
+            let body = fileName
             
             store.showToast(
                 title: title,
@@ -1071,5 +1110,51 @@ extension AppDelegate: MenuBarDropViewDelegate {
 
     @objc private func closeDropCanvas() {
         dropCanvasWindow?.orderOut(nil)
+    }
+
+    // MARK: - Screenshot Sync
+
+    private func startMacScreenshotObserver() {
+        screenshotQuery = NSMetadataQuery()
+        guard let query = screenshotQuery else { return }
+        
+        NotificationCenter.default.addObserver(
+            forName: .NSMetadataQueryDidUpdate,
+            object: query,
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleScreenshotQueryUpdate(query: query)
+        }
+        
+        query.predicate = NSPredicate(format: "kMDItemIsScreenCapture == 1")
+        query.searchScopes = [NSMetadataQueryUserHomeScope]
+        query.start()
+    }
+    
+    private func handleScreenshotQueryUpdate(query: NSMetadataQuery) {
+        query.disableUpdates()
+        
+        let results = query.results as? [NSMetadataItem] ?? []
+        for item in results {
+            guard let path = item.value(forAttribute: NSMetadataItemPathKey) as? String else { continue }
+            guard let creationDate = item.value(forAttribute: NSMetadataItemFSCreationDateKey) as? Date else { continue }
+            
+            // Only sync screenshots created after the app launched, and don't re-send the same file
+            if creationDate > observerStartDate, !sentScreenshotPaths.contains(path) {
+                // Check if user has enabled this in Preferences (defaults to false if missing)
+                let isEnabled = UserDefaults.standard.object(forKey: "autoForwardMacScreenshots") as? Bool ?? false
+                guard isEnabled else { continue }
+                
+                sentScreenshotPaths.insert(path)
+                let url = URL(fileURLWithPath: path)
+                
+                NSLog("Deskdrop: Auto-syncing Mac screenshot -> Android: \(path)")
+                Task { @MainActor in
+                    store.sendFile(url: url)
+                }
+            }
+        }
+        
+        query.enableUpdates()
     }
 }

@@ -222,6 +222,7 @@ private struct GeneralPane: View {
     @ObservedObject var virtualCamera: VirtualCameraInstaller
     @AppStorage("cr_app_theme") private var appTheme: String = "system"
     @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
+    @AppStorage("autoForwardMacScreenshots") private var autoForwardMacScreenshots: Bool = false
 
     var body: some View {
         PrefsSection(title: "Identity", icon: "person.crop.circle.fill", tint: CRTheme.accentBlue) {
@@ -241,6 +242,13 @@ private struct GeneralPane: View {
                     UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
                 }
                 .buttonStyle(CRSecondaryButtonStyle())
+            }
+        }
+
+        PrefsSection(title: "Ambient Continuity", icon: "star.fill", tint: CRTheme.accentYellow) {
+            PrefsRow(icon: "camera.viewfinder", label: "Screenshot Sync",
+                     description: "Instantly sends Mac screenshots to connected Android devices.") {
+                Toggle("", isOn: $autoForwardMacScreenshots).labelsHidden()
             }
         }
 

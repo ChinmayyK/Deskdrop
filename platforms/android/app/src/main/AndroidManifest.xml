@@ -32,6 +32,11 @@
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
+    <!-- ── SMS 2FA Auto-forwarding ────────────────────────────────── -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
     <!-- ── Phone call continuity ──────────────────────────────────── -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />

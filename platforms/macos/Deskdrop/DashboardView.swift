@@ -1243,7 +1243,9 @@ private struct CompactDeviceCard: View {
             // Icon
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandViolet], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .fill(device.name.lowercased().contains("mac") ?
+                          LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandViolet], startPoint: .topLeading, endPoint: .bottomTrailing) :
+                          LinearGradient(colors: [Color(hex: 0x059669), Color(hex: 0x34D399)], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 48, height: 48)
                 if device.name.lowercased().contains("mac") {
                     Image(systemName: "laptopcomputer")
@@ -1251,9 +1253,12 @@ private struct CompactDeviceCard: View {
                         .foregroundStyle(.white)
                 } else if let imgPath = Bundle.main.path(forResource: "AndroidLogo", ofType: "png"), let nsImg = NSImage(contentsOfFile: imgPath) {
                     Image(nsImage: nsImg)
+                        .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 24, height: 24)
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
                 } else {
                     Image(systemName: "smartphone")
                         .font(.system(size: 20))
@@ -1267,6 +1272,7 @@ private struct CompactDeviceCard: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(CRTheme.ink)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 
                 HStack(spacing: 8) {
                     HStack(spacing: 4) {
@@ -1274,6 +1280,8 @@ private struct CompactDeviceCard: View {
                         Text("Connected")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(CRTheme.accentGreen)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
                         BatteryIndicatorPill(level: battery.level, charging: battery.charging)
@@ -1289,14 +1297,37 @@ private struct CompactDeviceCard: View {
             // Actions
             HStack(spacing: 8) {
                 if device.isConnected {
+                    Button(action: {
+                        Task {
+                            try? await DeskdropIPCClient.shared.sendPushText("__DESKDROP_PING__", targetDeviceId: device.id)
+                        }
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bell.badge.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("Ping")
+                                .font(.system(size: 12, weight: .bold))
+                                .lineLimit(1)
+                        }
+                        .fixedSize(horizontal: true, vertical: true)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .foregroundStyle(CRTheme.accentBlue)
+                        .background(CRTheme.accentBlue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Ping Phone")
+                    
                     Button(action: onSendFiles) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             Image(systemName: "folder.fill")
                                 .font(.system(size: 13, weight: .semibold))
                             Text("Files")
                                 .font(.system(size: 12, weight: .bold))
+                                .lineLimit(1)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .fixedSize(horizontal: true, vertical: true)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
                         .foregroundStyle(CRTheme.brandElectric)
                         .background(CRTheme.brandElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
@@ -1304,11 +1335,17 @@ private struct CompactDeviceCard: View {
                     .help("Send Files")
                     
                     Button(action: { store.disconnect(device) }) {
-                        Image(systemName: "link.badge.minus")
-                            .font(.system(size: 13, weight: .semibold))
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .foregroundStyle(CRTheme.accentRed)
-                            .background(CRTheme.accentRed.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("Disconnect")
+                                .font(.system(size: 12, weight: .bold))
+                                .lineLimit(1)
+                        }
+                        .fixedSize(horizontal: true, vertical: true)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .foregroundStyle(CRTheme.accentRed)
+                        .background(CRTheme.accentRed.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .help("Disconnect")

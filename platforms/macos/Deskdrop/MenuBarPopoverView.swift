@@ -19,55 +19,57 @@ struct MenuBarPopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header Hero
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(store.connectedCount > 0 ? CRTheme.accentGreen.opacity(0.15) : Color.primary.opacity(0.05))
-                        .frame(width: 40, height: 40)
-                    
-                    Image(systemName: store.connectedCount > 0 ? "link.badge.plus" : "wifi.slash")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(store.connectedCount > 0 ? CRTheme.accentGreen : Color.secondary)
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(store.statusLine)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(1)
-                    
-                    if let status = store.dashboardStatus, let sync = status.lastSyncAt {
-                        Text("Last sync: \(sync.relativeTimeString())")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.secondary)
-                    } else {
-                        Text(store.connectedCount > 0 ? "Mesh Active" : "No devices connected")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.secondary)
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(store.connectedCount > 0 ? CRTheme.accentGreen.opacity(0.15) : Color.primary.opacity(0.05))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: store.connectedCount > 0 ? "link.badge.plus" : "wifi.slash")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(store.connectedCount > 0 ? CRTheme.accentGreen : Color.secondary)
                     }
-                }
-                
-                Spacer()
-                
-                Button(action: { onAction(.diagnostics) }) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.secondary.opacity(0.7))
-                        .frame(width: 28, height: 28)
-                        .background(Color.primary.opacity(0.05), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .crHoverScale()
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(store.statusLine)
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(1)
+                        
+                        if let status = store.dashboardStatus, let sync = status.lastSyncAt {
+                            Text("Last sync: \(sync.relativeTimeString())")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color.secondary)
+                        } else {
+                            Text(store.connectedCount > 0 ? "Mesh Active" : "No devices connected")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: { onAction(.diagnostics) }) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .frame(width: 28, height: 28)
+                            .background(Color.primary.opacity(0.05), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .crHoverScale()
 
-                Button(action: { onAction(.quit) }) {
-                    Image(systemName: "power")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.secondary.opacity(0.7))
-                        .frame(width: 28, height: 28)
-                        .background(Color.primary.opacity(0.05), in: Circle())
+                    Button(action: { onAction(.quit) }) {
+                        Image(systemName: "power")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .frame(width: 28, height: 28)
+                            .background(Color.primary.opacity(0.05), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .crHoverScale()
                 }
-                .buttonStyle(.plain)
-                .crHoverScale()
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)

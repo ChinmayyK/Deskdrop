@@ -226,7 +226,7 @@ final class DeskdropStore: ObservableObject {
 
     private func schedulePollTick() {
         pollTimer?.invalidate()
-        let interval: TimeInterval = connectedCount > 0 ? 0.25 : 1.0
+        let interval: TimeInterval = connectedCount > 0 ? 1.5 : 3.0
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.refresh()

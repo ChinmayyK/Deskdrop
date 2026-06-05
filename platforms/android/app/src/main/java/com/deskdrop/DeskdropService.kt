@@ -448,6 +448,71 @@ class DeskdropService : Service() {
         getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
     }
 
+    private val smsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != android.provider.Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+
+            // Check settings first
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("auto_forward_sms", false)) return
+
+            val h = engineHandle
+            if (h == 0L || !hasConnectedPeers()) return
+
+            val msgs = android.provider.Telephony.Sms.Intents.getMessagesFromIntent(intent)
+            for (msg in msgs) {
+                val body = msg.messageBody
+                val codeMatch = Regex("\\b\\d{4,8}\\b").find(body ?: "")
+                if (codeMatch != null) {
+                    DeskdropJni.pushText(h, codeMatch.value)
+                    Log.i(TAG, "Pushed 2FA code: ${codeMatch.value}")
+                    break
+                }
+            }
+        }
+    }
+
+    private val screenshotObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean, uri: android.net.Uri?) {
+            super.onChange(selfChange, uri)
+            val h = engineHandle
+            
+            // Check settings first
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            if (!prefs.getBoolean("auto_forward_screenshots", false)) return
+
+            if (h == 0L || !hasConnectedPeers()) return
+
+            try {
+                // Always query the main URI and sort by date
+                val cursor = contentResolver.query(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(android.provider.MediaStore.Images.Media.DATA),
+                    null, null,
+                    android.provider.MediaStore.Images.Media.DATE_ADDED + " DESC"
+                )
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val dataIndex = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DATA)
+                        val path = it.getString(dataIndex)
+                        if (path.contains("Screenshot", ignoreCase = true)) {
+                            // Check if it's new
+                            val file = java.io.File(path)
+                            if (file.exists() && System.currentTimeMillis() - file.lastModified() < 10000) {
+                                // It's a recent screenshot! Read the file and push it.
+                                val bytes = file.readBytes()
+                                DeskdropJni.pushImage(h, "image/png", bytes)
+                                Log.i(TAG, "Pushed new screenshot: $path")
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to observe screenshot", e)
+            }
+        }
+    }
+
     // Cached prefs (reloaded on relevant changes)
     private fun prefs() = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
     private fun isSyncEnabled()           = prefs().getBoolean("sync_enabled", true)
@@ -470,6 +535,18 @@ class DeskdropService : Service() {
         super.onCreate()
         createNotificationChannels()
         registerPairingReceiver()
+        
+        // Register SMS receiver
+        val filter = IntentFilter(android.provider.Telephony.Sms.Intents.SMS_RECEIVED_ACTION)
+        registerReceiver(smsReceiver, filter)
+
+        // Register screenshot observer
+        contentResolver.registerContentObserver(
+            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            true,
+            screenshotObserver
+        )
+        
         setServiceRunning(true)
     }
 
@@ -804,6 +881,12 @@ class DeskdropService : Service() {
         setServiceRunning(false)
         persistStatus()
         unregisterPairingReceiver()
+        
+        try { unregisterReceiver(smsReceiver) } catch (e: Exception) {}
+        try { contentResolver.unregisterContentObserver(screenshotObserver) } catch (e: Exception) {}
+        pingPlayer?.release()
+        pingPlayer = null
+        
         super.onDestroy()
     }
 
@@ -936,6 +1019,10 @@ class DeskdropService : Service() {
             // ── Clipboard text — AUTO-APPLIED (legacy or auto-apply enabled) ─
             DeskdropJni.CR_EVENT_CLIPBOARD_TEXT -> {
                 val text = DeskdropJni.eventText(ev) ?: return
+                if (text == "__DESKDROP_PING__") {
+                    pingPhone()
+                    return
+                }
                 val from = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
@@ -954,6 +1041,10 @@ class DeskdropService : Service() {
             // ── Clipboard text — TIMELINE-FIRST (available, not auto-applied) ─
             DeskdropJni.CR_EVENT_CLIPBOARD_AVAILABLE -> {
                 val text = DeskdropJni.eventText(ev) ?: return
+                if (text == "__DESKDROP_PING__") {
+                    pingPhone()
+                    return
+                }
                 val from = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
@@ -2409,6 +2500,41 @@ class DeskdropService : Service() {
         }
     }
 
+    // ── Ping Phone ──────────────────────────────────────────────────────────
+
+    private fun pingPhone() {
+        Log.i(TAG, "PING received! Ringing phone loudly...")
+        try {
+            val uri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+            pingPlayer?.release()
+            pingPlayer = android.media.MediaPlayer().apply {
+                setDataSource(applicationContext, uri)
+                setAudioStreamType(android.media.AudioManager.STREAM_ALARM)
+                isLooping = true
+                prepare()
+                start()
+            }
+            
+            // Turn up volume to max
+            val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            audioManager.setStreamVolume(
+                android.media.AudioManager.STREAM_ALARM,
+                audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM),
+                0
+            )
+            
+            // Stop after 5 seconds
+            handler.postDelayed({
+                pingPlayer?.stop()
+                pingPlayer?.release()
+                pingPlayer = null
+            }, 5000)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to ring phone", e)
+        }
+    }
+
     private fun processNextNsdResolve() {
         if (!isResolvingNsd.compareAndSet(false, true)) return
         val info = pendingNsdResolves.poll()
@@ -2835,9 +2961,11 @@ class DeskdropService : Service() {
 
     // ── Status persistence ────────────────────────────────────────────────────
 
-    // Per-peer last-sync timestamps — written when a clipboard event arrives from each peer.
-    // Key: "last_sync_<peerName>", Value: System.currentTimeMillis() as String.
+    // Track last-sync time for connected peers
     private val peerLastSync = mutableMapOf<String, Long>()
+
+    // For Ping Phone functionality
+    private var pingPlayer: android.media.MediaPlayer? = null
 
     private fun currentPeerSnapshots(): List<PeerSnapshot> {
         val raw = if (engineHandle != 0L) {

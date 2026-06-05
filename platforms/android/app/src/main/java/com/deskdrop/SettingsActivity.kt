@@ -25,6 +25,8 @@ class SettingsActivity : ComponentActivity() {
     private val syncFiles = mutableStateOf(true)
     private val callContinuityEnabled = mutableStateOf(false)
     private val notificationMirroringEnabled = mutableStateOf(false)
+    private val autoForwardSms = mutableStateOf(true)
+    private val autoForwardScreenshots = mutableStateOf(true)
     private val isDarkMode = mutableStateOf(false)
     private val peers = mutableStateOf(emptyList<PeerSnapshot>())
 
@@ -54,6 +56,8 @@ class SettingsActivity : ComponentActivity() {
                     syncFiles = syncFiles.value,
                     callContinuityEnabled = callContinuityEnabled.value,
                     notificationMirroringEnabled = notificationMirroringEnabled.value,
+                    autoForwardSms = autoForwardSms.value,
+                    autoForwardScreenshots = autoForwardScreenshots.value,
                     isDarkMode = isDarkMode.value,
                     peers = peers.value,
                     onSyncEnabledChange = {
@@ -85,6 +89,16 @@ class SettingsActivity : ComponentActivity() {
                         if (it) {
                             requestNotificationListenerPermission()
                         }
+                    },
+                    onAutoForwardSmsChange = {
+                        autoForwardSms.value = it
+                        saveBooleanPref("auto_forward_sms", it)
+                        if (it) requestSmsPermission()
+                    },
+                    onAutoForwardScreenshotsChange = {
+                        autoForwardScreenshots.value = it
+                        saveBooleanPref("auto_forward_screenshots", it)
+                        if (it) requestMediaPermissions()
                     },
                     onDarkModeChange = {
                         isDarkMode.value = it
@@ -121,6 +135,8 @@ class SettingsActivity : ComponentActivity() {
         syncFiles.value = prefs.getBoolean("sync_files", true)
         callContinuityEnabled.value = prefs.getBoolean("call_continuity_enabled", false)
         notificationMirroringEnabled.value = prefs.getBoolean("notification_mirroring", false)
+        autoForwardSms.value = prefs.getBoolean("auto_forward_sms", false)
+        autoForwardScreenshots.value = prefs.getBoolean("auto_forward_screenshots", false)
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
         peers.value = prefs.peerSnapshots()
     }
@@ -223,6 +239,33 @@ class SettingsActivity : ComponentActivity() {
         if (!hasPermission) {
             Toast.makeText(this, "Please allow Deskdrop to read notifications", Toast.LENGTH_LONG).show()
             startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+        }
+    }
+
+    private fun requestSmsPermission() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECEIVE_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECEIVE_SMS), 1003)
+        }
+    }
+
+    private fun requestMediaPermissions() {
+        val needed = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += android.Manifest.permission.READ_MEDIA_IMAGES
+            }
+            if (Build.VERSION.SDK_INT >= 34) {
+                if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    needed += android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+                }
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += android.Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+        }
+        if (needed.isNotEmpty()) {
+            requestPermissions(needed.toTypedArray(), 1004)
         }
     }
 

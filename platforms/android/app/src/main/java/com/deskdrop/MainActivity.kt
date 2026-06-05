@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         super.onCreate(savedInstanceState)
-        requestNotificationPermission()
+        requestRuntimePermissions()
         requestBatteryOptimizationExemption()
 
         setContent {
@@ -456,7 +456,7 @@ class MainActivity : ComponentActivity() {
             Intent(this, DeskdropService::class.java).apply { this.action = action })
     }
 
-    private fun requestNotificationPermission() {
+    private fun requestRuntimePermissions() {
         val needed = mutableListOf<String>()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

@@ -449,12 +449,16 @@ struct EngineShared {
     active_call: Arc<Mutex<Option<ActiveCallState>>>,
     /// Per-peer battery levels (F20). Keyed by device UUID.
     peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
+    /// Cache of local battery state to push to newly connected peers.
+    local_battery: Arc<Mutex<Option<(u8, bool)>>>,
+    /// Cache of local network state to push to newly connected peers.
+    local_network: Arc<Mutex<Option<String>>>,
     /// Per-peer network status. Keyed by device UUID.
     peer_networks: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerNetworkState>>>,
     /// Per-peer latest camera frame (to prevent MPSC channel OOM).
     pub camera_frames: Arc<Mutex<std::collections::HashMap<uuid::Uuid, Vec<u8>>>>,
     /// Rate limit for pairing UI spam from untrusted peers.
-    pub last_pairing_prompt: Arc<Mutex<Option<std::time::Instant>>>,
+
     /// Throttle for inbound clipboard pushes.
     pub throttle: crate::throttle::Throttle,
     /// Cross-device duplicate prevention (mesh echo suppression).
@@ -542,9 +546,11 @@ impl Engine {
             feedback: Arc::new(Mutex::new(crate::engine_support::FeedbackLog::new(200))),
             active_call: Arc::new(Mutex::new(None)),
             peer_batteries: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            local_battery: Arc::new(Mutex::new(None)),
+            local_network: Arc::new(Mutex::new(None)),
             peer_networks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             camera_frames: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            last_pairing_prompt: Arc::new(Mutex::new(None)),
+
             throttle: crate::throttle::Throttle::default_rate(),
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
@@ -809,6 +815,7 @@ impl Engine {
 
     /// Push this device's battery status to all connected trusted peers.
     pub async fn push_battery_status(&self, level: u8, charging: bool) {
+        *self.shared.local_battery.lock().await = Some((level, charging));
         let msg = AppMessage::BatteryStatus {
             level,
             charging,
@@ -826,6 +833,7 @@ impl Engine {
 
     /// Push this device's network status to all connected trusted peers.
     pub async fn push_network_status(&self, network_type: String) {
+        *self.shared.local_network.lock().await = Some(network_type.clone());
         let msg = AppMessage::NetworkStatus {
             network_type,
             origin_device: self.shared.config.device_id,
@@ -1304,7 +1312,7 @@ impl Engine {
 
         // Broadcast to all active connected peers
         let peers = self.shared.peer_manager.active_senders();
-        for (peer_id, tx) in peers {
+        for (_peer_id, tx) in peers {
             let _ = tx
                 .send(crate::protocol::AppMessage::KeyRotated {
                     new_pubkey_bytes: new_key,
@@ -2199,6 +2207,35 @@ impl Engine {
         if changed.is_some() {
             self.shared.peer_manager.update_trust(device_id, true)?;
             let _ = self.shared.peer_manager.set_auto_connect(device_id, true);
+            
+            // Push local battery and network status to the newly trusted peer.
+            let mut target_tx: Option<tokio::sync::mpsc::Sender<crate::protocol::AppMessage>> = None;
+            for (id, tx) in self.shared.peer_manager.active_senders() {
+                if id == device_id {
+                    target_tx = Some(tx);
+                    break;
+                }
+            }
+            if let Some(tx) = target_tx {
+                let sh = self.shared.clone();
+                tokio::spawn(async move {
+                    if let Some((level, charging)) = *sh.local_battery.lock().await {
+                        let _ = tx.send(AppMessage::BatteryStatus {
+                            level,
+                            charging,
+                            origin_device: sh.config.device_id,
+                            origin_device_name: sh.config.device_name.clone(),
+                        }).await;
+                    }
+                    if let Some(net) = sh.local_network.lock().await.clone() {
+                        let _ = tx.send(AppMessage::NetworkStatus {
+                            network_type: net,
+                            origin_device: sh.config.device_id,
+                            origin_device_name: sh.config.device_name.clone(),
+                        }).await;
+                    }
+                });
+            }
         }
         Ok(())
     }
@@ -3076,7 +3113,7 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         hs.peer_device_id,
         hs.peer_device_name.clone(),
         hs.peer_identity_pubkey_bytes,
-        hs.pin,
+        &hs.pin,
     )
     .await?;
 
@@ -3087,6 +3124,10 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         trusted,
         DiscoverySource::Mdns,
     )?;
+
+    if !trusted {
+        let _ = shared.peer_manager.set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
+    }
 
     register_session(
         shared,
@@ -3243,7 +3284,7 @@ async fn connect_once(
         hs.peer_device_id,
         hs.peer_device_name.clone(),
         hs.peer_identity_pubkey_bytes,
-        hs.pin,
+        &hs.pin,
     )
     .await?;
 
@@ -3264,6 +3305,10 @@ async fn connect_once(
         discovery,
     )?;
 
+    if !trusted {
+        let _ = shared.peer_manager.set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
+    }
+
     register_session(
         shared,
         stream,
@@ -3281,7 +3326,7 @@ async fn observe_trust(
     device_id: Uuid,
     device_name: String,
     identity_pubkey: [u8; 32],
-    pin: crate::pairing::PairingPin,
+    _pin: &crate::pairing::PairingPin,
 ) -> Result<bool> {
     let record = {
         let mut trust = shared.trust.lock().await;
@@ -3299,20 +3344,6 @@ async fn observe_trust(
         }
         TrustState::Untrusted => {
             shared.peer_manager.update_trust(device_id, false)?;
-
-            // Rate-limit pairing prompts to max 1 per 5 seconds to prevent UI spam attacks.
-            let now = std::time::Instant::now();
-            let mut last_prompt = shared.last_pairing_prompt.lock().await;
-            if let Some(last) = *last_prompt {
-                if now.duration_since(last).as_secs() < 5 {
-                    return Ok(false);
-                }
-            }
-            *last_prompt = Some(now);
-
-            let _ = shared
-                .peer_manager
-                .set_pairing_pin(device_id, Some(pin.display()));
 
             // We NO LONGER emit PairingRequested or OutgoingPairingWaiting here.
             // Eager TCP connections should be silent.
@@ -3380,6 +3411,29 @@ fn register_session(
         let name = peer_name.clone();
         tokio::spawn(async move {
             feed.lock().await.record_peer_connected(peer_id, name);
+        });
+    }
+
+    // Push local battery and network status to the newly connected peer if trusted.
+    if trusted {
+        let outbox = outbox_tx.clone();
+        let sh = shared.clone();
+        tokio::spawn(async move {
+            if let Some((level, charging)) = *sh.local_battery.lock().await {
+                let _ = outbox.send(AppMessage::BatteryStatus {
+                    level,
+                    charging,
+                    origin_device: sh.config.device_id,
+                    origin_device_name: sh.config.device_name.clone(),
+                }).await;
+            }
+            if let Some(net) = sh.local_network.lock().await.clone() {
+                let _ = outbox.send(AppMessage::NetworkStatus {
+                    network_type: net,
+                    origin_device: sh.config.device_id,
+                    origin_device_name: sh.config.device_name.clone(),
+                }).await;
+            }
         });
     }
 
@@ -4524,6 +4578,7 @@ fn register_session(
                         origin_device_name,
                     }) => {
                         touch_last_seen();
+                        tracing::info!("Received BatteryStatus: level={}, charging={} from {}", level, charging, origin_device);
                         // MED-03 FIX: Only process battery status from trusted peers.
                         if !shared
                             .peer_manager
@@ -4531,6 +4586,7 @@ fn register_session(
                             .map(|p| p.trusted)
                             .unwrap_or(false)
                         {
+                            tracing::warn!("Ignoring BatteryStatus from untrusted peer {}", peer_id);
                             continue;
                         }
                         // Persist in shared state for IPC status polling.

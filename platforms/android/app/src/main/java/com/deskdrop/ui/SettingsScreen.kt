@@ -64,6 +64,8 @@ fun SettingsScreen(
     syncFiles: Boolean,
     callContinuityEnabled: Boolean,
     notificationMirroringEnabled: Boolean,
+    autoForwardSms: Boolean,
+    autoForwardScreenshots: Boolean,
     isDarkMode: Boolean,
     peers: List<com.deskdrop.PeerSnapshot>,
     onSyncEnabledChange: (Boolean) -> Unit,
@@ -72,6 +74,8 @@ fun SettingsScreen(
     onSyncFilesChange: (Boolean) -> Unit,
     onCallContinuityChange: (Boolean) -> Unit,
     onNotificationMirroringChange: (Boolean) -> Unit,
+    onAutoForwardSmsChange: (Boolean) -> Unit,
+    onAutoForwardScreenshotsChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     onRenameClicked: () -> Unit,
     onBatterySettingsClicked: () -> Unit,
@@ -283,11 +287,29 @@ fun SettingsScreen(
                 item {
                     SettingsSection(
                         isDark = isDarkMode,
-                        title = "Features",
+                        title = "Ambient Continuity",
                         accentColor = CRTheme.statusAmber,
                         icon = Icons.Rounded.Star
                     ) {
                         Column {
+                            SettingsSwitchRow(
+                                isDark = isDarkMode,
+                                icon = Icons.Rounded.Message,
+                                title = "Auto-forward SMS 2FA",
+                                subtitle = "Automatically copies 2FA codes to Mac clipboard",
+                                checked = autoForwardSms,
+                                onCheckedChange = onAutoForwardSmsChange
+                            )
+                            HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                            SettingsSwitchRow(
+                                isDark = isDarkMode,
+                                icon = Icons.Rounded.CameraAlt,
+                                title = "Screenshot Sync",
+                                subtitle = "Instantly sends Android screenshots to your Mac",
+                                checked = autoForwardScreenshots,
+                                onCheckedChange = onAutoForwardScreenshotsChange
+                            )
+                            HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
                             SettingsSwitchRow(
                                 isDark = isDarkMode,
                                 icon = Icons.Rounded.Phone,
