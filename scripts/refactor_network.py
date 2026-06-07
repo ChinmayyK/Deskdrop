@@ -112,3 +112,4 @@ content = content.replace(recv_encrypted_old, recv_encrypted_new)
 
 with open("deskdrop-core/src/network.rs", "w") as f:
     f.write(content)
+
