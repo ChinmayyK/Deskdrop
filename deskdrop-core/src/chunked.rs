@@ -156,9 +156,9 @@ impl Reassembler {
                 // Fix 8: Reject absurd transfer announcements before allocating
                 // any state.  A malicious peer can announce total_bytes=u64::MAX
                 // and total_chunks=u32::MAX to tie up in-flight slots indefinitely.
-                // We cap at MAX_FILE_BYTES (512 MB) and MAX_CHUNKS_ALLOWED (8 192).
-                const MAX_ANNOUNCED_BYTES: u64 = crate::protocol::MAX_FILE_BYTES as u64;
-                const MAX_CHUNKS_ALLOWED: u32 = 4_096; // 4 096 × 512 KB = 2 GB
+                // We cap at MAX_FILE_BYTES and MAX_CHUNKS_ALLOWED.
+                const MAX_ANNOUNCED_BYTES: u64 = crate::protocol::MAX_FILE_BYTES;
+                const MAX_CHUNKS_ALLOWED: u32 = (crate::protocol::MAX_FILE_BYTES / CHUNK_SIZE as u64) as u32;
                 anyhow::ensure!(
                     total_bytes <= MAX_ANNOUNCED_BYTES,
                     "transfer announces {} bytes which exceeds the {} byte cap",
@@ -278,7 +278,7 @@ impl Reassembler {
                         let s = String::from_utf8(buf).context("chunk text not UTF-8")?;
                         ClipboardContent::Text(s)
                     }
-                    ChunkKind::Image { mime } => ClipboardContent::Image { mime, data: buf },
+                    ChunkKind::Image { mime } => ClipboardContent::Image { mime, data: buf, extracted_text: None },
                     ChunkKind::File { name } => ClipboardContent::File { name, data: buf },
                 };
 

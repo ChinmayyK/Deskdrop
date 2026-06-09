@@ -141,7 +141,7 @@ pub unsafe extern "C" fn deskdrop_push_image(
     let h = &*handle;
     runtime().block_on(
         h.engine
-            .push_clipboard(ClipboardContent::Image { mime, data: bytes }),
+            .push_clipboard(ClipboardContent::Image { mime, data: bytes, extracted_text: None }),
     ) as c_int
 }
 

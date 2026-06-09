@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 pub const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024; // 4 MB
 pub const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024; // 32 MB
-pub const MAX_FILE_BYTES: usize = 2 * 1024 * 1024 * 1024; // 2 GB (chunked / file-backed)
+pub const MAX_FILE_BYTES: u64 = 250 * 1024 * 1024 * 1024; // 250 GB (chunked / file-backed)
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ClipboardContent {
@@ -17,6 +17,8 @@ pub enum ClipboardContent {
     Image {
         mime: String,
         data: Vec<u8>,
+        #[serde(default)]
+        extracted_text: Option<String>,
     },
     /// File payload — delivered as clipboard and also saved to Downloads/Deskdrop.
     File {
@@ -88,7 +90,7 @@ impl ClipboardContent {
                     format!("{}…", &first[..end])
                 }
             }
-            ClipboardContent::Image { mime, data } => {
+            ClipboardContent::Image { mime, data, .. } => {
                 let kb = data.len() as f64 / 1024.0;
                 if kb >= 1024.0 {
                     format!("[Image {} {:.1} MB]", mime, kb / 1024.0)
@@ -199,6 +201,10 @@ pub struct FileTransferMetadata {
     pub mime_type: String,
     /// SHA-256 checksum of the complete file (hex-encoded).
     pub sha256_checksum: String,
+    #[serde(default)]
+    pub is_directory: bool,
+    #[serde(default)]
+    pub file_count: u32,
 }
 
 // ── Wire messages ─────────────────────────────────────────────────────────────
@@ -310,6 +316,27 @@ pub enum AppMessage {
     FileTransferResume {
         transfer_id: [u8; 16],
     },
+    FileTransferPaused {
+        transfer_id: [u8; 16],
+    },
+    FileTransferResumed {
+        transfer_id: [u8; 16],
+    },
+
+    // ── Media & Audio ──────────────────────────────────────────────────────────
+    MediaControl {
+        action: MediaAction,
+    },
+    AudioStreamStart {
+        sample_rate: u32,
+        channels: u16,
+        format: String,
+    },
+    AudioStreamChunk {
+        data: Vec<u8>,
+    },
+    AudioStreamStop,
+
     /// Phone call state propagated from an Android device to connected peers.
     /// Enables call continuity: ringing/offhook/idle states are relayed so
     /// macOS (or other peers) can show an incoming-call banner and trigger
@@ -387,7 +414,24 @@ pub enum AppMessage {
         origin_device: Uuid,
         data: Vec<u8>,
     },
+    NowPlaying {
+        title: String,
+        artist: String,
+        album: String,
+        status: String,
+        origin_device: Uuid,
+    },
     Bye,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MediaAction {
+    PlayPause,
+    Next,
+    Previous,
+    VolumeUp,
+    VolumeDown,
+    Mute,
 }
 
 // ── mDNS / defaults ──────────────────────────────────────────────────────────

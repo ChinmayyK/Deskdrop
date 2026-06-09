@@ -141,7 +141,7 @@ impl HistoryEntry {
                     full_text,
                 }
             }
-            ClipboardContent::Image { mime, data } => HistoryPayload::Image {
+            ClipboardContent::Image { mime, data, .. } => HistoryPayload::Image {
                 mime: mime.clone(),
                 bytes: data.len() as u64,
             },

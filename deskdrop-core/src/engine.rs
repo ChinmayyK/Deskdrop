@@ -17,6 +17,8 @@ use crate::retry::Backoff;
 use crate::settings::{default_peer_store_path, default_trust_store_path, Settings};
 use crate::trust::{TrustRecord, TrustState, TrustStore};
 use anyhow::{anyhow, Context, Result};
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+use nowhear::MediaSource;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -455,8 +457,9 @@ struct EngineShared {
     local_network: Arc<Mutex<Option<String>>>,
     /// Per-peer network status. Keyed by device UUID.
     peer_networks: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerNetworkState>>>,
-    /// Per-peer latest camera frame (to prevent MPSC channel OOM).
     pub camera_frames: Arc<Mutex<std::collections::HashMap<uuid::Uuid, Vec<u8>>>>,
+    /// Active audio relay senders (for stopping).
+    pub audio_relays: Arc<Mutex<std::collections::HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<()>>>>,
     /// Rate limit for pairing UI spam from untrusted peers.
 
     /// Throttle for inbound clipboard pushes.
@@ -550,6 +553,7 @@ impl Engine {
             local_network: Arc::new(Mutex::new(None)),
             peer_networks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             camera_frames: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            audio_relays: Arc::new(Mutex::new(std::collections::HashMap::new())),
 
             throttle: crate::throttle::Throttle::default_rate(),
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
@@ -598,6 +602,8 @@ impl Engine {
         // Spawn UDP broadcast beacon and listener for resilient discovery
         engine.spawn_udp_beacon();
         engine.spawn_udp_listener();
+
+        engine.spawn_now_playing_broadcaster();
 
         Ok(engine)
     }
@@ -745,6 +751,83 @@ impl Engine {
         });
     }
 
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    fn spawn_now_playing_broadcaster(&self) {
+        let shared = self.shared.clone();
+        tokio::spawn(async move {
+            let source = match nowhear::MediaSourceBuilder::new().build().await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!("Failed to build nowhear media source: {}", e);
+                    return;
+                }
+            };
+            
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
+            let mut last_title = String::new();
+            let mut last_status = String::new();
+            
+            loop {
+                interval.tick().await;
+                
+                if let Ok(players) = source.list_players().await {
+                    let mut found_active = false;
+                    for p in players {
+                        if let Ok(info) = source.get_player(&p).await {
+                            if info.playback_state == nowhear::PlaybackState::Playing {
+                                if let Some(track) = info.current_track {
+                                    let title = track.title.clone();
+                                    let artist = track.artist.join(", ");
+                                    let album = track.album.unwrap_or_default();
+                                    let status = "playing".to_string();
+                                    
+                                    if title != last_title || status != last_status {
+                                        last_title = title.clone();
+                                        last_status = status.clone();
+                                        
+                                        let msg = crate::protocol::AppMessage::NowPlaying {
+                                            title,
+                                            artist,
+                                            album,
+                                            status,
+                                            origin_device: shared.config.device_id,
+                                        };
+                                        
+                                        let peers = shared.peer_manager.all_connected_senders();
+                                        for (_, tx) in peers {
+                                            let _ = tx.send(msg.clone()).await;
+                                        }
+                                    }
+                                    found_active = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if !found_active && last_status == "playing" {
+                        last_status = "stopped".to_string();
+                        let msg = crate::protocol::AppMessage::NowPlaying {
+                            title: last_title.clone(),
+                            artist: "".to_string(),
+                            album: "".to_string(),
+                            status: "stopped".to_string(),
+                            origin_device: shared.config.device_id,
+                        };
+                        let peers = shared.peer_manager.all_connected_senders();
+                        for (_, tx) in peers {
+                            let _ = tx.send(msg.clone()).await;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    fn spawn_now_playing_broadcaster(&self) {}
+
+
     // ── Call Continuity ───────────────────────────────────────────────────────
 
     /// Push a phone call state change to all connected, trusted peers.
@@ -809,6 +892,78 @@ impl Engine {
     /// Returns None when no call is in progress.
     pub async fn active_call(&self) -> Option<ActiveCallState> {
         self.shared.active_call.lock().await.clone()
+    }
+
+    // ── Media & Audio ─────────────────────────────────────────────────────────
+
+    pub async fn send_media_control(&self, target_device: Uuid, action: crate::protocol::MediaAction) {
+        let msg = AppMessage::MediaControl { action };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        for (peer_id, tx) in peers {
+            if peer_id == target_device {
+                let _ = tx.send(msg.clone()).await;
+                break;
+            }
+        }
+    }
+
+    pub async fn start_audio_relay(&self, target_device: Uuid) {
+        tracing::info!("start_audio_relay for {}", target_device);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+        let (format_tx, format_rx) = tokio::sync::oneshot::channel();
+        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+
+        // Keep stop_tx alive locally or store it. For now, we'll store it globally per target_device.
+        // Actually, we can store it in self.shared. We need to add it to shared state if we want to stop it later.
+        // But let's just make start_audio_relay replace any existing stream.
+        let mut streams = self.shared.audio_relays.lock().await;
+        if let Some(old) = streams.remove(&target_device) {
+            let _ = old.send(());
+        }
+        streams.insert(target_device, stop_tx);
+
+        let peers = self.shared.peer_manager.all_connected_senders();
+        let peer_tx = match peers.into_iter().find(|(id, _)| *id == target_device) {
+            Some((_, tx)) => tx,
+            None => {
+                tracing::warn!("Target device {} not connected", target_device);
+                return;
+            }
+        };
+
+        crate::audio_relay::spawn_capture(tx, format_tx, stop_rx);
+
+        tokio::spawn(async move {
+            if let Ok((sample_rate, channels)) = format_rx.await {
+                // Announce start
+                let _ = peer_tx.send(crate::protocol::AppMessage::AudioStreamStart {
+                    sample_rate,
+                    channels,
+                    format: "f32le".into(),
+                }).await;
+
+                // Forward chunks
+                while let Some(data) = rx.recv().await {
+                    if peer_tx.send(crate::protocol::AppMessage::AudioStreamChunk { data }).await.is_err() {
+                        break; // Connection closed
+                    }
+                }
+            }
+        });
+    }
+
+    pub async fn stop_audio_relay(&self) {
+        tracing::info!("stop_audio_relay");
+        let mut streams = self.shared.audio_relays.lock().await;
+        for (_, stop_tx) in streams.drain() {
+            let _ = stop_tx.send(());
+        }
+
+        let msg = crate::protocol::AppMessage::AudioStreamStop;
+        let peers = self.shared.peer_manager.all_connected_senders();
+        for (_, tx) in peers {
+            let _ = tx.send(msg.clone()).await;
+        }
     }
 
     // ── F20: Battery synchronization ──────────────────────────────────────────
@@ -3502,6 +3657,8 @@ fn register_session(
             let shared = rx_shared;
             let peer_name = rx_peer_name;
             let peer_id = rx_peer_id;
+            let mut audio_playback_tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>> = None;
+            let mut audio_playback_stop_tx: Option<tokio::sync::oneshot::Sender<()>> = None;
             loop {
                 let result = sess_rx.recv().await;
                 match result {
@@ -3611,15 +3768,26 @@ fn register_session(
                                             hash_hex.clone(),
                                             relay_path.clone(),
                                         ),
-                                    ClipboardContent::Image { mime, data } => feed
-                                        .record_remote_clipboard_image(
+                                    ClipboardContent::Image { mime, data, extracted_text } => {
+                                        if let Some(text) = extracted_text {
+                                            feed.record_remote_clipboard_text(
+                                                origin_device,
+                                                display_name.clone(),
+                                                text,
+                                                format!("{}_text", hash_hex),
+                                                relay_path.clone(),
+                                            );
+                                            shared.clipboard_store.lock().await.insert(format!("{}_text", hash_hex), text.clone());
+                                        }
+                                        feed.record_remote_clipboard_image(
                                             origin_device,
                                             display_name.clone(),
                                             mime,
                                             data.len() as u64,
                                             hash_hex.clone(),
                                             relay_path.clone(),
-                                        ),
+                                        )
+                                    }
                                     ClipboardContent::File { name, data } => feed
                                         .record_file_transfer_started(
                                             origin_device,
@@ -4790,6 +4958,38 @@ fn register_session(
                     }
                     Ok(AppMessage::Hello { .. }) | Ok(AppMessage::HelloAck { .. }) => {
                         // Ignored in session loop
+                    }
+                    Ok(AppMessage::FileTransferPaused { .. }) | Ok(AppMessage::FileTransferResumed { .. }) => {
+                        // Ignored or informational
+                    }
+                    Ok(AppMessage::MediaControl { action }) => {
+                        if let Err(e) = crate::media::dispatch_media_action(action) {
+                            tracing::error!("Media control failed: {}", e);
+                        }
+                    }
+                    Ok(AppMessage::AudioStreamStart { sample_rate, channels, .. }) => {
+                        tracing::info!("Starting audio playback from peer {}", peer_id);
+                        let (tx, rx) = tokio::sync::mpsc::channel(100);
+                        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+                        audio_playback_tx = Some(tx);
+                        audio_playback_stop_tx = Some(stop_tx);
+                        crate::audio_relay::spawn_playback(rx, sample_rate, channels, stop_rx);
+                    }
+                    Ok(AppMessage::AudioStreamChunk { data }) => {
+                        if let Some(tx) = &audio_playback_tx {
+                            let _ = tx.try_send(data);
+                        }
+                    }
+                    Ok(AppMessage::AudioStreamStop) => {
+                        tracing::info!("Stopping audio playback from peer {}", peer_id);
+                        audio_playback_tx = None;
+                        if let Some(stop) = audio_playback_stop_tx.take() {
+                            let _ = stop.send(());
+                        }
+                    }
+                    Ok(AppMessage::NowPlaying { title, artist, status, .. }) => {
+                        tracing::info!("Now Playing on {}: {} - {} ({})", peer_name, title, artist, status);
+                        // Forward to UI
                     }
                     Err(err) => {
                         break err.to_string();

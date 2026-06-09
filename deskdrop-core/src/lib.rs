@@ -29,6 +29,7 @@
 //! ```
 
 pub mod activity;
+pub mod audio_relay;
 pub mod chunked;
 pub mod compress;
 pub mod crypto;
@@ -44,6 +45,7 @@ pub mod history;
 pub mod hotspot_probe;
 pub mod identity;
 pub mod ipc;
+pub mod media;
 pub mod mesh;
 pub mod metrics;
 pub mod network;

@@ -39,9 +39,9 @@ use uuid::Uuid;
 pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks saturate
                                                     // encrypt/serialize/frame/flush overhead.
 
-/// HIGH-03 FIX: Maximum transfer size (4 GB). Rejects announced transfers
+/// HIGH-03 FIX: Maximum transfer size (250 GB). Rejects announced transfers
 /// exceeding this limit to prevent disk-bomb attacks via pre-allocation.
-pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+pub const MAX_TRANSFER_BYTES: u64 = 250 * 1024 * 1024 * 1024;
 pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16; // ACK every 16 MB — keeps the pipeline full
                                              // on LAN while still bounding in-flight data.
 
@@ -129,6 +129,7 @@ pub struct OutboundTransfer {
     pub last_active_at: Instant,
     pub target_device: Option<Uuid>,
     pub paused: bool,
+    pub source_is_temp_tar: bool,
 }
 
 impl OutboundTransfer {
@@ -149,6 +150,7 @@ impl OutboundTransfer {
             last_active_at: Instant::now(),
             target_device,
             paused: false,
+            source_is_temp_tar: false,
         }
     }
 
@@ -170,6 +172,7 @@ impl OutboundTransfer {
             last_active_at: Instant::now(),
             target_device,
             paused: false,
+            source_is_temp_tar: false,
         })
     }
 
@@ -223,6 +226,16 @@ impl OutboundTransfer {
 
     pub fn is_all_sent(&self) -> bool {
         self.next_chunk >= self.total_chunks
+    }
+}
+
+impl Drop for OutboundTransfer {
+    fn drop(&mut self) {
+        if self.source_is_temp_tar {
+            if let OutboundSource::FilePath(ref p, _) = self.source {
+                let _ = std::fs::remove_file(p);
+            }
+        }
     }
 }
 
@@ -299,8 +312,11 @@ impl InboundTransfer {
                 .write(true)
                 .open(tmp)
                 .with_context(|| format!("creating temp file {}", tmp.display()))?;
-            file.set_len(self.meta.size_bytes)
-                .context("pre-allocating disk space for incoming file")?;
+            // Bypass pre-allocation for huge files to avoid UI freezing on systems without fast sparse files.
+            if self.meta.size_bytes <= 1024 * 1024 * 1024 { // 1 GB
+                file.set_len(self.meta.size_bytes)
+                    .context("pre-allocating temp file size")?;
+            }
             self.file_handle = Some(file);
         }
         self.status = TransferStatus::Transferring;
@@ -384,6 +400,22 @@ impl InboundTransfer {
         // during the long transfer window.
         let save_dir = tmp.parent().unwrap_or(Path::new("."));
         let safe_name = sanitize_file_name(&self.meta.file_name);
+        
+        if self.meta.is_directory {
+            let dest = unique_dest_path(save_dir, safe_name.trim_end_matches(".tar"));
+            std::fs::create_dir_all(&dest).context("creating extract dir")?;
+            
+            let tar_file = std::fs::File::open(&tmp).context("opening downloaded tar")?;
+            let mut archive = tar::Archive::new(tar_file);
+            archive.unpack(&dest).context("unpacking tar archive")?;
+            let _ = std::fs::remove_file(&tmp);
+            
+            self.tmp_path = None;
+            self.dest_path = Some(dest.clone());
+            self.status = TransferStatus::Complete;
+            return Ok(dest);
+        }
+
         let dest = unique_dest_path(save_dir, &safe_name);
 
         if let Some(parent) = dest.parent() {
@@ -517,6 +549,8 @@ impl FileTransferManager {
             size_bytes: data.len() as u64,
             mime_type,
             sha256_checksum: checksum,
+            is_directory: false,
+            file_count: 0,
         };
         let transfer = OutboundTransfer::new(data, meta, target_device);
         let tid = transfer.transfer_id;
@@ -527,14 +561,28 @@ impl FileTransferManager {
     pub fn start_outbound_path(
         &mut self,
         path: PathBuf,
-        file_name: String,
-        mime_type: String,
+        mut file_name: String,
+        mut mime_type: String,
         target_device: Option<Uuid>,
     ) -> Result<&OutboundTransfer> {
-        let size_bytes = std::fs::metadata(&path)
-            .with_context(|| format!("reading metadata for {}", path.display()))?
+        let is_directory = path.is_dir();
+        let actual_path = if is_directory {
+            let tmp_tar_path = std::env::temp_dir().join(format!("deskdrop_dir_{}.tar", Uuid::new_v4()));
+            let tar_file = std::fs::File::create(&tmp_tar_path).context("creating temp tar file")?;
+            let mut builder = tar::Builder::new(tar_file);
+            builder.append_dir_all(&file_name, &path).context("archiving directory")?;
+            builder.finish().context("finishing tar archive")?;
+            file_name = format!("{}.tar", file_name);
+            mime_type = "application/x-tar".to_string();
+            tmp_tar_path
+        } else {
+            path.clone()
+        };
+
+        let size_bytes = std::fs::metadata(&actual_path)
+            .with_context(|| format!("reading metadata for {}", actual_path.display()))?
             .len();
-        let checksum = checksum_file(&path)?;
+        let checksum = checksum_file(&actual_path)?;
         let mut tid = [0u8; 16];
         tid.copy_from_slice(Uuid::new_v4().as_bytes());
 
@@ -544,8 +592,13 @@ impl FileTransferManager {
             size_bytes,
             mime_type,
             sha256_checksum: checksum,
+            is_directory,
+            file_count: 0,
         };
-        let transfer = OutboundTransfer::from_path(path, meta, target_device)?;
+        let mut transfer = OutboundTransfer::from_path(actual_path, meta, target_device)?;
+        if is_directory {
+            transfer.source_is_temp_tar = true;
+        }
         let tid = transfer.transfer_id;
         self.outbound.insert(tid, transfer);
         Ok(self.outbound.get(&tid).unwrap())

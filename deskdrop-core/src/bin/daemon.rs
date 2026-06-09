@@ -703,6 +703,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             let content = ClipboardContent::Image {
                 mime: mime.clone(),
                 data,
+                extracted_text: None,
             };
             remember_history(&state, &content, current_device_name(&state).await).await?;
             Ok(IpcResponse::ok(
@@ -1249,6 +1250,30 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok_empty())
         }
 
+        IpcRequest::SendMediaControl { target_device, action } => {
+            let uuid = parse_uuid(&target_device)?;
+            let media_action = match action.to_lowercase().as_str() {
+                "play_pause" | "playpause" => deskdrop_core::protocol::MediaAction::PlayPause,
+                "next" => deskdrop_core::protocol::MediaAction::Next,
+                "previous" | "prev" => deskdrop_core::protocol::MediaAction::Previous,
+                "volume_up" | "volup" => deskdrop_core::protocol::MediaAction::VolumeUp,
+                "volume_down" | "voldown" => deskdrop_core::protocol::MediaAction::VolumeDown,
+                "mute" => deskdrop_core::protocol::MediaAction::Mute,
+                _ => return Ok(IpcResponse::error("invalid media action")),
+            };
+            state.engine.send_media_control(uuid, media_action).await;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::StartAudioRelay { target_device } => {
+            let uuid = parse_uuid(&target_device)?;
+            state.engine.start_audio_relay(uuid).await;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::StopAudioRelay => {
+            state.engine.stop_audio_relay().await;
+            Ok(IpcResponse::ok_empty())
+        }
+
         IpcRequest::Shutdown => {
             state.shutdown.notify_waiters();
             Ok(IpcResponse::ok_empty())
@@ -1308,7 +1333,7 @@ fn incoming_payload_json(id: u64, content: &ClipboardContent) -> serde_json::Val
             "type": "text",
             "text": text,
         }),
-        ClipboardContent::Image { mime, data } => json!({
+        ClipboardContent::Image { mime, data, .. } => json!({
             "id": id,
             "type": "image",
             "mime": mime,

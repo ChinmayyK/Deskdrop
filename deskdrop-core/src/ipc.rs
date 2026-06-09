@@ -341,6 +341,15 @@ pub enum IpcRequest {
         /// Whether the device is charging
         charging: bool,
     },
+    // ── Media & Audio ─────────────────────────────────────────────────────────
+    SendMediaControl {
+        target_device: String,
+        action: String,
+    },
+    StartAudioRelay {
+        target_device: String,
+    },
+    StopAudioRelay,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -737,6 +746,38 @@ pub async fn handle_ipc_request(
             eng.push_battery_status(level, charging).await;
             IpcResponse::ok_empty()
         }
+        // ── Media & Audio ──────────────────────────────────────────────────
+        IpcRequest::SendMediaControl { target_device, action } => {
+            match crate::ipc::parse_uuid(&target_device) {
+                Ok(uuid) => {
+                    let media_action = match action.to_lowercase().as_str() {
+                        "play_pause" | "playpause" => crate::protocol::MediaAction::PlayPause,
+                        "next" => crate::protocol::MediaAction::Next,
+                        "previous" | "prev" => crate::protocol::MediaAction::Previous,
+                        "volume_up" | "volup" => crate::protocol::MediaAction::VolumeUp,
+                        "volume_down" | "voldown" => crate::protocol::MediaAction::VolumeDown,
+                        "mute" => crate::protocol::MediaAction::Mute,
+                        _ => return IpcResponse::error("invalid media action"),
+                    };
+                    eng.send_media_control(uuid, media_action).await;
+                    IpcResponse::ok_empty()
+                }
+                Err(e) => IpcResponse::error(format!("bad target_device: {e}")),
+            }
+        }
+        IpcRequest::StartAudioRelay { target_device } => {
+            match crate::ipc::parse_uuid(&target_device) {
+                Ok(uuid) => {
+                    eng.start_audio_relay(uuid).await;
+                    IpcResponse::ok_empty()
+                }
+                Err(e) => IpcResponse::error(format!("bad target_device: {e}")),
+            }
+        }
+        IpcRequest::StopAudioRelay => {
+            eng.stop_audio_relay().await;
+            IpcResponse::ok_empty()
+        }
         // ── Metrics ────────────────────────────────────────────────────────
         IpcRequest::GetMetrics => {
             let snap = eng.status_snapshot().await;
@@ -963,7 +1004,7 @@ pub async fn handle_ipc_request(
         IpcRequest::PushImage { mime, data_base64 } => {
             match crate::ipc::decode_base64(&data_base64) {
                 Ok(data) => {
-                    let content = crate::protocol::ClipboardContent::Image { mime, data };
+                    let content = crate::protocol::ClipboardContent::Image { mime, data, extracted_text: None };
                     let n = eng.push_clipboard(content).await;
                     IpcResponse::ok(serde_json::json!({ "delivered": n }))
                 }

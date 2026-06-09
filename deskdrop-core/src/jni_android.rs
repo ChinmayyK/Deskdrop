@@ -166,7 +166,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushImage(
     let h = unsafe { &*(handle as *const AndroidHandle) };
     rt().block_on(
         h.engine
-            .push_clipboard(ClipboardContent::Image { mime, data: bytes }),
+            .push_clipboard(ClipboardContent::Image { mime, data: bytes, extracted_text: None }),
     ) as jint
 }
 

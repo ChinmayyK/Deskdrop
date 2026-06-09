@@ -65,6 +65,12 @@ pub async fn connect_with_timeout(addr: SocketAddr) -> Result<TcpStream> {
     Ok(stream)
 }
 
+/// Open an outbound connection via a configured WAN relay.
+pub async fn connect_via_relay(relay_url: &str, target_peer: Uuid) -> Result<TcpStream> {
+    // TODO: implement full WebRTC / TURN relay handshake.
+    anyhow::bail!("Relay transport not fully implemented yet for URL: {}, target: {}", relay_url, target_peer);
+}
+
 /// Best-effort socket tuning.
 ///
 /// Some Android builds reject `TCP_NODELAY` on accepted or freshly-connected
