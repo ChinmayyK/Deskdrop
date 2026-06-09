@@ -931,6 +931,7 @@ impl Engine {
             }
         };
 
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
         crate::audio_relay::spawn_capture(tx, format_tx, stop_rx);
 
         tokio::spawn(async move {
@@ -3657,7 +3658,9 @@ fn register_session(
             let shared = rx_shared;
             let peer_name = rx_peer_name;
             let peer_id = rx_peer_id;
+            #[allow(unused_variables, unused_mut)]
             let mut audio_playback_tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>> = None;
+            #[allow(unused_variables, unused_mut)]
             let mut audio_playback_stop_tx: Option<tokio::sync::oneshot::Sender<()>> = None;
             loop {
                 let result = sess_rx.recv().await;
@@ -4968,23 +4971,32 @@ fn register_session(
                         }
                     }
                     Ok(AppMessage::AudioStreamStart { sample_rate, channels, .. }) => {
-                        tracing::info!("Starting audio playback from peer {}", peer_id);
-                        let (tx, rx) = tokio::sync::mpsc::channel(100);
-                        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
-                        audio_playback_tx = Some(tx);
-                        audio_playback_stop_tx = Some(stop_tx);
-                        crate::audio_relay::spawn_playback(rx, sample_rate, channels, stop_rx);
+                        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+                        {
+                            tracing::info!("Starting audio playback from peer {}", peer_id);
+                            let (tx, rx) = tokio::sync::mpsc::channel(100);
+                            let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+                            audio_playback_tx = Some(tx);
+                            audio_playback_stop_tx = Some(stop_tx);
+                            crate::audio_relay::spawn_playback(rx, sample_rate, channels, stop_rx);
+                        }
                     }
                     Ok(AppMessage::AudioStreamChunk { data }) => {
-                        if let Some(tx) = &audio_playback_tx {
-                            let _ = tx.try_send(data);
+                        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+                        {
+                            if let Some(tx) = &audio_playback_tx {
+                                let _ = tx.try_send(data);
+                            }
                         }
                     }
                     Ok(AppMessage::AudioStreamStop) => {
-                        tracing::info!("Stopping audio playback from peer {}", peer_id);
-                        audio_playback_tx = None;
-                        if let Some(stop) = audio_playback_stop_tx.take() {
-                            let _ = stop.send(());
+                        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+                        {
+                            tracing::info!("Stopping audio playback from peer {}", peer_id);
+                            audio_playback_tx = None;
+                            if let Some(stop) = audio_playback_stop_tx.take() {
+                                let _ = stop.send(());
+                            }
                         }
                     }
                     Ok(AppMessage::NowPlaying { title, artist, status, .. }) => {

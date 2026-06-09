@@ -1511,16 +1511,20 @@ class DeskdropService : Service() {
     private fun showFileTransferCompleteNotification(from: String, fileName: String, publicUriStr: String?) {
         val openIntent = if (!publicUriStr.isNullOrEmpty()) {
             val uri = android.net.Uri.parse(publicUriStr)
+            // Try to open the specific file. FLAG_ACTIVITY_NEW_TASK is strictly required from a Service context!
             Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-        } else null
-
-        val openPi = openIntent?.let {
-            PendingIntent.getActivity(this, (publicUriStr ?: fileName).hashCode(), it,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        } else {
+            // Fallback to opening the system Downloads folder
+            Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
         }
+
+        val openPi = PendingIntent.getActivity(this, (publicUriStr ?: fileName).hashCode(), openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)

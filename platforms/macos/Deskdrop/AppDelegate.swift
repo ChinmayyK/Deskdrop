@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var dashboardController:      NSWindowController?
     private var quickAccessController:    NSWindowController?
     private var commandPaletteController: NSWindowController?
+    private var dropZoneController:       DropZoneWindowController?
     private var toastWindowManager:       DeskdropToastWindowManager?
     private var callBannerManager:         CallBannerWindowManager?
     private var cancellables = Set<AnyCancellable>()
@@ -218,9 +219,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         // ── Replace the default button with a custom drag-and-drop view ──────────
         if let button = statusItem.button {
-            // Register drag types on the button itself so the menu bar
-            // item participates in drag sessions.
-            button.registerForDraggedTypes([
+            // In macOS 15 (Sequoia), registering the button itself can cause it to swallow drag events
+            // and prevent them from reaching the MenuBarDropView subview.
+            // We register the window instead to ensure the subview gets hit-tested correctly.
+            button.window?.registerForDraggedTypes([
                 .fileURL,
                 .init(rawValue: "com.apple.pasteboard.promised-file-url"),
                 .init(rawValue: "com.apple.NSFilePromiseItemMetaData"),
@@ -313,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             size:  NSSize(width: 520, height: 400),
             rootView: CommandPaletteView(store: store)
         )
+        dropZoneController = DropZoneWindowController(store: store)
     }
 
     // MARK: - Store bindings
@@ -677,6 +680,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             id: 3, keyCode: UInt32(kVK_ANSI_C),
             modifiers: UInt32(cmdKey | shiftKey)
         ) { [weak self] in self?.forcePushClipboard() }
+
+        // ⌃D — Toggle Drop Zone Window
+        GlobalHotKeyManager.shared.register(
+            id: 4, keyCode: UInt32(kVK_ANSI_D),
+            modifiers: UInt32(controlKey)
+        ) { [weak self] in self?.toggleDropZone() }
+    }
+
+    @objc private func toggleDropZone() {
+        guard let controller = dropZoneController, let window = controller.window else { return }
+        if window.isVisible {
+            controller.closeWindow()
+        } else {
+            controller.show()
+        }
     }
 
     /// F24: Push the current Mac clipboard to all connected peers immediately.

@@ -1,3 +1,4 @@
+#![cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::HeapRb;

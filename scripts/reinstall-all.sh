@@ -30,6 +30,13 @@ echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE}
 echo -e "${BLUE}▶ Wiping macOS app data (~/Library/Application Support/deskdrop)...${NC}"
 rm -rf ~/Library/Application\ Support/deskdrop
 
+echo -e "${BLUE}▶ Wiping previous build directories and caches to save space...${NC}"
+rm -rf platforms/macos/build
+rm -rf platforms/android/app/build
+rm -rf release
+rm -f app-release.apk app-debug.apk libdeskdrop_core.dylib
+cargo clean
+
 # ==========================================
 # 1. macOS Reinstall
 # ==========================================

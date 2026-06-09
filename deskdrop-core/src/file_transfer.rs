@@ -129,7 +129,7 @@ pub struct OutboundTransfer {
     pub last_active_at: Instant,
     pub target_device: Option<Uuid>,
     pub paused: bool,
-    pub source_is_temp_tar: bool,
+    pub source_is_temp_zip: bool,
 }
 
 impl OutboundTransfer {
@@ -150,7 +150,7 @@ impl OutboundTransfer {
             last_active_at: Instant::now(),
             target_device,
             paused: false,
-            source_is_temp_tar: false,
+            source_is_temp_zip: false,
         }
     }
 
@@ -172,7 +172,7 @@ impl OutboundTransfer {
             last_active_at: Instant::now(),
             target_device,
             paused: false,
-            source_is_temp_tar: false,
+            source_is_temp_zip: false,
         })
     }
 
@@ -231,7 +231,7 @@ impl OutboundTransfer {
 
 impl Drop for OutboundTransfer {
     fn drop(&mut self) {
-        if self.source_is_temp_tar {
+        if self.source_is_temp_zip {
             if let OutboundSource::FilePath(ref p, _) = self.source {
                 let _ = std::fs::remove_file(p);
             }
@@ -402,12 +402,31 @@ impl InboundTransfer {
         let safe_name = sanitize_file_name(&self.meta.file_name);
         
         if self.meta.is_directory {
-            let dest = unique_dest_path(save_dir, safe_name.trim_end_matches(".tar"));
+            let dest = unique_dest_path(save_dir, safe_name.trim_end_matches(".tar").trim_end_matches(".zip"));
             std::fs::create_dir_all(&dest).context("creating extract dir")?;
             
-            let tar_file = std::fs::File::open(&tmp).context("opening downloaded tar")?;
-            let mut archive = tar::Archive::new(tar_file);
-            archive.unpack(&dest).context("unpacking tar archive")?;
+            let zip_file = std::fs::File::open(&tmp).context("opening downloaded zip")?;
+            let mut archive = zip::ZipArchive::new(zip_file).context("parsing zip archive")?;
+            
+            for i in 0..archive.len() {
+                let mut file = archive.by_index(i).context("reading zip entry")?;
+                let outpath = match file.enclosed_name() {
+                    Some(path) => dest.join(path),
+                    None => continue,
+                };
+
+                if (*file.name()).ends_with('/') {
+                    std::fs::create_dir_all(&outpath).ok();
+                } else {
+                    if let Some(p) = outpath.parent() {
+                        if !p.exists() {
+                            std::fs::create_dir_all(p).ok();
+                        }
+                    }
+                    let mut outfile = std::fs::File::create(&outpath).context("creating extracted file")?;
+                    std::io::copy(&mut file, &mut outfile).context("writing extracted file")?;
+                }
+            }
             let _ = std::fs::remove_file(&tmp);
             
             self.tmp_path = None;
@@ -567,14 +586,30 @@ impl FileTransferManager {
     ) -> Result<&OutboundTransfer> {
         let is_directory = path.is_dir();
         let actual_path = if is_directory {
-            let tmp_tar_path = std::env::temp_dir().join(format!("deskdrop_dir_{}.tar", Uuid::new_v4()));
-            let tar_file = std::fs::File::create(&tmp_tar_path).context("creating temp tar file")?;
-            let mut builder = tar::Builder::new(tar_file);
-            builder.append_dir_all(&file_name, &path).context("archiving directory")?;
-            builder.finish().context("finishing tar archive")?;
-            file_name = format!("{}.tar", file_name);
-            mime_type = "application/x-tar".to_string();
-            tmp_tar_path
+            let tmp_zip_path = std::env::temp_dir().join(format!("deskdrop_dir_{}.zip", Uuid::new_v4()));
+            let zip_file = std::fs::File::create(&tmp_zip_path).context("creating temp zip file")?;
+            let mut zip = zip::ZipWriter::new(zip_file);
+            let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+            
+            let prefix = path.parent().unwrap_or(&path);
+            for entry in walkdir::WalkDir::new(&path) {
+                let entry = entry.context("walking directory")?;
+                let entry_path = entry.path();
+                let name = entry_path.strip_prefix(prefix).unwrap_or(entry_path);
+                let name_str = name.to_string_lossy().replace("\\", "/");
+                
+                if entry_path.is_file() {
+                    zip.start_file(name_str, options).context("starting zip file")?;
+                    let mut f = std::fs::File::open(entry_path).context("opening file to zip")?;
+                    std::io::copy(&mut f, &mut zip).context("writing file to zip")?;
+                } else if !name.as_os_str().is_empty() && name_str != "/" {
+                    zip.add_directory(name_str, options).context("adding zip directory")?;
+                }
+            }
+            zip.finish().context("finishing zip archive")?;
+            file_name = format!("{}.zip", file_name);
+            mime_type = "application/zip".to_string();
+            tmp_zip_path
         } else {
             path.clone()
         };
@@ -597,7 +632,7 @@ impl FileTransferManager {
         };
         let mut transfer = OutboundTransfer::from_path(actual_path, meta, target_device)?;
         if is_directory {
-            transfer.source_is_temp_tar = true;
+            transfer.source_is_temp_zip = true;
         }
         let tid = transfer.transfer_id;
         self.outbound.insert(tid, transfer);
