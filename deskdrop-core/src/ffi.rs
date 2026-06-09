@@ -209,6 +209,40 @@ pub unsafe extern "C" fn deskdrop_send_file_path(
     }
 }
 
+/// Send a media control action to a specific device.
+/// action: 0=PlayPause, 1=Next, 2=Previous, 3=VolumeUp, 4=VolumeDown, 5=Mute
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_send_media_control(
+    handle: *mut DeskdropHandle,
+    target_device_ptr: *const c_char,
+    action: c_int,
+) -> c_int {
+    if handle.is_null() || target_device_ptr.is_null() {
+        return -1;
+    }
+    
+    let target_device = match uuid::Uuid::parse_str(
+        &CStr::from_ptr(target_device_ptr).to_string_lossy()
+    ) {
+        Ok(id) => id,
+        Err(_) => return -1,
+    };
+    
+    let media_action = match action {
+        0 => crate::protocol::MediaAction::PlayPause,
+        1 => crate::protocol::MediaAction::Next,
+        2 => crate::protocol::MediaAction::Previous,
+        3 => crate::protocol::MediaAction::VolumeUp,
+        4 => crate::protocol::MediaAction::VolumeDown,
+        5 => crate::protocol::MediaAction::Mute,
+        _ => return -1,
+    };
+    
+    let h = &*handle;
+    runtime().block_on(h.engine.send_media_control(target_device, media_action));
+    0
+}
+
 // ── Poll for events ───────────────────────────────────────────────────────────
 
 /// Event type codes returned by `deskdrop_poll_event`.
@@ -239,6 +273,7 @@ pub const PB_EVENT_CAMERA_FRAME: c_int = 25;
 pub const PB_EVENT_SYSTEM_HEALTH_UPDATED: c_int = 26;
 pub const PB_EVENT_PEER_DISCOVERED: c_int = 27;
 pub const PB_EVENT_NETWORK_STATE_CHANGED: c_int = 28;
+pub const PB_EVENT_NOW_PLAYING: c_int = 29;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -321,6 +356,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CallActionRequest { .. } => PB_EVENT_CALL_ACTION,
         EngineEvent::BatteryStateChanged { .. } => PB_EVENT_BATTERY_STATE_CHANGED,
         EngineEvent::NetworkStateChanged { .. } => PB_EVENT_NETWORK_STATE_CHANGED,
+        EngineEvent::NowPlaying { .. } => PB_EVENT_NOW_PLAYING,
         EngineEvent::NotificationReceived { .. } => PB_EVENT_ACTIVITY_UPDATED,
         EngineEvent::CameraStreamRequest { .. } => PB_EVENT_CAMERA_STREAM_REQUEST,
         EngineEvent::CameraStreamAccept { .. } => PB_EVENT_CAMERA_STREAM_ACCEPT,
@@ -348,6 +384,13 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
         EngineEvent::Warning(s) => Some(s.clone()),
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
         EngineEvent::NetworkStateChanged { network_type, .. } => Some(network_type.clone()),
+        EngineEvent::NowPlaying { title, artist, status, .. } => {
+            Some(serde_json::json!({
+                "title": title,
+                "artist": artist,
+                "status": status
+            }).to_string())
+        }
         EngineEvent::ActivityFeedUpdated { entries, .. } => serde_json::to_string(entries).ok(),
         _ => None,
     };
@@ -376,6 +419,7 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
         EngineEvent::BatteryStateChanged { from_name, .. } => Some(from_name.as_str()),
         EngineEvent::NetworkStateChanged { from_name, .. } => Some(from_name.as_str()),
+        EngineEvent::NowPlaying { device_name, .. } => Some(device_name.as_str()),
         _ => None,
     };
     if let Some(n) = name {

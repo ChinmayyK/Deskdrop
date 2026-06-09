@@ -45,6 +45,12 @@ final class DropZoneWindowController: NSWindowController {
     func show() {
         guard let window = self.window else { return }
         window.center()
+        
+        // Offset downward a bit
+        var frame = window.frame
+        frame.origin.y -= 400
+        window.setFrame(frame, display: true)
+        
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

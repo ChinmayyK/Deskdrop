@@ -119,6 +119,33 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_stop(
     }
 }
 
+// ── sendMediaControl ──────────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendMediaControl(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device: JString,
+    action: jint,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    
+    let target_str = match env.get_string(&target_device) {
+        Ok(s) => s,
+        Err(_) => return -1,
+    };
+    
+    let target_cstr = std::ffi::CString::new(target_str.to_string_lossy().into_owned()).unwrap();
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    
+    unsafe {
+        crate::ffi::deskdrop_send_media_control(h.inner, target_cstr.as_ptr(), action)
+    }
+}
+
 // ── pushText ──────────────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -381,6 +408,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         PairingRequest { .. } => 7,
         PairingResponse { .. } => 7,
         PeerDiscovered { .. } => 5,
+        NowPlaying { .. } => 29,
         Warning(_) => 7,
     }
 }
@@ -404,6 +432,16 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
+    } else if let crate::engine::EngineEvent::NowPlaying { title, artist, status, .. } = ev {
+        let json = serde_json::json!({
+            "title": title,
+            "artist": artist,
+            "status": status
+        }).to_string();
+        return env
+            .new_string(json)
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut());
     }
     std::ptr::null_mut()
 }
@@ -453,6 +491,11 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
         HistoryMetadataReceived { from_name, .. } => Some(from_name.as_str()),
         ClipboardSynced { peer_name, .. } => Some(peer_name.as_str()),
         ClipboardSyncFailed { peer_name, .. } => Some(peer_name.as_str()),
+        FileTransferIncoming { from_name, .. } => Some(from_name.as_str()),
+        FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
+        NowPlaying { device_name, .. } => Some(device_name.as_str()),
+        BatteryStateChanged { from_name, .. } => Some(from_name.as_str()),
+        NetworkStateChanged { from_name, .. } => Some(from_name.as_str()),
         PairingRequested { device_name, .. } => Some(device_name.as_str()),
         OutgoingPairingWaiting { device_name, .. } => Some(device_name.as_str()),
         ClipboardDeliveryStatus { .. } => None,
@@ -494,6 +537,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         FileTransferProgress { from_device, .. } => Some(*from_device),
         FileTransferComplete { from_device, .. } => Some(*from_device),
         FileTransferFailed { from_device, .. } => Some(*from_device),
+        NowPlaying { device_id, .. } => Some(*device_id),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())

@@ -141,6 +141,13 @@ pub enum EngineEvent {
         activity_id: u64,
         status: DeliveryStatus,
     },
+    NowPlaying {
+        device_id: Uuid,
+        device_name: String,
+        title: String,
+        artist: String,
+        status: String,
+    },
     PeerConnected {
         device_id: Uuid,
         device_name: String,
@@ -4999,9 +5006,15 @@ fn register_session(
                             }
                         }
                     }
-                    Ok(AppMessage::NowPlaying { title, artist, status, .. }) => {
+                    Ok(AppMessage::NowPlaying { title, artist, status, origin_device, .. }) => {
                         tracing::info!("Now Playing on {}: {} - {} ({})", peer_name, title, artist, status);
-                        // Forward to UI
+                        let _ = shared.event_tx.send(EngineEvent::NowPlaying {
+                            device_id: origin_device,
+                            device_name: peer_name.clone(),
+                            title,
+                            artist,
+                            status,
+                        }).await;
                     }
                     Err(err) => {
                         break err.to_string();
