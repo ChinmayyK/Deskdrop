@@ -1242,34 +1242,35 @@ private struct CompactDeviceCard: View {
         HStack(spacing: 16) {
             // Icon
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(device.name.lowercased().contains("mac") ?
                           LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandViolet], startPoint: .topLeading, endPoint: .bottomTrailing) :
                           LinearGradient(colors: [Color(hex: 0x059669), Color(hex: 0x34D399)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 48, height: 48)
+                    .frame(width: 56, height: 56)
+                    .shadow(color: device.name.lowercased().contains("mac") ? CRTheme.brandElectric.opacity(0.4) : Color(hex: 0x059669).opacity(0.4), radius: 8, x: 0, y: 4)
                 if device.name.lowercased().contains("mac") {
                     Image(systemName: "laptopcomputer")
-                        .font(.system(size: 20))
+                        .font(.system(size: 24))
                         .foregroundStyle(.white)
                 } else if let imgPath = Bundle.main.path(forResource: "AndroidLogo", ofType: "png"), let nsImg = NSImage(contentsOfFile: imgPath) {
                     Image(nsImage: nsImg)
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 24, height: 24)
+                        .frame(width: 28, height: 28)
                         .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
+                        .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
                 } else {
                     Image(systemName: "smartphone")
-                        .font(.system(size: 20))
+                        .font(.system(size: 24))
                         .foregroundStyle(.white)
                 }
             }
             
             // Text
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(device.name)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(CRTheme.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -1295,7 +1296,7 @@ private struct CompactDeviceCard: View {
             Spacer(minLength: 8)
             
             // Actions
-            HStack(spacing: 8) {
+            HStack(spacing: 12) {
                 if device.isConnected {
                     Button(action: {
                         Task {
@@ -1303,49 +1304,36 @@ private struct CompactDeviceCard: View {
                         }
                         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
                     }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "bell.badge.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                            Text("Ping")
-                                .font(.system(size: 12, weight: .bold))
-                                .lineLimit(1)
-                        }
-                        .fixedSize(horizontal: true, vertical: true)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .foregroundStyle(CRTheme.accentBlue)
-                        .background(CRTheme.accentBlue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 15))
+                            .frame(width: 38, height: 38)
+                            .foregroundStyle(CRTheme.accentBlue)
+                            .background(CRTheme.accentBlue.opacity(0.15), in: Circle())
                     }
                     .buttonStyle(.plain)
                     .help("Ping Phone")
                     
                     Button(action: onSendFiles) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 6) {
                             Image(systemName: "folder.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                            Text("Files")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 14, weight: .bold))
+                            Text("Send Files")
+                                .font(.system(size: 13, weight: .bold))
                                 .lineLimit(1)
                         }
-                        .fixedSize(horizontal: true, vertical: true)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
                         .foregroundStyle(CRTheme.brandElectric)
-                        .background(CRTheme.brandElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .background(CRTheme.brandElectric.opacity(0.15), in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .help("Send Files")
                     
                     Button(action: { store.disconnect(device) }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 13, weight: .semibold))
-                            Text("Disconnect")
-                                .font(.system(size: 12, weight: .bold))
-                                .lineLimit(1)
-                        }
-                        .fixedSize(horizontal: true, vertical: true)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .foregroundStyle(CRTheme.accentRed)
-                        .background(CRTheme.accentRed.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .frame(width: 38, height: 38)
+                            .foregroundStyle(CRTheme.accentRed)
+                            .background(CRTheme.accentRed.opacity(0.15), in: Circle())
                     }
                     .buttonStyle(.plain)
                     .help("Disconnect")
@@ -1353,13 +1341,13 @@ private struct CompactDeviceCard: View {
                     Button(action: { store.connect(device) }) {
                         HStack(spacing: 6) {
                             Image(systemName: "antenna.radiowaves.left.and.right")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 14, weight: .bold))
                             Text("Connect")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 13, weight: .bold))
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .padding(.horizontal, 16).padding(.vertical, 10)
                         .foregroundStyle(CRTheme.brandElectric)
-                        .background(CRTheme.brandElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .background(CRTheme.brandElectric.opacity(0.15), in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .help("Connect")
@@ -1367,11 +1355,12 @@ private struct CompactDeviceCard: View {
             }
         }
         .padding(16)
-        .background(CRTheme.surfaceElevated)
-        .crCard(cornerRadius: 16)
+        .background(Material.regular)
+        .crCard(cornerRadius: 20)
+        .shadow(color: Color.black.opacity(0.04), radius: 10, y: 4)
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(CRTheme.brandElectric.opacity(isHovered ? 0.3 : 0.0), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(CRTheme.brandElectric.opacity(isHovered ? 0.4 : 0.1), lineWidth: 1)
         }
         .onHover { isHovered = $0 }
         .animation(.crSpring, value: isHovered)

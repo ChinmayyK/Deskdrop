@@ -981,6 +981,22 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .await?;
             Ok(IpcResponse::ok(hex::encode(transfer_id)))
         }
+        IpcRequest::SendFilePaths {
+            paths,
+            bundle_name,
+            target_device,
+        } => {
+            let path_bufs: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
+            let transfer_id = state
+                .engine
+                .send_file_paths(
+                    path_bufs,
+                    bundle_name,
+                    target_device.as_deref().map(parse_uuid).transpose()?,
+                )
+                .await?;
+            Ok(IpcResponse::ok(hex::encode(transfer_id)))
+        }
         IpcRequest::AcceptFileTransfer { transfer_id } => {
             state
                 .engine
@@ -1250,29 +1266,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok_empty())
         }
 
-        IpcRequest::SendMediaControl { target_device, action } => {
-            let uuid = parse_uuid(&target_device)?;
-            let media_action = match action.to_lowercase().as_str() {
-                "play_pause" | "playpause" => deskdrop_core::protocol::MediaAction::PlayPause,
-                "next" => deskdrop_core::protocol::MediaAction::Next,
-                "previous" | "prev" => deskdrop_core::protocol::MediaAction::Previous,
-                "volume_up" | "volup" => deskdrop_core::protocol::MediaAction::VolumeUp,
-                "volume_down" | "voldown" => deskdrop_core::protocol::MediaAction::VolumeDown,
-                "mute" => deskdrop_core::protocol::MediaAction::Mute,
-                _ => return Ok(IpcResponse::error("invalid media action")),
-            };
-            state.engine.send_media_control(uuid, media_action).await;
-            Ok(IpcResponse::ok_empty())
-        }
-        IpcRequest::StartAudioRelay { target_device } => {
-            let uuid = parse_uuid(&target_device)?;
-            state.engine.start_audio_relay(uuid).await;
-            Ok(IpcResponse::ok_empty())
-        }
-        IpcRequest::StopAudioRelay => {
-            state.engine.stop_audio_relay().await;
-            Ok(IpcResponse::ok_empty())
-        }
+
 
         IpcRequest::Shutdown => {
             state.shutdown.notify_waiters();

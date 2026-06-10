@@ -119,32 +119,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_stop(
     }
 }
 
-// ── sendMediaControl ──────────────────────────────────────────────────────────
 
-#[no_mangle]
-pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendMediaControl(
-    mut env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    target_device: JString,
-    action: jint,
-) -> jint {
-    if handle == 0 {
-        return -1;
-    }
-    
-    let target_str = match env.get_string(&target_device) {
-        Ok(s) => s,
-        Err(_) => return -1,
-    };
-    
-    let target_cstr = std::ffi::CString::new(target_str.to_string_lossy().into_owned()).unwrap();
-    let h = unsafe { &*(handle as *const AndroidHandle) };
-    
-    unsafe {
-        crate::ffi::deskdrop_send_media_control(h.inner, target_cstr.as_ptr(), action)
-    }
-}
 
 // ── pushText ──────────────────────────────────────────────────────────────────
 
@@ -408,7 +383,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         PairingRequest { .. } => 7,
         PairingResponse { .. } => 7,
         PeerDiscovered { .. } => 5,
-        NowPlaying { .. } => 29,
+
         Warning(_) => 7,
     }
 }
@@ -432,16 +407,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
-    } else if let crate::engine::EngineEvent::NowPlaying { title, artist, status, .. } = ev {
-        let json = serde_json::json!({
-            "title": title,
-            "artist": artist,
-            "status": status
-        }).to_string();
-        return env
-            .new_string(json)
-            .map(|s| s.into_raw())
-            .unwrap_or(std::ptr::null_mut());
+
     }
     std::ptr::null_mut()
 }
@@ -493,7 +459,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
         ClipboardSyncFailed { peer_name, .. } => Some(peer_name.as_str()),
         FileTransferIncoming { from_name, .. } => Some(from_name.as_str()),
         FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
-        NowPlaying { device_name, .. } => Some(device_name.as_str()),
+
         BatteryStateChanged { from_name, .. } => Some(from_name.as_str()),
         NetworkStateChanged { from_name, .. } => Some(from_name.as_str()),
         PairingRequested { device_name, .. } => Some(device_name.as_str()),
@@ -537,7 +503,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         FileTransferProgress { from_device, .. } => Some(*from_device),
         FileTransferComplete { from_device, .. } => Some(*from_device),
         FileTransferFailed { from_device, .. } => Some(*from_device),
-        NowPlaying { device_id, .. } => Some(*device_id),
+
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
@@ -1341,6 +1307,67 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePath(
         PathBuf::from(path),
         display_name,
         mime_type,
+        target_device,
+    )) {
+        Ok(_) => 1,
+        Err(_) => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePaths(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    paths: jni::objects::JObjectArray,
+    bundle_name: JString,
+    target_device_id: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+
+    let paths_len = env.get_array_length(&paths).unwrap_or(0);
+    if paths_len == 0 {
+        return -1;
+    }
+
+    let mut path_bufs = Vec::with_capacity(paths_len as usize);
+    for i in 0..paths_len {
+        let el = match env.get_object_array_element(&paths, i) {
+            Ok(obj) => obj,
+            Err(_) => return -1,
+        };
+        let jstr: JString = el.into();
+        let s: String = match env.get_string(&jstr) {
+            Ok(s) => s.into(),
+            Err(_) => return -1,
+        };
+        path_bufs.push(PathBuf::from(s));
+    }
+
+    let bundle_name: String = match env.get_string(&bundle_name) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    
+    let target_device = if target_device_id.is_null() {
+        None
+    } else {
+        let raw: String = match env.get_string(&target_device_id) {
+            Ok(s) => s.into(),
+            Err(_) => return -1,
+        };
+        match uuid::Uuid::parse_str(&raw) {
+            Ok(value) => Some(value),
+            Err(_) => return -1,
+        }
+    };
+
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.send_file_paths(
+        path_bufs,
+        bundle_name,
         target_device,
     )) {
         Ok(_) => 1,

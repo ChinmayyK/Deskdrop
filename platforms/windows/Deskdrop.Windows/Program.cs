@@ -84,6 +84,14 @@ namespace Deskdrop.Windows
             [MarshalAs(UnmanagedType.LPUTF8Str)] string mimeType);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_send_file_paths(
+            IntPtr handle,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? targetDevice,
+            [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)] string[] paths,
+            UIntPtr pathsCount,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string bundleName);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int deskdrop_send_call_action(
             IntPtr handle,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string action,
@@ -389,24 +397,22 @@ namespace Deskdrop.Windows
                     var files = Clipboard.GetFileDropList();
                     if (files == null || files.Count == 0) return;
                     
-                    foreach (var path in files)
+                    if (files.Count == 1)
                     {
-                        var name  = Path.GetFileName(path);
-                        try
-                        {
-                            // Send via IPC directly using the path to avoid memory spikes on large files
-                            DaemonClient.SendFilePath(path, name, "application/octet-stream");
-                        }
-                        catch
-                        {
-                            // Fallback if the Daemon doesn't support send_file_path IPC command
-                            PushFile(path);
-                        }
-                        AddHistory(new HistoryItem
-                        {
-                            Summary = name, Source = "local",
-                            Time = DateTime.Now, TypeIcon = "📎",
-                        });
+                        var path = files[0];
+                        if (path == null) return;
+                        var name = Path.GetFileName(path);
+                        try { DaemonClient.SendFilePath(path, name, "application/octet-stream"); }
+                        catch { PushFile(path); }
+                        AddHistory(new HistoryItem { Summary = name, Source = "local", Time = DateTime.Now, TypeIcon = "📎" });
+                    }
+                    else
+                    {
+                        var paths = new string[files.Count];
+                        files.CopyTo(paths, 0);
+                        try { DaemonClient.SendFilePaths(paths, "deskdrop_bundle.zip"); }
+                        catch { PushFiles(paths); }
+                        AddHistory(new HistoryItem { Summary = $"{files.Count} files bundled", Source = "local", Time = DateTime.Now, TypeIcon = "📎" });
                     }
                 }
             }
@@ -457,6 +463,25 @@ namespace Deskdrop.Windows
                 AddHistory(new HistoryItem
                 {
                     Summary = name, Source = "local",
+                    Time = DateTime.Now, TypeIcon = "📎",
+                });
+            }
+            finally
+            {
+                NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS);
+            }
+        }
+
+        public void PushFiles(string[] paths, string bundleName = "deskdrop_bundle.zip", string? targetDevice = null)
+        {
+            if (_handle == IntPtr.Zero || paths.Length == 0) return;
+            NativeMethods.SetThreadExecutionState(NativeMethods.ES_CONTINUOUS | NativeMethods.ES_SYSTEM_REQUIRED);
+            try
+            {
+                NativeCore.deskdrop_send_file_paths(_handle, targetDevice, paths, (UIntPtr)paths.Length, bundleName);
+                AddHistory(new HistoryItem
+                {
+                    Summary = bundleName, Source = "local",
                     Time = DateTime.Now, TypeIcon = "📎",
                 });
             }

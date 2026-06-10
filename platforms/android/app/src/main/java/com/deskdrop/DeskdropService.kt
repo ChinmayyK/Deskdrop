@@ -72,7 +72,7 @@ object DeskdropJni {
     const val CR_EVENT_CALL_ACTION              = 18
     const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
     const val CR_EVENT_NETWORK_STATE_CHANGED    = 28
-    const val CR_EVENT_NOW_PLAYING             = 29
+
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
@@ -87,7 +87,7 @@ object DeskdropJni {
     @JvmStatic external fun pushBatteryStatus(handle: Long, level: Int, charging: Boolean): Int
     @JvmStatic external fun pushNetworkStatus(handle: Long, networkType: String): Int
     @JvmStatic external fun stopCameraStream(handle: Long): Int
-    @JvmStatic external fun sendMediaControl(engineHandle: Long, targetDevice: String, action: Int): Int
+
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
     @JvmStatic external fun waitEvent(handle: Long): Long
@@ -165,6 +165,12 @@ object DeskdropJni {
         path: String,
         displayName: String,
         mimeType: String,
+        targetDeviceId: String?
+    ): Int
+    @JvmStatic external fun sendFilePaths(
+        handle: Long,
+        paths: Array<String>,
+        bundleName: String,
         targetDeviceId: String?
     ): Int
 
@@ -384,6 +390,7 @@ class DeskdropService : Service() {
     private val engineStarted = AtomicBoolean(false)
     private val notificationManager by lazy { getSystemService(NotificationManager::class.java) }
 
+
     // NSD — peer discovery on Android (replaces stubbed Rust mDNS)
     private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
     private var nsdDiscoveryListener: NsdManager.DiscoveryListener? = null
@@ -529,7 +536,6 @@ class DeskdropService : Service() {
         else BackgroundSyncMode.ALWAYS_ACTIVE
 
     private val pollInterval  get() = if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE) POLL_FULL_MS  else POLL_REDUCED_MS
-    private val clipInterval  get() = if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE) CLIP_FULL_MS  else CLIP_REDUCED_MS
 
     // ── Service lifecycle ─────────────────────────────────────────────────────
 
@@ -563,25 +569,6 @@ class DeskdropService : Service() {
 
         when (intent?.action) {
             ACTION_STOP         -> { shutdownAndStop(); return START_NOT_STICKY }
-            "ACTION_MEDIA_PLAY_PAUSE" -> {
-                val h = engineHandle
-                val deviceId = intent.getStringExtra("device_id") ?: return START_STICKY
-                if (h != 0L) DeskdropJni.sendMediaControl(h, deviceId, 0)
-                return START_STICKY
-            }
-            "ACTION_MEDIA_NEXT" -> {
-                val h = engineHandle
-                val deviceId = intent.getStringExtra("device_id") ?: return START_STICKY
-                if (h != 0L) DeskdropJni.sendMediaControl(h, deviceId, 1)
-                return START_STICKY
-            }
-            "ACTION_MEDIA_PREVIOUS" -> {
-                val h = engineHandle
-                val deviceId = intent.getStringExtra("device_id") ?: return START_STICKY
-                if (h != 0L) DeskdropJni.sendMediaControl(h, deviceId, 2)
-                return START_STICKY
-            }
-
 
             // Settings changed live (e.g. sync toggle from SettingsActivity).
             // Re-read prefs and push them to the engine if possible.
@@ -805,7 +792,7 @@ class DeskdropService : Service() {
                 activeEngineHandle = engineHandle
                 Log.i(TAG, "Engine started — $deviceName")
                 startEventDrainThread()
-                scheduleClipboardWatch()
+                clipboardManager.addPrimaryClipChangedListener(clipboardListener)
                 // acquireMulticastLock() handled by onAvailable
                 // Cache our own UUID prefix so NSD can filter self-connections.
                 myDeviceId = DeskdropJni.getDeviceId(engineHandle)
@@ -985,6 +972,7 @@ class DeskdropService : Service() {
 
     private fun shutdownAndStop() {
         disconnectAllPeers()
+        clipboardManager.removePrimaryClipChangedListener(clipboardListener)
         stopSelf()
     }
 
@@ -1035,96 +1023,7 @@ class DeskdropService : Service() {
     }
 
     
-    private fun initMediaSession() {
-        if (mediaSession == null) {
-            mediaSession = android.media.session.MediaSession(this, "DeskdropMediaSession")
-            mediaSession?.isActive = true
-        }
-    }
 
-    private fun handleNowPlaying(ev: Long) {
-        val text = DeskdropJni.eventText(ev) ?: return
-        val deviceName = DeskdropJni.eventDeviceName(ev) ?: "Mac"
-        val deviceId = DeskdropJni.eventDeviceId(ev) ?: ""
-        
-        try {
-            val json = org.json.JSONObject(text)
-            val title = json.optString("title", "")
-            val artist = json.optString("artist", "")
-            val status = json.optString("status", "")
-            
-            if (title.isEmpty() && status == "stopped") {
-                mediaSession?.isActive = false
-                val nm = getSystemService(android.app.NotificationManager::class.java)
-                nm.cancel(1001) // 1001 is media notification ID
-                return
-            }
-            
-            initMediaSession()
-            mediaSession?.isActive = true
-            
-            val metadataBuilder = android.media.MediaMetadata.Builder()
-                .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, title)
-                .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, artist)
-            mediaSession?.setMetadata(metadataBuilder.build())
-            
-            val state = if (status == "playing") android.media.session.PlaybackState.STATE_PLAYING else android.media.session.PlaybackState.STATE_PAUSED
-            val playbackStateBuilder = android.media.session.PlaybackState.Builder()
-                .setActions(android.media.session.PlaybackState.ACTION_PLAY or android.media.session.PlaybackState.ACTION_PAUSE or android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT or android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS)
-                .setState(state, android.media.session.PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f)
-            mediaSession?.setPlaybackState(playbackStateBuilder.build())
-            
-            val channelId = "deskdrop_media"
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                val channel = android.app.NotificationChannel(channelId, "Media Sync", android.app.NotificationManager.IMPORTANCE_LOW)
-                val nm = getSystemService(android.app.NotificationManager::class.java)
-                nm.createNotificationChannel(channel)
-            }
-            
-            val playPauseIntent = android.app.PendingIntent.getService(this, 1, 
-                android.content.Intent(this, DeskdropService::class.java).apply { 
-                    action = "ACTION_MEDIA_PLAY_PAUSE" 
-                    putExtra("device_id", deviceId)
-                }, 
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
-                
-            val nextIntent = android.app.PendingIntent.getService(this, 2, 
-                android.content.Intent(this, DeskdropService::class.java).apply { 
-                    action = "ACTION_MEDIA_NEXT" 
-                    putExtra("device_id", deviceId)
-                }, 
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
-                
-            val prevIntent = android.app.PendingIntent.getService(this, 3, 
-                android.content.Intent(this, DeskdropService::class.java).apply { 
-                    action = "ACTION_MEDIA_PREVIOUS" 
-                    putExtra("device_id", deviceId)
-                }, 
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
-                
-            val notification = android.app.Notification.Builder(this, channelId)
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentTitle(title)
-                .setContentText(artist)
-                .setSubText("Playing on $deviceName")
-                .setStyle(android.app.Notification.MediaStyle()
-                    .setMediaSession(mediaSession?.sessionToken)
-                    .setShowActionsInCompactView(0, 1, 2)
-                )
-                .addAction(android.app.Notification.Action.Builder(android.R.drawable.ic_media_previous, "Previous", prevIntent).build())
-                .addAction(android.app.Notification.Action.Builder(
-                    if (status == "playing") android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play, 
-                    "Play/Pause", playPauseIntent).build())
-                .addAction(android.app.Notification.Action.Builder(android.R.drawable.ic_media_next, "Next", nextIntent).build())
-                .build()
-                
-            val nm = getSystemService(android.app.NotificationManager::class.java)
-            nm.notify(1001, notification)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse now playing event", e)
-        }
-    }
 
     private fun handleEvent(ev: Long) {
         when (DeskdropJni.eventType(ev)) {
@@ -1427,7 +1326,7 @@ class DeskdropService : Service() {
                 Log.d(TAG, "CallStateChanged echoed (no-op on originating device)")
             }
 
-            DeskdropJni.CR_EVENT_NOW_PLAYING -> handleNowPlaying(ev)
+
             DeskdropJni.CR_EVENT_CALL_ACTION -> {
                 val action = DeskdropJni.eventCallAction(ev) ?: return
                 Log.i(TAG, "Remote call action received: $action")
@@ -1698,16 +1597,8 @@ class DeskdropService : Service() {
 
     // ── Clipboard watch (Kotlin → Rust) ──────────────────────────────────────
 
-    private fun scheduleClipboardWatch() {
-        val interval = clipInterval
-        handler.postDelayed(object : Runnable {
-            override fun run() {
-                checkClipboard()
-                if (engineHandle != 0L) {
-                    handler.postDelayed(this, clipInterval)
-                }
-            }
-        }, interval)
+    private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+        checkClipboard()
     }
 
     private fun checkClipboard() {

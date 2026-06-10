@@ -169,6 +169,11 @@ pub enum IpcRequest {
         mime: String,
         target_device: Option<String>,
     },
+    SendFilePaths {
+        paths: Vec<String>,
+        bundle_name: String,
+        target_device: Option<String>,
+    },
     /// Accept an incoming file transfer.
     AcceptFileTransfer { transfer_id: String },
     /// Reject an incoming file transfer.
@@ -341,15 +346,7 @@ pub enum IpcRequest {
         /// Whether the device is charging
         charging: bool,
     },
-    // ── Media & Audio ─────────────────────────────────────────────────────────
-    SendMediaControl {
-        target_device: String,
-        action: String,
-    },
-    StartAudioRelay {
-        target_device: String,
-    },
-    StopAudioRelay,
+
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -746,38 +743,7 @@ pub async fn handle_ipc_request(
             eng.push_battery_status(level, charging).await;
             IpcResponse::ok_empty()
         }
-        // ── Media & Audio ──────────────────────────────────────────────────
-        IpcRequest::SendMediaControl { target_device, action } => {
-            match crate::ipc::parse_uuid(&target_device) {
-                Ok(uuid) => {
-                    let media_action = match action.to_lowercase().as_str() {
-                        "play_pause" | "playpause" => crate::protocol::MediaAction::PlayPause,
-                        "next" => crate::protocol::MediaAction::Next,
-                        "previous" | "prev" => crate::protocol::MediaAction::Previous,
-                        "volume_up" | "volup" => crate::protocol::MediaAction::VolumeUp,
-                        "volume_down" | "voldown" => crate::protocol::MediaAction::VolumeDown,
-                        "mute" => crate::protocol::MediaAction::Mute,
-                        _ => return IpcResponse::error("invalid media action"),
-                    };
-                    eng.send_media_control(uuid, media_action).await;
-                    IpcResponse::ok_empty()
-                }
-                Err(e) => IpcResponse::error(format!("bad target_device: {e}")),
-            }
-        }
-        IpcRequest::StartAudioRelay { target_device } => {
-            match crate::ipc::parse_uuid(&target_device) {
-                Ok(uuid) => {
-                    eng.start_audio_relay(uuid).await;
-                    IpcResponse::ok_empty()
-                }
-                Err(e) => IpcResponse::error(format!("bad target_device: {e}")),
-            }
-        }
-        IpcRequest::StopAudioRelay => {
-            eng.stop_audio_relay().await;
-            IpcResponse::ok_empty()
-        }
+
         // ── Metrics ────────────────────────────────────────────────────────
         IpcRequest::GetMetrics => {
             let snap = eng.status_snapshot().await;
@@ -1087,6 +1053,27 @@ pub async fn handle_ipc_request(
             };
             match eng
                 .send_file_path(std::path::PathBuf::from(path), name, mime, tgt)
+                .await
+            {
+                Ok(transfer_id) => IpcResponse::ok(hex::encode(transfer_id)),
+                Err(e) => IpcResponse::err(e.to_string()),
+            }
+        }
+        IpcRequest::SendFilePaths {
+            paths,
+            bundle_name,
+            target_device,
+        } => {
+            let tgt = match target_device {
+                Some(ref s) => match crate::ipc::parse_uuid(s) {
+                    Ok(id) => Some(id),
+                    Err(_) => return IpcResponse::err("invalid target device id"),
+                },
+                None => None,
+            };
+            let path_bufs: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
+            match eng
+                .send_file_paths(path_bufs, bundle_name, tgt)
                 .await
             {
                 Ok(transfer_id) => IpcResponse::ok(hex::encode(transfer_id)),

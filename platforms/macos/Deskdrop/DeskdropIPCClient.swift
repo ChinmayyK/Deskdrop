@@ -248,6 +248,19 @@ final class DeskdropIPCClient {
         return resp.data ?? ""
     }
 
+    /// Send multiple files/directories bundled into a single ZIP.
+    func sendFiles(urls: [URL], bundleName: String = "deskdrop_bundle", targetDeviceId: String? = nil) async throws -> String {
+        var cmd: [String: Any] = [
+            "cmd": "send_file_paths",
+            "paths": urls.map { $0.path },
+            "bundle_name": bundleName
+        ]
+        if let t = targetDeviceId { cmd["target_device"] = t }
+        let raw = try await send(cmd: cmd)
+        let resp = try JSONDecoder().decode(IpcResponse<String>.self, from: raw)
+        return resp.data ?? ""
+    }
+
     func acceptFileTransfer(transferId: String) async throws {
         _ = try await send(cmd: ["cmd": "accept_file_transfer", "transfer_id": transferId])
     }

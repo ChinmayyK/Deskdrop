@@ -323,19 +323,6 @@ pub enum AppMessage {
         transfer_id: [u8; 16],
     },
 
-    // ── Media & Audio ──────────────────────────────────────────────────────────
-    MediaControl {
-        action: MediaAction,
-    },
-    AudioStreamStart {
-        sample_rate: u32,
-        channels: u16,
-        format: String,
-    },
-    AudioStreamChunk {
-        data: Vec<u8>,
-    },
-    AudioStreamStop,
 
     /// Phone call state propagated from an Android device to connected peers.
     /// Enables call continuity: ringing/offhook/idle states are relayed so
@@ -414,25 +401,9 @@ pub enum AppMessage {
         origin_device: Uuid,
         data: Vec<u8>,
     },
-    NowPlaying {
-        title: String,
-        artist: String,
-        album: String,
-        status: String,
-        origin_device: Uuid,
-    },
     Bye,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MediaAction {
-    PlayPause,
-    Next,
-    Previous,
-    VolumeUp,
-    VolumeDown,
-    Mute,
-}
 
 // ── mDNS / defaults ──────────────────────────────────────────────────────────
 

@@ -639,6 +639,80 @@ impl FileTransferManager {
         Ok(self.outbound.get(&tid).unwrap())
     }
 
+    pub fn start_outbound_paths(
+        &mut self,
+        paths: Vec<PathBuf>,
+        mut bundle_name: String,
+        target_device: Option<Uuid>,
+    ) -> Result<&OutboundTransfer> {
+        if paths.is_empty() {
+            anyhow::bail!("no paths provided");
+        }
+        if paths.len() == 1 {
+            let path = paths[0].clone();
+            let mime_type = if path.is_dir() { "application/zip".to_string() } else { "application/octet-stream".to_string() };
+            return self.start_outbound_path(path, bundle_name, mime_type, target_device);
+        }
+
+        let tmp_zip_path = std::env::temp_dir().join(format!("deskdrop_bundle_{}.zip", Uuid::new_v4()));
+        let zip_file = std::fs::File::create(&tmp_zip_path).context("creating temp zip file")?;
+        let mut zip = zip::ZipWriter::new(zip_file);
+        let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        
+        for path in &paths {
+            if path.is_dir() {
+                let prefix = path.parent().unwrap_or(path);
+                for entry in walkdir::WalkDir::new(path) {
+                    let entry = entry.context("walking directory")?;
+                    let entry_path = entry.path();
+                    let name = entry_path.strip_prefix(prefix).unwrap_or(entry_path);
+                    let name_str = name.to_string_lossy().replace("\\", "/");
+                    
+                    if entry_path.is_file() {
+                        zip.start_file(name_str, options).context("starting zip file")?;
+                        let mut f = std::fs::File::open(entry_path).context("opening file to zip")?;
+                        std::io::copy(&mut f, &mut zip).context("writing file to zip")?;
+                    } else if !name.as_os_str().is_empty() && name_str != "/" {
+                        zip.add_directory(name_str, options).context("adding zip directory")?;
+                    }
+                }
+            } else {
+                let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                zip.start_file(&name, options).context("starting zip file")?;
+                let mut f = std::fs::File::open(path).context("opening file to zip")?;
+                std::io::copy(&mut f, &mut zip).context("writing file to zip")?;
+            }
+        }
+        zip.finish().context("finishing zip archive")?;
+        
+        if !bundle_name.ends_with(".zip") {
+            bundle_name = format!("{}.zip", bundle_name);
+        }
+
+        let size_bytes = std::fs::metadata(&tmp_zip_path)
+            .with_context(|| format!("reading metadata for {}", tmp_zip_path.display()))?
+            .len();
+        let checksum = checksum_file(&tmp_zip_path)?;
+        let mut tid = [0u8; 16];
+        tid.copy_from_slice(Uuid::new_v4().as_bytes());
+
+        let meta = FileTransferMetadata {
+            transfer_id: tid,
+            file_name: bundle_name,
+            size_bytes,
+            mime_type: "application/zip".to_string(),
+            sha256_checksum: checksum,
+            is_directory: true, // triggers extraction on receiver
+            file_count: paths.len() as u32,
+        };
+        let mut transfer = OutboundTransfer::from_path(tmp_zip_path, meta, target_device)?;
+        transfer.source_is_temp_zip = true;
+        
+        let tid = transfer.transfer_id;
+        self.outbound.insert(tid, transfer);
+        Ok(self.outbound.get(&tid).unwrap())
+    }
+
     pub fn get_outbound_mut(&mut self, tid: &TransferId) -> Option<&mut OutboundTransfer> {
         self.outbound.get_mut(tid)
     }

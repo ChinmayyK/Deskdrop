@@ -265,8 +265,10 @@ namespace Deskdrop.Windows
                         {
                             System.Threading.Tasks.Task.Run(() =>
                             {
-                                foreach (var file in dlg.FileNames)
-                                    _clipboardManager.PushFile(file);
+                                if (dlg.FileNames.Length == 1)
+                                    _clipboardManager.PushFile(dlg.FileNames[0]);
+                                else
+                                    _clipboardManager.PushFiles(dlg.FileNames, "deskdrop_bundle.zip");
                             });
                             ShowToast($"Sending {dlg.FileNames.Length} file(s)...");
                         }
@@ -782,13 +784,21 @@ namespace Deskdrop.Windows
         private void BorderSendFiles_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.OpenFileDialog();
-            dlg.Multiselect = false;
+            dlg.Multiselect = true;
             dlg.Title = "Select File to Send";
             if (dlg.ShowDialog() == true)
             {
-                var file = dlg.FileName;
-                _clipboardManager?.PushFile(file);
-                ShowToast($"Sending file: {System.IO.Path.GetFileName(file)}...");
+                if (dlg.FileNames.Length == 1)
+                {
+                    var file = dlg.FileNames[0];
+                    _clipboardManager?.PushFile(file);
+                    ShowToast($"Sending file: {System.IO.Path.GetFileName(file)}...");
+                }
+                else
+                {
+                    _clipboardManager?.PushFiles(dlg.FileNames, "deskdrop_bundle.zip");
+                    ShowToast($"Sending {dlg.FileNames.Length} files as batch...");
+                }
             }
         }
 
@@ -935,8 +945,10 @@ namespace Deskdrop.Windows
             {
                 System.Threading.Tasks.Task.Run(() =>
                 {
-                    foreach (var file in dlg.FileNames)
-                        _clipboardManager.PushFile(file);
+                    if (dlg.FileNames.Length == 1)
+                        _clipboardManager.PushFile(dlg.FileNames[0]);
+                    else
+                        _clipboardManager.PushFiles(dlg.FileNames, "deskdrop_bundle.zip");
                 });
                 ShowToast($"Sending {dlg.FileNames.Length} file(s)...");
             }
@@ -1001,10 +1013,10 @@ namespace Deskdrop.Windows
                 string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
                 System.Threading.Tasks.Task.Run(() =>
                 {
-                    foreach (var file in files)
-                    {
-                        _clipboardManager.PushFile(file);
-                    }
+                    if (files.Length == 1)
+                        _clipboardManager.PushFile(files[0]);
+                    else
+                        _clipboardManager.PushFiles(files, "deskdrop_bundle.zip");
                 });
                 ShowToast($"Sending {files.Length} file(s)...");
             }

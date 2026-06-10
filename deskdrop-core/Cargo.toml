@@ -60,11 +60,6 @@ anyhow = "1"
 default-net = "0.22.0"
 zip = "8.6.0"
 walkdir = "2.5.0"
-[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
-nowhear = "0.2.0"
-enigo = "0.2.0-rc3"
-cpal = "0.15"
-ringbuf = "0.3"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 mdns-sd = "0.10"
