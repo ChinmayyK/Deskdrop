@@ -29,6 +29,9 @@ import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import java.io.File
@@ -308,6 +311,8 @@ class DeskdropService : Service() {
         private const val NOTIF_ID_CLIPBOARD_AVAILABLE = 1005
         private const val NOTIF_ID_FILE_BASE         = 2000  // + (tid.hashCode() and 0xFFF)
         private const val NOTIF_ID_CALL              = 3001  // incoming call banner
+        private const val NOTIF_ID_PAIRING_BASE      = 4000  // pairing requests
+
 
         // Intent actions
         const val ACTION_START              = "com.deskdrop.START"
@@ -3026,7 +3031,37 @@ class DeskdropService : Service() {
             editor.putLong("last_sync_${name.take(32)}", ts)
         }
         editor.apply()
+        
+        updateDirectShareShortcuts(peers)
+        
         broadcastStatus()
+    }
+
+    private fun updateDirectShareShortcuts(peers: List<PeerSnapshot>) {
+        val shortcuts = mutableListOf<ShortcutInfoCompat>()
+        peers.filter { it.isConnected }.forEach { peer ->
+            val intent = Intent(this, DeskdropShareTarget::class.java).apply {
+                action = Intent.ACTION_SEND
+                putExtra(EXTRA_TARGET_DEVICE_ID, peer.id)
+            }
+            
+            val icon = IconCompat.createWithResource(this, R.mipmap.ic_launcher)
+
+            val shortcut = ShortcutInfoCompat.Builder(this, "peer_${peer.id}")
+                .setShortLabel(peer.name)
+                .setLongLabel("Send to ${peer.name}")
+                .setIcon(icon)
+                .setCategories(setOf("com.deskdrop.category.DIRECT_SHARE"))
+                .setIntent(intent)
+                .build()
+            shortcuts.add(shortcut)
+        }
+        
+        try {
+            ShortcutManagerCompat.setDynamicShortcuts(this, shortcuts)
+        } catch (e: Exception) {
+            Log.e("DeskdropService", "Failed to set dynamic shortcuts", e)
+        }
     }
 
     private fun broadcastStatus() {

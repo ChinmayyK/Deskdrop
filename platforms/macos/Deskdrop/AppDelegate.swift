@@ -54,8 +54,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Request permission for system notifications (device-connected alerts)
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        
+        let openAction = UNNotificationAction(identifier: "OPEN_ACTION", title: "Open", options: [.foreground])
+        let copyAction = UNNotificationAction(identifier: "COPY_ACTION", title: "Copy", options: [])
+        let category = UNNotificationCategory(identifier: "FILE_RECEIVED", actions: [openAction, copyAction], intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+        
         store.start()
         startMacScreenshotObserver()
+        NSApp.servicesProvider = self
         
         // Prevent App Nap to ensure background daemon and network sync stay responsive
         activityToken = ProcessInfo.processInfo.beginActivity(options: [.userInitiated], reason: "Deskdrop Background Sync")
@@ -87,6 +94,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             name: .deskdropEnsureDaemon,
             object: nil
         )
+    }
+
+    @objc func handleSendFilesService(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            Task { @MainActor in
+                do {
+                    try await DeskdropIPCClient.shared.sendFiles(urls: urls, targetDeviceId: store.defaultTargetDevice?.id)
+                    store.showToast(title: "Sending files", body: "\(urls.count) item(s)", tint: CRTheme.accentBlue, systemImage: "paperplane.fill", ttl: 2.0)
+                } catch {
+                    store.showToast(title: "Failed to send files", body: error.localizedDescription, tint: .red, systemImage: "xmark.octagon", ttl: 3.0)
+                }
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -393,6 +413,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().add(req)
     }
 
+    private func sendFileSystemNotification(title: String, body: String, filePath: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = "FILE_RECEIVED"
+        content.userInfo = ["filePath": filePath]
+        
+        let req = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(req)
+    }
+
     // Allow notifications to show as banners even when app is in foreground
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .sound])
@@ -401,8 +437,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     // Handle notification click
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         Task { @MainActor in
-            NSApp.activate(ignoringOtherApps: true)
-            self.openQuickAccess()
+            let action = response.actionIdentifier
+            if let filePath = response.notification.request.content.userInfo["filePath"] as? String {
+                let url = URL(fileURLWithPath: filePath)
+                if action == "OPEN_ACTION" {
+                    NSWorkspace.shared.open(url)
+                } else if action == "COPY_ACTION" {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.writeObjects([url as NSPasteboardWriting])
+                } else if action == UNNotificationDefaultActionIdentifier {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            } else {
+                NSApp.activate(ignoringOtherApps: true)
+                self.openQuickAccess()
+            }
             completionHandler()
         }
     }
@@ -532,22 +581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let title = "File Received"
             let body = fileName
             
-            store.showToast(
-                title: title,
-                body: body,
-                tint: CRTheme.accentBlue,
-                systemImage: "doc",
-                ttl: 6.0,
-                primaryAction: ToastAction(title: "Reveal in Finder", role: .primary) {
-                    let url = URL(fileURLWithPath: destPath)
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                },
-                secondaryAction: ToastAction(title: "Copy", role: .secondary) {
-                    let url = URL(fileURLWithPath: destPath)
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.writeObjects([url as NSPasteboardWriting])
-                }
-            )
+            sendFileSystemNotification(title: title, body: body, filePath: destPath)
             
         case "remote_notification":
             // Respect the user's toggle for Android Notification Mirroring

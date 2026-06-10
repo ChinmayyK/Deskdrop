@@ -136,6 +136,12 @@ if [[ -z "${ANDROID_NDK_HOME:-}" && -n "${ANDROID_HOME:-}" && -d "${ANDROID_HOME
     fi
 fi
 
+if [[ -z "${JAVA_HOME:-}" && -d "${HOME}/.jdk/jdk-17.0.11+9/Contents/Home" ]]; then
+    export JAVA_HOME="${HOME}/.jdk/jdk-17.0.11+9/Contents/Home"
+elif [[ -z "${JAVA_HOME:-}" && -d "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home" ]]; then
+    export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+fi
+
 if [[ -f "${ANDROID_DIR}/gradlew" ]]; then
     GRADLE_CMD=("./gradlew")
 elif [[ -x "/opt/homebrew/opt/gradle@8/bin/gradle" ]]; then

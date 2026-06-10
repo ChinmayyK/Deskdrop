@@ -159,17 +159,24 @@ class DeskdropShareTarget : ComponentActivity() {
             else -> null
         }
         val sharedName = intent?.getStringExtra(Intent.EXTRA_TITLE)?.takeIf { it.isNotBlank() }
+        val targetDeviceId = intent?.getStringExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID)
 
         if (!sharedText.isNullOrBlank()) {
             runCatching {
                 ContextCompat.startForegroundService(this, Intent(this, DeskdropService::class.java).apply {
                     action = DeskdropService.ACTION_PUSH_TEXT
                     putExtra("text", sharedText)
+                    if (targetDeviceId != null) putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, targetDeviceId)
                 })
             }
             Toast.makeText(this, "Pushed to Deskdrop peers", Toast.LENGTH_SHORT).show()
             finish()
         } else if (!sharedUris.isNullOrEmpty()) {
+            if (targetDeviceId != null) {
+                sendFiles(sharedUris, sharedName, targetDeviceId)
+                return
+            }
+
             val peers = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
                 .peerSnapshots()
                 .filter { it.isConnected }

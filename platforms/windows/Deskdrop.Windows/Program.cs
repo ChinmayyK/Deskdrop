@@ -195,7 +195,8 @@ namespace Deskdrop.Windows
         private string? _quickContextText;
         public string? QuickContextText => _quickContextText;
 
-        // ── Lifecycle ─────────────────────────────────────────────────────────
+        private EdgeDropWindow? _leftEdgeWindow;
+        private EdgeDropWindow? _rightEdgeWindow;
 
         public void Start(string? deviceName = null, ushort port = 0)
         {
@@ -226,6 +227,14 @@ namespace Deskdrop.Windows
                 }
             });
 
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                _leftEdgeWindow = new EdgeDropWindow(this, true);
+                _rightEdgeWindow = new EdgeDropWindow(this, false);
+                _leftEdgeWindow.Show();
+                _rightEdgeWindow.Show();
+            });
+
             RefreshStatus();
             _pollTimer  = new System.Threading.Timer(_ => DrainEvents(),    null, 0,   20);
             _watchTimer = new System.Threading.Timer(_ => CheckClipboard(), null, 200, 100);
@@ -237,6 +246,12 @@ namespace Deskdrop.Windows
             _pollTimer?.Dispose();  _pollTimer  = null;
             _watchTimer?.Dispose(); _watchTimer = null;
             if (_handle != IntPtr.Zero) { NativeCore.deskdrop_stop(_handle); _handle = IntPtr.Zero; }
+            
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                _leftEdgeWindow?.Close();
+                _rightEdgeWindow?.Close();
+            });
         }
 
         public void RestartDaemon()
@@ -585,7 +600,7 @@ namespace Deskdrop.Windows
                         });
                         StatusChanged?.Invoke($"📎 File received from {from}");
                         System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                            NotificationHelper.ShowToast($"File from {from}", $"Saved: {name}");
+                            NotificationHelper.ShowFileReceivedToast($"File from {from}", $"Saved: {name}", path);
                         });
                     }
                     break;
@@ -620,7 +635,7 @@ namespace Deskdrop.Windows
                         });
                         StatusChanged?.Invoke($"✅ File transfer complete from {from}");
                         System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                            NotificationHelper.ShowToast($"File from {from}", $"Saved: {name}");
+                            NotificationHelper.ShowFileReceivedToast($"File from {from}", $"Saved: {name}", path);
                         });
                     }
                     break;
@@ -1085,6 +1100,18 @@ namespace Deskdrop.Windows
                     NotificationHelper.ShowToast("Deskdrop Error", $"Failed to send file: {ex.Message}"));
             }
         }
+
+        public void PushFilesExternal(string[] filePaths)
+        {
+            try {
+                _mgr.PushFiles(filePaths);
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    NotificationHelper.ShowToast("Deskdrop", $"Sending {filePaths.Length} files..."));
+            } catch (Exception ex) {
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    NotificationHelper.ShowToast("Deskdrop Error", $"Failed to send files: {ex.Message}"));
+            }
+        }
         
         public void PushClipboardExternal()
         {
@@ -1310,6 +1337,7 @@ namespace Deskdrop.Windows
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 RegisterProtocolHandler();
+                RegisterContextMenu();
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
                 Application.ThreadException += (_, e) => LogError(e.Exception);
                 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -1402,6 +1430,16 @@ namespace Deskdrop.Windows
                     });
                 }
             }
+            else if (args.Length >= 2 && args[0] == "--push-files")
+            {
+                var files = args.Skip(1).Where(f => File.Exists(f) || Directory.Exists(f)).ToArray();
+                if (files.Length > 0)
+                {
+                    Task.Run(() => {
+                        app.PushFilesExternal(files);
+                    });
+                }
+            }
             else if (args.Length >= 1 && args[0].StartsWith("deskdrop://"))
             {
                 try
@@ -1419,6 +1457,34 @@ namespace Deskdrop.Windows
                         else if (action == "reject" && !string.IsNullOrEmpty(deviceId))
                         {
                             app.RespondToTrustExternal(deviceId, false);
+                        }
+                    }
+                    else if (uri.Host == "file-action")
+                    {
+                        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+                        var action = query["action"];
+                        var path = query["path"];
+
+                        if (!string.IsNullOrEmpty(path) && (File.Exists(path) || Directory.Exists(path)))
+                        {
+                            if (action == "open")
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = path,
+                                    UseShellExecute = true
+                                });
+                            }
+                            else if (action == "copy")
+                            {
+                                System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                                {
+                                    var dropList = new System.Collections.Specialized.StringCollection();
+                                    dropList.Add(path);
+                                    System.Windows.Clipboard.SetFileDropList(dropList);
+                                    NotificationHelper.ShowToast("Deskdrop", "File copied to clipboard.");
+                                });
+                            }
                         }
                     }
                     else if (uri.Host == "pair")
@@ -1468,6 +1534,37 @@ namespace Deskdrop.Windows
 
                     using var command = key.CreateSubKey(@"shell\open\command");
                     if (command != null) command.SetValue("", $"\"{exePath}\" \"%1\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError(ex);
+            }
+        }
+
+        private static void RegisterContextMenu()
+        {
+            try
+            {
+                var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (string.IsNullOrEmpty(exePath)) return;
+
+                using var fileKey = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Classes\*\shell\Deskdrop");
+                if (fileKey != null)
+                {
+                    fileKey.SetValue("", "Send via Deskdrop");
+                    fileKey.SetValue("Icon", $"\"{exePath}\",0");
+                    using var cmd = fileKey.CreateSubKey("command");
+                    if (cmd != null) cmd.SetValue("", $"\"{exePath}\" --push-file \"%1\"");
+                }
+
+                using var dirKey = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Classes\Directory\shell\Deskdrop");
+                if (dirKey != null)
+                {
+                    dirKey.SetValue("", "Send via Deskdrop");
+                    dirKey.SetValue("Icon", $"\"{exePath}\",0");
+                    using var cmd = dirKey.CreateSubKey("command");
+                    if (cmd != null) cmd.SetValue("", $"\"{exePath}\" --push-file \"%1\"");
                 }
             }
             catch (Exception ex)
