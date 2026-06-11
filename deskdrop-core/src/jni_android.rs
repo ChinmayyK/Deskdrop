@@ -1621,3 +1621,19 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifyNetworkRestored(
     rt().block_on(h.engine.reconnect_all_peers());
     0
 }
+
+// ── toggleWebDashboard ────────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_toggleWebDashboard(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    enable: jboolean,
+) {
+    if handle == 0 {
+        return;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.toggle_web_dashboard(enable != 0));
+}

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deskdrop Guest Share</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #09090b; color: #f4f4f5; }
+        .drag-active { border-color: #10b981 !important; background-color: rgba(16, 185, 129, 0.1) !important; }
+        .glass-panel { background: rgba(24, 24, 27, 0.7); backdrop-filter: blur(16px); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-6 bg-zinc-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 to-zinc-950">
+    
+    <div class="max-w-md w-full glass-panel border border-zinc-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+        <!-- Abstract Glow -->
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-emerald-500/10 blur-[60px] pointer-events-none"></div>
+
+        <div class="text-center mb-8 relative z-10">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 mb-4 shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight text-white mb-1">Deskdrop Guest Share</h1>
+            <p class="text-zinc-400 text-sm">Sending files to <strong class="text-zinc-200 font-semibold" id="deviceName">this device</strong>.</p>
+        </div>
+
+        <div id="dropzone" class="border-2 border-dashed border-zinc-700 rounded-2xl p-10 flex flex-col items-center justify-center transition-all duration-200 bg-zinc-900/50 hover:bg-zinc-800/50 cursor-pointer relative z-10 group">
+            <input type="file" id="fileInput" class="hidden" multiple>
+            <div class="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-zinc-400 group-hover:text-emerald-400 transition-colors"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" x2="12" y1="18" y2="12"/><line x1="9" x2="15" y1="15" y2="15"/></svg>
+            </div>
+            <p class="text-zinc-300 font-medium mb-1">Click or drag files here</p>
+            <p class="text-zinc-500 text-xs">Files transfer securely over your local Wi-Fi.</p>
+        </div>
+
+        <div id="uploadProgress" class="hidden mt-6 relative z-10">
+            <div class="flex justify-between text-xs text-zinc-400 mb-2 font-medium">
+                <span id="progressText">Uploading...</span>
+                <span id="progressPercent">0%</span>
+            </div>
+            <div class="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                <div id="progressBar" class="bg-emerald-500 h-1.5 rounded-full" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div id="successMessage" class="hidden mt-6 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 flex items-center gap-3 relative z-10">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400 shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <p class="text-sm text-emerald-200 font-medium">Files sent successfully!</p>
+        </div>
+    </div>
+
+    <script>
+        // Fetch device info
+        fetch('/api/info')
+            .then(res => res.json())
+            .then(data => {
+                if (data.device_name) {
+                    document.getElementById('deviceName').textContent = data.device_name;
+                }
+            })
+            .catch(err => console.error("Could not fetch device info", err));
+
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const progressContainer = document.getElementById('uploadProgress');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressText = document.getElementById('progressText');
+        const successMessage = document.getElementById('successMessage');
+
+        dropzone.addEventListener('click', () => fileInput.click());
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.add('drag-active'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.remove('drag-active'), false);
+        });
+
+        dropzone.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        function handleDrop(e) {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            handleFiles(files);
+        }
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            uploadFile(files[0]); // Currently supporting 1 file at a time for simplicity
+        }
+
+        function uploadFile(file) {
+            successMessage.classList.add('hidden');
+            progressContainer.classList.remove('hidden');
+            progressText.textContent = `Sending ${file.name}...`;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload', true);
+
+            xhr.upload.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    progressBar.style.width = percentComplete + '%';
+                    progressPercent.textContent = percentComplete + '%';
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    setTimeout(() => {
+                        progressContainer.classList.add('hidden');
+                        successMessage.classList.remove('hidden');
+                        progressBar.style.width = '0%';
+                        // Hide success message after 3 seconds
+                        setTimeout(() => successMessage.classList.add('hidden'), 3000);
+                    }, 500);
+                } else {
+                    progressText.textContent = `Error: ${xhr.statusText}`;
+                    progressText.classList.add('text-red-400');
+                    progressBar.classList.replace('bg-emerald-500', 'bg-red-500');
+                }
+            };
+
+            xhr.onerror = function() {
+                progressText.textContent = 'Network Error';
+                progressText.classList.add('text-red-400');
+                progressBar.classList.replace('bg-emerald-500', 'bg-red-500');
+            };
+
+            xhr.send(formData);
+        }
+    </script>
+</body>
+</html>

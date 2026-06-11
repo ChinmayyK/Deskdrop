@@ -39,6 +39,7 @@ struct IpcStatusResponse: Codable {
     let peer_batteries: [IpcPeerBatteryState]?
     let peer_networks: [IpcPeerNetworkState]?
     let active_transfers: [IpcFileTransferState]?
+    let web_dashboard_url: String?
 }
 
 struct IpcFileTransferState: Codable {
@@ -143,6 +144,10 @@ final class DeskdropIPCClient {
 
     func renameDevice(deviceId: String, displayName: String) async throws {
         _ = try await send(cmd: ["cmd": "rename_trusted_device", "device_id": deviceId, "display_name": displayName])
+    }
+
+    func toggleWebDashboard(enabled: Bool) async throws {
+        _ = try await send(cmd: ["cmd": "toggle_web_dashboard", "enabled": enabled])
     }
 
     func approveTrust(deviceId: String, deviceName: String, pubkeyBytes: Data) async throws {

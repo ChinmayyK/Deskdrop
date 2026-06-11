@@ -66,6 +66,7 @@ fun SettingsScreen(
     notificationMirroringEnabled: Boolean,
     autoForwardSms: Boolean,
     autoForwardScreenshots: Boolean,
+    webDashboardEnabled: Boolean,
     isDarkMode: Boolean,
     peers: List<com.deskdrop.PeerSnapshot>,
     onSyncEnabledChange: (Boolean) -> Unit,
@@ -76,6 +77,7 @@ fun SettingsScreen(
     onNotificationMirroringChange: (Boolean) -> Unit,
     onAutoForwardSmsChange: (Boolean) -> Unit,
     onAutoForwardScreenshotsChange: (Boolean) -> Unit,
+    onWebDashboardChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     onRenameClicked: () -> Unit,
     onBatterySettingsClicked: () -> Unit,
@@ -328,6 +330,24 @@ fun SettingsScreen(
                                 onCheckedChange = onNotificationMirroringChange
                             )
                         }
+                    }
+                }
+
+                item {
+                    SettingsSection(
+                        isDark = isDarkMode,
+                        title = "Guest Mode",
+                        accentColor = CRTheme.statusGreen,
+                        icon = Icons.Rounded.Wifi
+                    ) {
+                        SettingsSwitchRow(
+                            isDark = isDarkMode,
+                            icon = Icons.Rounded.Router,
+                            title = "Web Dashboard",
+                            subtitle = "Allow guests on the local network to upload files via a web browser.",
+                            checked = webDashboardEnabled,
+                            onCheckedChange = onWebDashboardChange
+                        )
                     }
                 }
 

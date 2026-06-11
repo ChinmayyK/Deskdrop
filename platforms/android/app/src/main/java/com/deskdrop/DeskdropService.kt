@@ -191,6 +191,8 @@ object DeskdropJni {
     ): Int
 
     // ── Call continuity ───────────────────────────────────────────────────────
+    /** Toggle the Guest Mode Web Dashboard. */
+    @JvmStatic external fun toggleWebDashboard(handle: Long, enable: Boolean)
     /** Push phone call state (ringing/offhook/idle) to all connected peers. */
     @JvmStatic external fun pushCallState(
         handle: Long, state: String, number: String, contactName: String
@@ -342,6 +344,7 @@ class DeskdropService : Service() {
         const val ACTION_SEND_PAIRING_REQUEST = "com.deskdrop.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "com.deskdrop.RESPOND_TO_PAIRING"
         const val ACTION_DISCONNECT_PEER    = "com.deskdrop.DISCONNECT_PEER"
+        const val ACTION_TOGGLE_WEB_DASHBOARD = "com.deskdrop.TOGGLE_WEB_DASHBOARD"
 
         // Intent extras
         const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
@@ -356,6 +359,7 @@ class DeskdropService : Service() {
         const val EXTRA_NOTIFICATION_PKG    = "notification_pkg"
         const val EXTRA_NOTIFICATION_TITLE  = "notification_title"
         const val EXTRA_NOTIFICATION_TEXT   = "notification_text"
+        const val EXTRA_WEB_DASHBOARD_ENABLED = "web_dashboard_enabled"
         const val PREF_SERVICE_RUNNING      = "service_running"
 
         // Poll intervals
@@ -620,6 +624,14 @@ class DeskdropService : Service() {
             ACTION_PAUSE_SYNC   -> { setSyncEnabled(false); return START_STICKY }
             ACTION_RESUME_SYNC  -> { setSyncEnabled(true);  return START_STICKY }
             ACTION_DISCONNECT_ALL -> { disconnectAllPeers(); return START_STICKY }
+            ACTION_TOGGLE_WEB_DASHBOARD -> {
+                val enabled = intent?.getBooleanExtra(EXTRA_WEB_DASHBOARD_ENABLED, false) ?: false
+                if (engineHandle != 0L) {
+                    DeskdropJni.toggleWebDashboard(engineHandle, enabled)
+                    Log.i(TAG, "Toggled Web Dashboard: $enabled")
+                }
+                return START_STICKY
+            }
             ACTION_CONNECT_MANUAL -> {
                 val ip = intent?.getStringExtra("ip")
                 val port = intent?.getIntExtra("port", 47823) ?: 47823
@@ -2786,9 +2798,11 @@ class DeskdropService : Service() {
         val syncText    = p.getBoolean("sync_text",    true)
         val syncImages  = p.getBoolean("sync_images",  true)
         val syncFiles   = p.getBoolean("sync_files",   true)
-        Log.i(TAG, "Applying settings: sync=$syncEnabled text=$syncText images=$syncImages files=$syncFiles")
+        val webDashboard = p.getBoolean("web_dashboard_enabled", false)
+        Log.i(TAG, "Applying settings: sync=$syncEnabled text=$syncText images=$syncImages files=$syncFiles web_dashboard=$webDashboard")
         // Push to engine — JNI call updates the engine's sync filter flags atomically.
         DeskdropJni.applySyncSettings(h, syncEnabled, syncText, syncImages, syncFiles)
+        DeskdropJni.toggleWebDashboard(h, webDashboard)
         // If sync was just disabled, cancel any pending clipboard notifications.
         if (!syncEnabled) {
             notificationManager.cancel(NOTIF_ID_CLIPBOARD_AVAILABLE)

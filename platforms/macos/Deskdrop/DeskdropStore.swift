@@ -374,7 +374,8 @@ final class DeskdropStore: ObservableObject {
                 lastSyncAt:   s.peers.compactMap { $0.last_sync }
                     .max().map { Date(timeIntervalSince1970: TimeInterval($0)) },
                 syncEnabled:  true,
-                daemonVersion: nil
+                daemonVersion: nil,
+                webDashboardUrl: s.web_dashboard_url
             )
             if lastActivityId > 0 {
                 await pollActivityFeedIncremental()
@@ -671,6 +672,12 @@ final class DeskdropStore: ObservableObject {
             ? "Clipboard sync is now active"
             : "Clipboard sync paused — no events will be forwarded",
             tint: s.syncEnabled ? CRTheme.accentGreen : CRTheme.accentOrange)
+    }
+
+    /// Toggle the Guest Mode Web Dashboard
+    func toggleWebDashboard(enabled: Bool) async throws {
+        try await ipc.toggleWebDashboard(enabled: enabled)
+        await refresh()
     }
 
     /// Open the Quick Access history panel — triggered by command palette.

@@ -202,6 +202,8 @@ pub enum IpcRequest {
     GetMetrics,
     /// Poll the latest camera frame received from any peer.
     LatestCameraFrame { target_device: Option<String> },
+    /// Toggle the Guest Mode Web Dashboard server
+    ToggleWebDashboard { enabled: bool },
 
     // ── History tag management ────────────────────────────────────────────────
     /// Add a tag to a history entry.
@@ -717,6 +719,10 @@ pub async fn handle_ipc_request(
             }
         }
         IpcRequest::Ping => IpcResponse::ok_empty(),
+        IpcRequest::ToggleWebDashboard { enabled } => {
+            eng.toggle_web_dashboard(enabled).await;
+            IpcResponse::ok_empty()
+        }
         IpcRequest::Shutdown => {
             std::process::exit(0);
         }

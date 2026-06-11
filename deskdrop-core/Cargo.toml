@@ -41,6 +41,11 @@ socket2 = { version = "0.5", features = ["all"] }
 image = { version = "0.24", optional = true }
 if-addrs = "0.13"
 
+# Web Dashboard
+axum = { version = "0.7", features = ["multipart"] }
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+futures-util = "0.3"
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

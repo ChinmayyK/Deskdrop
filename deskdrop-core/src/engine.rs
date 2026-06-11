@@ -365,6 +365,7 @@ pub struct EngineStatus {
     pub bind_address: SocketAddr,
     pub peers: Vec<PeerRecord>,
     pub last_sync_at: Option<u64>,
+    pub web_dashboard_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -464,6 +465,8 @@ struct EngineShared {
     pub dedup: Arc<Mutex<crate::dedup::Deduplicator>>,
     /// Active QR authentication token (short-lived)
     pub qr_auth_token: Arc<Mutex<Option<String>>>,
+    /// Shutdown channel for the Web Dashboard server
+    pub web_dashboard_shutdown: Arc<Mutex<Option<tokio::sync::broadcast::Sender<()>>>>,
 }
 
 #[derive(Clone)]
@@ -553,6 +556,7 @@ impl Engine {
             throttle: crate::throttle::Throttle::default_rate(),
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
+            web_dashboard_shutdown: Arc::new(Mutex::new(None)),
         };
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
@@ -2444,8 +2448,44 @@ impl Engine {
         self.shared.peer_manager.connected_count()
     }
 
+    pub async fn toggle_web_dashboard(&self, enable: bool) {
+        let mut shutdown_guard = self.shared.web_dashboard_shutdown.lock().await;
+        if enable {
+            if shutdown_guard.is_some() {
+                return; // Already running
+            }
+            let (tx, rx) = tokio::sync::broadcast::channel(1);
+            *shutdown_guard = Some(tx);
+            
+            let save_dir = self.shared.config.file_save_dir.clone()
+                .unwrap_or_else(crate::file_transfer::default_save_dir);
+                
+            let state = crate::web_dashboard::WebDashboardState {
+                device_name: self.shared.config.device_name.clone(),
+                save_dir,
+                event_tx: self.shared.event_tx.clone(),
+                web_device_id: Uuid::new_v4(), // Ephemeral ID
+            };
+            
+            tokio::spawn(async move {
+                let _ = crate::web_dashboard::start_web_server(4445, state, rx).await;
+            });
+        } else {
+            if let Some(tx) = shutdown_guard.take() {
+                let _ = tx.send(()); // Trigger shutdown
+            }
+        }
+    }
+
     pub async fn status_snapshot(&self) -> EngineStatus {
         let state = self.shared.network_state.lock().await.clone();
+        let web_dashboard_active = self.shared.web_dashboard_shutdown.lock().await.is_some();
+        let web_dashboard_url = if web_dashboard_active {
+            Some(format!("http://{}:4445", state.bind_addr.ip()))
+        } else {
+            None
+        };
+
         EngineStatus {
             active_interface: state.active_interface,
             bind_address: state.bind_addr,
@@ -2456,6 +2496,7 @@ impl Engine {
                 state.bind_addr.ip(),
             ),
             last_sync_at: self.shared.peer_manager.last_sync_at(),
+            web_dashboard_url,
         }
     }
 

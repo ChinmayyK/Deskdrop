@@ -1268,6 +1268,11 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
 
 
 
+        IpcRequest::ToggleWebDashboard { enabled } => {
+            state.engine.toggle_web_dashboard(enabled).await;
+            Ok(IpcResponse::ok_empty())
+        }
+
         IpcRequest::Shutdown => {
             state.shutdown.notify_waiters();
             Ok(IpcResponse::ok_empty())
