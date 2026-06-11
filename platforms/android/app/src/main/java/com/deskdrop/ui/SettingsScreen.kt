@@ -381,12 +381,45 @@ fun SettingsScreen(
                                                 lineHeight = 18.sp
                                             )
                                             Spacer(modifier = Modifier.height(8.dp))
+                                            val url = "http://${getLocalIpAddress()}:4445"
                                             Text(
-                                                text = "http://${getLocalIpAddress()}:4445",
+                                                text = url,
                                                 fontFamily = FontFamily.Monospace,
                                                 color = CRTheme.statusGreen,
                                                 fontWeight = FontWeight.Medium
                                             )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(Color.White, RoundedCornerShape(12.dp))
+                                                    .padding(12.dp)
+                                            ) {
+                                                val bmp = remember(url) {
+                                                    try {
+                                                        val writer = com.google.zxing.qrcode.QRCodeWriter()
+                                                        val bitMatrix = writer.encode(url, com.google.zxing.BarcodeFormat.QR_CODE, 400, 400)
+                                                        val w = bitMatrix.width
+                                                        val h = bitMatrix.height
+                                                        val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.RGB_565)
+                                                        for (x in 0 until w) {
+                                                            for (y in 0 until h) {
+                                                                b.setPixel(x, y, if (bitMatrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                                                            }
+                                                        }
+                                                        b
+                                                    } catch (e: Exception) {
+                                                        null
+                                                    }
+                                                }
+                                                if (bmp != null) {
+                                                    Image(
+                                                        bitmap = androidx.compose.ui.graphics.asImageBitmap(bmp),
+                                                        contentDescription = "QR Code",
+                                                        modifier = Modifier.size(140.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }

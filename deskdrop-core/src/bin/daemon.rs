@@ -555,6 +555,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "active_transfers":      active_transfers,
                 "peer_batteries":        peer_batteries,
                 "peer_networks":         peer_networks,
+                "web_dashboard_url":     snapshot.web_dashboard_url,
             })))
         }
         // Re-trigger mDNS discovery — called by the Mac "Scan" button and

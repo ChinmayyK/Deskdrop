@@ -3,6 +3,7 @@
 
 import SwiftUI
 import AppKit
+import CoreImage.CIFilterBuiltins
 
 // MARK: - Root
 
@@ -455,20 +456,49 @@ private struct NetworkPane: View {
             }
             if let url = store.status?.webDashboardUrl {
                 PrefsDivider()
-                PrefsRow(icon: "link", label: "Dashboard URL", description: "Ask guests to visit this URL in their browser.") {
-                    HStack(spacing: 8) {
-                        Text(url)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(CRTheme.inkSoft)
-                        Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(url, forType: .string)
+                PrefsRow(icon: "link", label: "Dashboard URL", description: "Scan the QR code or visit this URL in a browser.") {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack(spacing: 8) {
+                            Text(url)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(CRTheme.inkSoft)
+                            Button("Copy") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(url, forType: .string)
+                            }
+                            .buttonStyle(CRSecondaryButtonStyle())
                         }
-                        .buttonStyle(CRSecondaryButtonStyle())
+                        
+                        if let qrImage = generateQRCode(from: url) {
+                            Image(nsImage: qrImage)
+                                .interpolation(.none)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 140, height: 140)
+                                .padding(12)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
                     }
                 }
             }
         }
+    }
+    
+    private func generateQRCode(from string: String) -> NSImage? {
+        let context = CIContext()
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(string.utf8)
+        
+        if let outputImage = filter.outputImage {
+            let transform = CGAffineTransform(scaleX: 10, y: 10)
+            let scaledImage = outputImage.transformed(by: transform)
+            if let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) {
+                return NSImage(cgImage: cgImage, size: NSSize(width: scaledImage.extent.width, height: scaledImage.extent.height))
+            }
+        }
+        return nil
+    }
 
         PrefsSection(title: "Listener", icon: "antenna.radiowaves.left.and.right", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "number.circle.fill", label: "Port",
