@@ -449,7 +449,9 @@ private struct NetworkPane: View {
                     set: { enabled in
                         Task { try? await store.toggleWebDashboard(enabled: enabled) }
                     }
-                )).labelsHidden()
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
             }
             if let url = store.status?.webDashboardUrl {
                 PrefsDivider()
