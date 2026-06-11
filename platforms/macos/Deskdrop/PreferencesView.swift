@@ -483,23 +483,7 @@ private struct NetworkPane: View {
                 }
             }
         }
-    }
-    
-    private func generateQRCode(from string: String) -> NSImage? {
-        let context = CIContext()
-        let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(string.utf8)
         
-        if let outputImage = filter.outputImage {
-            let transform = CGAffineTransform(scaleX: 10, y: 10)
-            let scaledImage = outputImage.transformed(by: transform)
-            if let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) {
-                return NSImage(cgImage: cgImage, size: NSSize(width: scaledImage.extent.width, height: scaledImage.extent.height))
-            }
-        }
-        return nil
-    }
-
         PrefsSection(title: "Listener", icon: "antenna.radiowaves.left.and.right", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "number.circle.fill", label: "Port",
                      description: "TCP port the daemon binds to. Changes take effect on restart.") {
@@ -555,6 +539,21 @@ private struct NetworkPane: View {
                     .frame(maxWidth: 165)
             }
         }
+    }
+    
+    private func generateQRCode(from string: String) -> NSImage? {
+        let context = CIContext()
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(string.utf8)
+        
+        if let outputImage = filter.outputImage {
+            let transform = CGAffineTransform(scaleX: 10, y: 10)
+            let scaledImage = outputImage.transformed(by: transform)
+            if let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) {
+                return NSImage(cgImage: cgImage, size: NSSize(width: scaledImage.extent.width, height: scaledImage.extent.height))
+            }
+        }
+        return nil
     }
 }
 

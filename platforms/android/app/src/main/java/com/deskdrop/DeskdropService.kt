@@ -2332,7 +2332,7 @@ class DeskdropService : Service() {
             serviceType = NSD_SERVICE_TYPE
             port        = DEFAULT_DESKDROP_PORT
             setAttribute("id", myDeviceId ?: "")
-            setAttribute("v", "3")
+            setAttribute("v", "4")
         }
 
         val regListener = object : NsdManager.RegistrationListener {
@@ -2477,7 +2477,7 @@ class DeskdropService : Service() {
             }
 
             val peerVersion = if (Build.VERSION.SDK_INT >= 21) info.attributes["v"]?.let { String(it) } else null
-            if (peerVersion != null && peerVersion != "3") {
+            if (peerVersion != null && peerVersion != "4") {
                 Log.i(TAG, "NSD: skipping ${info.serviceName} due to protocol version $peerVersion")
                 return
             }
