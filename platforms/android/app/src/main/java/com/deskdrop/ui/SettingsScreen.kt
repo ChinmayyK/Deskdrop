@@ -340,14 +340,58 @@ fun SettingsScreen(
                         accentColor = CRTheme.statusGreen,
                         icon = Icons.Rounded.Wifi
                     ) {
-                        SettingsSwitchRow(
-                            isDark = isDarkMode,
-                            icon = Icons.Rounded.Router,
-                            title = "Web Dashboard",
-                            subtitle = "Allow guests on the local network to upload files via a web browser.",
-                            checked = webDashboardEnabled,
-                            onCheckedChange = onWebDashboardChange
-                        )
+                        Column {
+                            SettingsSwitchRow(
+                                isDark = isDarkMode,
+                                icon = Icons.Rounded.Router,
+                                title = "Web Dashboard",
+                                subtitle = "Allow guests on the local network to upload files via a web browser.",
+                                checked = webDashboardEnabled,
+                                onCheckedChange = onWebDashboardChange
+                            )
+                            
+                            AnimatedVisibility(
+                                visible = webDashboardEnabled,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
+                            ) {
+                                Column {
+                                    HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.surface(isDarkMode)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(imageVector = Icons.Rounded.Link, contentDescription = null, tint = CRTheme.textHigh(isDarkMode), modifier = Modifier.size(20.dp))
+                                        }
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(text = "Dashboard URL", style = CRTypography.bodyMedium, color = CRTheme.textHigh(isDarkMode))
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Ask guests to visit this URL in their browser.",
+                                                fontSize = 13.sp,
+                                                color = CRTheme.textMedium(isDarkMode),
+                                                lineHeight = 18.sp
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "http://${getLocalIpAddress()}:4445",
+                                                fontFamily = FontFamily.Monospace,
+                                                color = CRTheme.statusGreen,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

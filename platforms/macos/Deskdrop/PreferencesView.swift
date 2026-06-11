@@ -455,7 +455,7 @@ private struct NetworkPane: View {
             }
             if let url = store.status?.webDashboardUrl {
                 PrefsDivider()
-                PrefsRow(icon: "link", label: "Dashboard URL") {
+                PrefsRow(icon: "link", label: "Dashboard URL", description: "Ask guests to visit this URL in their browser.") {
                     HStack(spacing: 8) {
                         Text(url)
                             .font(.system(size: 11, design: .monospaced))
