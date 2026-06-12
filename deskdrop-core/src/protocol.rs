@@ -435,6 +435,7 @@ mod tests {
         let c = ClipboardContent::Image {
             mime: "image/png".into(),
             data: vec![],
+            extracted_text: None,
         };
         assert!(c.is_empty());
     }
@@ -444,6 +445,7 @@ mod tests {
         let c = ClipboardContent::Image {
             mime: "image/png".into(),
             data: vec![0xFF; 8],
+            extracted_text: None,
         };
         assert!(!c.is_empty());
     }
@@ -474,10 +476,12 @@ mod tests {
             ClipboardContent::Image {
                 mime: "image/png".into(),
                 data: vec![],
+                extracted_text: None,
             },
             ClipboardContent::Image {
                 mime: "image/png".into(),
                 data: vec![0],
+                extracted_text: None,
             },
         ];
         for item in &items {

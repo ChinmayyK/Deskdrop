@@ -941,21 +941,46 @@ private struct DeviceCard: View {
                 DeviceAvatar(name: device.name, platform: nil, size: 38, color: accent)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(device.name)
-                            .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
-                            .lineLimit(1)
-                        HStack(spacing: 3) {
-                            StatusDot(isOnline: device.isConnected, size: 6)
-                            Text(device.connectionState.label)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(device.connectionState.color)
+                    ViewThatFits(in: .horizontal) {
+                        // Option 1: Everything in one row
+                        HStack(spacing: 6) {
+                            Text(device.name)
+                                .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                                .lineLimit(1)
+                            HStack(spacing: 3) {
+                                StatusDot(isOnline: device.isConnected, size: 6)
+                                Text(device.connectionState.label)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(device.connectionState.color)
+                            }
+                            if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
+                                BatteryIndicatorPill(level: battery.level, charging: battery.charging)
+                            }
+                            if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
+                                NetworkIndicatorPill(type: net.networkType)
+                            }
                         }
-                        if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
-                            BatteryIndicatorPill(level: battery.level, charging: battery.charging)
-                        }
-                        if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
-                            NetworkIndicatorPill(type: net.networkType)
+                        // Option 2: Wrap pills to the next line
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text(device.name)
+                                    .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                                    .lineLimit(1)
+                                HStack(spacing: 3) {
+                                    StatusDot(isOnline: device.isConnected, size: 6)
+                                    Text(device.connectionState.label)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(device.connectionState.color)
+                                }
+                            }
+                            HStack(spacing: 6) {
+                                if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
+                                    BatteryIndicatorPill(level: battery.level, charging: battery.charging)
+                                }
+                                if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
+                                    NetworkIndicatorPill(type: net.networkType)
+                                }
+                            }
                         }
                     }
                     HStack(spacing: 6) {
@@ -1007,7 +1032,7 @@ private struct DeviceCard: View {
                     Button("Disconnect") { store.disconnect(device) }
                         .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentOrange))
                 } else if device.canReconnect {
-                    Button("Reconnect") { store.scanForDevices() }
+                    Button("Reconnect") { store.connect(device) }
                         .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                 }
                 if device.trustState != .trusted {
@@ -1173,7 +1198,7 @@ struct DeviceCentricDashboardView: View {
                 }
 
                 if !store.connectedDevices.isEmpty {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 340, maximum: .infinity), spacing: 16)], spacing: 16) {
                         ForEach(store.connectedDevices, id: \.id) { device in
                             CompactDeviceCard(device: device, store: store) {
                                 pendingFileTarget = device
@@ -1275,20 +1300,40 @@ private struct CompactDeviceCard: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Circle().fill(CRTheme.accentGreen).frame(width: 6, height: 6)
-                        Text("Connected")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(CRTheme.accentGreen)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        HStack(spacing: 4) {
+                            Circle().fill(CRTheme.accentGreen).frame(width: 6, height: 6)
+                            Text("Connected")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(CRTheme.accentGreen)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
+                            BatteryIndicatorPill(level: battery.level, charging: battery.charging)
+                        }
+                        if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
+                            NetworkIndicatorPill(type: net.networkType)
+                        }
                     }
-                    if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
-                        BatteryIndicatorPill(level: battery.level, charging: battery.charging)
-                    }
-                    if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
-                        NetworkIndicatorPill(type: net.networkType)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 4) {
+                            Circle().fill(CRTheme.accentGreen).frame(width: 6, height: 6)
+                            Text("Connected")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(CRTheme.accentGreen)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        HStack(spacing: 6) {
+                            if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
+                                BatteryIndicatorPill(level: battery.level, charging: battery.charging)
+                            }
+                            if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
+                                NetworkIndicatorPill(type: net.networkType)
+                            }
+                        }
                     }
                 }
             }
@@ -1314,14 +1359,21 @@ private struct CompactDeviceCard: View {
                     .help("Ping Phone")
                     
                     Button(action: onSendFiles) {
-                        HStack(spacing: 6) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "folder.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                Text("Send Files")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            
                             Image(systemName: "folder.fill")
-                                .font(.system(size: 14, weight: .bold))
-                            Text("Send Files")
-                                .font(.system(size: 13, weight: .bold))
-                                .lineLimit(1)
+                                .font(.system(size: 15))
+                                .frame(width: 38, height: 38)
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 10)
                         .foregroundStyle(CRTheme.brandElectric)
                         .background(CRTheme.brandElectric.opacity(0.15), in: Capsule())
                     }
@@ -1524,10 +1576,13 @@ struct BatteryIndicatorPill: View {
                 .font(.system(size: 9.5, weight: .semibold))
             Text("\(level)%")
                 .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .foregroundStyle(tintColor)
+        .fixedSize(horizontal: true, vertical: false)
         .background(
             Capsule()
                 .fill(tintColor.opacity(0.12))
@@ -1559,6 +1614,8 @@ struct NetworkIndicatorPill: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .foregroundStyle(tintColor)
+        .lineLimit(1)
+        .fixedSize()
         .background(
             Capsule()
                 .fill(tintColor.opacity(0.12))

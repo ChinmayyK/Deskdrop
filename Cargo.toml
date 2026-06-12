@@ -2,7 +2,7 @@
 members = [
     "deskdrop-core",
     "deskdrop-cli",
-    "platforms/linux",
+    "platforms/linux", "test_zip",
 ]
 resolver = "2"
 

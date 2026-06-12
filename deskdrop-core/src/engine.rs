@@ -1,6 +1,6 @@
 use crate::activity::ActivityFeed;
 use crate::dedup::hash_content;
-use crate::discovery::{Discovery, PeerEvent, PeerInfo};
+use crate::discovery::{Discovery, PeerEvent};
 use crate::file_transfer::{default_save_dir, FileTransferManager, FileTransferMessage};
 use crate::identity::IdentityStore;
 use crate::mesh::{ClipboardApplyPolicy, MeshRouter};
@@ -17,7 +17,7 @@ use crate::retry::Backoff;
 use crate::settings::{default_peer_store_path, default_trust_store_path, Settings};
 use crate::trust::{TrustRecord, TrustState, TrustStore};
 use anyhow::{anyhow, Context, Result};
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
@@ -423,7 +423,12 @@ struct EngineShared {
     identity_key: Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
     network_state: Arc<Mutex<RuntimeNetworkState>>,
     listener_tx: mpsc::Sender<ListenerCommand>,
-    discovery_tx: Option<mpsc::Sender<DiscoveryCommand>>,
+    /// Handle to submit discovery events into the DiscoveryManager
+    discovery_input: Option<crate::discovery_manager::DiscoveryInputHandle>,
+    /// Channel to restart mDNS on network changes
+    mdns_tx: Option<mpsc::Sender<DiscoveryCommand>>,
+    /// Broadcasts the current active network interface to probes
+    network_tx: Option<tokio::sync::watch::Sender<Option<crate::network_manager::NetworkInterfaceInfo>>>,
     network_reconcile: Arc<Mutex<()>>,
     // ── New: mesh-aware shared state ─────────────────────────────────────────
     /// Mesh fanout router + relay dedup (shared, lock-protected).
@@ -496,12 +501,22 @@ impl Engine {
 
         let (active_interface, bind_addr) = resolve_bind_address(&config)?;
         let (listener_tx, listener_rx) = mpsc::channel(8);
-        let discovery_pair = if config.enable_discovery {
-            let (tx, rx) = mpsc::channel(8);
-            Some((tx, rx))
+        let (discovery_manager, discovery_input, discovery_rx) = if config.enable_discovery {
+            let (mgr, handle, rx) = crate::discovery_manager::DiscoveryManager::new(config.device_id);
+            (Some(mgr), Some(handle), Some(rx))
         } else {
-            None
+            (None, None, None)
         };
+
+        let mut mdns_tx = None;
+        let mut mdns_rx_opt = None;
+        if let Some(_) = &discovery_input {
+            let (tx, rx) = mpsc::channel(8);
+            mdns_tx = Some(tx);
+            mdns_rx_opt = Some(rx);
+        }
+
+        let (network_tx, network_rx) = tokio::sync::watch::channel(None);
 
         let shared = EngineShared {
             config: config.clone(),
@@ -514,7 +529,9 @@ impl Engine {
                 active_interface,
             })),
             listener_tx: listener_tx.clone(),
-            discovery_tx: discovery_pair.as_ref().map(|(tx, _)| tx.clone()),
+            discovery_input: discovery_input.clone(),
+            mdns_tx: mdns_tx.clone(),
+            network_tx: Some(network_tx),
             network_reconcile: Arc::new(Mutex::new(())),
             mesh_router: Arc::new(Mutex::new(MeshRouter::new(
                 config.device_id,
@@ -560,8 +577,17 @@ impl Engine {
         };
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
-        if let Some((_, discovery_rx)) = discovery_pair {
-            spawn_discovery_supervisor(shared.clone(), discovery_rx);
+        
+        if let Some(discovery_input) = &discovery_input {
+            if let Some(rx) = mdns_rx_opt {
+                spawn_mdns_supervisor(
+                    config.device_id,
+                    config.device_name.clone(),
+                    rx,
+                    discovery_input.clone(),
+                    event_tx.clone()
+                );
+            }
         }
 
         let engine = Self {
@@ -584,13 +610,11 @@ impl Engine {
         };
         let _identity_pubkey = shared.identity_key.read().unwrap().public_bytes;
 
-        if let Some(discovery_tx) = &engine.shared.discovery_tx {
-            let _ = discovery_tx
-                .send(DiscoveryCommand::Restart {
-                    bind_ip: discovery_ip,
-                    port: engine.shared.config.port,
-                })
-                .await;
+        if let Some(tx) = &mdns_tx {
+            let _ = tx.send(DiscoveryCommand::Restart {
+                bind_ip: discovery_ip,
+                port: engine.shared.config.port,
+            }).await;
         }
 
         engine.spawn_network_monitor().await?;
@@ -598,160 +622,143 @@ impl Engine {
         engine.spawn_sensitive_history_pruner();
         engine.spawn_auto_reconnector();
 
-        // Spawn UDP broadcast beacon and listener for resilient discovery
-        #[cfg(not(target_os = "android"))]
-        engine.spawn_udp_beacon();
-        engine.spawn_udp_listener();
+        if let Some(discovery_manager) = discovery_manager {
+            tokio::spawn(discovery_manager.run());
+            
+            let handle = discovery_input.unwrap();
+            
+            // ── Spawn Hotspot Probe ──
+            crate::hotspot_probe::spawn_hotspot_probe(
+                engine.shared.config.device_id,
+                engine.shared.config.port,
+                handle.clone(),
+                network_rx,
+            );
+            
+            // ── Spawn Peer Cache Probe ──
+            let peer_cache_probe = crate::peer_cache_probe::PeerCacheProbe::new(
+                engine.shared.config.device_id,
+                handle.clone(),
+            );
+            // We need a channel for targets. The cache probe can pull targets periodically, or
+            // we can feed it. But wait, we didn't hook up a loop to feed targets. Let's just create an empty channel for now
+            // or see if PeerCacheProbe has a polling method. Actually `run` takes `mpsc::Receiver<Vec<ProbeTarget>>`.
+            let (targets_tx, targets_rx) = mpsc::channel(8);
+            tokio::spawn(peer_cache_probe.run(targets_rx));
+            
+            // Periodically feed the peer cache probe
+            let peer_manager_clone = engine.shared.peer_manager.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+                loop {
+                    interval.tick().await;
+                    let records = peer_manager_clone.list();
+                    let targets: Vec<crate::peer_cache_probe::ProbeTarget> = records.into_iter().filter_map(|r| {
+                        if r.status == PeerConnectionState::Connected || !r.trusted {
+                            return None;
+                        }
+                        let mut addrs = Vec::new();
+                        for addr in r.socket_addrs() {
+                            addrs.push(addr);
+                        }
+                        Some(crate::peer_cache_probe::ProbeTarget {
+                            device_id: r.id,
+                            device_name: r.friendly_name.clone(),
+                            addrs,
+                            disconnected_at: r.last_seen.unwrap_or(0) as u64,
+                        })
+                    }).collect();
+                    if targets_tx.send(targets).await.is_err() {
+                        break;
+                    }
+                }
+            });
+
+            // Calculate identity fingerprint prefix from public key
+            let identity_fingerprint = shared.identity_key.read().unwrap().public_bytes;
+            let mut identity_fingerprint_prefix = [0u8; 8];
+            identity_fingerprint_prefix.copy_from_slice(&identity_fingerprint[..8]);
+
+            // ── Spawn UDP Beacons ──
+            let udp_config = crate::udp_discovery::UdpBeaconConfig {
+                service_port: engine.shared.config.port,
+                device_id: engine.shared.config.device_id,
+                identity_fingerprint_prefix,
+                ..Default::default()
+            };
+            
+            let cancel = tokio_util::sync::CancellationToken::new();
+            tokio::spawn(crate::udp_discovery::spawn_broadcast_beacon(udp_config.clone(), cancel.clone()));
+            tokio::spawn(crate::udp_discovery::spawn_broadcast_listener(udp_config.clone(), handle.clone(), cancel.clone()));
+            tokio::spawn(crate::udp_discovery::spawn_multicast_beacon(udp_config.clone(), cancel.clone()));
+            tokio::spawn(crate::udp_discovery::spawn_multicast_listener(udp_config.clone(), handle.clone(), cancel.clone()));
+            
+            // ── Unified Discovery Event Loop ──
+            let shared_clone = engine.shared.clone();
+            let mut rx = discovery_rx.unwrap();
+            tokio::spawn(async move {
+                while let Some(event) = rx.recv().await {
+                    match event {
+                        crate::discovery_manager::DiscoveryEvent::PeerAppeared(peer) |
+                        crate::discovery_manager::DiscoveryEvent::PeerUpdated(peer) => {
+                            if peer.addrs.is_empty() { continue; }
+                            let trusted = shared_clone.trust.lock().await.is_trusted(peer.device_id);
+                            
+                            // Pick the first address (IPv4 is sorted first by DiscoveryManager)
+                            let peer_addr = std::net::SocketAddr::new(peer.addrs[0], peer.port);
+                            
+                            if let Err(err) = shared_clone.peer_manager.upsert_peer(
+                                peer.device_id,
+                                peer.device_name,
+                                peer_addr,
+                                trusted,
+                                peer.source,
+                            ) {
+                                tracing::warn!(error = %err, "failed to upsert discovered peer");
+                            } else {
+                                if !should_initiate_session(&shared_clone, peer.device_id, peer.source).await {
+                                    continue;
+                                }
+                                if shared_clone.peer_manager.live_endpoint(peer.device_id) == Some(peer_addr) {
+                                    continue;
+                                }
+                                if matches!(
+                                    shared_clone.peer_manager.get(peer.device_id),
+                                    Some(record) if record.status == PeerConnectionState::Connecting && record.socket_addrs().contains(&peer_addr)
+                                ) {
+                                    continue;
+                                }
+                                
+                                tracing::info!(
+                                    "DiscoveryManager: peer {} found at {}",
+                                    peer.device_id,
+                                    peer_addr
+                                );
+                                let connect_shared = shared_clone.clone();
+                                tokio::spawn(async move {
+                                    if let Err(err) = connect_loop(
+                                        connect_shared,
+                                        vec![peer_addr],
+                                        Some(peer.device_id),
+                                        peer.source,
+                                    ).await {
+                                        tracing::warn!(peer_id = %peer.device_id, error = %err, "discovered peer connection failed");
+                                    }
+                                });
+                            }
+                        }
+                        crate::discovery_manager::DiscoveryEvent::PeerDisappeared { .. } => {
+                            // Can optionally mark disconnected, but let keepalive timeouts handle real disconnects
+                        }
+                    }
+                }
+            });
+        }
 
 
 
         Ok(engine)
     }
-
-    #[cfg(not(target_os = "android"))]
-    fn spawn_udp_beacon(&self) {
-        let shared = self.shared.clone();
-        tokio::spawn(async move {
-            let socket = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
-                Ok(s) => s,
-                Err(err) => {
-                    tracing::warn!(error = %err, "failed to bind UDP beacon socket");
-                    return;
-                }
-            };
-            if let Err(err) = socket.set_broadcast(true) {
-                tracing::warn!(error = %err, "failed to set broadcast flag on UDP beacon socket");
-            }
-
-            let device_id_str = shared.config.device_id.to_string();
-            // Payload format: DESKDROP_BEACON:<uuid>:<tcp_port>:<device_name>
-            let mut payload = format!(
-                "DESKDROP_BEACON:{}:{}:{}",
-                device_id_str, shared.config.port, shared.config.device_name
-            )
-            .into_bytes();
-            if payload.len() > 512 {
-                payload.truncate(512);
-            }
-
-            let broadcast_addr: SocketAddr =
-                "255.255.255.255:47824".parse().expect("static IP is valid");
-
-            // ── AirDrop-style startup burst ──────────────────────────────────
-            // Send 3 rapid beacons in the first 300ms so peers discover us
-            // almost instantly, then fall back to the regular interval.
-            for _ in 0..3 {
-                let _ = socket.send_to(&payload, broadcast_addr).await;
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            }
-
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(1500));
-            loop {
-                interval.tick().await;
-                if let Err(err) = socket.send_to(&payload, broadcast_addr).await {
-                    tracing::trace!(error = %err, "failed to send UDP beacon");
-                }
-            }
-        });
-    }
-
-    fn spawn_udp_listener(&self) {
-        let shared = self.shared.clone();
-        tokio::spawn(async move {
-            let socket = match tokio::net::UdpSocket::bind("0.0.0.0:47824").await {
-                Ok(s) => s,
-                Err(err) => {
-                    tracing::warn!(error = %err, "failed to bind UDP listener socket");
-                    return;
-                }
-            };
-            let mut buf = vec![0u8; 1024];
-            loop {
-                match socket.recv_from(&mut buf).await {
-                    Ok((len, addr)) => {
-                        let text = String::from_utf8_lossy(&buf[..len]);
-                        if text.starts_with("DESKDROP_BEACON:") {
-                            let parts: Vec<&str> = text.splitn(4, ':').collect();
-                            if parts.len() >= 3 {
-                                if let Ok(peer_id) = uuid::Uuid::parse_str(parts[1]) {
-                                    if peer_id != shared.config.device_id {
-                                        let peer_name = if parts.len() == 4 {
-                                            parts[3].to_string()
-                                        } else {
-                                            format!("device-{}", &peer_id.to_string()[..8])
-                                        };
-                                        if let Ok(peer_port) = parts[2].parse::<u16>() {
-                                            let peer_addr = SocketAddr::new(addr.ip(), peer_port);
-
-                                            let trusted = {
-                                                let trust_guard = shared.trust.lock().await;
-                                                trust_guard.is_trusted(peer_id)
-                                            };
-
-                                            if let Err(err) = shared.peer_manager.upsert_peer(
-                                                peer_id,
-                                                peer_name.clone(),
-                                                peer_addr,
-                                                trusted,
-                                                DiscoverySource::UdpBeacon,
-                                            ) {
-                                                tracing::warn!(error = %err, "failed to upsert UDP beacon peer");
-                                            } else {
-                                                if !should_initiate_session(
-                                                    &shared,
-                                                    peer_id,
-                                                    DiscoverySource::UdpBeacon,
-                                                )
-                                                .await
-                                                {
-                                                    continue;
-                                                }
-                                                if shared.peer_manager.live_endpoint(peer_id)
-                                                    == Some(peer_addr)
-                                                {
-                                                    continue;
-                                                }
-                                                if matches!(
-                                                    shared.peer_manager.get(peer_id),
-                                                    Some(record) if record.status == PeerConnectionState::Connecting && record.socket_addrs().contains(&peer_addr)
-                                                ) {
-                                                    continue;
-                                                }
-
-                                                tracing::info!(
-                                                    "UDP Beacon discovered peer {} at {}",
-                                                    peer_id,
-                                                    peer_addr
-                                                );
-                                                let shared_clone = shared.clone();
-                                                tokio::spawn(async move {
-                                                    if let Err(err) = connect_loop(
-                                                        shared_clone,
-                                                        vec![peer_addr],
-                                                        Some(peer_id),
-                                                        DiscoverySource::UdpBeacon,
-                                                    )
-                                                    .await
-                                                    {
-                                                        tracing::warn!(peer_id = %peer_id, error = %err, "UDP beacon peer connection failed");
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        tracing::warn!(error = %err, "UDP listener recv_from failed");
-                        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-                    }
-                }
-            }
-        });
-    }
-
 
 
     // ── Call Continuity ───────────────────────────────────────────────────────
@@ -1969,7 +1976,10 @@ impl Engine {
     /// Called by the Mac "Scan" button — surfaces peers that came online
     /// since the last browse.
     pub async fn rescan_peers(&self) {
-        if let Some(tx) = &self.shared.discovery_tx {
+        if let Some(input) = &self.shared.discovery_input {
+            input.refresh().await;
+        }
+        if let Some(tx) = &self.shared.mdns_tx {
             let state = self.shared.network_state.lock().await;
             let bind_ip = state
                 .active_interface
@@ -2078,6 +2088,15 @@ impl Engine {
 
     pub async fn connect_to_peer(&self, ip: String, port: u16) -> Result<()> {
         let addr = SocketAddr::new(ip.parse().context("invalid peer IP")?, port);
+        let ip_addr = addr.ip();
+        let peers = self.shared.peer_manager.list();
+        for peer in peers {
+            if peer.ips.contains(&ip_addr) || peer.addr_history.iter().any(|r| r.addr.ip() == ip_addr) {
+                if peer.explicit_disconnect {
+                    let _ = self.shared.peer_manager.set_explicit_disconnect(peer.id, false);
+                }
+            }
+        }
         self.shared.peer_manager.note_manual_target(addr);
         match connect_once(
             self.shared.clone(),
@@ -2438,6 +2457,23 @@ impl Engine {
 
     /// Set auto-connect for a device.
     pub async fn set_auto_connect(&self, device_id: Uuid, enabled: bool) -> Result<bool> {
+        if enabled {
+            let _ = self.shared.peer_manager.set_explicit_disconnect(device_id, false);
+            if let Some(peer) = self.shared.peer_manager.get(device_id) {
+                let is_offline = peer.status == crate::peer_manager::PeerConnectionState::Disconnected
+                    || peer.status == crate::peer_manager::PeerConnectionState::Failed;
+                if is_offline {
+                    let endpoints = peer.socket_addrs();
+                    if !endpoints.is_empty() {
+                        let shared_clone = self.shared.clone();
+                        let discovery = peer.discovery;
+                        tokio::spawn(async move {
+                            let _ = connect_once(shared_clone, endpoints, Some(device_id), discovery).await;
+                        });
+                    }
+                }
+            }
+        }
         self.shared
             .peer_manager
             .set_auto_connect(device_id, enabled)
@@ -2689,45 +2725,33 @@ fn spawn_listener_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Listen
     });
 }
 
-fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<DiscoveryCommand>) {
+fn spawn_mdns_supervisor(
+    my_device_id: Uuid,
+    device_name: String,
+    mut rx: mpsc::Receiver<DiscoveryCommand>,
+    input_handle: crate::discovery_manager::DiscoveryInputHandle,
+    event_tx: mpsc::Sender<EngineEvent>,
+) {
     let (peer_tx, mut peer_rx) = mpsc::channel::<PeerEvent>(64);
-    let peer_shared = shared.clone();
-
+    let input_handle_clone = input_handle.clone();
+    
     tokio::spawn(async move {
         while let Some(event) = peer_rx.recv().await {
             match event {
                 PeerEvent::Found(peer) => {
-                    if let Err(err) = on_peer_found(peer_shared.clone(), peer).await {
-                        warn!(error = %err, "peer discovery connect failed");
-                    }
+                    let discovered = crate::discovery_manager::DiscoveredPeer {
+                        device_id: peer.device_id,
+                        device_name: peer.device_name,
+                        addrs: peer.addrs,
+                        port: peer.port,
+                        source: DiscoverySource::Mdns,
+                        protocol_version: None, // mDNS doesn't have version until resolved in discovery_manager
+                        identity_fingerprint_prefix: None,
+                    };
+                    input_handle_clone.found(discovered).await;
                 }
                 PeerEvent::Lost(device_id) => {
-                    if peer_shared.peer_manager.is_connected(device_id) {
-                        continue;
-                    }
-                    let name = peer_shared
-                        .peer_manager
-                        .get(device_id)
-                        .map(|peer| peer.friendly_name.clone());
-
-                    if let Some(peer) = peer_shared.peer_manager.get(device_id) {
-                        if !peer.trusted && !peer.remembered {
-                            let _ = peer_shared.peer_manager.forget_device(device_id);
-                        } else {
-                            let _ = peer_shared.peer_manager.mark_disconnected(
-                                device_id,
-                                Some("mDNS announcement lost".to_string()),
-                            );
-                        }
-                    }
-                    let _ = peer_shared
-                        .event_tx
-                        .send(EngineEvent::PeerDisconnected {
-                            device_id,
-                            device_name: name,
-                            reason: Some("mDNS announcement lost".into()),
-                        })
-                        .await;
+                    input_handle_clone.lost(device_id, DiscoverySource::Mdns).await;
                 }
             }
         }
@@ -2747,10 +2771,10 @@ fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Disco
                         continue;
                     }
 
-                    match Discovery::new(shared.config.device_id) {
+                    match Discovery::new(my_device_id) {
                         Ok(discovery) => {
                             let advertised = discovery.advertise(
-                                &shared.config.device_name,
+                                &device_name,
                                 port,
                                 Some(bind_ip),
                             );
@@ -2765,7 +2789,7 @@ fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Disco
                                         "discovery restart on {bind_ip}:{port} failed after network change: {err}"
                                     );
                                     let _ =
-                                        shared.event_tx.send(EngineEvent::Warning(message)).await;
+                                        event_tx.send(EngineEvent::Warning(message)).await;
                                 }
                             }
                         }
@@ -2773,7 +2797,7 @@ fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Disco
                             let message = format!(
                                 "creating discovery daemon after network change failed: {err}"
                             );
-                            let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
+                            let _ = event_tx.send(EngineEvent::Warning(message)).await;
                         }
                     }
                 }
@@ -2878,8 +2902,12 @@ async fn handle_network_change(shared: EngineShared, change: NetworkChangeEvent)
             .map(|i| i.ip)
             .unwrap_or(current_addr.ip())
     };
-    if let Some(discovery_tx) = &shared.discovery_tx {
-        let _ = discovery_tx
+    if let Some(network_tx) = &shared.network_tx {
+        let _ = network_tx.send(change.current.active_interface.clone());
+    }
+    
+    if let Some(mdns_tx) = &shared.mdns_tx {
+        let _ = mdns_tx
             .send(DiscoveryCommand::Restart {
                 bind_ip: discovery_ip,
                 port: shared.config.port,
@@ -3074,55 +3102,6 @@ fn peer_display_rank(
         std::cmp::Reverse(peer.last_seen.unwrap_or(0)),
         std::cmp::Reverse(peer.last_sync.unwrap_or(0)),
     )
-}
-
-async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
-    let trusted = shared.trust.lock().await.is_trusted(peer.device_id);
-
-    for ip in peer.addrs {
-        let addr = SocketAddr::new(ip, peer.port);
-
-        let _ = shared.peer_manager.upsert_peer(
-            peer.device_id,
-            peer.device_name.clone(),
-            addr,
-            trusted,
-            DiscoverySource::Mdns,
-        );
-
-        if !should_initiate_session(&shared, peer.device_id, DiscoverySource::Mdns).await {
-            continue;
-        }
-
-        if shared.peer_manager.live_endpoint(peer.device_id) == Some(addr) {
-            continue;
-        }
-
-        if matches!(
-            shared.peer_manager.get(peer.device_id),
-            Some(record)
-                if record.status == PeerConnectionState::Connecting
-                    && record.socket_addrs().contains(&addr)
-        ) {
-            continue;
-        }
-
-        let shared_clone = shared.clone();
-        tokio::spawn(async move {
-            if let Err(err) = connect_loop(
-                shared_clone,
-                vec![addr],
-                Some(peer.device_id),
-                DiscoverySource::Mdns,
-            )
-            .await
-            {
-                warn!(peer_id = %peer.device_id, error = %err, "discovered peer connection failed");
-            }
-        });
-    }
-
-    Ok(())
 }
 
 async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<()> {

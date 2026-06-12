@@ -2343,6 +2343,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_zip"
+version = "1.2.0"
+dependencies = [
+ "zip",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"

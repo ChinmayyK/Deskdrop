@@ -61,7 +61,8 @@ object DeskdropJni {
     const val CR_EVENT_PEER_DISCOVERED       = 27
     const val CR_EVENT_WARNING               = 7
     const val CR_EVENT_CLIPBOARD_SYNCED      = 8
-    // 9, 10 reserved
+    const val CR_EVENT_PAIRING_CONFIRMED     = 9
+    const val CR_EVENT_PAIRING_REJECTED      = 10
     const val CR_EVENT_CLIPBOARD_AVAILABLE   = 11  // timeline-first: in feed, not yet applied
     const val CR_EVENT_FILE_TRANSFER_INCOMING  = 12
     const val CR_EVENT_FILE_TRANSFER_PROGRESS  = 13
@@ -151,7 +152,7 @@ object DeskdropJni {
      * Connect to a peer discovered via Android NSD.
      * Returns 0 on success, -1 on error.
      */
-    @JvmStatic external fun connectToPeer(handle: Long, ip: String, port: Int): Int
+    @JvmStatic external fun connectToPeer(handle: Long, ip: String, port: Int, targetDeviceId: String?): Int
     @JvmStatic external fun reportDiscoveredPeer(handle: Long, deviceId: String, deviceName: String, ip: String, port: Int): Int
     @JvmStatic external fun initiatePairing(handle: Long, deviceId: String): Int
     @JvmStatic external fun disconnectPeer(handle: Long, deviceId: String): Int
@@ -635,8 +636,9 @@ class DeskdropService : Service() {
             ACTION_CONNECT_MANUAL -> {
                 val ip = intent?.getStringExtra("ip")
                 val port = intent?.getIntExtra("port", 47823) ?: 47823
+                val targetDeviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID)
                 if (!ip.isNullOrBlank() && engineHandle != 0L) {
-                    val result = DeskdropJni.connectToPeer(engineHandle, ip, port)
+                    val result = DeskdropJni.connectToPeer(engineHandle, ip, port, targetDeviceId)
                     Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
                 }
                 return START_STICKY
@@ -1195,14 +1197,15 @@ class DeskdropService : Service() {
                 val destPath = DeskdropJni.eventTransferDestPath(ev) ?: ""
                 
                 // Copy the file from private app storage to public Downloads!
+                val isDir = destPath.isNotEmpty() && File(destPath).isDirectory
                 val publicUriStr = if (destPath.isNotEmpty()) {
                     saveFileToPublicDownloads(File(destPath))
                 } else null
                 
-                val finalPath = publicUriStr ?: destPath
+                val finalPath = if (publicUriStr != null && publicUriStr != "DIRECTORY") publicUriStr else destPath
                 updateActivityTransferComplete(tid, finalPath)
                 cancelFileTransferNotification(tid)
-                showFileTransferCompleteNotification(from, fileName, publicUriStr)
+                showFileTransferCompleteNotification(from, fileName, if (isDir) "DIRECTORY" else publicUriStr)
                 activeTransfers.remove(tid)
                 publishActiveTransfers()
             }
@@ -1271,7 +1274,38 @@ class DeskdropService : Service() {
                     putExtra("device_name", name)
                     putExtra("pin", pin)
                 }
-                startActivity(intent)
+                
+                val pendingIntent = PendingIntent.getActivity(
+                    this@DeskdropService,
+                    deviceId.hashCode(),
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val notif = NotificationCompat.Builder(this@DeskdropService, CHAN_ALERTS)
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle("Pairing Request")
+                    .setContentText("$name wants to connect. Tap to review.")
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setFullScreenIntent(pendingIntent, true)
+                    .setAutoCancel(true)
+                    .build()
+
+                notificationManager.notify(NOTIF_ID_TOFU, notif)
+            }
+            DeskdropJni.CR_EVENT_PAIRING_CONFIRMED,
+            DeskdropJni.CR_EVENT_PAIRING_REJECTED -> {
+                val deviceId = DeskdropJni.eventDeviceId(ev)
+                // Cancel the notification
+                val notificationManager = getSystemService(NotificationManager::class.java)
+                notificationManager.cancel(NOTIF_ID_TOFU)
+                
+                // Tell the UI to dismiss the dialog
+                sendBroadcast(Intent(PairingActivity.ACTION_PAIRING_RESOLVED).apply {
+                    putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
+                    setPackage(packageName)
+                })
             }
 
 
@@ -1539,7 +1573,7 @@ class DeskdropService : Service() {
     }
 
     private fun showFileTransferCompleteNotification(from: String, fileName: String, publicUriStr: String?) {
-        val openIntent = if (!publicUriStr.isNullOrEmpty()) {
+        val openIntent = if (!publicUriStr.isNullOrEmpty() && publicUriStr != "DIRECTORY") {
             val uri = android.net.Uri.parse(publicUriStr)
             // Try to open the specific file. FLAG_ACTIVITY_NEW_TASK is strictly required from a Service context!
             Intent(Intent.ACTION_VIEW).apply {
@@ -1818,17 +1852,32 @@ class DeskdropService : Service() {
         return File(base, "Deskdrop").also { it.mkdirs() }
     }
 
-    private fun saveFileToPublicDownloads(sourceFile: File): String? {
+    private fun saveFileToPublicDownloads(sourceFile: File, relativePath: String = ""): String? {
         if (!sourceFile.exists()) return null
+
+        if (sourceFile.isDirectory) {
+            sourceFile.listFiles()?.forEach { child ->
+                val childRelativePath = if (relativePath.isEmpty()) {
+                    sourceFile.name
+                } else {
+                    "$relativePath/${sourceFile.name}"
+                }
+                saveFileToPublicDownloads(child, childRelativePath)
+            }
+            return "DIRECTORY"
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = contentResolver
             val contentValues = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, sourceFile.name)
                 put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "*/*")
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                val baseDir = android.os.Environment.DIRECTORY_DOWNLOADS
+                val fullPath = if (relativePath.isEmpty()) baseDir else "$baseDir/$relativePath"
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, fullPath)
             }
-            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return null
             try {
+                val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return null
                 resolver.openOutputStream(uri)?.use { outStream ->
                     java.io.FileInputStream(sourceFile).use { inStream ->
                         inStream.copyTo(outStream)
@@ -1841,7 +1890,8 @@ class DeskdropService : Service() {
             }
         } else {
             // For Android 9 and below, write directly using file system
-            val destDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val baseDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val destDir = if (relativePath.isEmpty()) baseDir else File(baseDir, relativePath)
             destDir.mkdirs()
             val destFile = File(destDir, sourceFile.name)
             try {

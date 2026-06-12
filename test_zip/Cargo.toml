@@ -1,0 +1,9 @@
+[package]
+name = "test_zip"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+zip = "8.6.0"

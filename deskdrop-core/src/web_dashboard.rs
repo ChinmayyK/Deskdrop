@@ -68,7 +68,7 @@ async fn api_upload(
         };
 
         // Attempt to extract content length from headers if present
-        let mut total_bytes = 0; // Unknown by default in multipart unless specified
+        let total_bytes = 0; // Unknown by default in multipart unless specified
 
         let dest_path = state.save_dir.join(&file_name);
         let mut file = match tokio::fs::File::create(&dest_path).await {

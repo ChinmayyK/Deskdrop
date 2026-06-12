@@ -479,7 +479,13 @@ impl PeerManager {
             if entry.status == PeerConnectionState::Connecting
                 || entry.status == PeerConnectionState::Connected
             {
-                return Ok(false);
+                let is_different = match (endpoint, self.live_endpoint(device_id)) {
+                    (Some(new_ep), Some(live_ep)) => new_ep != live_ep,
+                    _ => false,
+                };
+                if !is_different {
+                    return Ok(false);
+                }
             }
             if let Some(endpoint) = endpoint {
                 if !entry.ips.contains(&endpoint.ip()) {

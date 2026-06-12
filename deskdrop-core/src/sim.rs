@@ -301,6 +301,7 @@ mod tests {
             .send(ClipboardContent::Image {
                 mime: "image/png".into(),
                 data: img_data.clone(),
+                extracted_text: None,
             })
             .await;
 

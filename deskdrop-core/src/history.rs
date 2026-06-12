@@ -1089,6 +1089,7 @@ mod tests {
                 &ClipboardContent::Image {
                     mime: "image/png".into(),
                     data: vec![0u8; 512],
+                    extracted_text: None,
                 },
                 "iPhone".into(),
                 1024,
@@ -1124,6 +1125,7 @@ mod tests {
                 &ClipboardContent::Image {
                     mime: "image/png".into(),
                     data: vec![1, 2, 3],
+                    extracted_text: None,
                 },
                 "dev".into(),
                 1024,

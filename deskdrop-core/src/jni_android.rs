@@ -1159,6 +1159,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_connectToPeer(
     handle: jlong,
     ip: JString,
     port: jint,
+    target_device_id_jstr: JString,
 ) -> jint {
     if handle == 0 {
         return -1;
@@ -1167,7 +1168,22 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_connectToPeer(
         Ok(s) => s.into(),
         Err(_) => return -1,
     };
+    let target_device_id = if target_device_id_jstr.is_null() {
+        None
+    } else {
+        let raw: String = match env.get_string(&target_device_id_jstr) {
+            Ok(s) => s.into(),
+            Err(_) => return -1,
+        };
+        uuid::Uuid::parse_str(&raw).ok()
+    };
+
     let h = unsafe { &*(handle as *const AndroidHandle) };
+
+    if let Some(id) = target_device_id {
+        let _ = rt().block_on(h.engine.set_auto_connect(id, true));
+    }
+
     match rt().block_on(h.engine.connect_to_peer(ip_str, port as u16)) {
         Ok(()) => 0,
         Err(_) => -1,

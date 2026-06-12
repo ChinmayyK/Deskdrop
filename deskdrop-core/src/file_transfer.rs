@@ -1113,6 +1113,8 @@ mod tests {
             size_bytes: data.len() as u64,
             mime_type: "text/plain".into(),
             sha256_checksum: hex::encode(Sha256::digest(data)),
+            is_directory: false,
+            file_count: 0,
         }
     }
 
