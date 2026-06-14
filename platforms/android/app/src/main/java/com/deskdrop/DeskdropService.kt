@@ -826,7 +826,9 @@ class DeskdropService : Service() {
                     } else if (targetDeviceId != null && !isPeerConnected(targetDeviceId)) {
                         Log.w(TAG, "PUSH_SHARED_URI ignored: target peer is no longer connected")
                     } else {
-                        sendSharedUris(uriStrings, preferredName, targetDeviceId)
+                        Thread {
+                            sendSharedUris(uriStrings, preferredName, targetDeviceId)
+                        }.start()
                     }
                 }
             }
@@ -1621,28 +1623,30 @@ class DeskdropService : Service() {
 
         val clipboardMime = contentResolver.getType(uri).orEmpty()
         if (!clipboardMime.startsWith("image/")) {
-            val staged = stageSharedUri(uri, preferredName = null, fallbackIndex = 1)
-            if (staged != null) {
-                lastClipboardSignature = sig
-                val result = DeskdropJni.sendFilePath(
-                    engineHandle,
-                    staged.localFile.absolutePath,
-                    staged.displayName,
-                    staged.mimeType,
-                    null
-                )
-                if (result == 1) {
-                    addToFeed(
-                        ActivityEntry(
-                            deviceName = "All devices",
-                            kind = ActivityKind.FILE_SENT,
-                            preview = staged.displayName
-                        )
+            Thread {
+                val staged = stageSharedUri(uri, preferredName = null, fallbackIndex = 1)
+                if (staged != null) {
+                    lastClipboardSignature = sig
+                    val result = DeskdropJni.sendFilePath(
+                        engineHandle,
+                        staged.localFile.absolutePath,
+                        staged.displayName,
+                        staged.mimeType,
+                        null
                     )
-                    broadcastStatus()
+                    if (result == 1) {
+                        addToFeed(
+                            ActivityEntry(
+                                deviceName = "All devices",
+                                kind = ActivityKind.FILE_SENT,
+                                preview = staged.displayName
+                            )
+                        )
+                        broadcastStatus()
+                    }
                 }
-                return
-            }
+            }.start()
+            return
         }
 
         when (val payload = readClipboardUri(uri)) {

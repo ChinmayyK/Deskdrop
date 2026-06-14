@@ -196,69 +196,33 @@ class DeskdropShareTarget : ComponentActivity() {
     }
 
     private fun sendFiles(sharedUris: List<Uri>, sharedName: String?, targetId: String?) {
-        Thread {
-            val stagedUris = mutableListOf<String>()
-            sharedUris.forEachIndexed { index, uri ->
-                val stagedFileUri = stageFileInActivity(uri, index + 1)
-                if (stagedFileUri != null) {
-                    stagedUris.add(stagedFileUri.toString())
+        val stringUris = sharedUris.map { it.toString() }
+        val svc = Intent(this@DeskdropShareTarget, DeskdropService::class.java).apply {
+            action = DeskdropService.ACTION_PUSH_SHARED_URI
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            
+            if (sharedUris.isNotEmpty()) {
+                val cd = android.content.ClipData.newRawUri("shared_uris", sharedUris[0])
+                for (i in 1 until sharedUris.size) {
+                    cd.addItem(android.content.ClipData.Item(sharedUris[i]))
                 }
+                clipData = cd
             }
 
-            runOnUiThread {
-                if (stagedUris.isNotEmpty()) {
-                    val svc = Intent(this@DeskdropShareTarget, DeskdropService::class.java).apply {
-                        action = DeskdropService.ACTION_PUSH_SHARED_URI
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        putStringArrayListExtra(
-                            DeskdropService.EXTRA_SHARED_URIS,
-                            ArrayList(stagedUris)
-                        )
-                        sharedName?.let { putExtra(DeskdropService.EXTRA_SHARED_NAME, it) }
-                        targetId?.let { 
-                            putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, it)
-                            getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putString("last_used_device_id", it).apply()
-                        }
-                    }
-                    runCatching { ContextCompat.startForegroundService(this@DeskdropShareTarget, svc) }
-                    Toast.makeText(this@DeskdropShareTarget, "Sending to Deskdrop", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@DeskdropShareTarget, "Staging failed", Toast.LENGTH_SHORT).show()
-                }
-                finish()
-            }
-        }.start()
-    }
-
-    private fun stageFileInActivity(uri: Uri, fallbackIndex: Int): Uri? = runCatching {
-        val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-        val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime.substringBefore(';')) ?: ""
-        
-        var displayName = "Shared file $fallbackIndex"
-        if (uri.scheme.equals("file", ignoreCase = true)) {
-            displayName = uri.path?.let { java.io.File(it).name } ?: displayName
-        } else {
-            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                val col = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (col >= 0 && cursor.moveToFirst()) {
-                    cursor.getString(col)?.takeIf { it.isNotBlank() }?.let { displayName = it }
-                }
+            putStringArrayListExtra(
+                DeskdropService.EXTRA_SHARED_URIS,
+                ArrayList(stringUris)
+            )
+            sharedName?.let { putExtra(DeskdropService.EXTRA_SHARED_NAME, it) }
+            targetId?.let { 
+                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, it)
+                getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putString("last_used_device_id", it).apply()
             }
         }
-        
-        val stagedDir = java.io.File(cacheDir, "shared-outgoing").also { it.mkdirs() }
-        val sanitizedName = displayName.replace("[\\\\/:*?\"<>|]".toRegex(), "_")
-        val finalExt = if (ext.isNotEmpty()) ".$ext" else ""
-        val stagedFile = java.io.File(stagedDir, if (sanitizedName.endsWith(finalExt)) sanitizedName else "$sanitizedName$finalExt")
-        
-        contentResolver.openInputStream(uri)?.use { input ->
-            java.io.FileOutputStream(stagedFile).use { output ->
-                input.copyTo(output, 256 * 1024)
-            }
-        } ?: return null
-        
-        Uri.fromFile(stagedFile)
-    }.onFailure { Log.w("DeskdropShareTarget", "Failed to stage shared URI $uri", it) }.getOrNull()
+        runCatching { ContextCompat.startForegroundService(this@DeskdropShareTarget, svc) }
+        Toast.makeText(this@DeskdropShareTarget, "Sending to Deskdrop", Toast.LENGTH_SHORT).show()
+        finish()
+    }
 }
 
 @Composable

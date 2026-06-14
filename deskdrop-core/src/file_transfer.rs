@@ -41,7 +41,8 @@ pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger
 
 /// HIGH-03 FIX: Maximum transfer size (4 GB). Rejects announced transfers
 /// exceeding this limit to prevent disk-bomb attacks via pre-allocation.
-pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+pub const MAX_TRANSFER_BYTES: u64 = 1024 * 1024 * 1024 * 1024; // 1 TB
+
 pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16; // ACK every 16 MB — keeps the pipeline full
                                              // on LAN while still bounding in-flight data.
 
@@ -530,11 +531,11 @@ impl FileTransferManager {
         file_name: String,
         mime_type: String,
         target_device: Option<Uuid>,
+        checksum: String,
     ) -> Result<&OutboundTransfer> {
         let size_bytes = std::fs::metadata(&path)
             .with_context(|| format!("reading metadata for {}", path.display()))?
             .len();
-        let checksum = checksum_file(&path)?;
         let mut tid = [0u8; 16];
         tid.copy_from_slice(Uuid::new_v4().as_bytes());
 
@@ -920,7 +921,7 @@ fn read_file_chunk_from_file(
     Ok(buf)
 }
 
-fn checksum_file(path: &Path) -> Result<String> {
+pub fn checksum_file(path: &Path) -> Result<String> {
     let mut file = File::open(path)
         .with_context(|| format!("opening file for checksum {}", path.display()))?;
     let mut hasher = Sha256::new();

@@ -1640,9 +1640,16 @@ impl Engine {
         mime_type: String,
         target_device: Option<Uuid>,
     ) -> Result<[u8; 16]> {
+        let path_clone = path.clone();
+        let checksum = tokio::task::spawn_blocking(move || {
+            crate::file_transfer::checksum_file(&path_clone)
+        })
+        .await
+        .context("joining checksum task")??;
+
         let mut mgr = self.shared.file_transfers.lock().await;
         let transfer =
-            mgr.start_outbound_path(path, file_name.clone(), mime_type, target_device)?;
+            mgr.start_outbound_path(path, file_name.clone(), mime_type, target_device, checksum)?;
         let transfer_id = transfer.transfer_id;
         let meta = transfer.meta.clone();
         let size_bytes = meta.size_bytes;

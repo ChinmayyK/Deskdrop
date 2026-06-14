@@ -1,6 +1,6 @@
 [package]
 name = "deskdrop-core"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 authors = ["Deskdrop Contributors"]
 description = "Proximity-Based Shared Clipboard — core engine"

@@ -157,8 +157,8 @@ impl Reassembler {
                 // any state.  A malicious peer can announce total_bytes=u64::MAX
                 // and total_chunks=u32::MAX to tie up in-flight slots indefinitely.
                 // We cap at MAX_FILE_BYTES (512 MB) and MAX_CHUNKS_ALLOWED (8 192).
-                const MAX_ANNOUNCED_BYTES: u64 = crate::protocol::MAX_FILE_BYTES as u64;
-                const MAX_CHUNKS_ALLOWED: u32 = 4_096; // 4 096 × 512 KB = 2 GB
+                const MAX_ANNOUNCED_BYTES: u64 = crate::protocol::MAX_FILE_BYTES;
+                const MAX_CHUNKS_ALLOWED: u32 = 2_097_152; // 2 097 152 × 512 KB = 1 TB
                 anyhow::ensure!(
                     total_bytes <= MAX_ANNOUNCED_BYTES,
                     "transfer announces {} bytes which exceeds the {} byte cap",
