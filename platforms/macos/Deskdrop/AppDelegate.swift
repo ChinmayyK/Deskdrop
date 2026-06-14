@@ -218,13 +218,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         // ── Replace the default button with a custom drag-and-drop view ──────────
         if let button = statusItem.button {
-            // Register drag types on the button itself so the menu bar
-            // item participates in drag sessions.
-            button.registerForDraggedTypes([
-                .fileURL,
-                .init(rawValue: "com.apple.pasteboard.promised-file-url"),
-                .init(rawValue: "com.apple.NSFilePromiseItemMetaData"),
-            ])
+            // Do not register drag types on the button itself, otherwise it intercepts
+            // the drag events and prevents our custom MenuBarDropView from receiving them.
 
             button.image = statusBarImage()
             button.imagePosition = .imageOnly
