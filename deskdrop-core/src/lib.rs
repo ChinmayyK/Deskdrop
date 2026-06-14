@@ -29,7 +29,6 @@
 //! ```
 
 pub mod activity;
-
 pub mod chunked;
 pub mod compress;
 pub mod crypto;
@@ -45,7 +44,6 @@ pub mod history;
 pub mod hotspot_probe;
 pub mod identity;
 pub mod ipc;
-
 pub mod mesh;
 pub mod metrics;
 pub mod network;
@@ -62,7 +60,6 @@ pub mod sync_controller;
 pub mod throttle;
 pub mod trust;
 pub mod udp_discovery;
-pub mod web_dashboard;
 
 #[cfg(target_os = "android")]
 pub mod jni_android;

@@ -29,9 +29,6 @@ import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.core.content.pm.ShortcutInfoCompat
-import androidx.core.content.pm.ShortcutManagerCompat
-import androidx.core.graphics.drawable.IconCompat
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import java.io.File
@@ -61,8 +58,7 @@ object DeskdropJni {
     const val CR_EVENT_PEER_DISCOVERED       = 27
     const val CR_EVENT_WARNING               = 7
     const val CR_EVENT_CLIPBOARD_SYNCED      = 8
-    const val CR_EVENT_PAIRING_CONFIRMED     = 9
-    const val CR_EVENT_PAIRING_REJECTED      = 10
+    // 9, 10 reserved
     const val CR_EVENT_CLIPBOARD_AVAILABLE   = 11  // timeline-first: in feed, not yet applied
     const val CR_EVENT_FILE_TRANSFER_INCOMING  = 12
     const val CR_EVENT_FILE_TRANSFER_PROGRESS  = 13
@@ -77,7 +73,6 @@ object DeskdropJni {
     const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
     const val CR_EVENT_NETWORK_STATE_CHANGED    = 28
 
-
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
     @JvmStatic external fun stop(handle: Long)
@@ -91,7 +86,6 @@ object DeskdropJni {
     @JvmStatic external fun pushBatteryStatus(handle: Long, level: Int, charging: Boolean): Int
     @JvmStatic external fun pushNetworkStatus(handle: Long, networkType: String): Int
     @JvmStatic external fun stopCameraStream(handle: Long): Int
-
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
     @JvmStatic external fun waitEvent(handle: Long): Long
@@ -152,7 +146,7 @@ object DeskdropJni {
      * Connect to a peer discovered via Android NSD.
      * Returns 0 on success, -1 on error.
      */
-    @JvmStatic external fun connectToPeer(handle: Long, ip: String, port: Int, targetDeviceId: String?): Int
+    @JvmStatic external fun connectToPeer(handle: Long, ip: String, port: Int): Int
     @JvmStatic external fun reportDiscoveredPeer(handle: Long, deviceId: String, deviceName: String, ip: String, port: Int): Int
     @JvmStatic external fun initiatePairing(handle: Long, deviceId: String): Int
     @JvmStatic external fun disconnectPeer(handle: Long, deviceId: String): Int
@@ -171,12 +165,6 @@ object DeskdropJni {
         mimeType: String,
         targetDeviceId: String?
     ): Int
-    @JvmStatic external fun sendFilePaths(
-        handle: Long,
-        paths: Array<String>,
-        bundleName: String,
-        targetDeviceId: String?
-    ): Int
 
     /**
      * Push updated sync settings to the running engine atomically.
@@ -192,8 +180,6 @@ object DeskdropJni {
     ): Int
 
     // ── Call continuity ───────────────────────────────────────────────────────
-    /** Toggle the Guest Mode Web Dashboard. */
-    @JvmStatic external fun toggleWebDashboard(handle: Long, enable: Boolean)
     /** Push phone call state (ringing/offhook/idle) to all connected peers. */
     @JvmStatic external fun pushCallState(
         handle: Long, state: String, number: String, contactName: String
@@ -314,8 +300,6 @@ class DeskdropService : Service() {
         private const val NOTIF_ID_CLIPBOARD_AVAILABLE = 1005
         private const val NOTIF_ID_FILE_BASE         = 2000  // + (tid.hashCode() and 0xFFF)
         private const val NOTIF_ID_CALL              = 3001  // incoming call banner
-        private const val NOTIF_ID_PAIRING_BASE      = 4000  // pairing requests
-
 
         // Intent actions
         const val ACTION_START              = "com.deskdrop.START"
@@ -345,7 +329,6 @@ class DeskdropService : Service() {
         const val ACTION_SEND_PAIRING_REQUEST = "com.deskdrop.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "com.deskdrop.RESPOND_TO_PAIRING"
         const val ACTION_DISCONNECT_PEER    = "com.deskdrop.DISCONNECT_PEER"
-        const val ACTION_TOGGLE_WEB_DASHBOARD = "com.deskdrop.TOGGLE_WEB_DASHBOARD"
 
         // Intent extras
         const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
@@ -360,7 +343,6 @@ class DeskdropService : Service() {
         const val EXTRA_NOTIFICATION_PKG    = "notification_pkg"
         const val EXTRA_NOTIFICATION_TITLE  = "notification_title"
         const val EXTRA_NOTIFICATION_TEXT   = "notification_text"
-        const val EXTRA_WEB_DASHBOARD_ENABLED = "web_dashboard_enabled"
         const val PREF_SERVICE_RUNNING      = "service_running"
 
         // Poll intervals
@@ -399,7 +381,6 @@ class DeskdropService : Service() {
     private val connectedPeerIds = linkedMapOf<String, String>()  // deviceId → displayName
     private val engineStarted = AtomicBoolean(false)
     private val notificationManager by lazy { getSystemService(NotificationManager::class.java) }
-
 
     // NSD — peer discovery on Android (replaces stubbed Rust mDNS)
     private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
@@ -546,6 +527,7 @@ class DeskdropService : Service() {
         else BackgroundSyncMode.ALWAYS_ACTIVE
 
     private val pollInterval  get() = if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE) POLL_FULL_MS  else POLL_REDUCED_MS
+    private val clipInterval  get() = if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE) CLIP_FULL_MS  else CLIP_REDUCED_MS
 
     // ── Service lifecycle ─────────────────────────────────────────────────────
 
@@ -625,20 +607,11 @@ class DeskdropService : Service() {
             ACTION_PAUSE_SYNC   -> { setSyncEnabled(false); return START_STICKY }
             ACTION_RESUME_SYNC  -> { setSyncEnabled(true);  return START_STICKY }
             ACTION_DISCONNECT_ALL -> { disconnectAllPeers(); return START_STICKY }
-            ACTION_TOGGLE_WEB_DASHBOARD -> {
-                val enabled = intent?.getBooleanExtra(EXTRA_WEB_DASHBOARD_ENABLED, false) ?: false
-                if (engineHandle != 0L) {
-                    DeskdropJni.toggleWebDashboard(engineHandle, enabled)
-                    Log.i(TAG, "Toggled Web Dashboard: $enabled")
-                }
-                return START_STICKY
-            }
             ACTION_CONNECT_MANUAL -> {
                 val ip = intent?.getStringExtra("ip")
                 val port = intent?.getIntExtra("port", 47823) ?: 47823
-                val targetDeviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID)
                 if (!ip.isNullOrBlank() && engineHandle != 0L) {
-                    val result = DeskdropJni.connectToPeer(engineHandle, ip, port, targetDeviceId)
+                    val result = DeskdropJni.connectToPeer(engineHandle, ip, port)
                     Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
                 }
                 return START_STICKY
@@ -811,7 +784,7 @@ class DeskdropService : Service() {
                 activeEngineHandle = engineHandle
                 Log.i(TAG, "Engine started — $deviceName")
                 startEventDrainThread()
-                clipboardManager.addPrimaryClipChangedListener(clipboardListener)
+                scheduleClipboardWatch()
                 // acquireMulticastLock() handled by onAvailable
                 // Cache our own UUID prefix so NSD can filter self-connections.
                 myDeviceId = DeskdropJni.getDeviceId(engineHandle)
@@ -991,7 +964,6 @@ class DeskdropService : Service() {
 
     private fun shutdownAndStop() {
         disconnectAllPeers()
-        clipboardManager.removePrimaryClipChangedListener(clipboardListener)
         stopSelf()
     }
 
@@ -1040,9 +1012,6 @@ class DeskdropService : Service() {
             }
         }.apply { start() }
     }
-
-    
-
 
     private fun handleEvent(ev: Long) {
         when (DeskdropJni.eventType(ev)) {
@@ -1197,15 +1166,14 @@ class DeskdropService : Service() {
                 val destPath = DeskdropJni.eventTransferDestPath(ev) ?: ""
                 
                 // Copy the file from private app storage to public Downloads!
-                val isDir = destPath.isNotEmpty() && File(destPath).isDirectory
                 val publicUriStr = if (destPath.isNotEmpty()) {
                     saveFileToPublicDownloads(File(destPath))
                 } else null
                 
-                val finalPath = if (publicUriStr != null && publicUriStr != "DIRECTORY") publicUriStr else destPath
+                val finalPath = publicUriStr ?: destPath
                 updateActivityTransferComplete(tid, finalPath)
                 cancelFileTransferNotification(tid)
-                showFileTransferCompleteNotification(from, fileName, if (isDir) "DIRECTORY" else publicUriStr)
+                showFileTransferCompleteNotification(from, fileName, publicUriStr)
                 activeTransfers.remove(tid)
                 publishActiveTransfers()
             }
@@ -1274,38 +1242,7 @@ class DeskdropService : Service() {
                     putExtra("device_name", name)
                     putExtra("pin", pin)
                 }
-                
-                val pendingIntent = PendingIntent.getActivity(
-                    this@DeskdropService,
-                    deviceId.hashCode(),
-                    intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-
-                val notif = NotificationCompat.Builder(this@DeskdropService, CHAN_ALERTS)
-                    .setSmallIcon(android.R.drawable.ic_dialog_info)
-                    .setContentTitle("Pairing Request")
-                    .setContentText("$name wants to connect. Tap to review.")
-                    .setPriority(NotificationCompat.PRIORITY_MAX)
-                    .setCategory(NotificationCompat.CATEGORY_CALL)
-                    .setFullScreenIntent(pendingIntent, true)
-                    .setAutoCancel(true)
-                    .build()
-
-                notificationManager.notify(NOTIF_ID_TOFU, notif)
-            }
-            DeskdropJni.CR_EVENT_PAIRING_CONFIRMED,
-            DeskdropJni.CR_EVENT_PAIRING_REJECTED -> {
-                val deviceId = DeskdropJni.eventDeviceId(ev)
-                // Cancel the notification
-                val notificationManager = getSystemService(NotificationManager::class.java)
-                notificationManager.cancel(NOTIF_ID_TOFU)
-                
-                // Tell the UI to dismiss the dialog
-                sendBroadcast(Intent(PairingActivity.ACTION_PAIRING_RESOLVED).apply {
-                    putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
-                    setPackage(packageName)
-                })
+                startActivity(intent)
             }
 
 
@@ -1376,7 +1313,6 @@ class DeskdropService : Service() {
                 // Other peers (macOS) will show the incoming call banner.
                 Log.d(TAG, "CallStateChanged echoed (no-op on originating device)")
             }
-
 
             DeskdropJni.CR_EVENT_CALL_ACTION -> {
                 val action = DeskdropJni.eventCallAction(ev) ?: return
@@ -1573,22 +1509,18 @@ class DeskdropService : Service() {
     }
 
     private fun showFileTransferCompleteNotification(from: String, fileName: String, publicUriStr: String?) {
-        val openIntent = if (!publicUriStr.isNullOrEmpty() && publicUriStr != "DIRECTORY") {
+        val openIntent = if (!publicUriStr.isNullOrEmpty()) {
             val uri = android.net.Uri.parse(publicUriStr)
-            // Try to open the specific file. FLAG_ACTIVITY_NEW_TASK is strictly required from a Service context!
             Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-        } else {
-            // Fallback to opening the system Downloads folder
-            Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        }
+        } else null
 
-        val openPi = PendingIntent.getActivity(this, (publicUriStr ?: fileName).hashCode(), openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val openPi = openIntent?.let {
+            PendingIntent.getActivity(this, (publicUriStr ?: fileName).hashCode(), it,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
 
         val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -1648,8 +1580,16 @@ class DeskdropService : Service() {
 
     // ── Clipboard watch (Kotlin → Rust) ──────────────────────────────────────
 
-    private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
-        checkClipboard()
+    private fun scheduleClipboardWatch() {
+        val interval = clipInterval
+        handler.postDelayed(object : Runnable {
+            override fun run() {
+                checkClipboard()
+                if (engineHandle != 0L) {
+                    handler.postDelayed(this, clipInterval)
+                }
+            }
+        }, interval)
     }
 
     private fun checkClipboard() {
@@ -1852,32 +1792,17 @@ class DeskdropService : Service() {
         return File(base, "Deskdrop").also { it.mkdirs() }
     }
 
-    private fun saveFileToPublicDownloads(sourceFile: File, relativePath: String = ""): String? {
+    private fun saveFileToPublicDownloads(sourceFile: File): String? {
         if (!sourceFile.exists()) return null
-
-        if (sourceFile.isDirectory) {
-            sourceFile.listFiles()?.forEach { child ->
-                val childRelativePath = if (relativePath.isEmpty()) {
-                    sourceFile.name
-                } else {
-                    "$relativePath/${sourceFile.name}"
-                }
-                saveFileToPublicDownloads(child, childRelativePath)
-            }
-            return "DIRECTORY"
-        }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = contentResolver
             val contentValues = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, sourceFile.name)
                 put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "*/*")
-                val baseDir = android.os.Environment.DIRECTORY_DOWNLOADS
-                val fullPath = if (relativePath.isEmpty()) baseDir else "$baseDir/$relativePath"
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, fullPath)
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
             }
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return null
             try {
-                val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return null
                 resolver.openOutputStream(uri)?.use { outStream ->
                     java.io.FileInputStream(sourceFile).use { inStream ->
                         inStream.copyTo(outStream)
@@ -1890,8 +1815,7 @@ class DeskdropService : Service() {
             }
         } else {
             // For Android 9 and below, write directly using file system
-            val baseDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val destDir = if (relativePath.isEmpty()) baseDir else File(baseDir, relativePath)
+            val destDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
             destDir.mkdirs()
             val destFile = File(destDir, sourceFile.name)
             try {
@@ -2382,7 +2306,7 @@ class DeskdropService : Service() {
             serviceType = NSD_SERVICE_TYPE
             port        = DEFAULT_DESKDROP_PORT
             setAttribute("id", myDeviceId ?: "")
-            setAttribute("v", "4")
+            setAttribute("v", "3")
         }
 
         val regListener = object : NsdManager.RegistrationListener {
@@ -2527,7 +2451,7 @@ class DeskdropService : Service() {
             }
 
             val peerVersion = if (Build.VERSION.SDK_INT >= 21) info.attributes["v"]?.let { String(it) } else null
-            if (peerVersion != null && peerVersion != "4") {
+            if (peerVersion != null && peerVersion != "3") {
                 Log.i(TAG, "NSD: skipping ${info.serviceName} due to protocol version $peerVersion")
                 return
             }
@@ -2848,11 +2772,9 @@ class DeskdropService : Service() {
         val syncText    = p.getBoolean("sync_text",    true)
         val syncImages  = p.getBoolean("sync_images",  true)
         val syncFiles   = p.getBoolean("sync_files",   true)
-        val webDashboard = p.getBoolean("web_dashboard_enabled", false)
-        Log.i(TAG, "Applying settings: sync=$syncEnabled text=$syncText images=$syncImages files=$syncFiles web_dashboard=$webDashboard")
+        Log.i(TAG, "Applying settings: sync=$syncEnabled text=$syncText images=$syncImages files=$syncFiles")
         // Push to engine — JNI call updates the engine's sync filter flags atomically.
         DeskdropJni.applySyncSettings(h, syncEnabled, syncText, syncImages, syncFiles)
-        DeskdropJni.toggleWebDashboard(h, webDashboard)
         // If sync was just disabled, cancel any pending clipboard notifications.
         if (!syncEnabled) {
             notificationManager.cancel(NOTIF_ID_CLIPBOARD_AVAILABLE)
@@ -3095,37 +3017,7 @@ class DeskdropService : Service() {
             editor.putLong("last_sync_${name.take(32)}", ts)
         }
         editor.apply()
-        
-        updateDirectShareShortcuts(peers)
-        
         broadcastStatus()
-    }
-
-    private fun updateDirectShareShortcuts(peers: List<PeerSnapshot>) {
-        val shortcuts = mutableListOf<ShortcutInfoCompat>()
-        peers.filter { it.isConnected }.forEach { peer ->
-            val intent = Intent(this, DeskdropShareTarget::class.java).apply {
-                action = Intent.ACTION_SEND
-                putExtra(EXTRA_TARGET_DEVICE_ID, peer.id)
-            }
-            
-            val icon = IconCompat.createWithResource(this, R.mipmap.ic_launcher)
-
-            val shortcut = ShortcutInfoCompat.Builder(this, "peer_${peer.id}")
-                .setShortLabel(peer.name)
-                .setLongLabel("Send to ${peer.name}")
-                .setIcon(icon)
-                .setCategories(setOf("com.deskdrop.category.DIRECT_SHARE"))
-                .setIntent(intent)
-                .build()
-            shortcuts.add(shortcut)
-        }
-        
-        try {
-            ShortcutManagerCompat.setDynamicShortcuts(this, shortcuts)
-        } catch (e: Exception) {
-            Log.e("DeskdropService", "Failed to set dynamic shortcuts", e)
-        }
     }
 
     private fun broadcastStatus() {

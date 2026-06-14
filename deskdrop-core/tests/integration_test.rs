@@ -215,13 +215,12 @@ async fn sim_image_payload_roundtrip() {
         .send(ClipboardContent::Image {
             mime: "image/png".into(),
             data: img_data.clone(),
-            extracted_text: None,
         })
         .await;
 
     let received = bob.next_clipboard().await.expect("image must arrive");
     match received {
-        ClipboardContent::Image { mime, data, .. } => {
+        ClipboardContent::Image { mime, data } => {
             assert_eq!(mime, "image/png");
             assert_eq!(data, img_data, "image data must be byte-identical");
         }

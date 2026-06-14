@@ -16,9 +16,8 @@ class PairingActivity : ComponentActivity() {
         const val EXTRA_DEVICE_NAME     = "device_name"
         const val EXTRA_FINGERPRINT     = "fingerprint"
         const val EXTRA_PIN             = "pin"
-        const val ACTION_PAIRING_RESULT   = "com.deskdrop.PAIRING_RESULT"
-        const val ACTION_PAIRING_RESOLVED = "com.deskdrop.PAIRING_RESOLVED"
-        const val EXTRA_APPROVED          = "approved"
+        const val ACTION_PAIRING_RESULT = "com.deskdrop.PAIRING_RESULT"
+        const val EXTRA_APPROVED        = "approved"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,32 +52,6 @@ class PairingActivity : ComponentActivity() {
                 )
             }
         }
-    }
-
-    private val receiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: Intent?) {
-            if (intent?.action == ACTION_PAIRING_RESOLVED) {
-                val targetId = intent.getStringExtra(EXTRA_DEVICE_ID)
-                val currentId = this@PairingActivity.intent.getStringExtra(EXTRA_DEVICE_ID)
-                if (targetId == null || targetId == currentId) {
-                    finish()
-                }
-            }
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(receiver, android.content.IntentFilter(ACTION_PAIRING_RESOLVED), RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(receiver, android.content.IntentFilter(ACTION_PAIRING_RESOLVED))
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        unregisterReceiver(receiver)
     }
 
     private fun sendResult(deviceId: String, approved: Boolean) {

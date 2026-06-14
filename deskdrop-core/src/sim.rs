@@ -301,13 +301,12 @@ mod tests {
             .send(ClipboardContent::Image {
                 mime: "image/png".into(),
                 data: img_data.clone(),
-                extracted_text: None,
             })
             .await;
 
         let item = bob.next_clipboard().await.expect("received");
         match item {
-            ClipboardContent::Image { data, mime, .. } => {
+            ClipboardContent::Image { data, mime } => {
                 assert_eq!(mime, "image/png");
                 assert_eq!(data.len(), 1024);
             }

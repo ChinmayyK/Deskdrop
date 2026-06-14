@@ -3,7 +3,6 @@
 
 import SwiftUI
 import AppKit
-import CoreImage.CIFilterBuiltins
 
 // MARK: - Root
 
@@ -100,7 +99,7 @@ struct PreferencesView: View {
         switch tab {
         case .general:  GeneralPane(copy: $copy, virtualCamera: virtualCamera)
         case .sync:     SyncPane(copy: $copy, patternDraft: $patternDraft)
-        case .network:  NetworkPane(copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid, store: store)
+        case .network:  NetworkPane(copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
                             .onChange(of: portString) { v in
                                 if let p = UInt16(v), p > 1024 { copy.port = p; portIsInvalid = false; isDirty = true }
                                 else { portIsInvalid = true }
@@ -439,51 +438,8 @@ private struct NetworkPane: View {
     @Binding var copy: DeskdropSettingsSnapshot
     @Binding var portString: String
     @Binding var portIsInvalid: Bool
-    @ObservedObject var store: DeskdropStore
 
     var body: some View {
-        PrefsSection(title: "Guest Mode", icon: "globe", tint: CRTheme.accentGreen) {
-            PrefsRow(icon: "wifi.router.fill", label: "Web Dashboard",
-                     description: "Allow guests on the local network to upload files via a web browser.") {
-                Toggle("", isOn: Binding(
-                    get: { store.status?.webDashboardUrl != nil },
-                    set: { enabled in
-                        Task { try? await store.toggleWebDashboard(enabled: enabled) }
-                    }
-                ))
-                .toggleStyle(.switch)
-                .labelsHidden()
-            }
-            if let url = store.status?.webDashboardUrl {
-                PrefsDivider()
-                PrefsRow(icon: "link", label: "Dashboard URL", description: "Scan the QR code or visit this URL in a browser.") {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack(spacing: 8) {
-                            Text(url)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(CRTheme.inkSoft)
-                            Button("Copy") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(url, forType: .string)
-                            }
-                            .buttonStyle(CRSecondaryButtonStyle())
-                        }
-                        
-                        if let qrImage = generateQRCode(from: url) {
-                            Image(nsImage: qrImage)
-                                .interpolation(.none)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 140, height: 140)
-                                .padding(12)
-                                .background(Color.white)
-                                .cornerRadius(12)
-                        }
-                    }
-                }
-            }
-        }
-        
         PrefsSection(title: "Listener", icon: "antenna.radiowaves.left.and.right", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "number.circle.fill", label: "Port",
                      description: "TCP port the daemon binds to. Changes take effect on restart.") {
@@ -539,21 +495,6 @@ private struct NetworkPane: View {
                     .frame(maxWidth: 165)
             }
         }
-    }
-    
-    private func generateQRCode(from string: String) -> NSImage? {
-        let context = CIContext()
-        let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(string.utf8)
-        
-        if let outputImage = filter.outputImage {
-            let transform = CGAffineTransform(scaleX: 10, y: 10)
-            let scaledImage = outputImage.transformed(by: transform)
-            if let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) {
-                return NSImage(cgImage: cgImage, size: NSSize(width: scaledImage.extent.width, height: scaledImage.extent.height))
-            }
-        }
-        return nil
     }
 }
 

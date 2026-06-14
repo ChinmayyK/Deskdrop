@@ -27,7 +27,6 @@ class SettingsActivity : ComponentActivity() {
     private val notificationMirroringEnabled = mutableStateOf(false)
     private val autoForwardSms = mutableStateOf(true)
     private val autoForwardScreenshots = mutableStateOf(true)
-    private val webDashboardEnabled = mutableStateOf(false)
     private val isDarkMode = mutableStateOf(false)
     private val peers = mutableStateOf(emptyList<PeerSnapshot>())
 
@@ -59,7 +58,6 @@ class SettingsActivity : ComponentActivity() {
                     notificationMirroringEnabled = notificationMirroringEnabled.value,
                     autoForwardSms = autoForwardSms.value,
                     autoForwardScreenshots = autoForwardScreenshots.value,
-                    webDashboardEnabled = webDashboardEnabled.value,
                     isDarkMode = isDarkMode.value,
                     peers = peers.value,
                     onSyncEnabledChange = {
@@ -102,16 +100,6 @@ class SettingsActivity : ComponentActivity() {
                         saveBooleanPref("auto_forward_screenshots", it)
                         if (it) requestMediaPermissions()
                     },
-                    onWebDashboardChange = {
-                        webDashboardEnabled.value = it
-                        saveBooleanPref("web_dashboard_enabled", it)
-                        ContextCompat.startForegroundService(this@SettingsActivity,
-                            Intent(this@SettingsActivity, DeskdropService::class.java).apply {
-                                action = DeskdropService.ACTION_TOGGLE_WEB_DASHBOARD
-                                putExtra(DeskdropService.EXTRA_WEB_DASHBOARD_ENABLED, it)
-                            }
-                        )
-                    },
                     onDarkModeChange = {
                         isDarkMode.value = it
                         saveBooleanPref("dark_mode", it)
@@ -149,7 +137,6 @@ class SettingsActivity : ComponentActivity() {
         notificationMirroringEnabled.value = prefs.getBoolean("notification_mirroring", false)
         autoForwardSms.value = prefs.getBoolean("auto_forward_sms", false)
         autoForwardScreenshots.value = prefs.getBoolean("auto_forward_screenshots", false)
-        webDashboardEnabled.value = prefs.getBoolean("web_dashboard_enabled", false)
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
         peers.value = prefs.peerSnapshots()
     }

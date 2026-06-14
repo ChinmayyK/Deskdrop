@@ -39,7 +39,6 @@ struct IpcStatusResponse: Codable {
     let peer_batteries: [IpcPeerBatteryState]?
     let peer_networks: [IpcPeerNetworkState]?
     let active_transfers: [IpcFileTransferState]?
-    let web_dashboard_url: String?
 }
 
 struct IpcFileTransferState: Codable {
@@ -146,10 +145,6 @@ final class DeskdropIPCClient {
         _ = try await send(cmd: ["cmd": "rename_trusted_device", "device_id": deviceId, "display_name": displayName])
     }
 
-    func toggleWebDashboard(enabled: Bool) async throws {
-        _ = try await send(cmd: ["cmd": "toggle_web_dashboard", "enabled": enabled])
-    }
-
     func approveTrust(deviceId: String, deviceName: String, pubkeyBytes: Data) async throws {
         _ = try await send(cmd: [
             "cmd": "trust_peer",
@@ -246,19 +241,6 @@ final class DeskdropIPCClient {
             "path": url.path,
             "name": url.lastPathComponent,
             "mime": mimeType(for: url),
-        ]
-        if let t = targetDeviceId { cmd["target_device"] = t }
-        let raw = try await send(cmd: cmd)
-        let resp = try JSONDecoder().decode(IpcResponse<String>.self, from: raw)
-        return resp.data ?? ""
-    }
-
-    /// Send multiple files/directories bundled into a single ZIP.
-    func sendFiles(urls: [URL], bundleName: String = "deskdrop_bundle", targetDeviceId: String? = nil) async throws -> String {
-        var cmd: [String: Any] = [
-            "cmd": "send_file_paths",
-            "paths": urls.map { $0.path },
-            "bundle_name": bundleName
         ]
         if let t = targetDeviceId { cmd["target_device"] = t }
         let raw = try await send(cmd: cmd)

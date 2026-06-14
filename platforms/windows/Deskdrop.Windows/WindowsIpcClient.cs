@@ -34,15 +34,6 @@ namespace Deskdrop.Windows
             return Send(new { cmd = "send_file_path", path = path, name = name, mime = mime, target_device = targetDevice });
         }
 
-        public static JsonDocument? SendFilePaths(string[] paths, string bundleName = "deskdrop_bundle", string? targetDevice = null)
-        {
-            if (targetDevice == null)
-            {
-                return Send(new { cmd = "send_file_paths", paths = paths, bundle_name = bundleName });
-            }
-            return Send(new { cmd = "send_file_paths", paths = paths, bundle_name = bundleName, target_device = targetDevice });
-        }
-
         // ── Security ────────────────────────────────────────────────────────────
 
         /// <summary>

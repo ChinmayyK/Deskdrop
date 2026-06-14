@@ -44,13 +44,12 @@ async fn e2e_image_transfer() {
         .send(ClipboardContent::Image {
             mime: "image/png".into(),
             data: data.clone(),
-            extracted_text: None,
         })
         .await;
 
     let got = bob.next_clipboard().await.unwrap();
     match got {
-        ClipboardContent::Image { mime, data: d, .. } => {
+        ClipboardContent::Image { mime, data: d } => {
             assert_eq!(mime, "image/png");
             assert_eq!(d.len(), data.len());
         }
@@ -143,7 +142,6 @@ fn chunked_image_roundtrip() {
     let content = ClipboardContent::Image {
         mime: "image/webp".into(),
         data: data.clone(),
-        extracted_text: None,
     };
 
     let msgs = maybe_chunk(&content).expect("should chunk");
@@ -157,7 +155,7 @@ fn chunked_image_roundtrip() {
     }
 
     match result.unwrap() {
-        ClipboardContent::Image { mime, data: d, .. } => {
+        ClipboardContent::Image { mime, data: d } => {
             assert_eq!(mime, "image/webp");
             assert_eq!(d, data);
         }

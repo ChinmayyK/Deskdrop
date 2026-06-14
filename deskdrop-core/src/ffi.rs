@@ -141,7 +141,7 @@ pub unsafe extern "C" fn deskdrop_push_image(
     let h = &*handle;
     runtime().block_on(
         h.engine
-            .push_clipboard(ClipboardContent::Image { mime, data: bytes, extracted_text: None }),
+            .push_clipboard(ClipboardContent::Image { mime, data: bytes }),
     ) as c_int
 }
 
@@ -209,51 +209,6 @@ pub unsafe extern "C" fn deskdrop_send_file_path(
     }
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn deskdrop_send_file_paths(
-    handle: *mut DeskdropHandle,
-    target_device_ptr: *const c_char,
-    paths_ptr: *const *const c_char,
-    paths_count: usize,
-    bundle_name_ptr: *const c_char,
-) -> c_int {
-    if handle.is_null() || paths_ptr.is_null() || bundle_name_ptr.is_null() || paths_count == 0 {
-        return -1;
-    }
-
-    let target_device = if !target_device_ptr.is_null() {
-        let s = CStr::from_ptr(target_device_ptr).to_string_lossy();
-        if s.is_empty() {
-            None
-        } else {
-            uuid::Uuid::parse_str(&s).ok()
-        }
-    } else {
-        None
-    };
-
-    let mut paths = Vec::with_capacity(paths_count);
-    let paths_slice = std::slice::from_raw_parts(paths_ptr, paths_count);
-    for &p in paths_slice {
-        if p.is_null() { return -1; }
-        paths.push(std::path::PathBuf::from(CStr::from_ptr(p).to_string_lossy().into_owned()));
-    }
-
-    let bundle_name = CStr::from_ptr(bundle_name_ptr).to_string_lossy().into_owned();
-
-    let h = &*handle;
-    let res = runtime().block_on(
-        h.engine.send_file_paths(paths, bundle_name, target_device)
-    );
-    if res.is_ok() {
-        0
-    } else {
-        -1
-    }
-}
-
-
-
 // ── Poll for events ───────────────────────────────────────────────────────────
 
 /// Event type codes returned by `deskdrop_poll_event`.
@@ -266,8 +221,6 @@ pub const PB_EVENT_PEER_CONNECTED: c_int = 5;
 pub const PB_EVENT_PEER_DISCONNECTED: c_int = 6;
 pub const PB_EVENT_WARNING: c_int = 7;
 pub const PB_EVENT_CLIPBOARD_SYNCED: c_int = 8;
-pub const PB_EVENT_PAIRING_CONFIRMED: c_int = 9;
-pub const PB_EVENT_PAIRING_REJECTED: c_int = 10;
 pub const PB_EVENT_CLIPBOARD_AVAILABLE: c_int = 11; // timeline-first: not yet applied
 pub const PB_EVENT_FILE_TRANSFER_INCOMING: c_int = 12;
 pub const PB_EVENT_FILE_TRANSFER_PROGRESS: c_int = 13;
@@ -286,7 +239,6 @@ pub const PB_EVENT_CAMERA_FRAME: c_int = 25;
 pub const PB_EVENT_SYSTEM_HEALTH_UPDATED: c_int = 26;
 pub const PB_EVENT_PEER_DISCOVERED: c_int = 27;
 pub const PB_EVENT_NETWORK_STATE_CHANGED: c_int = 28;
-
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -350,8 +302,8 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::SystemHealthUpdated(_) => PB_EVENT_SYSTEM_HEALTH_UPDATED,
         EngineEvent::ClipboardDeliveryStatus { .. } => PB_EVENT_WARNING,
         EngineEvent::PairingRequested { .. } => PB_EVENT_PAIRING_REQUESTED,
-        EngineEvent::PairingConfirmed { .. } => PB_EVENT_PAIRING_CONFIRMED,
-        EngineEvent::PairingRejected { .. } => PB_EVENT_PAIRING_REJECTED,
+        EngineEvent::PairingConfirmed { .. } => PB_EVENT_WARNING,
+        EngineEvent::PairingRejected { .. } => PB_EVENT_WARNING,
         EngineEvent::PairingRequest { .. } => PB_EVENT_WARNING,
         EngineEvent::PairingResponse { .. } => PB_EVENT_WARNING,
         EngineEvent::ClipboardSynced { .. } => PB_EVENT_CLIPBOARD_SYNCED,
@@ -369,7 +321,6 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CallActionRequest { .. } => PB_EVENT_CALL_ACTION,
         EngineEvent::BatteryStateChanged { .. } => PB_EVENT_BATTERY_STATE_CHANGED,
         EngineEvent::NetworkStateChanged { .. } => PB_EVENT_NETWORK_STATE_CHANGED,
-
         EngineEvent::NotificationReceived { .. } => PB_EVENT_ACTIVITY_UPDATED,
         EngineEvent::CameraStreamRequest { .. } => PB_EVENT_CAMERA_STREAM_REQUEST,
         EngineEvent::CameraStreamAccept { .. } => PB_EVENT_CAMERA_STREAM_ACCEPT,
@@ -397,7 +348,6 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
         EngineEvent::Warning(s) => Some(s.clone()),
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
         EngineEvent::NetworkStateChanged { network_type, .. } => Some(network_type.clone()),
-
         EngineEvent::ActivityFeedUpdated { entries, .. } => serde_json::to_string(entries).ok(),
         _ => None,
     };
@@ -426,7 +376,6 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
         EngineEvent::BatteryStateChanged { from_name, .. } => Some(from_name.as_str()),
         EngineEvent::NetworkStateChanged { from_name, .. } => Some(from_name.as_str()),
-
         _ => None,
     };
     if let Some(n) = name {
@@ -577,8 +526,6 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
     let e = &mut *event;
     let id_str = match &e.inner {
         EngineEvent::PairingRequested { device_id, .. } => Some(device_id.to_string()),
-        EngineEvent::PairingConfirmed { device_id, .. } => Some(device_id.to_string()),
-        EngineEvent::PairingRejected { device_id, .. } => Some(device_id.to_string()),
         EngineEvent::CallStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::BatteryStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::NetworkStateChanged { from_device, .. } => Some(from_device.to_string()),

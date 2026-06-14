@@ -23,7 +23,7 @@ pub fn hash_content(content: &crate::protocol::ClipboardContent) -> ContentHash 
             h.update(b"T");
             h.update(s.as_bytes());
         }
-        crate::protocol::ClipboardContent::Image { mime, data, .. } => {
+        crate::protocol::ClipboardContent::Image { mime, data } => {
             h.update(b"I");
             h.update(mime.as_bytes());
             h.update(data);

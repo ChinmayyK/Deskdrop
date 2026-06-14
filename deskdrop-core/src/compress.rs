@@ -114,7 +114,7 @@ pub async fn compress_image(
     }
 
     match content {
-        ClipboardContent::Image { ref data, ref mime, ref extracted_text } => {
+        ClipboardContent::Image { ref data, ref mime } => {
             let size = data.len();
             if size < COMPRESS_THRESHOLD {
                 return (content, None);
@@ -143,7 +143,6 @@ pub async fn compress_image(
                             ClipboardContent::Image {
                                 data: new_data,
                                 mime: new_mime,
-                                extracted_text: extracted_text.clone(),
                             },
                             Some(stats),
                         )
@@ -259,7 +258,6 @@ mod tests {
         ClipboardContent::Image {
             mime: mime.to_string(),
             data: vec![0xAB; size],
-            extracted_text: None,
         }
     }
 

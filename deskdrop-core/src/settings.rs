@@ -20,15 +20,6 @@ pub enum SyncMode {
     Manual,
 }
 
-// ── RelayConfig ───────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct RelayConfig {
-    pub enabled: bool,
-    pub server_url: String,
-    pub auth_token: String,
-}
-
 // ── Settings struct ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,10 +31,6 @@ pub struct Settings {
 
     /// Override the device name shown to peers. Empty = use hostname.
     pub device_name: String,
-
-    /// Relay server configuration (WAN support).
-    #[serde(default)]
-    pub relay: RelayConfig,
 
     // ── Sync behaviour ───────────────────────────────────────────────────────
     /// Enable clipboard syncing (master switch).
@@ -194,7 +181,6 @@ impl Default for Settings {
         Self {
             port: crate::protocol::DEFAULT_PORT,
             device_name: String::new(),
-            relay: RelayConfig::default(),
             sync_enabled: true,
             sync_text: true,
             sync_images: true,

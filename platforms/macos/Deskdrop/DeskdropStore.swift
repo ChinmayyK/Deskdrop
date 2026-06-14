@@ -46,7 +46,6 @@ final class DeskdropStore: ObservableObject {
     @Published var settings: DeskdropSettingsSnapshot? = nil
     @Published var quickSendContext: QuickSendContext? = nil
     @Published var pendingTrustRequest: DeviceDetailSnapshot? = nil
-    private var promptedPairingIds = Set<String>()
     @Published var dashboardStatus: StatusSnapshot? = nil
     @Published var pinnedItemIds: Set<Int64> = []
     /// Active phone call from a connected Android device (nil = no active call).
@@ -258,24 +257,10 @@ final class DeskdropStore: ObservableObject {
             var seenIds = Set<String>()
             var uniquePeers = [PeerViewModel]()
             // Deduplicate peers by ID (handles cases where a device is discovered via both IPv4 and IPv6)
-            for raw in s.peers {
-                if !seenIds.contains(raw.id) {
-                    seenIds.insert(raw.id)
-                    uniquePeers.append(makePeerViewModel(raw))
-                }
-                
-                if (raw.pairing_requested ?? false) {
-                    if !promptedPairingIds.contains(raw.id) {
-                        promptedPairingIds.insert(raw.id)
-                        DispatchQueue.main.async {
-                            self.pendingTrustRequest = DeviceDetailSnapshot(
-                                deviceId: raw.id,
-                                deviceName: raw.display_name ?? raw.friendly_name,
-                                fingerprint: raw.pairing_pin ?? "0000",
-                                lastSeen: raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) }
-                            )
-                        }
-                    }
+            for p in s.peers {
+                if !seenIds.contains(p.id) {
+                    seenIds.insert(p.id)
+                    uniquePeers.append(makePeerViewModel(p))
                 }
             }
             peers = uniquePeers
@@ -374,8 +359,7 @@ final class DeskdropStore: ObservableObject {
                 lastSyncAt:   s.peers.compactMap { $0.last_sync }
                     .max().map { Date(timeIntervalSince1970: TimeInterval($0)) },
                 syncEnabled:  true,
-                daemonVersion: nil,
-                webDashboardUrl: s.web_dashboard_url
+                daemonVersion: nil
             )
             if lastActivityId > 0 {
                 await pollActivityFeedIncremental()
@@ -672,12 +656,6 @@ final class DeskdropStore: ObservableObject {
             ? "Clipboard sync is now active"
             : "Clipboard sync paused — no events will be forwarded",
             tint: s.syncEnabled ? CRTheme.accentGreen : CRTheme.accentOrange)
-    }
-
-    /// Toggle the Guest Mode Web Dashboard
-    func toggleWebDashboard(enabled: Bool) async throws {
-        try await ipc.toggleWebDashboard(enabled: enabled)
-        await refresh()
     }
 
     /// Open the Quick Access history panel — triggered by command palette.

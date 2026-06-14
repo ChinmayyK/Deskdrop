@@ -40,28 +40,7 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
-
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
-
-    <key>NSServices</key>
-    <array>
-        <dict>
-            <key>NSMenuItem</key>
-            <dict>
-                <key>default</key>
-                <string>Send via Deskdrop</string>
-            </dict>
-            <key>NSMessage</key>
-            <string>handleSendFilesService</string>
-            <key>NSPortName</key>
-            <string>Deskdrop</string>
-            <key>NSSendTypes</key>
-            <array>
-                <string>public.file-url</string>
-                <string>public.item</string>
-            </array>
-        </dict>
-    </array>
 </dict>
 </plist>

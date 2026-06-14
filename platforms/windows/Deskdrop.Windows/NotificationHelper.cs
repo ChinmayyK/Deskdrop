@@ -65,36 +65,6 @@ namespace Deskdrop.Windows
             {
                 Console.WriteLine($"Toast with actions failed: {ex.Message}");
             }
-        public static void ShowFileReceivedToast(string title, string body, string filePath, string? iconPath = null)
-        {
-            try
-            {
-                var encodedPath = Uri.EscapeDataString(filePath);
-                var xmlString = $@"
-<toast launch='deskdrop://'>
-  <visual>
-    <binding template='ToastGeneric'>
-      <text>{System.Security.SecurityElement.Escape(title)}</text>
-      <text>{System.Security.SecurityElement.Escape(body)}</text>
-      {(string.IsNullOrEmpty(iconPath) ? "" : $"<image placement='appLogoOverride' src='file:///{iconPath.Replace("\\", "/")}' />")}
-    </binding>
-  </visual>
-  <actions>
-    <action content='Open' arguments='deskdrop://file-action?action=open&amp;path={encodedPath}' activationType='protocol' />
-    <action content='Copy' arguments='deskdrop://file-action?action=copy&amp;path={encodedPath}' activationType='protocol' />
-  </actions>
-</toast>";
-
-                var xml = new XmlDocument();
-                xml.LoadXml(xmlString);
-
-                var toast = new ToastNotification(xml);
-                ToastNotificationManager.CreateToastNotifier(AppUserModelID).Show(toast);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"File received toast failed: {ex.Message}");
-            }
         }
     }
 }

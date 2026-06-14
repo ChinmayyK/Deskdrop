@@ -276,7 +276,6 @@ class MainActivity : ComponentActivity() {
                                     action = DeskdropService.ACTION_CONNECT_MANUAL
                                     putExtra("ip", ip)
                                     putExtra("port", port)
-                                    putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
                                 }
                             )
                             showSnack("Connecting to ${peer.name}...")

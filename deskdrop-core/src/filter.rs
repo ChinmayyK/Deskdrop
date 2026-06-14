@@ -615,7 +615,6 @@ mod tests {
         ClipboardContent::Image {
             mime: "image/png".into(),
             data: vec![0; 100],
-            extracted_text: None,
         }
     }
     fn file(name: &str) -> ClipboardContent {

@@ -62,7 +62,7 @@ namespace Deskdrop.Windows
                         if (files.Length == 1)
                         {
                             var path = files[0];
-                            if (File.Exists(path) || Directory.Exists(path))
+                            if (File.Exists(path))
                             {
                                 try {
                                     _clipboardManager.PushFile(path);
@@ -79,13 +79,24 @@ namespace Deskdrop.Windows
                         else
                         {
                             try {
-                                _clipboardManager.PushFiles(files, "deskdrop_bundle.zip");
+                                var tempZip = Path.Combine(Path.GetTempPath(), $"deskdrop_batch_{DateTime.Now:yyyyMMddHHmmss}.zip");
+                                using (var archive = System.IO.Compression.ZipFile.Open(tempZip, System.IO.Compression.ZipArchiveMode.Create))
+                                {
+                                    foreach (string path in files)
+                                    {
+                                        if (File.Exists(path))
+                                        {
+                                            archive.CreateEntryFromFile(path, Path.GetFileName(path));
+                                        }
+                                    }
+                                }
+                                _clipboardManager.PushFile(tempZip);
                                 System.Windows.Application.Current.Dispatcher.Invoke(() => {
                                     NotificationHelper.ShowToast("Deskdrop", $"Sending {files.Length} files as batch...");
                                 });
                             } catch (Exception ex) {
                                 System.Windows.Application.Current.Dispatcher.Invoke(() => {
-                                    NotificationHelper.ShowToast("Deskdrop Error", $"Failed to send files: {ex.Message}");
+                                    NotificationHelper.ShowToast("Deskdrop Error", $"Failed to zip and send files: {ex.Message}");
                                 });
                             }
                         }

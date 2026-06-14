@@ -555,7 +555,6 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "active_transfers":      active_transfers,
                 "peer_batteries":        peer_batteries,
                 "peer_networks":         peer_networks,
-                "web_dashboard_url":     snapshot.web_dashboard_url,
             })))
         }
         // Re-trigger mDNS discovery — called by the Mac "Scan" button and
@@ -704,7 +703,6 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             let content = ClipboardContent::Image {
                 mime: mime.clone(),
                 data,
-                extracted_text: None,
             };
             remember_history(&state, &content, current_device_name(&state).await).await?;
             Ok(IpcResponse::ok(
@@ -982,22 +980,6 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .await?;
             Ok(IpcResponse::ok(hex::encode(transfer_id)))
         }
-        IpcRequest::SendFilePaths {
-            paths,
-            bundle_name,
-            target_device,
-        } => {
-            let path_bufs: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
-            let transfer_id = state
-                .engine
-                .send_file_paths(
-                    path_bufs,
-                    bundle_name,
-                    target_device.as_deref().map(parse_uuid).transpose()?,
-                )
-                .await?;
-            Ok(IpcResponse::ok(hex::encode(transfer_id)))
-        }
         IpcRequest::AcceptFileTransfer { transfer_id } => {
             state
                 .engine
@@ -1267,13 +1249,6 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok_empty())
         }
 
-
-
-        IpcRequest::ToggleWebDashboard { enabled } => {
-            state.engine.toggle_web_dashboard(enabled).await;
-            Ok(IpcResponse::ok_empty())
-        }
-
         IpcRequest::Shutdown => {
             state.shutdown.notify_waiters();
             Ok(IpcResponse::ok_empty())
@@ -1333,7 +1308,7 @@ fn incoming_payload_json(id: u64, content: &ClipboardContent) -> serde_json::Val
             "type": "text",
             "text": text,
         }),
-        ClipboardContent::Image { mime, data, .. } => json!({
+        ClipboardContent::Image { mime, data } => json!({
             "id": id,
             "type": "image",
             "mime": mime,

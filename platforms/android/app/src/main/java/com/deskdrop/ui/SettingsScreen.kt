@@ -5,8 +5,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -68,7 +66,6 @@ fun SettingsScreen(
     notificationMirroringEnabled: Boolean,
     autoForwardSms: Boolean,
     autoForwardScreenshots: Boolean,
-    webDashboardEnabled: Boolean,
     isDarkMode: Boolean,
     peers: List<com.deskdrop.PeerSnapshot>,
     onSyncEnabledChange: (Boolean) -> Unit,
@@ -79,7 +76,6 @@ fun SettingsScreen(
     onNotificationMirroringChange: (Boolean) -> Unit,
     onAutoForwardSmsChange: (Boolean) -> Unit,
     onAutoForwardScreenshotsChange: (Boolean) -> Unit,
-    onWebDashboardChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     onRenameClicked: () -> Unit,
     onBatterySettingsClicked: () -> Unit,
@@ -331,101 +327,6 @@ fun SettingsScreen(
                                 checked = notificationMirroringEnabled,
                                 onCheckedChange = onNotificationMirroringChange
                             )
-                        }
-                    }
-                }
-
-                item {
-                    SettingsSection(
-                        isDark = isDarkMode,
-                        title = "Guest Mode",
-                        accentColor = CRTheme.statusGreen,
-                        icon = Icons.Rounded.Wifi
-                    ) {
-                        Column {
-                            SettingsSwitchRow(
-                                isDark = isDarkMode,
-                                icon = Icons.Rounded.Router,
-                                title = "Web Dashboard",
-                                subtitle = "Allow guests on the local network to upload files via a web browser.",
-                                checked = webDashboardEnabled,
-                                onCheckedChange = onWebDashboardChange
-                            )
-                            
-                            AnimatedVisibility(
-                                visible = webDashboardEnabled,
-                                enter = expandVertically() + fadeIn(),
-                                exit = shrinkVertically() + fadeOut()
-                            ) {
-                                Column {
-                                    HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 24.dp, vertical = 16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.surface(isDarkMode)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(imageVector = Icons.Rounded.Link, contentDescription = null, tint = CRTheme.textHigh(isDarkMode), modifier = Modifier.size(20.dp))
-                                        }
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(text = "Dashboard URL", style = CRTypography.bodyMedium, color = CRTheme.textHigh(isDarkMode))
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = "Ask guests to visit this URL in their browser.",
-                                                fontSize = 13.sp,
-                                                color = CRTheme.textMedium(isDarkMode),
-                                                lineHeight = 18.sp
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            val url = "http://${getLocalIpAddress()}:4445"
-                                            Text(
-                                                text = url,
-                                                fontFamily = FontFamily.Monospace,
-                                                color = CRTheme.statusGreen,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            
-                                            Box(
-                                                modifier = Modifier
-                                                    .background(Color.White, RoundedCornerShape(12.dp))
-                                                    .padding(12.dp)
-                                            ) {
-                                                val bmp = remember(url) {
-                                                    try {
-                                                        val writer = com.google.zxing.qrcode.QRCodeWriter()
-                                                        val bitMatrix = writer.encode(url, com.google.zxing.BarcodeFormat.QR_CODE, 400, 400)
-                                                        val w = bitMatrix.width
-                                                        val h = bitMatrix.height
-                                                        val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.RGB_565)
-                                                        for (x in 0 until w) {
-                                                            for (y in 0 until h) {
-                                                                b.setPixel(x, y, if (bitMatrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
-                                                            }
-                                                        }
-                                                        b
-                                                    } catch (e: Exception) {
-                                                        null
-                                                    }
-                                                }
-                                                if (bmp != null) {
-                                                    Image(
-                                                        bitmap = bmp.asImageBitmap(),
-                                                        contentDescription = "QR Code",
-                                                        modifier = Modifier.size(140.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }

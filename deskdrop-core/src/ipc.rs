@@ -169,11 +169,6 @@ pub enum IpcRequest {
         mime: String,
         target_device: Option<String>,
     },
-    SendFilePaths {
-        paths: Vec<String>,
-        bundle_name: String,
-        target_device: Option<String>,
-    },
     /// Accept an incoming file transfer.
     AcceptFileTransfer { transfer_id: String },
     /// Reject an incoming file transfer.
@@ -202,8 +197,6 @@ pub enum IpcRequest {
     GetMetrics,
     /// Poll the latest camera frame received from any peer.
     LatestCameraFrame { target_device: Option<String> },
-    /// Toggle the Guest Mode Web Dashboard server
-    ToggleWebDashboard { enabled: bool },
 
     // ── History tag management ────────────────────────────────────────────────
     /// Add a tag to a history entry.
@@ -348,7 +341,6 @@ pub enum IpcRequest {
         /// Whether the device is charging
         charging: bool,
     },
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -719,10 +711,6 @@ pub async fn handle_ipc_request(
             }
         }
         IpcRequest::Ping => IpcResponse::ok_empty(),
-        IpcRequest::ToggleWebDashboard { enabled } => {
-            eng.toggle_web_dashboard(enabled).await;
-            IpcResponse::ok_empty()
-        }
         IpcRequest::Shutdown => {
             std::process::exit(0);
         }
@@ -749,7 +737,6 @@ pub async fn handle_ipc_request(
             eng.push_battery_status(level, charging).await;
             IpcResponse::ok_empty()
         }
-
         // ── Metrics ────────────────────────────────────────────────────────
         IpcRequest::GetMetrics => {
             let snap = eng.status_snapshot().await;
@@ -976,7 +963,7 @@ pub async fn handle_ipc_request(
         IpcRequest::PushImage { mime, data_base64 } => {
             match crate::ipc::decode_base64(&data_base64) {
                 Ok(data) => {
-                    let content = crate::protocol::ClipboardContent::Image { mime, data, extracted_text: None };
+                    let content = crate::protocol::ClipboardContent::Image { mime, data };
                     let n = eng.push_clipboard(content).await;
                     IpcResponse::ok(serde_json::json!({ "delivered": n }))
                 }
@@ -1059,27 +1046,6 @@ pub async fn handle_ipc_request(
             };
             match eng
                 .send_file_path(std::path::PathBuf::from(path), name, mime, tgt)
-                .await
-            {
-                Ok(transfer_id) => IpcResponse::ok(hex::encode(transfer_id)),
-                Err(e) => IpcResponse::err(e.to_string()),
-            }
-        }
-        IpcRequest::SendFilePaths {
-            paths,
-            bundle_name,
-            target_device,
-        } => {
-            let tgt = match target_device {
-                Some(ref s) => match crate::ipc::parse_uuid(s) {
-                    Ok(id) => Some(id),
-                    Err(_) => return IpcResponse::err("invalid target device id"),
-                },
-                None => None,
-            };
-            let path_bufs: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
-            match eng
-                .send_file_paths(path_bufs, bundle_name, tgt)
                 .await
             {
                 Ok(transfer_id) => IpcResponse::ok(hex::encode(transfer_id)),

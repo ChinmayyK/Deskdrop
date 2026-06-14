@@ -89,7 +89,6 @@ fn bench_chunk_and_reassemble(c: &mut Criterion) {
         let content = ClipboardContent::Image {
             mime: "image/png".into(),
             data: vec![0xAB; size],
-            extracted_text: None,
         };
         group.throughput(Throughput::Bytes(size as u64));
 

@@ -119,8 +119,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_stop(
     }
 }
 
-
-
 // ── pushText ──────────────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -168,7 +166,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushImage(
     let h = unsafe { &*(handle as *const AndroidHandle) };
     rt().block_on(
         h.engine
-            .push_clipboard(ClipboardContent::Image { mime, data: bytes, extracted_text: None }),
+            .push_clipboard(ClipboardContent::Image { mime, data: bytes }),
     ) as jint
 }
 
@@ -383,7 +381,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         PairingRequest { .. } => 7,
         PairingResponse { .. } => 7,
         PeerDiscovered { .. } => 5,
-
         Warning(_) => 7,
     }
 }
@@ -407,7 +404,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
-
     }
     std::ptr::null_mut()
 }
@@ -457,11 +453,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
         HistoryMetadataReceived { from_name, .. } => Some(from_name.as_str()),
         ClipboardSynced { peer_name, .. } => Some(peer_name.as_str()),
         ClipboardSyncFailed { peer_name, .. } => Some(peer_name.as_str()),
-        FileTransferIncoming { from_name, .. } => Some(from_name.as_str()),
-        FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
-
-        BatteryStateChanged { from_name, .. } => Some(from_name.as_str()),
-        NetworkStateChanged { from_name, .. } => Some(from_name.as_str()),
         PairingRequested { device_name, .. } => Some(device_name.as_str()),
         OutgoingPairingWaiting { device_name, .. } => Some(device_name.as_str()),
         ClipboardDeliveryStatus { .. } => None,
@@ -503,7 +494,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         FileTransferProgress { from_device, .. } => Some(*from_device),
         FileTransferComplete { from_device, .. } => Some(*from_device),
         FileTransferFailed { from_device, .. } => Some(*from_device),
-
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
@@ -1159,7 +1149,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_connectToPeer(
     handle: jlong,
     ip: JString,
     port: jint,
-    target_device_id_jstr: JString,
 ) -> jint {
     if handle == 0 {
         return -1;
@@ -1168,22 +1157,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_connectToPeer(
         Ok(s) => s.into(),
         Err(_) => return -1,
     };
-    let target_device_id = if target_device_id_jstr.is_null() {
-        None
-    } else {
-        let raw: String = match env.get_string(&target_device_id_jstr) {
-            Ok(s) => s.into(),
-            Err(_) => return -1,
-        };
-        uuid::Uuid::parse_str(&raw).ok()
-    };
-
     let h = unsafe { &*(handle as *const AndroidHandle) };
-
-    if let Some(id) = target_device_id {
-        let _ = rt().block_on(h.engine.set_auto_connect(id, true));
-    }
-
     match rt().block_on(h.engine.connect_to_peer(ip_str, port as u16)) {
         Ok(()) => 0,
         Err(_) => -1,
@@ -1323,67 +1297,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePath(
         PathBuf::from(path),
         display_name,
         mime_type,
-        target_device,
-    )) {
-        Ok(_) => 1,
-        Err(_) => -1,
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePaths(
-    mut env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    paths: jni::objects::JObjectArray,
-    bundle_name: JString,
-    target_device_id: JString,
-) -> jint {
-    if handle == 0 {
-        return -1;
-    }
-
-    let paths_len = env.get_array_length(&paths).unwrap_or(0);
-    if paths_len == 0 {
-        return -1;
-    }
-
-    let mut path_bufs = Vec::with_capacity(paths_len as usize);
-    for i in 0..paths_len {
-        let el = match env.get_object_array_element(&paths, i) {
-            Ok(obj) => obj,
-            Err(_) => return -1,
-        };
-        let jstr: JString = el.into();
-        let s: String = match env.get_string(&jstr) {
-            Ok(s) => s.into(),
-            Err(_) => return -1,
-        };
-        path_bufs.push(PathBuf::from(s));
-    }
-
-    let bundle_name: String = match env.get_string(&bundle_name) {
-        Ok(s) => s.into(),
-        Err(_) => return -1,
-    };
-    
-    let target_device = if target_device_id.is_null() {
-        None
-    } else {
-        let raw: String = match env.get_string(&target_device_id) {
-            Ok(s) => s.into(),
-            Err(_) => return -1,
-        };
-        match uuid::Uuid::parse_str(&raw) {
-            Ok(value) => Some(value),
-            Err(_) => return -1,
-        }
-    };
-
-    let h = unsafe { &*(handle as *const AndroidHandle) };
-    match rt().block_on(h.engine.send_file_paths(
-        path_bufs,
-        bundle_name,
         target_device,
     )) {
         Ok(_) => 1,
@@ -1636,20 +1549,4 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifyNetworkRestored(
     let h = unsafe { &*(handle as *const AndroidHandle) };
     rt().block_on(h.engine.reconnect_all_peers());
     0
-}
-
-// ── toggleWebDashboard ────────────────────────────────────────────────────────
-
-#[no_mangle]
-pub extern "system" fn Java_com_deskdrop_DeskdropJni_toggleWebDashboard(
-    _env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    enable: jboolean,
-) {
-    if handle == 0 {
-        return;
-    }
-    let h = unsafe { &*(handle as *const AndroidHandle) };
-    rt().block_on(h.engine.toggle_web_dashboard(enable != 0));
 }

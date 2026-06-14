@@ -175,7 +175,6 @@ struct StatusSnapshot {
     let lastSyncAt: Date?
     let syncEnabled: Bool
     let daemonVersion: String?
-    let webDashboardUrl: String?
 }
 
 // MARK: - Device Detail (for trust prompt)
