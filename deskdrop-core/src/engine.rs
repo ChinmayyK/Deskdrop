@@ -264,6 +264,9 @@ pub enum EngineEvent {
     Warning(String),
 }
 
+
+
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncTarget {
@@ -359,7 +362,7 @@ impl Default for EngineConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EngineStatus {
     pub active_interface: Option<NetworkInterfaceInfo>,
     pub bind_address: SocketAddr,
@@ -1640,16 +1643,9 @@ impl Engine {
         mime_type: String,
         target_device: Option<Uuid>,
     ) -> Result<[u8; 16]> {
-        let path_clone = path.clone();
-        let checksum = tokio::task::spawn_blocking(move || {
-            crate::file_transfer::checksum_file(&path_clone)
-        })
-        .await
-        .context("joining checksum task")??;
-
         let mut mgr = self.shared.file_transfers.lock().await;
         let transfer =
-            mgr.start_outbound_path(path, file_name.clone(), mime_type, target_device, checksum)?;
+            mgr.start_outbound_path(path, file_name.clone(), mime_type, target_device)?;
         let transfer_id = transfer.transfer_id;
         let meta = transfer.meta.clone();
         let size_bytes = meta.size_bytes;
@@ -1917,19 +1913,19 @@ impl Engine {
                         }
                     }
 
-                    let all_sent = {
-                        let mut mgr = bg_shared.file_transfers.lock().await;
-                        mgr.get_outbound_mut(&bg_transfer_id)
-                            .map(|transfer| transfer.is_all_sent())
-                            .unwrap_or(false)
-                    };
-                    if all_sent {
-                        let _ = bg_outbox
-                            .send(AppMessage::FileTransferComplete {
-                                transfer_id: bg_transfer_id,
-                            })
-                            .await;
-                    }
+                    let final_checksum = {
+    let mut mgr = bg_shared.file_transfers.lock().await;
+    mgr.get_outbound_mut(&bg_transfer_id)
+        .and_then(|transfer| if transfer.is_all_sent() { Some(transfer.finalize_checksum()) } else { None })
+};
+if let Some(sha256_checksum) = final_checksum {
+    let _ = bg_outbox
+        .send(AppMessage::FileTransferComplete {
+            transfer_id: bg_transfer_id,
+            sha256_checksum,
+        })
+        .await;
+}
                 });
             }
         }
@@ -3851,44 +3847,31 @@ fn register_session(
                             }
                             let bg_outbox = session_outbox_tx.clone();
                             let bg_shared = shared.clone();
+                            let bg_event_tx = shared.event_tx.clone();
                             let bg_transfer_id = transfer_id;
+                            let bg_peer_id = peer_id;
                             tokio::spawn(async move {
                                 // Batch multiple chunk reads per mutex lock to reduce contention.
                                 // With 1 MB chunks, reading 8 at a time = 8 MB per lock cycle.
                                 const BATCH_SIZE: usize = 8;
                                 'outer: loop {
-                                    let batch: Vec<AppMessage> = {
-                                        let mut mgr = bg_shared.file_transfers.lock().await;
-                                        let mut msgs = Vec::with_capacity(BATCH_SIZE);
-                                        for _ in 0..BATCH_SIZE {
-                                            match mgr.get_outbound_mut(&bg_transfer_id) {
-                                                Some(transfer) => {
-                                                    match transfer.next_chunk_message() {
-                                                        Ok(Some(FileTransferMessage::Chunk {
-                                                            transfer_id,
-                                                            chunk_index,
-                                                            total_chunks,
-                                                            data,
-                                                        })) => msgs.push(AppMessage::FileChunk {
-                                                            transfer_id,
-                                                            chunk_index,
-                                                            total_chunks,
-                                                            data,
-                                                        }),
-                                                        Ok(None) => break,
-                                                        Ok(_) => continue,
-                                                        Err(err) => {
-                                                            warn!(error = %err, "failed to read outbound file chunk");
-                                                            mgr.cancel_outbound(&bg_transfer_id);
-                                                            break 'outer;
-                                                        }
-                                                    }
-                                                }
-                                                None => break,
-                                            }
-                                        }
-                                        msgs
+                                    let (batch, progs) = match read_outbound_chunks(bg_shared.clone(), bg_transfer_id, BATCH_SIZE).await {
+                                        Some((batch, progs)) => (batch, progs),
+                                        None => break 'outer,
                                     };
+
+                                    if let Some((prog, fname)) = progs.last() {
+                                        let _ = bg_event_tx.send(EngineEvent::FileTransferProgress {
+                                            transfer_id: bg_transfer_id,
+                                            from_device: bg_peer_id,
+                                            file_name: fname.clone(),
+                                            percent: prog.percent,
+                                            bytes_received: prog.bytes_received,
+                                            total_bytes: prog.total_bytes,
+                                            speed_bps: prog.speed_bps,
+                                            eta_secs: prog.eta_secs,
+                                        }).await;
+                                    }
 
                                     if batch.is_empty() {
                                         break;
@@ -3900,19 +3883,19 @@ fn register_session(
                                     }
                                 }
 
-                                let all_sent = {
-                                    let mut mgr = bg_shared.file_transfers.lock().await;
-                                    mgr.get_outbound_mut(&bg_transfer_id)
-                                        .map(|transfer| transfer.is_all_sent())
-                                        .unwrap_or(false)
-                                };
-                                if all_sent {
-                                    let _ = bg_outbox
-                                        .send(AppMessage::FileTransferComplete {
-                                            transfer_id: bg_transfer_id,
-                                        })
-                                        .await;
-                                }
+                                let final_checksum = {
+    let mut mgr = bg_shared.file_transfers.lock().await;
+    mgr.get_outbound_mut(&bg_transfer_id)
+        .and_then(|transfer| if transfer.is_all_sent() { Some(transfer.finalize_checksum()) } else { None })
+};
+if let Some(sha256_checksum) = final_checksum {
+    let _ = bg_outbox
+        .send(AppMessage::FileTransferComplete {
+            transfer_id: bg_transfer_id,
+            sha256_checksum,
+        })
+        .await;
+}
                             });
                         }
                     }
@@ -4015,7 +3998,7 @@ fn register_session(
                             }
                         }
                     }
-                    Ok(AppMessage::FileTransferComplete { transfer_id }) => {
+                    Ok(AppMessage::FileTransferComplete { transfer_id, sha256_checksum }) => {
                         touch_last_seen();
                         if !shared
                             .peer_manager
@@ -4034,7 +4017,7 @@ fn register_session(
                                 } else {
                                     let file_name = transfer.meta.file_name.clone();
                                     let file_bytes = transfer.meta.size_bytes;
-                                    match transfer.finalize() {
+                                    match transfer.finalize(sha256_checksum.clone()) {
                                         Ok(dest) => Ok((dest, file_name, file_bytes)),
                                         Err(e) => Err(e.to_string()),
                                     }
@@ -4267,19 +4250,19 @@ fn register_session(
                                     }
                                 }
 
-                                let all_sent = {
-                                    let mut mgr = bg_shared.file_transfers.lock().await;
-                                    mgr.get_outbound_mut(&bg_transfer_id)
-                                        .map(|transfer| transfer.is_all_sent())
-                                        .unwrap_or(false)
-                                };
-                                if all_sent {
-                                    let _ = bg_outbox
-                                        .send(AppMessage::FileTransferComplete {
-                                            transfer_id: bg_transfer_id,
-                                        })
-                                        .await;
-                                }
+                                let final_checksum = {
+    let mut mgr = bg_shared.file_transfers.lock().await;
+    mgr.get_outbound_mut(&bg_transfer_id)
+        .and_then(|transfer| if transfer.is_all_sent() { Some(transfer.finalize_checksum()) } else { None })
+};
+if let Some(sha256_checksum) = final_checksum {
+    let _ = bg_outbox
+        .send(AppMessage::FileTransferComplete {
+            transfer_id: bg_transfer_id,
+            sha256_checksum,
+        })
+        .await;
+}
                             });
                         }
                     }
@@ -5023,4 +5006,81 @@ fn ensure_parent(path: &Path) -> Result<()> {
         std::fs::create_dir_all(parent).with_context(|| format!("creating {:?}", parent))?;
     }
     Ok(())
+}
+
+
+async fn read_outbound_chunks(
+    shared: crate::engine::EngineShared,
+    transfer_id: [u8; 16],
+    batch_size: usize,
+) -> Option<(Vec<AppMessage>, Vec<(crate::file_transfer::TransferProgress, String)>)> {
+    let mut msgs = Vec::with_capacity(batch_size);
+    let mut progs = Vec::with_capacity(batch_size);
+    for _ in 0..batch_size {
+        let instr = {
+            let mut mgr = shared.file_transfers.lock().await;
+            let t = match mgr.get_outbound_mut(&transfer_id) {
+                Some(t) => t,
+                None => return if msgs.is_empty() { None } else { Some((msgs, progs)) },
+            };
+            match t.next_chunk_instruction() {
+                Ok(Some(i)) => i,
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to get next chunk instruction");
+                    mgr.cancel_outbound(&transfer_id);
+                    return None;
+                }
+            }
+        };
+        
+        let data = match instr {
+            crate::file_transfer::ChunkInstruction::Memory { ref data, .. } => data.clone(),
+            crate::file_transfer::ChunkInstruction::File { ref path, offset, len, .. } => {
+                let path = path.clone();
+                let res = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
+                    use std::io::{Read, Seek};
+                    let mut file = std::fs::File::open(&path)?;
+                    file.seek(std::io::SeekFrom::Start(offset))?;
+                    let mut buf = vec![0u8; len];
+                    file.read_exact(&mut buf)?;
+                    Ok(buf)
+                }).await.unwrap();
+                match res {
+                    Ok(d) => d,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "failed to read outbound file chunk");
+                        let mut mgr = shared.file_transfers.lock().await;
+                        mgr.cancel_outbound(&transfer_id);
+                        return None;
+                    }
+                }
+            }
+        };
+        
+        let (msg, prog, fname) = {
+            let mut mgr = shared.file_transfers.lock().await;
+            let t = match mgr.get_outbound_mut(&transfer_id) {
+                Some(t) => t,
+                None => return if msgs.is_empty() { None } else { Some((msgs, progs)) },
+            };
+            let c_idx = match instr {
+                crate::file_transfer::ChunkInstruction::Memory { chunk_index, .. } => chunk_index,
+                crate::file_transfer::ChunkInstruction::File { chunk_index, .. } => chunk_index,
+            };
+            let msg = t.process_chunk_data(c_idx, data);
+            (msg, t.progress(), t.meta.file_name.clone())
+        };
+        
+        if let crate::file_transfer::FileTransferMessage::Chunk { transfer_id, chunk_index, total_chunks, data } = msg {
+            msgs.push(AppMessage::FileChunk { transfer_id, chunk_index, total_chunks, data });
+            progs.push((prog, fname));
+        }
+    }
+    
+    if msgs.is_empty() {
+        None
+    } else {
+        Some((msgs, progs))
+    }
 }

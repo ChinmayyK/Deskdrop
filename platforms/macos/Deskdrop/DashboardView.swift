@@ -1172,6 +1172,25 @@ struct DeviceCentricDashboardView: View {
                     .padding(.bottom, 30)
                 }
 
+                // Active Transfers Section
+                if !store.activeTransfers.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.up.arrow.down").foregroundStyle(CRTheme.brandElectric)
+                            Text("Active Transfers").font(.system(size: 14, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                        }
+                        .padding(.horizontal, 40)
+                        
+                        LazyVStack(spacing: 12) {
+                            ForEach(store.activeTransfers) { transfer in
+                                ActiveTransferCard(transfer: transfer, store: store)
+                                    .padding(.horizontal, 40)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 30)
+                }
+
                 if !store.connectedDevices.isEmpty {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                         ForEach(store.connectedDevices, id: \.id) { device in

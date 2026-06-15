@@ -246,6 +246,10 @@ class MainActivity : ComponentActivity() {
                         showSnack("Applied to clipboard")
                         rebuildFeed()
                     },
+                    onDeleteActivity = { entry ->
+                        DeskdropService.removeFromFeed(entry.id)
+                        rebuildFeed()
+                    },
                     onTrustPeer = { peer ->
                         ContextCompat.startForegroundService(this@MainActivity,
                             Intent(this@MainActivity, DeskdropService::class.java).apply {

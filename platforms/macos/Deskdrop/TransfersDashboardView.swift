@@ -86,7 +86,7 @@ struct TransfersDashboardView: View {
 
 // MARK: - Active Transfer Card
 
-private struct ActiveTransferCard: View {
+struct ActiveTransferCard: View {
     let transfer: FileTransferState
     @ObservedObject var store: DeskdropStore
     
@@ -150,10 +150,19 @@ private struct ActiveTransferCard: View {
                 } else if case .failed = transfer.status {
                     // No progress bar for failed
                 } else {
-                    ProgressView(value: Double(transfer.percent), total: 100.0)
-                        .tint(progressColor)
-                        .frame(height: 4)
-                        .padding(.top, 4)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.black.opacity(0.1))
+                                .frame(height: 4)
+                            
+                            Capsule()
+                                .fill(progressColor)
+                                .frame(width: max(0, geo.size.width * CGFloat(transfer.percent) / 100.0), height: 4)
+                        }
+                    }
+                    .frame(height: 4)
+                    .padding(.top, 4)
                 }
             }
             
@@ -170,6 +179,8 @@ private struct ActiveTransferCard: View {
                 } else if case .paused = transfer.status {
                     actionButton(icon: "play.fill") { store.resumeFileTransfer(transfer) }
                     actionButton(icon: "xmark") { store.cancelFileTransfer(transfer) }
+                } else if case .complete = transfer.status {
+                    actionButton(icon: "checkmark", color: .green) { store.cancelFileTransfer(transfer) }
                 }
             }
         }

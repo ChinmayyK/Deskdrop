@@ -197,8 +197,6 @@ pub struct FileTransferMetadata {
     pub file_name: String,
     pub size_bytes: u64,
     pub mime_type: String,
-    /// SHA-256 checksum of the complete file (hex-encoded).
-    pub sha256_checksum: String,
 }
 
 // ── Wire messages ─────────────────────────────────────────────────────────────
@@ -290,6 +288,7 @@ pub enum AppMessage {
     /// Sender signals all chunks sent; receiver should verify.
     FileTransferComplete {
         transfer_id: [u8; 16],
+        sha256_checksum: String,
     },
     /// Receiver confirms finalization (success or error).
     FileTransferCompleteAck {

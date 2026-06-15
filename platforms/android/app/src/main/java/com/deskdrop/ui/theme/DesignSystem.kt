@@ -1,5 +1,11 @@
 package com.deskdrop.ui.theme
 
+import android.os.Build
+import android.graphics.RuntimeShader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import org.intellij.lang.annotations.Language
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -126,6 +132,13 @@ fun Modifier.crPressScale(
         label = "press_scale"
     )
 
+    val haptic = LocalHapticFeedback.current
+    LaunchedEffect(isPressed) {
+        if (isPressed) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+
     var mod = this.scale(scale)
     if (onClick != null) {
         mod = mod.clickable(
@@ -143,9 +156,42 @@ object CRMotion {
     val fluid = spring<Float>(dampingRatio = 0.7f, stiffness = 200f)
 }
 
+@Language("AGSL")
+private const val NOISE_SHADER = """
+    uniform float2 iResolution;
+    uniform float iTime;
+    uniform half alpha;
+    
+    float hash(float2 p) {
+        float3 p3  = fract(float3(p.xyx) * .1031);
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.x + p3.y) * p3.z);
+    }
+
+    half4 main(float2 fragCoord) {
+        float n = hash(fragCoord + iTime);
+        return half4(n, n, n, alpha * n);
+    }
+"""
+
 @Composable
 fun SubtleNoiseOverlay(isDark: Boolean) {
-    // Removed to fix ANR and extreme memory/CPU usage caused by 30k+ drawRect calls.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val time by produceState(0f) {
+            while (true) {
+                withFrameNanos { value = it / 1_000_000_000f }
+            }
+        }
+        val alpha = if (isDark) 0.07f else 0.035f
+        val shader = remember { RuntimeShader(NOISE_SHADER) }
+        
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            shader.setFloatUniform("iResolution", size.width, size.height)
+            shader.setFloatUniform("iTime", time)
+            shader.setFloatUniform("alpha", alpha)
+            drawRect(brush = ShaderBrush(shader))
+        }
+    }
 }
 
 @Composable

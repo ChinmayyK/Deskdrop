@@ -72,9 +72,30 @@ class StreamSource: NSObject, CMIOExtensionStreamSource {
         return true
     }
     
+    // Image fetching state
+    private var latestFrame: CGImage?
+    private var fetchTask: Task<Void, Never>?
+    
     func startStream() throws {
         guard !isStreaming else { return }
         isStreaming = true
+        
+        // Start background fetch loop
+        fetchTask = Task {
+            while !Task.isCancelled {
+                do {
+                    let (data, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:40404/")!)
+                    if let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
+                       let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) {
+                        self.latestFrame = cgImage
+                    }
+                } catch {
+                    // Ignore fetch errors (daemon might be down or no frame yet)
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                try? await Task.sleep(nanoseconds: 16_000_000) // ~60fps poll rate
+            }
+        }
         
         // Timer to generate 30fps frames
         DispatchQueue.main.async {
@@ -87,6 +108,9 @@ class StreamSource: NSObject, CMIOExtensionStreamSource {
     func stopStream() throws {
         guard isStreaming else { return }
         isStreaming = false
+        
+        fetchTask?.cancel()
+        fetchTask = nil
         
         DispatchQueue.main.async {
             self.timer?.invalidate()
@@ -107,9 +131,42 @@ class StreamSource: NSObject, CMIOExtensionStreamSource {
         let height = CVPixelBufferGetHeight(buffer)
         let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
         
-        // Fill with a solid color (e.g. green) as a placeholder
         if let baseAddress = baseAddress {
-            memset(baseAddress, 0x88, height * bytesPerRow)
+            if let cgImage = latestFrame {
+                // Render CGImage onto the pixel buffer
+                let colorSpace = CGColorSpaceCreateDeviceRGB()
+                if let context = CGContext(data: baseAddress,
+                                           width: width,
+                                           height: height,
+                                           bitsPerComponent: 8,
+                                           bytesPerRow: bytesPerRow,
+                                           space: colorSpace,
+                                           bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
+                    
+                    // Clear background
+                    context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+                    
+                    // Draw centered maintaining aspect ratio
+                    let imgWidth = CGFloat(cgImage.width)
+                    let imgHeight = CGFloat(cgImage.height)
+                    let targetRatio = CGFloat(width) / CGFloat(height)
+                    let imgRatio = imgWidth / imgHeight
+                    
+                    var drawRect = CGRect.zero
+                    if imgRatio > targetRatio {
+                        let newHeight = CGFloat(width) / imgRatio
+                        drawRect = CGRect(x: 0, y: (CGFloat(height) - newHeight) / 2.0, width: CGFloat(width), height: newHeight)
+                    } else {
+                        let newWidth = CGFloat(height) * imgRatio
+                        drawRect = CGRect(x: (CGFloat(width) - newWidth) / 2.0, y: 0, width: newWidth, height: CGFloat(height))
+                    }
+                    
+                    context.draw(cgImage, in: drawRect)
+                }
+            } else {
+                // Fill with a dark gray placeholder if no frame is available yet
+                memset(baseAddress, 0x11, height * bytesPerRow)
+            }
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
         

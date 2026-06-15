@@ -226,7 +226,13 @@ final class DeskdropStore: ObservableObject {
 
     private func schedulePollTick() {
         pollTimer?.invalidate()
-        let interval: TimeInterval = connectedCount > 0 ? 1.5 : 3.0
+        let hasActiveTransfers = activeTransfers.contains { t in
+            switch t.status {
+            case .transferring, .verifying, .incoming: return true
+            default: return false
+            }
+        }
+        let interval: TimeInterval = hasActiveTransfers ? 0.25 : (connectedCount > 0 ? 1.5 : 3.0)
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.refresh()
@@ -280,6 +286,7 @@ final class DeskdropStore: ObservableObject {
                     case "verifying": status = .verifying
                     case "failed": status = .failed(reason: "Unknown Error")
                     case "cancelled": status = .cancelled
+                    case "complete": status = .complete(destPath: "")
                     default: status = .transferring
                     }
                     return FileTransferState(

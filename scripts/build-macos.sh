@@ -105,6 +105,8 @@ cat > "${APP_BUNDLE}/../VirtualCamera.entitlements" <<EOF
 <dict>
     <key>com.apple.security.app-sandbox</key>
     <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
 </dict>
 </plist>
 EOF

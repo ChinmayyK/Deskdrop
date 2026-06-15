@@ -673,17 +673,23 @@ fun ActiveTransferCard(
         Spacer(modifier = Modifier.height(16.dp))
         
         // Progress Bar
+        val animatedProgress by animateFloatAsState(
+            targetValue = transfer.percent / 100f,
+            animationSpec = tween(durationMillis = 500, easing = LinearEasing),
+            label = "transfer_progress"
+        )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f), RoundedCornerShape(3.dp))
+                .height(8.dp)
+                .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(4.dp))
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(transfer.percent / 100f)
-                    .height(6.dp)
-                    .background(if (transfer.isPaused) CRTheme.accentAmber else CRTheme.brandCyan, RoundedCornerShape(3.dp))
+                    .fillMaxWidth(animatedProgress.coerceIn(0f, 1f))
+                    .height(8.dp)
+                    .background(if (transfer.isPaused) CRTheme.accentAmber else CRTheme.brandCyan)
             )
         }
         

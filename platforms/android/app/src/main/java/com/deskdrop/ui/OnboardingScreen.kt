@@ -1,6 +1,7 @@
 package com.deskdrop.ui
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -124,16 +126,16 @@ fun OnboardingScreen(
 @Composable
 private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, selected: PeerSnapshot?, onScanQr: () -> Unit, onManualIp: () -> Unit, onPeerSelect: (PeerSnapshot) -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Text("Step 1: Find a device", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
+        Text("Welcome to Deskdrop", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Make sure Deskdrop is running on your Mac or PC.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+        Text("Let's link your computer to get started.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
         
         Spacer(modifier = Modifier.height(24.dp))
         
         Button(
             onClick = onScanQr,
             colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft),
-            modifier = Modifier.fillMaxWidth(0.7f)
+            modifier = Modifier.fillMaxWidth(0.7f).height(56.dp)
         ) {
             Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp), tint = CRTheme.bg(isDark))
             Spacer(modifier = Modifier.width(8.dp))
@@ -148,9 +150,14 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
 
         Spacer(modifier = Modifier.height(16.dp))
         
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
             if (peers.isEmpty()) {
-                item { Text("Searching for nearby devices...", color = CRTheme.textMedium(isDark)) }
+                item { 
+                    Spacer(modifier = Modifier.height(24.dp))
+                    RadarAnimation(isDark)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("Searching for nearby devices...", color = CRTheme.textMedium(isDark)) 
+                }
             } else {
                 items(peers.size) { idx ->
                     val peer = peers[idx]
@@ -164,12 +171,20 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            if (peer.name.lowercase().contains("mac")) Icons.Rounded.LaptopMac else Icons.Rounded.Computer,
-                            contentDescription = null,
-                            tint = CRTheme.textHigh(isDark),
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(CRTheme.bg(isDark).copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (peer.name.lowercase().contains("mac")) Icons.Rounded.LaptopMac else Icons.Rounded.Computer,
+                                contentDescription = null,
+                                tint = CRTheme.textHigh(isDark),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(peer.name, style = CRTypography.bodyMedium, color = CRTheme.textHigh(isDark), fontWeight = FontWeight.Bold)
                     }
@@ -183,11 +198,8 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
 private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCancel: () -> Unit) {
     var hasTimedOut by remember { mutableStateOf(false) }
 
-    // Wait indefinitely for the PairingActivity to launch once the handshake completes.
-    // The core engine manages connection timeouts natively.
-
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Text("Step 2: Connect & Pair", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
+        Text("Connect & Pair", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
         
         if (hasTimedOut) {
@@ -201,10 +213,10 @@ private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCance
             }
         } else {
             Text("Connecting to ${selectedPeer?.name ?: "the device"}...", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(32.dp))
-            CircularProgressIndicator(color = CRTheme.blueSoft)
-            Spacer(modifier = Modifier.height(32.dp))
-            Text("A pairing prompt with a secure PIN will appear shortly.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(48.dp))
+            LinkingAnimation(isDark)
+            Spacer(modifier = Modifier.height(48.dp))
+            Text("A pairing prompt with a secure PIN will appear shortly on your computer.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
         }
     }
 }
@@ -212,7 +224,7 @@ private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCance
 @Composable
 private fun StepThreeSendSample(isDark: Boolean, selectedPeer: PeerSnapshot?, onSend: (PeerSnapshot?) -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Text("Step 3: Send Sample Text", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
+        Text("Test Connection", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
         Text("Let's make sure it works. Click below to send a sample message.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
         
@@ -220,19 +232,34 @@ private fun StepThreeSendSample(isDark: Boolean, selectedPeer: PeerSnapshot?, on
         
         Button(
             onClick = { onSend(selectedPeer) },
-            colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft)
+            colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft),
+            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
         ) {
-            Text("SEND 'HELLO FROM ANDROID'", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
+            Icon(Icons.Rounded.Send, contentDescription = null, tint = CRTheme.bg(isDark))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("SEND TEST MESSAGE", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
 private fun StepFourCompletion(isDark: Boolean) {
+    val scale = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        scale.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
+            )
+        )
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .size(100.dp)
+                .scale(scale.value)
                 .clip(CircleShape)
                 .background(CRTheme.statusGreen.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
@@ -243,5 +270,83 @@ private fun StepFourCompletion(isDark: Boolean) {
         Text("You're all set!", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
         Text("Received files will automatically appear here.\nClipboard text will be instantly available to paste.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+fun RadarAnimation(isDark: Boolean) {
+    val infiniteTransition = rememberInfiniteTransition(label = "radar")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 2.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "radarScale"
+    )
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "radarAlpha"
+    )
+    
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(120.dp)) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .scale(scale)
+                .clip(CircleShape)
+                .background(CRTheme.brandCyan.copy(alpha = alpha * 0.4f))
+        )
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(CRTheme.bg(isDark)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Rounded.Search, 
+                contentDescription = null, 
+                tint = CRTheme.brandCyan, 
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun LinkingAnimation(isDark: Boolean) {
+    val infiniteTransition = rememberInfiniteTransition(label = "linking")
+    val dotAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dotAlpha"
+    )
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.Smartphone, contentDescription = null, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(40.dp))
+        Spacer(modifier = Modifier.width(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            repeat(3) { i ->
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(CRTheme.brandCyan.copy(alpha = if (i % 2 == 0) dotAlpha else 1f - dotAlpha))
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Icon(Icons.Rounded.LaptopMac, contentDescription = null, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(48.dp))
     }
 }
