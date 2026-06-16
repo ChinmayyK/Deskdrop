@@ -2289,6 +2289,7 @@ if let Some(sha256_checksum) = final_checksum {
             origin_device: self.shared.config.device_id,
             origin_device_name: self.shared.config.device_name.clone(),
         };
+
         let peers = self.shared.peer_manager.all_connected_senders();
         if let Some(tx) = peers
             .into_iter()
@@ -2296,6 +2297,30 @@ if let Some(sha256_checksum) = final_checksum {
             .map(|(_, tx)| tx)
         {
             let _ = tx.send(msg).await;
+
+            let pin = self
+                .shared
+                .peer_manager
+                .get(target_device)
+                .and_then(|p| p.pairing_pin.clone())
+                .unwrap_or_else(|| "------".to_string());
+            
+            let device_name = self
+                .shared
+                .peer_manager
+                .get(target_device)
+                .map(|p| p.friendly_name.clone())
+                .unwrap_or_else(|| "Unknown device".to_string());
+
+            let _ = self
+                .shared
+                .event_tx
+                .send(EngineEvent::OutgoingPairingWaiting {
+                    device_id: target_device,
+                    device_name,
+                    pin,
+                })
+                .await;
         } else {
             // Trigger a manual connection if we aren't connected yet.
             if let Some(peer) = self.shared.peer_manager.get(target_device) {
@@ -2319,6 +2344,27 @@ if let Some(sha256_checksum) = final_checksum {
                                 .map(|(_, tx)| tx)
                             {
                                 let _ = tx.send(msg).await;
+
+                                let pin = shared
+                                    .peer_manager
+                                    .get(target_device)
+                                    .and_then(|p| p.pairing_pin.clone())
+                                    .unwrap_or_else(|| "------".to_string());
+                                
+                                let device_name = shared
+                                    .peer_manager
+                                    .get(target_device)
+                                    .map(|p| p.friendly_name.clone())
+                                    .unwrap_or_else(|| "Unknown device".to_string());
+
+                                let _ = shared
+                                    .event_tx
+                                    .send(EngineEvent::OutgoingPairingWaiting {
+                                        device_id: target_device,
+                                        device_name,
+                                        pin,
+                                    })
+                                    .await;
                             }
                         }
                     });
@@ -2391,10 +2437,11 @@ if let Some(sha256_checksum) = final_checksum {
         self.shared.peer_manager.set_sync_enabled(device_id, true)
     }
 
-    /// Forget Device: remove persistent pairing without revoking trust.
+    /// Forget Device: remove persistent pairing and revoke trust.
     pub async fn forget_device(&self, device_id: Uuid) -> Result<bool> {
         let found = self.shared.peer_manager.forget_device(device_id)?;
         if found {
+            let _ = self.shared.trust.lock().await.revoke_peer(device_id);
             // Disconnect the session — device will not auto-reconnect
             let session = self.shared.peer_manager.shutdown_peer_session(device_id)?;
             if let Some(session) = session {
@@ -3128,9 +3175,7 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         DiscoverySource::Mdns,
     )?;
 
-    if !trusted {
-        let _ = shared.peer_manager.set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
-    }
+    let _ = shared.peer_manager.set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
 
     register_session(
         shared,
@@ -3308,9 +3353,7 @@ async fn connect_once(
         discovery,
     )?;
 
-    if !trusted {
-        let _ = shared.peer_manager.set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
-    }
+    let _ = shared.peer_manager.set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
 
     register_session(
         shared,
@@ -4090,8 +4133,8 @@ if let Some(sha256_checksum) = final_checksum {
                     }
                     Ok(AppMessage::FileTransferCompleteAck {
                         transfer_id,
-                        success: _,
-                        error: _,
+                        success,
+                        error,
                     }) => {
                         touch_last_seen();
                         if !shared
@@ -4102,11 +4145,30 @@ if let Some(sha256_checksum) = final_checksum {
                         {
                             continue;
                         }
-                        shared
-                            .file_transfers
-                            .lock()
-                            .await
-                            .remove_outbound(&transfer_id);
+                        
+                        let (file_name, peer_name) = {
+                            let mut mgr = shared.file_transfers.lock().await;
+                            let fname = mgr.get_outbound_mut(&transfer_id).map(|t| t.meta.file_name.clone()).unwrap_or_default();
+                            mgr.remove_outbound(&transfer_id);
+                            let pname = shared.peer_manager.get(peer_id).map(|p| p.friendly_name.clone()).unwrap_or_default();
+                            (fname, pname)
+                        };
+                        
+                        if success {
+                            let _ = shared.event_tx.send(EngineEvent::FileTransferComplete {
+                                transfer_id,
+                                from_device: peer_id,
+                                from_name: peer_name,
+                                file_name,
+                                dest_path: std::path::PathBuf::new(),
+                            }).await;
+                        } else {
+                            let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
+                                transfer_id,
+                                from_device: peer_id,
+                                reason: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            }).await;
+                        }
                     }
                     Ok(AppMessage::FileTransferCancel {
                         transfer_id,
@@ -4423,6 +4485,13 @@ if let Some(sha256_checksum) = final_checksum {
                         if !accepted {
                             tracing::info!(peer_id = %peer_id, "peer rejected pairing request");
                             let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::PairingResponse {
+                                    device_id: origin_device,
+                                    accepted,
+                                })
+                                .await;
                             break "peer rejected pairing request".to_string();
                         } else {
                             // ── CRITICAL: Establish mutual trust ──────────────

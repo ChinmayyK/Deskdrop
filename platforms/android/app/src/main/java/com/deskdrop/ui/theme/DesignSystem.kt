@@ -72,14 +72,7 @@ object CRTheme {
     fun stroke(isDark: Boolean) = if (isDark) strokeDark else strokeLight
     fun glass(isDark: Boolean) = if (isDark) Color.White.copy(alpha = 0.03f) else Color.White.copy(alpha = 0.6f)
 
-    // Legacy Aliases
-    val brandElectric = blueSoft
-    val brandViolet = blueSoft
-    val brandCyan = cyanSoft
-    val brandPink = statusRed
-    val accentGreen = statusGreen
-    val accentAmber = statusAmber
-    val accentRed = statusRed
+    // Legacy Aliases moved to Composable extensions at the end of the file
     fun textLow(isDark: Boolean) = textMedium(isDark).copy(alpha = 0.5f)
     
     // Ambient Ecosystem Glow Colors
@@ -203,6 +196,9 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
         label = "mesh_breathe"
     )
 
+    val electricColor = CRTheme.brandElectric
+    val violetColor = CRTheme.brandViolet
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -226,7 +222,7 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
                 // Orb 1 (Electric Blue)
                 drawCircle(
                     brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(CRTheme.blueSoft.copy(alpha = if (isDark) 0.2f else 0.15f), Color.Transparent),
+                        colors = listOf(electricColor.copy(alpha = if (isDark) 0.2f else 0.15f), Color.Transparent),
                         center = centerOffset,
                         radius = size.width * 0.8f
                     ),
@@ -236,7 +232,7 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
                 // Orb 2 (Violet)
                 drawCircle(
                     brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(CRTheme.brandViolet.copy(alpha = if (isDark) 0.15f else 0.12f), Color.Transparent),
+                        colors = listOf(violetColor.copy(alpha = if (isDark) 0.15f else 0.12f), Color.Transparent),
                         center = centerOffset2,
                         radius = size.width * 0.7f
                     ),
@@ -354,3 +350,18 @@ fun CRSwitch(checked: Boolean, isDark: Boolean) {
         )
     }
 }
+
+val CRTheme.brandElectric: Color
+    @Composable get() = androidx.compose.material3.MaterialTheme.colorScheme.primary
+val CRTheme.brandViolet: Color
+    @Composable get() = androidx.compose.material3.MaterialTheme.colorScheme.secondary
+val CRTheme.brandCyan: Color
+    @Composable get() = androidx.compose.material3.MaterialTheme.colorScheme.tertiary
+val CRTheme.brandPink: Color
+    @Composable get() = androidx.compose.material3.MaterialTheme.colorScheme.error
+val CRTheme.accentGreen: Color
+    @Composable get() = Color(0xFF10B981)
+val CRTheme.accentRed: Color
+    @Composable get() = androidx.compose.material3.MaterialTheme.colorScheme.error
+val CRTheme.accentAmber: Color
+    @Composable get() = Color(0xFFF59E0B)

@@ -1,5 +1,7 @@
 package com.deskdrop
 
+import com.deskdrop.ui.theme.*
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent

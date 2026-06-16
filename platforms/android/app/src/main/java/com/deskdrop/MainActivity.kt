@@ -1,5 +1,7 @@
 package com.deskdrop
 
+import com.deskdrop.ui.theme.*
+
 import android.Manifest
 import android.content.*
 import android.os.Build
@@ -108,6 +110,20 @@ class MainActivity : ComponentActivity() {
                 android.graphics.Color.TRANSPARENT
             )
         )
+        super.onCreate(savedInstanceState)
+        
+        // Initialize persistent preferences
+        val prefs = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
+        isDarkMode.value = prefs.getBoolean("dark_mode", false)
+        hasCompletedOnboarding.value = prefs.getBoolean("has_completed_onboarding", false)
+        
+        // UX FIX: Auto-complete onboarding if we have a trusted peer (user closed app during onboarding previously)
+        // We do this ONLY on create so we don't abruptly close the OnboardingScreen while the user is actively using it!
+        val allPeers = prefs.peerSnapshots()
+        if (!hasCompletedOnboarding.value && allPeers.any { it.trusted }) {
+            prefs.edit().putBoolean("has_completed_onboarding", true).apply()
+            hasCompletedOnboarding.value = true
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // API 30+: use the modern `display` property (defaultDisplay is deprecated)
             val displayModes = display?.supportedModes ?: emptyArray()
@@ -125,7 +141,6 @@ class MainActivity : ComponentActivity() {
                 preferredRefreshRate = bestRate
             }
         }
-        super.onCreate(savedInstanceState)
         requestRuntimePermissions()
         requestBatteryOptimizationExemption()
 
@@ -144,7 +159,11 @@ class MainActivity : ComponentActivity() {
                                 value = ipInput,
                                 onValueChange = { ipInput = it },
                                 label = { Text("e.g. 192.168.1.50") },
-                                singleLine = true
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri,
+                                    autoCorrect = false
+                                )
                             )
                         },
                         confirmButton = {
@@ -428,7 +447,7 @@ class MainActivity : ComponentActivity() {
         
         val allPeers = prefs.peerSnapshots()
         peers.value = allPeers
-        
+
         val isConnected = allPeers.any { it.isConnected }
         ambientStatus.value = if (isConnected) "Secure Connection  •  LAN Active" else "Looking for network..."
     }
@@ -467,6 +486,11 @@ class MainActivity : ComponentActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED) {
             needed += Manifest.permission.POST_NOTIFICATIONS
+        }
+
+        if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += Manifest.permission.READ_PHONE_STATE
         }
 
         if (needed.isNotEmpty()) {

@@ -355,7 +355,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         ClipboardSynced { .. } => 8,
         ClipboardSyncFailed { .. } => 7,
         PairingRequested { .. } => 4,
-        OutgoingPairingWaiting { .. } => 7,
+        OutgoingPairingWaiting { .. } => 29,
         SystemHealthUpdated(_) => 26,
         ClipboardDeliveryStatus { .. } => 7,
         PairingConfirmed { .. } => 7,
@@ -397,13 +397,33 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
         return std::ptr::null_mut();
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::ClipboardReceived { content, .. } = ev {
-        if let ClipboardContent::Text(ref t) = &**content {
+    match ev {
+        crate::engine::EngineEvent::ClipboardReceived { content, .. } => {
+            if let ClipboardContent::Text(ref t) = &**content {
+                return env
+                    .new_string(t)
+                    .map(|s| s.into_raw())
+                    .unwrap_or(std::ptr::null_mut());
+            }
+        }
+        crate::engine::EngineEvent::Warning(msg) => {
             return env
-                .new_string(t)
+                .new_string(msg)
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
+        crate::engine::EngineEvent::PairingResponse { accepted, .. } => {
+            let msg = if *accepted {
+                "Pairing request was accepted."
+            } else {
+                "Pairing request was declined."
+            };
+            return env
+                .new_string(msg)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        _ => {}
     }
     std::ptr::null_mut()
 }
@@ -561,13 +581,18 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFingerprint(
         return std::ptr::null_mut();
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::PairingRequested { pin, .. } = ev {
-        env.new_string(pin)
+    match ev {
+        crate::engine::EngineEvent::PairingRequested { pin, .. } => env
+            .new_string(pin)
             .ok()
             .map(|s| s.into_raw())
-            .unwrap_or(std::ptr::null_mut())
-    } else {
-        std::ptr::null_mut()
+            .unwrap_or(std::ptr::null_mut()),
+        crate::engine::EngineEvent::OutgoingPairingWaiting { pin, .. } => env
+            .new_string(pin)
+            .ok()
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        _ => std::ptr::null_mut(),
     }
 }
 
@@ -1262,33 +1287,33 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePath(
     display_name: JString,
     mime_type: JString,
     target_device_id: JString,
-) -> jint {
+) -> jstring {
     if handle == 0 {
-        return -1;
+        return std::ptr::null_mut();
     }
 
     let path: String = match env.get_string(&path) {
         Ok(s) => s.into(),
-        Err(_) => return -1,
+        Err(_) => return std::ptr::null_mut(),
     };
     let display_name: String = match env.get_string(&display_name) {
         Ok(s) => s.into(),
-        Err(_) => return -1,
+        Err(_) => return std::ptr::null_mut(),
     };
     let mime_type: String = match env.get_string(&mime_type) {
         Ok(s) => s.into(),
-        Err(_) => return -1,
+        Err(_) => return std::ptr::null_mut(),
     };
     let target_device = if target_device_id.is_null() {
         None
     } else {
         let raw: String = match env.get_string(&target_device_id) {
             Ok(s) => s.into(),
-            Err(_) => return -1,
+            Err(_) => return std::ptr::null_mut(),
         };
         match uuid::Uuid::parse_str(&raw) {
             Ok(value) => Some(value),
-            Err(_) => return -1,
+            Err(_) => return std::ptr::null_mut(),
         }
     };
 
@@ -1299,8 +1324,12 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePath(
         mime_type,
         target_device,
     )) {
-        Ok(_) => 1,
-        Err(_) => -1,
+        Ok(tid) => env
+            .new_string(hex::encode(tid))
+            .ok()
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
     }
 }
 

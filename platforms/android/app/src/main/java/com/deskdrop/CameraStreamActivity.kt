@@ -237,6 +237,9 @@ fun CameraPreview(executor: ExecutorService, modifier: Modifier = Modifier) {
     )
 }
 
+private var nv21Buffer: ByteArray? = null
+private val jpegOutputStream = ByteArrayOutputStream(1024 * 1024)
+
 private fun processImage(image: ImageProxy) {
     try {
         if (image.format == ImageFormat.YUV_420_888) {
@@ -247,18 +250,23 @@ private fun processImage(image: ImageProxy) {
             val ySize = yBuffer.remaining()
             val uSize = uBuffer.remaining()
             val vSize = vBuffer.remaining()
+            val totalSize = ySize + uSize + vSize
 
-            val nv21 = ByteArray(ySize + uSize + vSize)
+            var nv21 = nv21Buffer
+            if (nv21 == null || nv21.size != totalSize) {
+                nv21 = ByteArray(totalSize)
+                nv21Buffer = nv21
+            }
 
             yBuffer.get(nv21, 0, ySize)
             vBuffer.get(nv21, ySize, vSize)
             uBuffer.get(nv21, ySize + vSize, uSize)
 
             val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-            val out = ByteArrayOutputStream()
+            jpegOutputStream.reset()
             // Improved quality for clearer video feed while maintaining reasonable network usage
-            yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 85, out)
-            val jpegBytes = out.toByteArray()
+            yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 85, jpegOutputStream)
+            val jpegBytes = jpegOutputStream.toByteArray()
 
             val handle = DeskdropService.activeEngineHandle
             if (handle != 0L) {

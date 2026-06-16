@@ -1,5 +1,7 @@
 package com.deskdrop.ui
 
+import com.deskdrop.ui.theme.*
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -21,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import com.deskdrop.PeerSnapshot
 import com.deskdrop.ui.theme.CRBackground
 import com.deskdrop.ui.theme.CRTheme
@@ -85,6 +88,9 @@ fun OnboardingScreen(
                         2 -> StepThreeSendSample(isDark, selectedPeer, onSend = {
                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                             if (it != null) onSendSampleText(it)
+                            forceCompletion = true
+                        }, onSkip = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                             forceCompletion = true
                         })
                         3 -> StepFourCompletion(isDark)
@@ -198,6 +204,12 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
 private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCancel: () -> Unit) {
     var hasTimedOut by remember { mutableStateOf(false) }
 
+    LaunchedEffect(selectedPeer) {
+        hasTimedOut = false
+        delay(30000)
+        hasTimedOut = true
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("Connect & Pair", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
@@ -213,16 +225,72 @@ private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCance
             }
         } else {
             Text("Connecting to ${selectedPeer?.name ?: "the device"}...", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(48.dp))
-            LinkingAnimation(isDark)
-            Spacer(modifier = Modifier.height(48.dp))
-            Text("A pairing prompt with a secure PIN will appear shortly on your computer.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            if (selectedPeer?.pairingPin != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    Icon(
+                        Icons.Rounded.Lock, 
+                        contentDescription = null, 
+                        tint = CRTheme.statusGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Secure Pairing Code", 
+                        style = CRTypography.bodyMedium, 
+                        color = CRTheme.textMedium(isDark), 
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Verify this code on your computer to establish trust.", 
+                    style = CRTypography.caption, 
+                    color = CRTheme.textLow(isDark), 
+                    textAlign = TextAlign.Center, 
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val rawDigits = selectedPeer.pairingPin.filter { it.isDigit() }
+                    val digits = if (rawDigits.isNotEmpty() && rawDigits.length < 6) rawDigits.padStart(6, '0') else rawDigits
+                    digits.forEachIndexed { index, char ->
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp, 56.dp)
+                                .crGlassCard(isDark, cornerRadius = 12.dp, elevated = true),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = char.toString(),
+                                style = CRTypography.h1.copy(fontSize = 32.sp),
+                                color = CRTheme.textHigh(isDark)
+                            )
+                        }
+                        if (index == 2 && digits.length > 3) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(CRTheme.textMedium(isDark).copy(alpha = 0.5f)))
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                    }
+                }
+            } else {
+                LinkingAnimation(isDark)
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("A pairing prompt will appear shortly on your computer.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
+            }
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun StepThreeSendSample(isDark: Boolean, selectedPeer: PeerSnapshot?, onSend: (PeerSnapshot?) -> Unit) {
+private fun StepThreeSendSample(isDark: Boolean, selectedPeer: PeerSnapshot?, onSend: (PeerSnapshot?) -> Unit, onSkip: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("Test Connection", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
         Spacer(modifier = Modifier.height(16.dp))
@@ -238,6 +306,15 @@ private fun StepThreeSendSample(isDark: Boolean, selectedPeer: PeerSnapshot?, on
             Icon(Icons.Rounded.Send, contentDescription = null, tint = CRTheme.bg(isDark))
             Spacer(modifier = Modifier.width(8.dp))
             Text("SEND TEST MESSAGE", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        TextButton(
+            onClick = onSkip,
+            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
+        ) {
+            Text("SKIP TEST", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
         }
     }
 }

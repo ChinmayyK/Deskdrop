@@ -1,5 +1,7 @@
 package com.deskdrop.ui
 
+import com.deskdrop.ui.theme.*
+
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -33,6 +35,7 @@ fun PairingScreen(
     deviceName: String,
     pin: String,
     fingerprint: String,
+    isInitiator: Boolean = false,
     onApprove: () -> Unit,
     onDeny: () -> Unit
 ) {
@@ -69,7 +72,7 @@ fun PairingScreen(
             ) {
                 // Header
                 Text(
-                    text = "PAIRING REQUEST",
+                    text = if (isInitiator) "WAITING FOR RESPONSE" else "PAIRING REQUEST",
                     style = CRTypography.label,
                     color = CRTheme.brandElectric,
                     letterSpacing = 2.sp,
@@ -90,7 +93,7 @@ fun PairingScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 Text(
-                    text = "wants to connect to your ecosystem.",
+                    text = if (isInitiator) "Please accept the request on this device." else "wants to connect to your ecosystem.",
                     style = CRTypography.bodyMedium,
                     color = CRTheme.textMedium(isDark),
                     textAlign = TextAlign.Center
@@ -156,7 +159,7 @@ fun PairingScreen(
                 
                 // Actions
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Deny
+                    // Deny / Cancel
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -170,23 +173,25 @@ fun PairingScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Decline", style = CRTypography.label, color = CRTheme.accentRed, fontWeight = FontWeight.Bold)
+                        Text(if (isInitiator) "Cancel" else "Decline", style = CRTypography.label, color = CRTheme.accentRed, fontWeight = FontWeight.Bold)
                     }
                     
-                    // Approve
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
-                            .crPressScale(0.95f)
-                            .background(CRTheme.brandElectric, RoundedCornerShape(16.dp))
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onApprove()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Accept", style = CRTypography.label, color = Color.White, fontWeight = FontWeight.Bold)
+                    if (!isInitiator) {
+                        // Approve
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .crPressScale(0.95f)
+                                .background(CRTheme.brandElectric, RoundedCornerShape(16.dp))
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onApprove()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Accept", style = CRTypography.label, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

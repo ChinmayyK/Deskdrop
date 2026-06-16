@@ -1,5 +1,9 @@
 package com.deskdrop.ui
 
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.foundation.ScrollState
+import androidx.compose.ui.graphics.graphicsLayer
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -82,6 +86,7 @@ val CRTheme.accentAmber get() = Color(0xFFF59E0B)
 
 enum class AppTab { Home, Activity, Devices, Settings }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.animation.ExperimentalAnimationApi::class)
 @Composable
 fun MainScreen(
     isDark: Boolean,
@@ -119,7 +124,11 @@ fun MainScreen(
     onResendActivity: (ActivityEntry) -> Unit = {},
     onReplayOnboarding: () -> Unit = {}
 ) {
-    var currentTab by remember { mutableStateOf(AppTab.Home) }
+    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(initialPage = AppTab.Home.ordinal, pageCount = { AppTab.values().size })
+    val currentTab = AppTab.values()[pagerState.targetPage]
+    val scope = rememberCoroutineScope()
+    
     val hasConnectedDevices = peers.any { it.isConnected }
 
     CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices) {
@@ -128,25 +137,13 @@ fun MainScreen(
 
                 
                 Box(modifier = Modifier.weight(1f)) {
-                    AnimatedContent(
-                        targetState = currentTab,
-                        transitionSpec = {
-                            val targetIndex = AppTab.values().indexOf(targetState)
-                            val initialIndex = AppTab.values().indexOf(initialState)
-                            val direction = if (targetIndex > initialIndex) 1 else -1
-                            
-                            androidx.compose.animation.slideInHorizontally(
-                                animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                                initialOffsetX = { fullWidth -> direction * fullWidth / 4 }
-                            ) + fadeIn(animationSpec = tween(400)) togetherWith 
-                            androidx.compose.animation.slideOutHorizontally(
-                                animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                                targetOffsetX = { fullWidth -> -direction * fullWidth / 4 }
-                            ) + fadeOut(animationSpec = tween(400))
-                        },
-                        label = "tab_content"
-                    ) { tab ->
-                        when (tab) {
+                    
+                    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+                    androidx.compose.foundation.pager.HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        when (AppTab.values()[page]) {
                             AppTab.Home -> HomeTab(
                                 isDark = isDark,
                                 peers = peers,
@@ -166,10 +163,11 @@ fun MainScreen(
                                 onActionResumeTransfer = onActionResumeTransfer,
                                 onActionCancelTransfer = onActionCancelTransfer,
                                 onForgetPeer = onForgetPeer,
+                                onRejectPeer = onRejectPeer,
                                 onDeleteActivity = onDeleteActivity,
                                 onResendActivity = onResendActivity,
                                 onReplayOnboarding = onReplayOnboarding,
-                                onTabSelected = { currentTab = it }
+                                onTabSelected = { tab -> scope.launch { pagerState.animateScrollToPage(tab.ordinal) } }
                             )
                             AppTab.Activity -> ActivityTab(
                                 isDark = isDark,
@@ -227,7 +225,9 @@ fun MainScreen(
             ) {
                 BottomDock(
                     currentTab = currentTab,
-                    onTabSelected = { currentTab = it },
+                    onTabSelected = { tab ->
+                        scope.launch { pagerState.animateScrollToPage(tab.ordinal) }
+                    },
                     isDark = isDark
                 )
             }
@@ -302,6 +302,7 @@ fun HomeTab(
     onActionResumeTransfer: (String) -> Unit,
     onActionCancelTransfer: (String) -> Unit,
     onForgetPeer: (PeerSnapshot) -> Unit,
+    onRejectPeer: (PeerSnapshot) -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit,
     onResendActivity: (ActivityEntry) -> Unit,
     onReplayOnboarding: () -> Unit,
@@ -479,6 +480,7 @@ fun HomeTab(
                         peer = peer,
                         onSendFiles = { onActionSendFiles(peer.id) },
                         onForget = { onForgetPeer(peer) },
+                        onReject = { onRejectPeer(peer) },
                         modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp)
                     )
                 }
@@ -1001,6 +1003,7 @@ fun TimelineActivityRow(
                         onHorizontalDrag = { change, dragAmount ->
                             if (offsetX.value + dragAmount <= 0) {
                                 coroutineScope.launch { offsetX.snapTo(offsetX.value + dragAmount) }
+                                change.consume() // Prevent the HorizontalPager from stealing this swipe
                             }
                         },
                         onDragEnd = {
@@ -1013,6 +1016,9 @@ fun TimelineActivityRow(
                             } else {
                                 coroutineScope.launch { offsetX.animateTo(0f, androidx.compose.animation.core.spring()) }
                             }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch { offsetX.animateTo(0f, androidx.compose.animation.core.spring()) }
                         }
                     )
                 }
@@ -1097,6 +1103,7 @@ fun DeviceCard(
     peer: PeerSnapshot,
     onSendFiles: () -> Unit,
     onForget: () -> Unit,
+    onReject: () -> Unit,
     modifier: Modifier = Modifier.width(170.dp)
 ) {
     val haptic = LocalHapticFeedback.current
@@ -1198,7 +1205,31 @@ fun DeviceCard(
             }
             androidx.compose.material3.DropdownMenuItem(
                 text = { Text("Forget Device", color = CRTheme.accentRed) },
-                onClick = { showMenu = false; onForget() }
+                onClick = {
+                    showMenu = false
+                    onForget()
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = CRTheme.accentRed
+                    )
+                }
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Revoke Trust", color = CRTheme.accentRed) },
+                onClick = {
+                    showMenu = false
+                    onReject()
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Block,
+                        contentDescription = null,
+                        tint = CRTheme.accentRed
+                    )
+                }
             )
         }
     }
@@ -1753,3 +1784,4 @@ fun BottomDock(
         }
     }
 }
+

@@ -239,6 +239,7 @@ pub const PB_EVENT_CAMERA_FRAME: c_int = 25;
 pub const PB_EVENT_SYSTEM_HEALTH_UPDATED: c_int = 26;
 pub const PB_EVENT_PEER_DISCOVERED: c_int = 27;
 pub const PB_EVENT_NETWORK_STATE_CHANGED: c_int = 28;
+pub const PB_EVENT_OUTGOING_PAIRING_WAITING: c_int = 29;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -327,7 +328,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CameraStreamStop { .. } => PB_EVENT_CAMERA_STREAM_STOP,
         EngineEvent::CameraFrameReceived { .. } => PB_EVENT_CAMERA_FRAME,
         EngineEvent::PeerDiscovered { .. } => PB_EVENT_PEER_DISCOVERED,
-        EngineEvent::OutgoingPairingWaiting { .. } => PB_EVENT_WARNING,
+        EngineEvent::OutgoingPairingWaiting { .. } => PB_EVENT_OUTGOING_PAIRING_WAITING,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
     }
 }
@@ -371,6 +372,7 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::ClipboardSynced { peer_name, .. } => Some(peer_name.as_str()),
         EngineEvent::ClipboardSyncFailed { peer_name, .. } => Some(peer_name.as_str()),
         EngineEvent::PairingRequested { device_name, .. } => Some(device_name.as_str()),
+        EngineEvent::OutgoingPairingWaiting { device_name, .. } => Some(device_name.as_str()),
         EngineEvent::PeerConnected { device_name, .. } => Some(device_name.as_str()),
         EngineEvent::FileTransferIncoming { from_name, .. } => Some(from_name.as_str()),
         EngineEvent::FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
@@ -511,8 +513,13 @@ pub unsafe extern "C" fn deskdrop_event_transfer_dest_path(event: *mut PbEvent) 
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_fingerprint(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    if let EngineEvent::PairingRequested { pin, .. } = &e.inner {
-        let cs = CString::new(pin.as_bytes()).unwrap_or_default();
+    let pin_str = match &e.inner {
+        EngineEvent::PairingRequested { pin, .. } => Some(pin.as_bytes()),
+        EngineEvent::OutgoingPairingWaiting { pin, .. } => Some(pin.as_bytes()),
+        _ => None,
+    };
+    if let Some(bytes) = pin_str {
+        let cs = CString::new(bytes).unwrap_or_default();
         e.cached_mime = Some(cs);
         e.cached_mime.as_ref().unwrap().as_ptr()
     } else {
@@ -526,6 +533,7 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
     let e = &mut *event;
     let id_str = match &e.inner {
         EngineEvent::PairingRequested { device_id, .. } => Some(device_id.to_string()),
+        EngineEvent::OutgoingPairingWaiting { device_id, .. } => Some(device_id.to_string()),
         EngineEvent::CallStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::BatteryStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::NetworkStateChanged { from_device, .. } => Some(from_device.to_string()),

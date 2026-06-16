@@ -1,5 +1,7 @@
 package com.deskdrop
 
+import com.deskdrop.ui.theme.*
+
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Typeface

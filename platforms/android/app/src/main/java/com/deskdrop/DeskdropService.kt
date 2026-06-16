@@ -72,6 +72,7 @@ object DeskdropJni {
     const val CR_EVENT_CALL_ACTION              = 18
     const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
     const val CR_EVENT_NETWORK_STATE_CHANGED    = 28
+    const val CR_EVENT_OUTGOING_PAIRING_WAITING = 29
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
@@ -164,7 +165,7 @@ object DeskdropJni {
         displayName: String,
         mimeType: String,
         targetDeviceId: String?
-    ): Int
+    ): String?
 
     /**
      * Push updated sync settings to the running engine atomically.
@@ -591,11 +592,6 @@ class DeskdropService : Service() {
                         val result = DeskdropJni.pushText(h, text)
                         Log.i(TAG, "PUSH_CLIPBOARD: result=$result len=${text.length}")
                         if (result == 0) {
-                            addActivity(ActivityEntry(
-                                deviceName = "All devices",
-                                kind       = ActivityKind.CLIPBOARD_TEXT,
-                                preview    = text.take(400)
-                            ))
                             broadcastActivityUpdated()
                         }
                         // Hide quick context once sent
@@ -1173,10 +1169,26 @@ class DeskdropService : Service() {
                 val fileName = DeskdropJni.eventTransferFileName(ev) ?: "file"
                 val destPath = DeskdropJni.eventTransferDestPath(ev) ?: ""
                 
+                if (destPath.isEmpty()) {
+                    // Outbound transfer completed!
+                    updateActivityTransferComplete(tid, "")
+                    cancelFileTransferNotification(tid)
+                    activeTransfers.remove(tid)
+                    publishActiveTransfers()
+                    
+                    val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
+                        .setSmallIcon(R.mipmap.ic_launcher)
+                        .setContentTitle("File sent to $from")
+                        .setContentText(fileName)
+                        .setAutoCancel(true)
+                    val notifId = NOTIF_ID_FILE_BASE + (fileName.hashCode() and 0xFFF)
+                    notificationManager.notify(notifId, builder.build())
+                    
+                    return
+                }
+                
                 // Copy the file from private app storage to public Downloads!
-                val publicUriStr = if (destPath.isNotEmpty()) {
-                    saveFileToPublicDownloads(File(destPath))
-                } else null
+                val publicUriStr = saveFileToPublicDownloads(File(destPath))
                 
                 val finalPath = publicUriStr ?: destPath
                 updateActivityTransferComplete(tid, finalPath)
@@ -1253,6 +1265,16 @@ class DeskdropService : Service() {
                 startActivity(intent)
             }
 
+            DeskdropJni.CR_EVENT_OUTGOING_PAIRING_WAITING -> {
+                val deviceId = DeskdropJni.eventDeviceId(ev) ?: return
+                val name = resolvePeerDisplayName(deviceId, DeskdropJni.eventDeviceName(ev))
+                val pin  = DeskdropJni.eventFingerprint(ev) ?: ""
+                Log.i(TAG, "Outgoing pairing waiting for $name ($deviceId) with pin $pin")
+                // No need to launch PairingActivity here. 
+                // The OnboardingScreen or Dashboard naturally reflects this state via trust_store updates.
+                persistStatus()
+            }
+
 
             // ── Peer discovered ───────────────────────────────────────────────
             DeskdropJni.CR_EVENT_PEER_DISCOVERED -> {
@@ -1309,6 +1331,9 @@ class DeskdropService : Service() {
             DeskdropJni.CR_EVENT_WARNING -> {
                 val msg = DeskdropJni.eventText(ev) ?: return
                 Log.w(TAG, "Engine warning: $msg")
+                if (msg == "Pairing request was declined." || msg == "Pairing request was accepted.") {
+                    sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI"))
+                }
                 addActivity(ActivityEntry(deviceName = "System",
                     kind = ActivityKind.WARNING, preview = msg.take(80)))
                 if (isCriticalFailure(msg)) showFailureNotification(msg)
@@ -1633,19 +1658,20 @@ class DeskdropService : Service() {
                 val staged = stageSharedUri(uri, preferredName = null, fallbackIndex = 1)
                 if (staged != null) {
                     lastClipboardSignature = sig
-                    val result = DeskdropJni.sendFilePath(
+                    val tid = DeskdropJni.sendFilePath(
                         engineHandle,
                         staged.localFile.absolutePath,
                         staged.displayName,
                         staged.mimeType,
                         null
                     )
-                    if (result == 1) {
+                    if (tid != null) {
                         addToFeed(
                             ActivityEntry(
                                 deviceName = "All devices",
                                 kind = ActivityKind.FILE_SENT,
-                                preview = staged.displayName
+                                preview = staged.displayName,
+                                transferId = tid
                             )
                         )
                         broadcastStatus()
@@ -1695,14 +1721,14 @@ class DeskdropService : Service() {
                 return@forEachIndexed
             }
 
-            val result = DeskdropJni.sendFilePath(
+            val tid = DeskdropJni.sendFilePath(
                 engineHandle,
                 staged.localFile.absolutePath,
                 staged.displayName,
                 staged.mimeType,
                 targetDeviceId
             )
-            if (result == 1) {
+            if (tid != null) {
                 sentAny = true
                 Log.i(
                     TAG,
@@ -1719,7 +1745,8 @@ class DeskdropService : Service() {
                     ActivityEntry(
                         deviceName = targetName,
                         kind = ActivityKind.FILE_SENT,
-                        preview = staged.displayName
+                        preview = staged.displayName,
+                        transferId = tid
                     )
                 )
             } else {
@@ -2197,9 +2224,13 @@ class DeskdropService : Service() {
                 "decline" -> {
                     if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) ==
                         android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                         runCatching { tm.endCall() }
                             .onSuccess { Log.i(TAG, "Remote decline: call ended") }
                             .onFailure { Log.w(TAG, "Remote decline failed", it) }
+                    } else {
+                        Log.i(TAG, "Remote decline not supported on this Android version")
+                    }
                     } else {
                         Log.w(TAG, "Remote decline: ANSWER_PHONE_CALLS permission not granted")
                     }

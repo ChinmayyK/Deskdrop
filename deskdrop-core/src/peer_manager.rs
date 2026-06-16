@@ -739,11 +739,20 @@ impl PeerManager {
             .unwrap_or(false)
     }
 
-    /// Forget Device: removes persistent pairing without revoking trust.
     pub fn forget_device(&self, device_id: Uuid) -> Result<bool> {
         let found = {
             let mut store = self.store.write().unwrap();
-            store.peers.remove(&device_id).is_some()
+            if let Some(entry) = store.peers.get_mut(&device_id) {
+                entry.trusted = false;
+                entry.remembered = false;
+                entry.auto_connect = false;
+                entry.explicit_disconnect = true;
+                entry.pairing_requested = false;
+                entry.pairing_pin = None;
+                true
+            } else {
+                false
+            }
         };
         if found {
             self.save()?;

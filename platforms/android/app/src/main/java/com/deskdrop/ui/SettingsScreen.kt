@@ -1,5 +1,7 @@
 package com.deskdrop.ui
 
+import com.deskdrop.ui.theme.*
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
