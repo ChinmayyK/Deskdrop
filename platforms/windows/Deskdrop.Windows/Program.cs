@@ -1247,13 +1247,10 @@ namespace Deskdrop.Windows
         {
             try
             {
-                File.AppendAllText(@"C:\Users\CHINMAY KUDALKAR\Desktop\crash.txt", $"[{DateTime.Now:u}] App Start\n");
                 using var mutex = new Mutex(true, $"Deskdrop_SingleInstance_v1_{Environment.UserName}", out bool isNew);
-                File.AppendAllText(@"C:\Users\CHINMAY KUDALKAR\Desktop\crash.txt", $"[{DateTime.Now:u}] Mutex isNew: {isNew}\n");
                 
                 if (!isNew)
                 {
-                    File.AppendAllText(@"C:\Users\CHINMAY KUDALKAR\Desktop\crash.txt", $"[{DateTime.Now:u}] Exiting due to isNew=false\n");
                     if (args.Length > 0)
                     {
                         try

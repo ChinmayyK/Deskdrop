@@ -12,8 +12,10 @@
         <SolidColorBrush x:Key="BrandElectric" Color="{StaticResource BrandElectricColor}"/>
         <SolidColorBrush x:Key="BrandGreen" Color="#34C759"/>
         <SolidColorBrush x:Key="BrandRed" Color="#FF3B30"/>
-        <SolidColorBrush x:Key="SurfaceStrong" Color="#A0F3F3F3"/>
+        <SolidColorBrush x:Key="SurfaceStrong" Color="#F3F3F3"/>
+        <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="Stroke" Color="#D1D1D6"/>
+        <SolidColorBrush x:Key="StrokeSoft" Color="#E5E5EA"/>
         <SolidColorBrush x:Key="Ink" Color="#1C1C1E"/>
         <SolidColorBrush x:Key="InkSoft" Color="#6E6E73"/>
         <Style x:Key="ModernButton" TargetType="Button">
@@ -39,74 +41,124 @@
         </Style>
     </Window.Resources>
     
-    <Border Background="{StaticResource SurfaceStrong}" CornerRadius="8" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="24">
+    <Border Background="{StaticResource SurfaceElevated}" CornerRadius="12" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Margin="24">
         <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="32" ShadowDepth="8" Opacity="0.2"/>
+            <DropShadowEffect Color="Black" BlurRadius="32" ShadowDepth="8" Opacity="0.1"/>
         </Border.Effect>
         <Grid>
-            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16"   Background="Transparent" BorderThickness="0" Click="BtnClose_Click" Panel.ZIndex="1"><iconPacks:PackIconLucide Kind="X"/></Button>
-            
-            <Grid x:Name="IntroView" Visibility="Visible">
+            <!-- Background Elements -->
+            <Border Background="{StaticResource SurfaceElevated}" CornerRadius="12" ClipToBounds="True">
+                <Grid>
+                    <Ellipse Fill="#E5F2FF" Width="400" Height="400" Margin="-100,-100,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Opacity="0.5">
+                        <Ellipse.Effect><BlurEffect Radius="100"/></Ellipse.Effect>
+                    </Ellipse>
+                    <Ellipse Fill="#E5F9E9" Width="300" Height="300" Margin="0,0,-50,-50" HorizontalAlignment="Right" VerticalAlignment="Bottom" Opacity="0.5">
+                        <Ellipse.Effect><BlurEffect Radius="100"/></Ellipse.Effect>
+                    </Ellipse>
+                </Grid>
+            </Border>
+
+            <Grid>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="48">
-                    <TextBlock Text="Welcome to Deskdrop" FontSize="36" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,16"/>
-                    <TextBlock Text="Your seamless ecosystem across Windows, macOS, Android, and iOS." FontSize="16" Foreground="{StaticResource InkSoft}" TextAlignment="Center" Margin="0,0,0,48"/>
-                    
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <StackPanel Grid.Column="0" Margin="16" Width="200">
-                            <Border Width="64" Height="64" CornerRadius="32" Background="#E5F2FF" Margin="0,0,0,16">
-                                <iconPacks:PackIconLucide Kind="Smartphone" Width="28" Height="28"    Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="1. Get the app" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
-                            <TextBlock Text="Install Deskdrop on your mobile device." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
-                        </StackPanel>
-                        
-                        <StackPanel Grid.Column="1" Margin="16" Width="200">
-                            <Border Width="64" Height="64" CornerRadius="32" Background="#E5F9E9" Margin="0,0,0,16">
-                                <iconPacks:PackIconLucide Kind="Link" Width="28" Height="28"    Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="2. Scan &amp; Pair" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
-                            <TextBlock Text="Use the Magic Link QR code to securely pair." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
-                        </StackPanel>
-                        
-                        <StackPanel Grid.Column="2" Margin="16" Width="200">
-                            <Border Width="64" Height="64" CornerRadius="32" Background="#FFF0F0" Margin="0,0,0,16">
-                                <iconPacks:PackIconLucide Kind="Send" Width="28" Height="28"    Foreground="{StaticResource BrandRed}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="3. Drop anything" FontSize="18" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8"/>
-                            <TextBlock Text="Drag and drop files to instantly send them." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource InkSoft}"/>
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
                 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,48">
-                    <Button Content="Show Magic Link" Style="{StaticResource ModernButton}" Background="{StaticResource BrandElectric}" Foreground="White" Padding="32,16" FontSize="16" Click="BtnShowQRCode_Click" Margin="0,0,16,0"/>
-                    <Button Content="Skip for now" Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="32,16" FontSize="16" Click="BtnSkip_Click"/>
+                <!-- Pagination -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,40,0,0" x:Name="PaginationPanel">
+                    <Ellipse x:Name="Dot0" Width="8" Height="8" Fill="{StaticResource BrandElectric}" Margin="4"/>
+                    <Ellipse x:Name="Dot1" Width="8" Height="8" Fill="{StaticResource StrokeSoft}" Margin="4"/>
+                    <Ellipse x:Name="Dot2" Width="8" Height="8" Fill="{StaticResource StrokeSoft}" Margin="4"/>
+                    <Ellipse x:Name="Dot3" Width="8" Height="8" Fill="{StaticResource StrokeSoft}" Margin="4"/>
                 </StackPanel>
-            </Grid>
 
-            <Grid x:Name="DoneView" Visibility="Collapsed">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="48">
-                    <Border Width="96" Height="96" CornerRadius="48" Background="#E5F9E9" Margin="0,0,0,24">
-                        <iconPacks:PackIconLucide Kind="CheckCircle" Width="48" Height="48"    Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="You're all set!" FontSize="36" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,16"/>
-                    <TextBlock Text="Your device is now securely paired. You can close this window and start dropping files." FontSize="16" Foreground="{StaticResource InkSoft}" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="400" Margin="0,0,0,48"/>
-                    
-                    <Button Content="Finish &amp; Start Using Deskdrop" Style="{StaticResource ModernButton}" Background="{StaticResource BrandElectric}" Foreground="White" Padding="32,16" FontSize="16" Click="BtnFinish_Click"/>
-                </StackPanel>
+                <!-- Step 1 -->
+                <Grid Grid.Row="1" x:Name="Step1View" Visibility="Visible">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                        <TextBlock Text="Step 1: Find a device" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock Text="Make sure Deskdrop is running on your phone or another computer." FontSize="14" Foreground="{StaticResource InkSoft}" TextAlignment="Center" Margin="0,0,0,24"/>
+                        <Button Content="Show QR Code" Style="{StaticResource ModernButton}" Background="{StaticResource BrandGreen}" Foreground="White" Padding="16,8" FontSize="14" HorizontalAlignment="Center" Click="BtnShowQRCode_Click" Margin="0,0,0,24"/>
+                        
+                        <ScrollViewer Height="250" Width="400" VerticalScrollBarVisibility="Hidden">
+                            <StackPanel>
+                                <StackPanel x:Name="ScanningPanel" Visibility="Visible">
+                                    <Grid Width="70" Height="70" HorizontalAlignment="Center" Margin="0,32,0,24">
+                                        <iconPacks:PackIconLucide Kind="Radio" Width="28" Height="28" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <TextBlock Text="Scanning local network..." FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" TextAlignment="Center"/>
+                                </StackPanel>
+                                
+                                <ItemsControl x:Name="PeersList" Visibility="Collapsed" Margin="16">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource ModernButton}" Background="{StaticResource SurfaceStrong}" Margin="0,0,0,8" Click="PeerButton_Click">
+                                                <Grid Margin="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <iconPacks:PackIconLucide Kind="Smartphone" Width="20" Height="20" Foreground="{StaticResource Ink}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding friendly_name}" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Step 2 -->
+                <Grid Grid.Row="1" x:Name="Step2View" Visibility="Collapsed">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                        <TextBlock Text="Step 2: Verify &amp; Trust" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,24"/>
+                        
+                        <StackPanel x:Name="PinPanel" Visibility="Collapsed">
+                            <TextBlock x:Name="VerifyDeviceNameText" Text="Ensure this matches the code on your device:" FontSize="14" Foreground="{StaticResource InkSoft}" TextAlignment="Center" Margin="0,0,0,16"/>
+                            <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24" HorizontalAlignment="Center">
+                                <TextBlock x:Name="PinText" Text="123456" FontSize="32" FontWeight="Black" FontFamily="Consolas" Foreground="{StaticResource Ink}" TextAlignment="Center" />
+                            </Border>
+                            
+                            <StackPanel x:Name="PairingActionsPanel" Orientation="Horizontal" HorizontalAlignment="Center" Visibility="Collapsed">
+                                <Button Content="Decline" Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="24,12" FontSize="14" Click="BtnDecline_Click" Margin="0,0,16,0"/>
+                                <Button Content="Trust Device" Style="{StaticResource ModernButton}" Background="{StaticResource BrandGreen}" Foreground="White" Padding="24,12" FontSize="14" Click="BtnTrust_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <StackPanel x:Name="ConnectingPanel" Visibility="Visible">
+                            <TextBlock x:Name="ConnectingText" Text="Connecting..." FontSize="14" Foreground="{StaticResource InkSoft}" TextAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Step 3 -->
+                <Grid Grid.Row="1" x:Name="Step3View" Visibility="Collapsed">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                        <TextBlock Text="Step 3: Send Sample Text" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,24"/>
+                        <TextBlock Text="Let's make sure it works. Click the button below to send 'Hello from Windows' to your device." FontSize="14" Foreground="{StaticResource InkSoft}" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="400" Margin="0,0,0,48"/>
+                        <Button Content="Send 'Hello from Windows'" Style="{StaticResource ModernButton}" Background="{StaticResource BrandElectric}" Foreground="White" Padding="24,12" FontSize="14" HorizontalAlignment="Center" Click="BtnSendSample_Click"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Step 4 -->
+                <Grid Grid.Row="1" x:Name="Step4View" Visibility="Collapsed">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                        <Border Width="100" Height="100" CornerRadius="50" Background="#E5F9E9" Margin="0,0,0,24">
+                            <iconPacks:PackIconLucide Kind="Check" Width="40" Height="40" Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="You're all set!" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Ink}" TextAlignment="Center" Margin="0,0,0,16"/>
+                        <TextBlock Text="Received files will automatically land in your Downloads folder.&#10;Clipboard text will be instantly available to paste." FontSize="14" Foreground="{StaticResource InkSoft}" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="400" LineHeight="20"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Footer Navigation -->
+                <Grid Grid.Row="2" Margin="40,0,40,40">
+                    <Button x:Name="BtnFooterLeft" Content="Skip for now" Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="16,8" HorizontalAlignment="Left" Click="BtnFooterLeft_Click"/>
+                    <Button x:Name="BtnFooterRight" Content="Get Started" Style="{StaticResource ModernButton}" Background="{StaticResource BrandElectric}" Foreground="White" Padding="24,12" HorizontalAlignment="Right" Click="BtnFooterRight_Click" Visibility="Collapsed"/>
+                </Grid>
             </Grid>
-            
         </Grid>
     </Border>
 </Window>
-

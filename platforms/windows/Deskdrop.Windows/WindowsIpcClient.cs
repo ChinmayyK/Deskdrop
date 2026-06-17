@@ -159,6 +159,8 @@ namespace Deskdrop.Windows
             Send(new { cmd = "revoke_trusted_device", device_id = deviceId });
 
         // ── Transfer Controls ─────────────────────────────────────────────────
+        public static JsonDocument? SendPairingRequest(string deviceId) => Send(new { cmd = "send_pairing_request", device_id = deviceId });
+        public static JsonDocument? RespondToPairing(string deviceId, bool accepted) => Send(new { cmd = "respond_to_pairing", device_id = deviceId, accepted });
         public static JsonDocument? AcceptFileTransfer(string transferId) => Send(new { cmd = "accept_file_transfer", transfer_id = transferId });
         public static JsonDocument? RejectFileTransfer(string transferId, string reason) => Send(new { cmd = "reject_file_transfer", transfer_id = transferId, reason = reason });
         public static JsonDocument? PauseFileTransfer(string transferId) => Send(new { cmd = "pause_file_transfer", transfer_id = transferId });

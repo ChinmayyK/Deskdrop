@@ -73,6 +73,14 @@ namespace Deskdrop.Windows
         public bool ShowDisconnectButton => status == "connected" && is_trusted;
         public bool ShowConnectButton => status != "connected";
 
+        private string? _pairingPin;
+        [System.Text.Json.Serialization.JsonPropertyName("pairing_pin")]
+        public string? pairingPin { get => _pairingPin; set => SetProperty(ref _pairingPin, value); }
+        
+        private bool _pairingRequested;
+        [System.Text.Json.Serialization.JsonPropertyName("pairing_requested")]
+        public bool pairingRequested { get => _pairingRequested; set => SetProperty(ref _pairingRequested, value); }
+
         private int _batteryLevel;
         public int BatteryLevel { get => _batteryLevel; set { if(SetProperty(ref _batteryLevel, value)) { OnPropertyChanged(nameof(ShowBattery)); OnPropertyChanged(nameof(BatteryIcon)); OnPropertyChanged(nameof(BatteryColor)); } } }
         private bool _batteryCharging;
@@ -233,6 +241,21 @@ namespace Deskdrop.Windows
 
         private int _isRefreshInFlight = 0;
 
+        public void ConnectAndPair(string deviceId)
+        {
+            DaemonClient.SendPairingRequest(deviceId);
+        }
+
+        public void RespondToPairing(string deviceId, bool accepted)
+        {
+            DaemonClient.RespondToPairing(deviceId, accepted);
+        }
+
+        public void SendPushText(string text, string toDeviceId)
+        {
+            DaemonClient.Send(new { cmd = "push_text", text = text, target_device = toDeviceId });
+        }
+
         public void UpdateStateFromDaemon()
         {
             if (System.Threading.Interlocked.CompareExchange(ref _isRefreshInFlight, 1, 0) != 0) return;
@@ -385,6 +408,8 @@ namespace Deskdrop.Windows
                                 match.status = peer.status;
                                 match.BatteryLevel = peer.BatteryLevel;
                                 match.BatteryCharging = peer.BatteryCharging;
+                                match.pairingPin = peer.pairingPin;
+                                match.pairingRequested = peer.pairingRequested;
                                 existing.Remove(match);
                             }
                             else

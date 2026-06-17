@@ -79,7 +79,7 @@
             </Style.Triggers>
         </Style>
         
-        <!-- macOS CRTheme Palette -->
+        <!-- macOS CRTheme Palette (Light Mode) -->
         <Color x:Key="BrandElectricColor">#0055CC</Color>
         <SolidColorBrush x:Key="BrandElectric" Color="{StaticResource BrandElectricColor}"/>
         <SolidColorBrush x:Key="BrandViolet" Color="#5E5CE6"/>
@@ -88,15 +88,15 @@
         <SolidColorBrush x:Key="BrandRed" Color="#FF3B30"/>
         
         <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceStrong" Color="#E5F2F2F7"/>
+        <SolidColorBrush x:Key="SurfaceStrong" Color="#F5F5F5"/>
         <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="SurfaceGlass" Color="#80FFFFFF"/> <!-- More translucent for Mica -->
+        <SolidColorBrush x:Key="SurfaceGlass" Color="#E6FFFFFF"/> <!-- Translucent white for Mica -->
         
-        <SolidColorBrush x:Key="Ink" Color="#D9000000"/>
-        <SolidColorBrush x:Key="InkSoft" Color="#8C000000"/> <!-- Improved contrast -->
-        <SolidColorBrush x:Key="InkSubtle" Color="#66000000"/> <!-- Improved contrast -->
-        <SolidColorBrush x:Key="Stroke" Color="#1A000000"/> <!-- Darker for visibility -->
-        <SolidColorBrush x:Key="StrokeSoft" Color="#0D000000"/>
+        <SolidColorBrush x:Key="Ink" Color="#D9000000"/> <!-- 85% Black -->
+        <SolidColorBrush x:Key="InkSoft" Color="#8C000000"/> <!-- 55% Black -->
+        <SolidColorBrush x:Key="InkSubtle" Color="#66000000"/> <!-- 40% Black -->
+        <SolidColorBrush x:Key="Stroke" Color="#1A000000"/> <!-- 10% Black -->
+        <SolidColorBrush x:Key="StrokeSoft" Color="#0D000000"/> <!-- 5% Black -->
 
         <!-- macOS Traffic Light Colors -->
         <SolidColorBrush x:Key="MacRed" Color="#FF5F56"/>
@@ -117,7 +117,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0.5" CornerRadius="6">
-                            <TextBlock x:Name="icon" Text="{TemplateBinding Content}" FontSize="8" FontFamily="Segoe UI" FontWeight="Bold" Foreground="#80000000" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0" Margin="0,-1,0,0"/>
+                            <TextBlock x:Name="icon" Text="{TemplateBinding Content}" FontSize="8" FontFamily="Segoe UI" FontWeight="Bold" Foreground="{StaticResource InkSubtle}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0" Margin="0,-1,0,0"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -138,21 +138,21 @@
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="border" Background="Transparent" CornerRadius="16" Padding="14,10" Margin="4,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <iconPacks:PackIconLucide Kind="{Binding Tag}" Width="16" Height="16" x:Name="icon"    VerticalAlignment="Center"/>
+                                <iconPacks:PackIconLucide Kind="{Binding Path=Tag, RelativeSource={RelativeSource TemplatedParent}}" Width="16" Height="16" x:Name="icon" VerticalAlignment="Center"/>
                                 <!-- The text label will expand when checked -->
                                 <TextBlock x:Name="label" Text="{TemplateBinding Content}" FontSize="13" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                             </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#0A000000"/>
+                                <Setter TargetName="border" Property="Background" Value="#0D000000"/>
                                 <Setter Property="Foreground" Value="{StaticResource Ink}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="{StaticResource BrandElectric}"/>
                                 <Setter TargetName="border" Property="Effect">
                                     <Setter.Value>
-                                        <DropShadowEffect Color="#007AFF" Opacity="0.35" BlurRadius="8" ShadowDepth="3"/>
+                                        <DropShadowEffect Color="#0055CC" Opacity="0.35" BlurRadius="8" ShadowDepth="0"/>
                                     </Setter.Value>
                                 </Setter>
                                 <Setter Property="Foreground" Value="White"/>
@@ -176,11 +176,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#0A000000"/>
+                                <Setter TargetName="border" Property="Background" Value="#0D000000"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#170055CC"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#330055CC"/>
+                                <Setter TargetName="border" Property="Background" Value="#1A0055CC"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#800055CC"/>
                                 <Setter Property="Foreground" Value="{StaticResource BrandElectric}"/>
                                 <Setter TargetName="label" Property="FontWeight" Value="SemiBold"/>
                             </Trigger>
@@ -240,7 +240,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsFocused" Value="True">
-                                <Setter TargetName="border" Property="BorderBrush" Value="#80007AFF"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#8032ADE6"/>
                                 <Setter TargetName="border" Property="BorderThickness" Value="3"/>
                                 <Setter TargetName="border" Property="Margin" Value="-2"/>
                             </Trigger>
@@ -350,9 +350,9 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
-                        <Border Background="#E5FFFFFF" CornerRadius="12" BorderThickness="1" BorderBrush="#20000000" Padding="8" Margin="0,0,12,12">
+                        <Border Background="#E52C2C2E" CornerRadius="12" BorderThickness="1" BorderBrush="#33FFFFFF" Padding="8" Margin="0,0,12,12">
                             <Border.Effect>
-                                <DropShadowEffect Color="Black" Opacity="0.15" BlurRadius="16" ShadowDepth="4"/>
+                                <DropShadowEffect Color="Black" Opacity="0.3" BlurRadius="16" ShadowDepth="4"/>
                             </Border.Effect>
                             <ItemsPresenter/>
                         </Border>
@@ -364,7 +364,7 @@
         <Style x:Key="MacMenuItemStyle" TargetType="MenuItem">
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Margin" Value="0,2"/>
-            <Setter Property="Foreground" Value="#1C1C1E"/>
+            <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -374,7 +374,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#007AFF"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource BrandElectric}"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -398,14 +398,14 @@
                 <!-- HOME VIEW MOVED TO QUICK ACCESS WINDOW -->
 
                 <!-- ACTIVITY VIEW -->
-                <Grid x:Name="ActivityView" Visibility="Visible" Margin="48,16,48,0">
+                <Grid x:Name="ActivityView" Visibility="Visible" Margin="0,16,0,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
-                        <TextBlock Text="Activity Feed" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                    <StackPanel Grid.Row="0" Margin="48,0,48,24">
+                        <TextBlock Text="Clipboard History" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                         
                         <!-- Toolbar: Search and Filters -->
                         <Border Background="{StaticResource SurfaceElevated}" CornerRadius="8" Padding="12,10" Margin="0,16,0,0">
@@ -417,7 +417,7 @@
                                 </Grid.ColumnDefinitions>
                                 
                                 <!-- Search -->
-                                <Border Grid.Column="0" Background="#F2F2F7" CornerRadius="6" Padding="8,6" Width="200" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5">
+                                <Border Grid.Column="0" Background="#111111" CornerRadius="6" Padding="8,6" Width="200" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5">
                                     <Grid>
                                         <iconPacks:PackIconLucide Kind="Search" Width="14" Height="14" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="4,0,0,0"/>
                                         <TextBlock Text="Filter activity..." Foreground="{StaticResource InkSoft}" FontSize="12" Margin="28,0,0,0" VerticalAlignment="Center"/>
@@ -436,8 +436,8 @@
                         <Border Height="1" Background="{StaticResource Stroke}" Margin="0,16,0,0" Opacity="0.5"/>
                     </StackPanel>
                     
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,120">
-                        <StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden" Margin="0,0,0,120">
+                        <StackPanel Margin="48,0,48,0">
                             <TextBlock Text="RECENT ACTIVITY" FontSize="12" FontWeight="Bold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,8"/>
                             <ItemsControl x:Name="ActivityFeedList">
                                 <ItemsControl.ItemTemplate>
@@ -467,18 +467,18 @@
                 </Grid>
 
                 <!-- TRANSFERS VIEW -->
-                <Grid x:Name="TransfersView" Visibility="Collapsed" Margin="48,16,48,0">
+                <Grid x:Name="TransfersView" Visibility="Collapsed" Margin="0,16,0,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                    <StackPanel Grid.Row="0" Margin="48,0,48,24">
                         <TextBlock Text="Transfers" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                     </StackPanel>
                     
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,120">
-                        <StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden" Margin="0,0,0,120">
+                        <StackPanel Margin="48,0,48,0">
                             <TextBlock Text="ACTIVE" FontSize="12" FontWeight="Bold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,8"/>
                             <ItemsControl x:Name="ActiveTransfersList" Margin="0,0,0,24">
                                 <ItemsControl.ItemTemplate>
@@ -490,13 +490,13 @@
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <Border Width="40" Height="40" CornerRadius="6" Background="#E5E5EA" Margin="0,0,12,0" Grid.Column="0">
+                                                <Border Width="40" Height="40" CornerRadius="6" Background="#33FFFFFF" Margin="0,0,12,0" Grid.Column="0">
                                                     <iconPacks:PackIconLucide Kind="File" Width="16" Height="16"    Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Border>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding FileName}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
                                                     <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
-                                                    <ProgressBar Value="{Binding Percent}" Maximum="100" Height="4" Margin="0,6,0,0" Foreground="{Binding ProgressColor}" Background="#E5E5EA" BorderThickness="0"/>
+                                                    <ProgressBar Value="{Binding Percent}" Maximum="100" Height="4" Margin="0,6,0,0" Foreground="{Binding ProgressColor}" Background="#33FFFFFF" BorderThickness="0"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
                                                     <Button   FontSize="14" Width="32" Height="32" Style="{StaticResource ModernButton}" Background="{Binding PrimaryBackground}" Foreground="{Binding PrimaryForeground}" Margin="0,0,8,0" Click="BtnTransferPrimaryAction_Click" Visibility="{Binding PrimaryVisible, Converter={StaticResource BooleanToVisibilityConverter}}"><iconPacks:PackIconLucide Kind="{Binding PrimaryIcon}"/></Button>
@@ -538,18 +538,18 @@
                 </Grid>
 
                 <!-- DEVICES VIEW -->
-                <Grid x:Name="DevicesView" Visibility="Collapsed" Margin="48,16,48,0">
+                <Grid x:Name="DevicesView" Visibility="Collapsed" Margin="0,16,0,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
-                        <TextBlock Text="Ecosystem" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                    <StackPanel Grid.Row="0" Margin="48,0,48,24">
+                        <TextBlock Text="Welcome back, Chinmayk!" FontSize="26" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                     </StackPanel>
                     
-                    <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
-                        <StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden" Margin="0,0,0,120">
+                        <StackPanel Margin="48,0,48,0">
                             
                             <!-- Magic Link Pairing Card -->
                             <Border Style="{StaticResource HoverCardStyle}" CornerRadius="12" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="16">
@@ -559,8 +559,8 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="40" Height="40" CornerRadius="20" Background="#E5F9E9" Margin="0,0,16,0" Grid.Column="0">
-                                        <iconPacks:PackIconLucide Kind="Link" Width="20" Height="20"    Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="36" Height="36" CornerRadius="8" Background="#1A34C759" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,16,0" Grid.Column="0">
+                                        <iconPacks:PackIconLucide Kind="Link" Width="18" Height="18" Foreground="{StaticResource BrandGreen}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="Magic Link pairing" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
@@ -578,16 +578,16 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="40" Height="40" CornerRadius="20" Background="#E5F2FF" Margin="0,0,16,0" Grid.Column="0">
-                                        <iconPacks:PackIconLucide Kind="Plug" Width="20" Height="20"    Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="36" Height="36" CornerRadius="8" Background="#1A0055CC" Margin="0,0,16,0" Grid.Column="0">
+                                        <iconPacks:PackIconLucide Kind="Globe" Width="18" Height="18" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="Manual Connect" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
                                         <TextBlock Text="Connect to a specific IP address and port" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Grid.Column="2">
-                                        <TextBox x:Name="TxtConnectAddress" Style="{StaticResource MacTextBox}" Width="160" Margin="0,0,12,0" Text="192.168.1.20:47823"/>
-                                        <Button Style="{StaticResource ModernButton}" Content="Connect" Padding="16,8" Click="BtnConnect_Click"/>
+                                    <StackPanel Orientation="Horizontal" Grid.Column="2" VerticalAlignment="Center">
+                                        <TextBox x:Name="TxtConnectAddress" Style="{StaticResource MacTextBox}" Width="160" Margin="0,0,12,0" Text="192.168.1.20:47823" BorderThickness="0" Background="Transparent" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" HorizontalAlignment="Right" TextAlignment="Right"/>
+                                        <Button Style="{StaticResource ModernButton}" Content="Connect" Padding="16,6" Click="BtnConnect_Click"/>
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -600,14 +600,17 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="40" Height="40" CornerRadius="20" Background="#E5F2FF" Margin="0,0,16,0" Grid.Column="0">
-                                        <iconPacks:PackIconLucide Kind="Send" Width="20" Height="20"    Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="36" Height="36" CornerRadius="8" Background="#1A0055CC" Margin="0,0,16,0" Grid.Column="0">
+                                        <iconPacks:PackIconLucide Kind="File" Width="18" Height="18" Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="Send a File" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
                                         <TextBlock Text="Push a document, image, or archive to peers" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
                                     </StackPanel>
-                                    <Button Grid.Column="2" Style="{StaticResource ModernButton}" Content="Send to all" Background="{StaticResource BrandElectric}" Foreground="White" Padding="16,8" Click="BtnSendFile_Click"/>
+                                    <StackPanel Orientation="Horizontal" Grid.Column="2" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource ModernButton}" Content="Send to all" Background="{StaticResource BrandElectric}" Foreground="White" Padding="16,6" Click="BtnSendFile_Click" Margin="0,0,12,0"/>
+                                        <Button Content="Choose..." Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" FontWeight="Medium" Cursor="Hand" Padding="8,6" VerticalAlignment="Center"/>
+                                    </StackPanel>
                                 </Grid>
                             </Border>
 
@@ -621,29 +624,56 @@
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <Grid Width="48" Height="48" Margin="0,0,16,0" Grid.Column="0">
-                                                    <Ellipse Style="{StaticResource DevicePulseRing}" Stroke="{StaticResource BrandElectric}" StrokeThickness="2" />
-                                                    <Border CornerRadius="24" Background="#E5E5EA">
-                                                        <iconPacks:PackIconLucide Kind="Smartphone" Width="20" Height="20"    Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </Grid>
+                                                <!-- Connected Device Left Icon -->
+                                                <Border Width="48" Height="48" CornerRadius="12" Background="{StaticResource BrandGreen}" Margin="0,0,16,0" Grid.Column="0">
+                                                    <iconPacks:PackIconLucide Kind="Smartphone" Width="24" Height="24" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <!-- Connected Device Center Info -->
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding friendly_name}" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-                                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                                        <TextBlock Text="{Binding status}" Foreground="{StaticResource BrandGreen}" FontSize="12" Margin="0,0,8,0"/>
-                                                        <StackPanel Orientation="Horizontal" Visibility="{Binding ShowBattery, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                            <iconPacks:PackIconLucide Kind="{Binding BatteryIcon}" Width="10" Height="10"    Foreground="{Binding BatteryColor}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                            <TextBlock Text="{Binding BatteryLevel, StringFormat={}{0}%}" Foreground="{StaticResource InkSoft}" FontSize="12" VerticalAlignment="Center"/>
-                                                        </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                        <Ellipse Width="6" Height="6" Fill="{StaticResource BrandGreen}" Margin="0,0,4,0"/>
+                                                        <TextBlock Text="Connected" Foreground="{StaticResource BrandGreen}" FontSize="12" FontWeight="Medium" Margin="0,0,12,0"/>
+                                                        <Border Background="#E6F5F5F5" CornerRadius="8" Padding="6,2" Margin="0,0,6,0">
+                                                            <iconPacks:PackIconLucide Kind="BatteryMedium" Width="12" Height="12" Foreground="{StaticResource BrandGreen}" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <Border Background="#E6F5F5F5" CornerRadius="8" Padding="6,2">
+                                                            <iconPacks:PackIconLucide Kind="Wifi" Width="12" Height="12" Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center"/>
+                                                        </Border>
                                                     </StackPanel>
                                                 </StackPanel>
+                                                <!-- Connected Device Right Actions -->
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Button Style="{StaticResource ModernButton}"   ToolTip="Rename" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="8" Click="BtnRenameDevice_Click" Tag="{Binding device_id}"><iconPacks:PackIconLucide Kind="Pencil"/></Button>
-                                                    <Button Style="{StaticResource ModernButton}"   ToolTip="Pause Sync" Background="Transparent" Foreground="{StaticResource InkSoft}" Padding="8" Click="BtnPauseSyncDevice_Click" Tag="{Binding device_id}"><iconPacks:PackIconLucide Kind="Pause"/></Button>
-                                                    <Button Style="{StaticResource ModernButton}"   ToolTip="Forget Device" Background="Transparent" Foreground="{StaticResource BrandRed}" Padding="8" Click="BtnForgetDevice_Click" Tag="{Binding device_id}"><iconPacks:PackIconLucide Kind="Trash"/></Button>
-                                                    <Button Style="{StaticResource ModernButton}" Content="Verify" Background="{StaticResource BrandBlue}" Foreground="White" Padding="12,6" Margin="8,0,0,0" Tag="{Binding device_id}" Click="BtnVerifyDevice_Click" Visibility="{Binding ShowVerifyButton, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                                    <Button Style="{StaticResource ModernButton}" Content="Disconnect" Background="#FFF0F0" Foreground="{StaticResource BrandRed}" Padding="12,6" Margin="8,0,0,0" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click" Visibility="{Binding ShowDisconnectButton, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                                    <Button Style="{StaticResource ModernButton}" Content="Connect" Background="#E5F0FA" Foreground="{StaticResource BrandBlue}" Padding="12,6" Margin="8,0,0,0" Tag="{Binding device_id}" Click="BtnConnectDevice_Click" Visibility="{Binding ShowConnectButton, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Ping" Background="#E6F0FAFF" Foreground="{StaticResource BrandElectric}" BorderThickness="0" Padding="12,6" Margin="0,0,8,0" Tag="{Binding device_id}">
+                                                        <Button.ContentTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <iconPacks:PackIconLucide Kind="Bell" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </Button.ContentTemplate>
+                                                    </Button>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Files" Background="#E6F0FAFF" Foreground="{StaticResource BrandElectric}" BorderThickness="0" Padding="12,6" Margin="0,0,8,0" Tag="{Binding device_id}">
+                                                        <Button.ContentTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <iconPacks:PackIconLucide Kind="Folder" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </Button.ContentTemplate>
+                                                    </Button>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Disconnect" Background="#E6FFF0F0" Foreground="{StaticResource BrandRed}" BorderThickness="0" Padding="12,6" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click">
+                                                        <Button.ContentTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <iconPacks:PackIconLucide Kind="X" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </Button.ContentTemplate>
+                                                    </Button>
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
@@ -655,18 +685,18 @@
                 </Grid>
 
                 <!-- SETTINGS VIEW -->
-                <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="48,16,48,0">
+                <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="0,16,0,0">
                     <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                    <StackPanel Grid.Row="0" Margin="48,0,48,24">
                         <TextBlock Text="Settings" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                     </StackPanel>
                     
-                    <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
-                        <StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden" Margin="0,0,0,120">
+                        <StackPanel Margin="48,0,48,0">
                             <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -725,7 +755,7 @@
                         <TextBlock Text="Diagnostics" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
                     </StackPanel>
                     
-                    <ScrollViewer Grid.Row="1" Margin="0,0,0,120">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden" Margin="0,0,0,120">
                         <StackPanel>
                             <Border CornerRadius="12" Background="{StaticResource SurfaceStrong}" Padding="20" Margin="0,0,0,16">
                                 <Grid>
@@ -772,69 +802,67 @@
             </Grid>
             
             <!-- TOP CHROME: ContinuityHeaderView -->
-            <Border VerticalAlignment="Top" Height="64" Panel.ZIndex="100" WindowChrome.IsHitTestVisibleInChrome="True">
-                <Border.Background>
-                    <SolidColorBrush Color="#FFFFFF" Opacity="0.95"/>
-                </Border.Background>
+            <Border VerticalAlignment="Top" Height="52" Panel.ZIndex="100" WindowChrome.IsHitTestVisibleInChrome="True" Background="Transparent">
                 <Grid>
                     <!-- Search Bar (Centered) -->
-                    <Border HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,0" Width="320" Height="32" Background="{StaticResource SurfaceElevated}" CornerRadius="6" BorderBrush="{StaticResource Stroke}" BorderThickness="1">
+                    <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="360" Height="28" Background="{StaticResource SurfaceStrong}" CornerRadius="6" BorderBrush="{StaticResource StrokeSoft}" BorderThickness="1">
                         <Grid>
-                            <iconPacks:PackIconLucide Kind="Search" Width="14" Height="14"    Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" Margin="12,0,0,0" HorizontalAlignment="Left"/>
-                            <TextBlock Text="Search devices, clipboard..." Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" Margin="36,0,0,0" FontSize="13" HorizontalAlignment="Left"/>
+                            <iconPacks:PackIconLucide Kind="Search" Width="14" Height="14" Foreground="{StaticResource InkSubtle}" VerticalAlignment="Center" Margin="8,0,0,0" HorizontalAlignment="Left"/>
+                            <TextBlock Text="Search devices, clipboard, files..." Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" Margin="28,0,0,0" FontSize="12" HorizontalAlignment="Left"/>
                         </Grid>
                     </Border>
                     
-                    <!-- Quick Actions & Status (Center-Right) -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,160,0">
+                    <!-- Quick Actions, Status & Windows Controls (Right) -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0">
                         <!-- Status Indicator -->
                         <Ellipse Width="8" Height="8" Fill="{StaticResource BrandGreen}" Margin="0,0,6,0"/>
-                        <TextBlock Text="Active" Foreground="{StaticResource InkSoft}" FontSize="13" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        <TextBlock Text="Active" Foreground="{StaticResource InkSoft}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0"/>
                         
                         <!-- Quick Actions Capsule -->
-                        <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="4">
+                        <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="4" Margin="0,0,16,0">
                             <StackPanel Orientation="Horizontal">
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Click="NavDiagnostics_Click" ToolTip="Scan Network" AutomationProperties.Name="Scan">
-                                    <iconPacks:PackIconLucide Kind="Wifi" Width="14" Height="14"   />
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Click="NavDiagnostics_Click" ToolTip="Scan Network" AutomationProperties.Name="Scan">
+                                    <iconPacks:PackIconLucide Kind="Wifi" Width="14" Height="14"/>
                                 </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="2,0,0,0" Click="NavDiagnostics_Click" ToolTip="Send File" AutomationProperties.Name="Send">
-                                    <iconPacks:PackIconLucide Kind="Send" Width="14" Height="14"   />
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Margin="2,0,0,0" Click="NavDiagnostics_Click" ToolTip="Send File" AutomationProperties.Name="Send">
+                                    <iconPacks:PackIconLucide Kind="Send" Width="14" Height="14"/>
                                 </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Margin="2,0,0,0" Click="NavDiagnostics_Click" ToolTip="QR Code" AutomationProperties.Name="QRCode">
-                                    <iconPacks:PackIconLucide Kind="QrCode" Width="14" Height="14"   />
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Margin="2,0,0,0" Click="NavDiagnostics_Click" ToolTip="QR Code" AutomationProperties.Name="QRCode">
+                                    <iconPacks:PackIconLucide Kind="QrCode" Width="14" Height="14"/>
                                 </Button>
                                 <Border Width="1" Height="16" Background="{StaticResource Stroke}" Margin="4,0,4,0"/>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" Width="32" Height="32" Padding="0" Click="NavSettings_Click" ToolTip="Settings (Ctrl+,)" AutomationProperties.Name="Settings">
-                                    <iconPacks:PackIconLucide Kind="Settings" Width="14" Height="14"   />
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Click="NavSettings_Click" ToolTip="Settings (Ctrl+,)" AutomationProperties.Name="Settings">
+                                    <iconPacks:PackIconLucide Kind="Settings" Width="14" Height="14"/>
                                 </Button>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
-                    
-                    <!-- Windows Native Caption Buttons (Top Right) -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,16,16,0">
-                        <!-- Minimize -->
-                        <Button Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" Width="46" Height="32" Click="BtnMinimize_Click" WindowChrome.IsHitTestVisibleInChrome="True" AutomationProperties.Name="Minimize">
-                            <iconPacks:PackIconLucide Kind="Minus" Width="10" Height="10"    VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                        </Button>
-                        <!-- Close -->
-                        <Button Background="Transparent" BorderThickness="0" Foreground="{StaticResource Ink}" Width="46" Height="32" Click="BtnClose_Click" WindowChrome.IsHitTestVisibleInChrome="True" AutomationProperties.Name="Close">
-                            <iconPacks:PackIconLucide Kind="X" Width="10" Height="10"    VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                        </Button>
+
+                        <!-- Windows Caption Buttons -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Click="BtnMinimize_Click" ToolTip="Minimize" WindowChrome.IsHitTestVisibleInChrome="True">
+                                <iconPacks:PackIconLucide Kind="Minus" Width="14" Height="14"/>
+                            </Button>
+                            <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Margin="4,0,0,0" ToolTip="Maximize" WindowChrome.IsHitTestVisibleInChrome="True">
+                                <iconPacks:PackIconLucide Kind="Square" Width="12" Height="12"/>
+                            </Button>
+                            <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="BtnClose_Click" ToolTip="Close" WindowChrome.IsHitTestVisibleInChrome="True">
+                                <iconPacks:PackIconLucide Kind="X" Width="14" Height="14"/>
+                            </Button>
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
             </Border>
 
 
             <!-- BOTTOM CHROME: FloatingNavBar Capsule -->
-            <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,32" CornerRadius="24" Background="{StaticResource SurfaceGlass}" BorderBrush="#30000000" BorderThickness="1" Padding="6" Panel.ZIndex="200" WindowChrome.IsHitTestVisibleInChrome="True">
+            <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,32" CornerRadius="24" Background="{StaticResource SurfaceElevated}" BorderThickness="1" BorderBrush="{StaticResource StrokeSoft}" Padding="8" Panel.ZIndex="100" WindowChrome.IsHitTestVisibleInChrome="True">
                 <Border.Effect>
                     <DropShadowEffect Color="Black" Opacity="0.12" BlurRadius="24" ShadowDepth="12"/>
                 </Border.Effect>
                 <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="NavBtnDevices" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE975;" Content="Ecosystem" Click="NavDevices_Click" IsChecked="True"/>
-                    <RadioButton x:Name="NavBtnActivity" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE81C;" Content="Activity" Click="NavActivity_Click"/>
-                    <RadioButton x:Name="NavBtnTransfers" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="&#xE8D5;" Content="Transfers" Click="NavTransfers_Click"/>
+                    <RadioButton x:Name="NavBtnDevices" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="MonitorSmartphone" Content="Devices" Click="NavDevices_Click" IsChecked="True"/>
+                    <RadioButton x:Name="NavBtnActivity" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="Clipboard" Content="Clipboard" Click="NavActivity_Click"/>
+                    <RadioButton x:Name="NavBtnTransfers" GroupName="NavGroup" Style="{StaticResource CapsuleNavButtonStyle}" Tag="Folder" Content="Transfers" Click="NavTransfers_Click"/>
                 </StackPanel>
             </Border>
 
@@ -851,7 +879,7 @@
                     </Grid.RowDefinitions>
                     
                     <StackPanel Orientation="Horizontal" Grid.Row="0">
-                        <Border Width="48" Height="48" CornerRadius="24" Background="#E5E5EA" Margin="0,0,16,0">
+                        <Border Width="48" Height="48" CornerRadius="24" Background="#33FFFFFF" Margin="0,0,16,0">
                             <iconPacks:PackIconLucide Kind="Plus" Width="24" Height="24"    Foreground="{StaticResource BrandElectric}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <StackPanel VerticalAlignment="Center">
@@ -867,15 +895,15 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         
-                        <Button Grid.Column="0" Content="Decline" Background="#FFF0F0" Foreground="{StaticResource BrandRed}" FontWeight="SemiBold" Style="{StaticResource ModernButton}" Click="BtnDeclineCall_Click" Padding="0,10"/>
+                        <Button Grid.Column="0" Content="Decline" Background="#33FF3B30" Foreground="{StaticResource BrandRed}" FontWeight="SemiBold" Style="{StaticResource ModernButton}" Click="BtnDeclineCall_Click" Padding="0,10"/>
                         <Button Grid.Column="2" Content="Accept" Background="{StaticResource BrandGreen}" Foreground="White" FontWeight="SemiBold" Style="{StaticResource ModernButton}" Click="BtnAcceptCall_Click" Padding="0,10"/>
                     </Grid>
                 </Grid>
             </Border>
 
             <!-- MODULE 1: DROP ZONE OVERLAY -->
-            <Grid x:Name="DropZoneOverlay" Visibility="Collapsed" Panel.ZIndex="999" Background="#80FFFFFF">
-                <Border Margin="32" BorderBrush="{StaticResource BrandElectric}" BorderThickness="4" CornerRadius="24" Background="#E5F0FAFF">
+            <Grid x:Name="DropZoneOverlay" Visibility="Collapsed" Panel.ZIndex="999" Background="#80000000">
+                <Border Margin="32" BorderBrush="{StaticResource BrandElectric}" BorderThickness="4" CornerRadius="24" Background="#E51C1C1E">
                     <Border.Effect>
                         <DropShadowEffect Color="{StaticResource BrandElectricColor}" BlurRadius="32" ShadowDepth="0" Opacity="0.5"/>
                     </Border.Effect>
@@ -930,7 +958,7 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="Bd" Property="Background" Value="#0F000000"/>
+                                                        <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
                                                     </Trigger>
                                                     <Trigger Property="IsSelected" Value="True">
                                                         <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrandElectric}"/>
