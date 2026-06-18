@@ -679,7 +679,6 @@ mod tests {
         let addr = listener.local_addr().unwrap();
 
         let id_a = Uuid::new_v4();
-        let id_a = Uuid::new_v4();
         let id_b = Uuid::new_v4();
         let key_a = std::sync::Arc::new(std::sync::RwLock::new(crate::identity::IdentityKey::generate()));
         let key_b = std::sync::Arc::new(std::sync::RwLock::new(crate::identity::IdentityKey::generate()));

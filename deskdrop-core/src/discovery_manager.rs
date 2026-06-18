@@ -398,6 +398,7 @@ impl DiscoveryManager {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(device_id = %peer.device_id, source = ?peer.source))]
     async fn handle_found(&mut self, peer: DiscoveredPeer) {
         // Ignore our own advertisements.
         if peer.device_id == self.my_device_id {
@@ -458,6 +459,7 @@ impl DiscoveryManager {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(device_id = %device_id, source = ?source))]
     async fn handle_lost(&mut self, device_id: Uuid, source: DiscoverySource) {
         if let Some(merged) = self.peers.get_mut(&device_id) {
             merged.sources.retain(|s| s.source != source);

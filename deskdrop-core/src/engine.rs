@@ -325,7 +325,7 @@ pub fn default_device_name() -> String {
     #[cfg(target_os = "macos")]
     {
         if let Ok(output) = std::process::Command::new("scutil")
-            .args(&["--get", "ComputerName"])
+            .args(["--get", "ComputerName"])
             .output()
         {
             let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -829,7 +829,7 @@ impl Engine {
         let peers = self.shared.peer_manager.all_trusted_senders();
         for (peer_id, tx) in peers {
             if self.is_trusted(peer_id).await {
-                let _ = tx.send(msg.clone());
+                let _ = tx.send(msg.clone()).await;
             }
         }
     }
@@ -846,7 +846,7 @@ impl Engine {
         let peers = self.shared.peer_manager.all_trusted_senders();
         for (peer_id, tx) in peers {
             if self.is_trusted(peer_id).await {
-                let _ = tx.send(msg.clone());
+                let _ = tx.send(msg.clone()).await;
             }
         }
     }
@@ -1872,36 +1872,75 @@ impl Engine {
                 tokio::spawn(async move {
                     const BATCH_SIZE: usize = 8;
                     'outer: loop {
-                        let batch: Vec<AppMessage> = {
-                            let mut mgr = bg_shared.file_transfers.lock().await;
-                            let mut msgs = Vec::with_capacity(BATCH_SIZE);
-                            for _ in 0..BATCH_SIZE {
+                        let mut batch = Vec::with_capacity(BATCH_SIZE);
+                        for _ in 0..BATCH_SIZE {
+                            let instr_res = {
+                                let mut mgr = bg_shared.file_transfers.lock().await;
                                 match mgr.get_outbound_mut(&bg_transfer_id) {
-                                    Some(transfer) => match transfer.next_chunk_message() {
-                                        Ok(Some(FileTransferMessage::Chunk {
-                                            transfer_id,
-                                            chunk_index,
-                                            total_chunks,
-                                            data,
-                                        })) => msgs.push(AppMessage::FileChunk {
-                                            transfer_id,
-                                            chunk_index,
-                                            total_chunks,
-                                            data,
-                                        }),
-                                        Ok(None) => break,
-                                        Ok(_) => continue,
+                                    Some(transfer) => transfer.next_chunk_instruction(),
+                                    None => break 'outer,
+                                }
+                            };
+                            
+                            let instr = match instr_res {
+                                Ok(Some(i)) => i,
+                                Ok(None) => break,
+                                Err(err) => {
+                                    tracing::warn!(error = %err, "failed to generate chunk instruction");
+                                    let mut mgr = bg_shared.file_transfers.lock().await;
+                                    mgr.cancel_outbound(&bg_transfer_id);
+                                    break 'outer;
+                                }
+                            };
+                            
+                            let (chunk_index, data_res) = match instr {
+                                crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
+                                    (chunk_index, Ok(data))
+                                }
+                                crate::file_transfer::ChunkInstruction::File { chunk_index, path, offset, len } => {
+                                    let read_res = tokio::task::spawn_blocking(move || {
+                                        let mut file = std::fs::File::open(&path).map_err(anyhow::Error::from)?;
+                                        use std::io::{Seek, Read, SeekFrom};
+                                        file.seek(SeekFrom::Start(offset)).map_err(anyhow::Error::from)?;
+                                        let mut buf = vec![0u8; len];
+                                        file.read_exact(&mut buf).map_err(anyhow::Error::from)?;
+                                        Ok::<Vec<u8>, anyhow::Error>(buf)
+                                    }).await.unwrap();
+                                    (chunk_index, read_res)
+                                }
+                            };
+                            
+                            let msg = {
+                                let mut mgr = bg_shared.file_transfers.lock().await;
+                                match mgr.get_outbound_mut(&bg_transfer_id) {
+                                    Some(transfer) => match data_res {
+                                        Ok(data) => {
+                                            match transfer.process_chunk_data(chunk_index, data) {
+                                                crate::file_transfer::FileTransferMessage::Chunk {
+                                                    transfer_id,
+                                                    chunk_index,
+                                                    total_chunks,
+                                                    data,
+                                                } => AppMessage::FileChunk {
+                                                    transfer_id,
+                                                    chunk_index,
+                                                    total_chunks,
+                                                    data,
+                                                },
+                                                _ => continue,
+                                            }
+                                        }
                                         Err(err) => {
-                                            warn!(error = %err, "failed to read outbound file chunk on resume");
+                                            tracing::warn!(error = %err, "failed to read file chunk");
                                             mgr.cancel_outbound(&bg_transfer_id);
                                             break 'outer;
                                         }
                                     },
-                                    None => break,
+                                    None => break 'outer,
                                 }
-                            }
-                            msgs
-                        };
+                            };
+                            batch.push(msg);
+                        }
 
                         if batch.is_empty() {
                             break;
@@ -3108,6 +3147,7 @@ async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip_all, fields(device_id = tracing::field::Empty))]
 async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<()> {
     network::optimize_stream(&stream, "incoming engine stream");
     let shared_clone = shared.clone();
@@ -3130,6 +3170,8 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         },
     )
     .await?;
+
+    tracing::Span::current().record("device_id", &tracing::field::display(hs.peer_device_id));
 
     if shared
         .peer_manager
@@ -3253,6 +3295,7 @@ async fn connect_loop(
     }
 }
 
+#[tracing::instrument(skip_all, fields(device_id = ?expected_device_id))]
 async fn connect_once(
     shared: EngineShared,
     endpoints: Vec<SocketAddr>,
@@ -3957,22 +4000,79 @@ if let Some(sha256_checksum) = final_checksum {
                         {
                             continue;
                         }
-                        let (progress, should_ack) = {
+                        let (validation, io_ctx) = {
                             let mut mgr = shared.file_transfers.lock().await;
                             if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
                                 if transfer.from_device != peer_id {
-                                    continue;
-                                }
-                                let prog = match transfer.receive_chunk(chunk_index, data) {
-                                    Ok(p) => Some(p),
-                                    Err(e) => {
-                                        tracing::error!("Failed to receive chunk: {:?}", e);
-                                        None
+                                    (Err(anyhow::anyhow!("peer mismatch")), None)
+                                } else {
+                                    match transfer.validate_chunk(chunk_index, data.len()) {
+                                        Ok((offset, padding, is_duplicate)) => {
+                                            if is_duplicate {
+                                                (Ok((offset, padding, true)), None)
+                                            } else {
+                                                let ctx = transfer.take_io_context();
+                                                (Ok((offset, padding, false)), ctx)
+                                            }
+                                        }
+                                        Err(e) => (Err(e), None)
                                     }
-                                };
-                                let ack = transfer.should_ack();
-                                (prog, ack)
+                                }
                             } else {
+                                (Err(anyhow::anyhow!("unknown transfer")), None)
+                            }
+                        };
+
+                        let (progress, should_ack) = match validation {
+                            Ok((offset, padding, is_duplicate)) => {
+                                if is_duplicate {
+                                    let mut mgr = shared.file_transfers.lock().await;
+                                    if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
+                                        (Some(transfer.progress_snapshot()), transfer.should_ack())
+                                    } else {
+                                        (None, false)
+                                    }
+                                } else if let Some((mut file, mut hasher)) = io_ctx {
+                                    let data_len = data.len();
+                                    let res = tokio::task::spawn_blocking(move || {
+                                        use std::io::{Seek, Write, SeekFrom};
+                                        use sha2::Digest;
+                                        if let Err(e) = file.seek(SeekFrom::Start(offset)) {
+                                            return Err(anyhow::anyhow!("seek error: {}", e));
+                                        }
+                                        if let Err(e) = file.write_all(&data) {
+                                            return Err(anyhow::anyhow!("write error: {}", e));
+                                        }
+                                        hasher.update(&data);
+                                        if padding > 0 {
+                                            hasher.update(&vec![0u8; padding]);
+                                        }
+                                        Ok::<_, anyhow::Error>((file, hasher))
+                                    }).await.unwrap();
+                                    
+                                    match res {
+                                        Ok((file, hasher)) => {
+                                            let mut mgr = shared.file_transfers.lock().await;
+                                            if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                                t.restore_io_context(file, hasher);
+                                                let prog = t.commit_chunk(chunk_index, data_len);
+                                                (Some(prog), t.should_ack())
+                                            } else {
+                                                (None, false)
+                                            }
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Disk I/O error: {}", e);
+                                            (None, false)
+                                        }
+                                    }
+                                } else {
+                                    tracing::error!("Transfer accepted but missing file handle");
+                                    (None, false)
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to validate chunk: {:?}", e);
                                 (None, false)
                             }
                         };
@@ -4269,47 +4369,84 @@ if let Some(sha256_checksum) = final_checksum {
                             tokio::spawn(async move {
                                 const BATCH_SIZE: usize = 8;
                                 'outer: loop {
-                                    let batch: Vec<AppMessage> = {
-                                        let mut mgr = bg_shared.file_transfers.lock().await;
-                                        let mut msgs = Vec::with_capacity(BATCH_SIZE);
-                                        for _ in 0..BATCH_SIZE {
-                                            match mgr.get_outbound_mut(&bg_transfer_id) {
-                                                Some(transfer) => {
-                                                    match transfer.next_chunk_message() {
-                                                        Ok(Some(FileTransferMessage::Chunk {
-                                                            transfer_id,
-                                                            chunk_index,
-                                                            total_chunks,
-                                                            data,
-                                                        })) => msgs.push(AppMessage::FileChunk {
-                                                            transfer_id,
-                                                            chunk_index,
-                                                            total_chunks,
-                                                            data,
-                                                        }),
-                                                        Ok(None) => break,
-                                                        Ok(_) => continue,
-                                                        Err(err) => {
-                                                            warn!(error = %err, "failed to read outbound file chunk on resume");
-                                                            mgr.cancel_outbound(&bg_transfer_id);
-                                                            break 'outer;
-                                                        }
-                                                    }
-                                                }
-                                                None => break,
-                                            }
-                                        }
-                                        msgs
-                                    };
+                                let mut batch = Vec::with_capacity(BATCH_SIZE);
+                                for _ in 0..BATCH_SIZE {
+                                let instr_res = {
+                                let mut mgr = bg_shared.file_transfers.lock().await;
+                                match mgr.get_outbound_mut(&bg_transfer_id) {
+                                Some(transfer) => transfer.next_chunk_instruction(),
+                                None => break 'outer,
+                                }
+                                };
 
-                                    if batch.is_empty() {
-                                        break;
-                                    }
-                                    for wire_msg in batch {
-                                        if bg_outbox.send(wire_msg).await.is_err() {
-                                            break 'outer;
-                                        }
-                                    }
+                                let instr = match instr_res {
+                                Ok(Some(i)) => i,
+                                Ok(None) => break,
+                                Err(err) => {
+                                tracing::warn!(error = %err, "failed to generate chunk instruction");
+                                let mut mgr = bg_shared.file_transfers.lock().await;
+                                mgr.cancel_outbound(&bg_transfer_id);
+                                break 'outer;
+                                }
+                                };
+
+                                let (chunk_index, data_res) = match instr {
+                                crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
+                                (chunk_index, Ok(data))
+                                }
+                                crate::file_transfer::ChunkInstruction::File { chunk_index, path, offset, len } => {
+                                let read_res = tokio::task::spawn_blocking(move || {
+                                let mut file = std::fs::File::open(&path).map_err(anyhow::Error::from)?;
+                                use std::io::{Seek, Read, SeekFrom};
+                                file.seek(SeekFrom::Start(offset)).map_err(anyhow::Error::from)?;
+                                let mut buf = vec![0u8; len];
+                                file.read_exact(&mut buf).map_err(anyhow::Error::from)?;
+                                Ok::<Vec<u8>, anyhow::Error>(buf)
+                                }).await.unwrap();
+                                (chunk_index, read_res)
+                                }
+                                };
+
+                                let msg = {
+                                let mut mgr = bg_shared.file_transfers.lock().await;
+                                match mgr.get_outbound_mut(&bg_transfer_id) {
+                                Some(transfer) => match data_res {
+                                Ok(data) => {
+                                match transfer.process_chunk_data(chunk_index, data) {
+                                crate::file_transfer::FileTransferMessage::Chunk {
+                                transfer_id,
+                                chunk_index,
+                                total_chunks,
+                                data,
+                                } => AppMessage::FileChunk {
+                                transfer_id,
+                                chunk_index,
+                                total_chunks,
+                                data,
+                                },
+                                _ => continue,
+                                }
+                                }
+                                Err(err) => {
+                                tracing::warn!(error = %err, "failed to read file chunk");
+                                mgr.cancel_outbound(&bg_transfer_id);
+                                break 'outer;
+                                }
+                                },
+                                None => break 'outer,
+                                }
+                                };
+                                batch.push(msg);
+                                }
+
+                                if batch.is_empty() {
+                                break;
+                                }
+                                for wire_msg in batch {
+                                if bg_outbox.send(wire_msg).await.is_err() {
+                                break 'outer;
+                                }
+                                }
                                 }
 
                                 let final_checksum = {
@@ -4371,7 +4508,7 @@ if let Some(sha256_checksum) = final_checksum {
                             .unwrap_or(false)
                         {
                             let mut trust = shared.trust.lock().await;
-                            if let Ok(_) = trust.rotate_peer_key(peer_id, &new_pubkey_bytes) {
+                            if trust.rotate_peer_key(peer_id, &new_pubkey_bytes).is_ok() {
                                 tracing::info!(peer_id = %peer_id, "Successfully processed KeyRotated from peer");
                             }
                         }

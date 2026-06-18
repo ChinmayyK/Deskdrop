@@ -480,10 +480,16 @@ pub mod server {
             std::fs::remove_file(&path).ok();
         }
 
+        // High-Stakes TOCTOU Fix: Set umask to 0177 (removes all permissions for group/others)
+        // BEFORE binding the socket, so it is created atomically with 0600 permissions.
+        let old_umask = unsafe { libc::umask(0o177) };
+
         let listener = UnixListener::bind(&path)
             .with_context(|| format!("binding IPC socket at {:?}", path))?;
 
-        // Restrict to owner only.
+        unsafe { libc::umask(old_umask) };
+
+        // Restrict to owner only explicitly as a fallback
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

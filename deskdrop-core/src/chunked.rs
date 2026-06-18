@@ -44,9 +44,9 @@ pub enum ChunkKind {
 /// of heap on every outgoing clipboard push (HIGH-06).  We now borrow the
 /// underlying bytes for the threshold check and only materialise the chunks
 /// after we know the payload is large enough to warrant chunking.
-pub fn maybe_chunk(content: &ClipboardContent) -> Option<Vec<ChunkMessage>> {
+pub fn maybe_chunk<'a>(content: &'a ClipboardContent) -> Option<impl Iterator<Item = ChunkMessage> + 'a> {
     // Borrow the raw bytes without cloning — used for length check and checksum.
-    let raw: &[u8] = match content {
+    let raw: &'a [u8] = match content {
         ClipboardContent::Text(s) => s.as_bytes(),
         ClipboardContent::Image { data, .. } => data.as_slice(),
         ClipboardContent::File { data, .. } => data.as_slice(),
@@ -66,30 +66,29 @@ pub fn maybe_chunk(content: &ClipboardContent) -> Option<Vec<ChunkMessage>> {
     let mut id = [0u8; 16];
     id.copy_from_slice(Uuid::new_v4().as_bytes());
 
-    // Now slice directly from the borrowed bytes — one copy per chunk instead
-    // of one full-payload clone followed by per-chunk copies.
     let total_bytes = raw.len() as u64;
-    let chunk_slices: Vec<&[u8]> = raw.chunks(CHUNK_SIZE).collect();
+    let chunk_slices = raw.chunks(CHUNK_SIZE);
     let total_chunks = chunk_slices.len() as u32;
 
-    let mut msgs = Vec::with_capacity(chunk_slices.len() + 2);
-    msgs.push(ChunkMessage::Start {
+    let start_msg = std::iter::once(ChunkMessage::Start {
         transfer_id: id,
         total_chunks,
         total_bytes,
         checksum,
         kind,
     });
-    for (index, slice) in chunk_slices.into_iter().enumerate() {
-        msgs.push(ChunkMessage::Chunk {
+
+    let chunks = chunk_slices.enumerate().map(move |(index, slice)| {
+        ChunkMessage::Chunk {
             transfer_id: id,
             index: index as u32,
             data: slice.to_vec(),
-        });
-    }
-    msgs.push(ChunkMessage::End { transfer_id: id });
+        }
+    });
 
-    Some(msgs)
+    let end_msg = std::iter::once(ChunkMessage::End { transfer_id: id });
+
+    Some(start_msg.chain(chunks).chain(end_msg))
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -338,7 +337,7 @@ mod tests {
     #[test]
     fn large_payload_roundtrip_with_checksum() {
         let original = make_content(CHUNK_SIZE * 3 + 7777);
-        let msgs = maybe_chunk(&original).expect("should chunk");
+        let msgs = maybe_chunk(&original).expect("should chunk").collect::<Vec<_>>();
         assert!(msgs.len() > 3);
 
         let mut r = Reassembler::default();
@@ -356,7 +355,7 @@ mod tests {
     #[test]
     fn corrupted_transfer_detected() {
         let content = make_content(CHUNK_THRESHOLD * 2);
-        let mut msgs = maybe_chunk(&content).unwrap();
+        let mut msgs = maybe_chunk(&content).unwrap().collect::<Vec<_>>();
 
         // Corrupt one data chunk
         for msg in &mut msgs {
@@ -381,7 +380,7 @@ mod tests {
     #[test]
     fn duplicate_chunk_index_is_rejected() {
         let content = make_content(CHUNK_THRESHOLD * 2);
-        let mut msgs = maybe_chunk(&content).unwrap();
+        let mut msgs = maybe_chunk(&content).unwrap().collect::<Vec<_>>();
 
         // Duplicate chunk index 0.
         let dup = msgs
@@ -411,7 +410,7 @@ mod tests {
     #[test]
     fn cancel_all_clears_in_flight() {
         let content = make_content(CHUNK_THRESHOLD * 2);
-        let msgs = maybe_chunk(&content).unwrap();
+        let msgs = maybe_chunk(&content).unwrap().collect::<Vec<_>>();
 
         let mut r = Reassembler::default();
         // Feed just the Start.
@@ -453,7 +452,7 @@ mod tests {
     #[test]
     fn progress_tracking() {
         let content = make_content(CHUNK_THRESHOLD * 2);
-        let msgs = maybe_chunk(&content).unwrap();
+        let msgs = maybe_chunk(&content).unwrap().collect::<Vec<_>>();
 
         let mut r = Reassembler::default();
         // Start the transfer.

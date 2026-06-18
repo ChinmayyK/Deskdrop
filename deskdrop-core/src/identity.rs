@@ -174,7 +174,19 @@ impl IdentityStore {
     /// Save key to disk.
     pub fn save(&self, key: &IdentityKey) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent).context("creating key directory")?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                std::fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(0o700)
+                    .create(parent)
+                    .context("creating key directory")?;
+            }
+            #[cfg(not(unix))]
+            {
+                std::fs::create_dir_all(parent).context("creating key directory")?;
+            }
         }
 
         let tmp = self.path.with_extension("tmp");

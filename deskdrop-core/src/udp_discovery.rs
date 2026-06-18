@@ -531,6 +531,7 @@ pub async fn spawn_multicast_listener(
 // ── Shared beacon handler ─────────────────────────────────────────────────────
 
 /// Parse a received beacon payload and submit it as a `DiscoveredPeer` if valid.
+#[tracing::instrument(skip_all, fields(src = %src, source = ?source))]
 async fn handle_received_beacon(
     payload: &[u8],
     src: SocketAddr,

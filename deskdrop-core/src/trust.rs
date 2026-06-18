@@ -99,7 +99,19 @@ impl TrustStore {
 
     pub fn save(&self) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent).context("creating trust dir")?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                std::fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(0o700)
+                    .create(parent)
+                    .context("creating trust dir")?;
+            }
+            #[cfg(not(unix))]
+            {
+                std::fs::create_dir_all(parent).context("creating trust dir")?;
+            }
         }
         let tmp = self.path.with_extension("tmp");
         let bytes = serde_json::to_vec_pretty(&self.data)?;

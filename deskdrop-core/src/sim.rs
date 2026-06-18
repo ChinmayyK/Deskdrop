@@ -176,11 +176,58 @@ impl SimNetwork {
 
     /// Create an n-node fully-connected mesh.
     pub fn mesh(n: usize) -> Vec<(SimNode, Vec<mpsc::Sender<AppMessage>>)> {
-        // For brevity: returns nodes with a broadcast sender list.
-        // Each node's inbox is wired to all others' outboxes.
-        // Full implementation is left as a named todo.
-        let _ = n;
-        vec![]
+        let seq = Arc::new(AtomicU64::new(1));
+        
+        let mut in_txs: Vec<mpsc::Sender<AppMessage>> = Vec::new();
+        let mut in_rxs = Vec::new();
+        let mut out_txs: Vec<mpsc::Sender<AppMessage>> = Vec::new();
+        let mut out_rxs = Vec::new();
+
+        for _ in 0..n {
+            let (tx, rx) = mpsc::channel::<AppMessage>(256);
+            in_txs.push(tx);
+            in_rxs.push(Some(rx));
+
+            let (tx, rx) = mpsc::channel::<AppMessage>(256);
+            out_txs.push(tx);
+            out_rxs.push(Some(rx));
+        }
+
+        let mut results = Vec::new();
+
+        for i in 0..n {
+            let mut bcast_txs = Vec::new();
+            for (j, tx) in in_txs.iter().enumerate().take(n) {
+                if i != j {
+                    bcast_txs.push(tx.clone());
+                }
+            }
+
+            let mut rx = out_rxs[i].take().unwrap();
+            let senders = bcast_txs.clone();
+            
+            tokio::spawn(async move {
+                while let Some(msg) = rx.recv().await {
+                    for tx in &senders {
+                        let _ = tx.send(msg.clone()).await;
+                    }
+                }
+            });
+
+            let node = SimNode {
+                device_id: Uuid::new_v4(),
+                device_name: format!("Node {}", i),
+                outbox: out_txs[i].clone(),
+                inbox: in_rxs[i].take().unwrap(),
+                dedup: Deduplicator::new(),
+                seq: seq.clone(),
+                artificial_latency: Duration::ZERO,
+            };
+
+            results.push((node, bcast_txs));
+        }
+
+        results
     }
 }
 
@@ -343,5 +390,34 @@ mod tests {
             "drop rate out of range: {}",
             drops
         );
+    }
+
+    #[tokio::test]
+    async fn sim_mesh_broadcast() {
+        let mut mesh = SimNetwork::mesh(3);
+        let (mut node2, _) = mesh.pop().unwrap();
+        let (mut node1, _) = mesh.pop().unwrap();
+        let (mut node0, _) = mesh.pop().unwrap();
+
+        // Node 0 sends a message.
+        node0.send_text("broadcast from 0").await;
+
+        // Both 1 and 2 should receive it.
+        let msg1 = node1.next_clipboard().await.expect("node 1 should receive");
+        let msg2 = node2.next_clipboard().await.expect("node 2 should receive");
+        
+        assert_eq!(msg1, ClipboardContent::Text("broadcast from 0".into()));
+        assert_eq!(msg2, ClipboardContent::Text("broadcast from 0".into()));
+
+        // Check echo suppression: node 1 echoing back the SAME text.
+        // Node 0 already sent it, so it shouldn't apply it again.
+        // Node 2 just received it, so it shouldn't apply it again.
+        node1.send_text("broadcast from 0").await;
+        
+        let echo0 = node0.next_clipboard().await;
+        let echo2 = node2.next_clipboard().await;
+        
+        assert!(echo0.is_none(), "node 0 should suppress its own original broadcast");
+        assert!(echo2.is_none(), "node 2 should suppress duplicate hash from node 1");
     }
 }

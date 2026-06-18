@@ -571,7 +571,19 @@ impl History {
 
     fn persist(&self) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent).context("creating history dir")?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                std::fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(0o700)
+                    .create(parent)
+                    .context("creating history dir")?;
+            }
+            #[cfg(not(unix))]
+            {
+                std::fs::create_dir_all(parent).context("creating history dir")?;
+            }
         }
         // Atomic write: serialise to a .tmp file then rename so a crash during
         // write never leaves the history file in a partially-written state.

@@ -36,14 +36,14 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks saturate
+pub const FILE_CHUNK_SIZE: usize = 256 * 1024; // 256 KB per chunk — larger chunks saturate
                                                     // encrypt/serialize/frame/flush overhead.
 
 /// HIGH-03 FIX: Maximum transfer size (4 GB). Rejects announced transfers
 /// exceeding this limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = 1024 * 1024 * 1024 * 1024; // 1 TB
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16; // ACK every 16 MB — keeps the pipeline full
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 64; // ACK every 16 MB — keeps the pipeline full
                                              // on LAN while still bounding in-flight data.
 
 pub type TransferId = [u8; 16];
@@ -405,6 +405,51 @@ impl InboundTransfer {
         Ok(())
     }
 
+    pub fn take_io_context(&mut self) -> Option<(std::fs::File, sha2::Sha256)> {
+        if let Some(file) = self.file_handle.take() {
+            let hasher = std::mem::replace(&mut self.hasher, sha2::Sha256::new());
+            Some((file, hasher))
+        } else {
+            None
+        }
+    }
+
+    pub fn restore_io_context(&mut self, file: std::fs::File, hasher: sha2::Sha256) {
+        self.file_handle = Some(file);
+        self.hasher = hasher;
+    }
+
+    pub fn validate_chunk(&mut self, chunk_index: u32, data_len: usize) -> Result<(u64, usize, bool)> {
+        self.last_active_at = Instant::now();
+        anyhow::ensure!(self.status == TransferStatus::Transferring, "transfer is not active");
+        anyhow::ensure!(!self.paused, "transfer is paused");
+        anyhow::ensure!(data_len <= 4 * 1024 * 1024, "chunk size exceeds limit");
+        anyhow::ensure!(chunk_index < self.total_chunks, "chunk {} out of range", chunk_index);
+        
+        if chunk_index < self.total_chunks - 1 {
+            anyhow::ensure!(data_len == FILE_CHUNK_SIZE, "non-final chunk size mismatch");
+        }
+        
+        if chunk_index < self.received_chunk_count {
+            return Ok((0, 0, true)); // duplicate
+        }
+        anyhow::ensure!(chunk_index == self.received_chunk_count, "out-of-order chunk");
+
+        let offset = (chunk_index as u64) * (FILE_CHUNK_SIZE as u64);
+        let mut padding = 0;
+        if chunk_index < self.total_chunks - 1 && data_len < FILE_CHUNK_SIZE {
+            padding = FILE_CHUNK_SIZE - data_len;
+        }
+        Ok((offset, padding, false))
+    }
+
+    pub fn commit_chunk(&mut self, chunk_index: u32, data_len: usize) -> TransferProgress {
+        self.bytes_received += data_len as u64;
+        self.received_chunk_count += 1;
+        self.last_confirmed_chunk = chunk_index;
+        self.progress_snapshot()
+    }
+
     /// Feed a chunk into the transfer. Returns progress info.
     pub fn receive_chunk(&mut self, chunk_index: u32, data: Vec<u8>) -> Result<TransferProgress> {
         self.last_active_at = Instant::now();
@@ -534,7 +579,7 @@ impl InboundTransfer {
         Ok(())
     }
 
-    fn progress_snapshot(&self) -> TransferProgress {
+    pub fn progress_snapshot(&self) -> TransferProgress {
         let percent = if self.total_chunks == 0 {
             100
         } else {
@@ -603,7 +648,6 @@ impl FileTransferManager {
         mime_type: String,
         target_device: Option<Uuid>,
     ) -> Result<&OutboundTransfer> {
-        let checksum = hex::encode(Sha256::digest(&data));
         let mut tid = [0u8; 16];
         tid.copy_from_slice(Uuid::new_v4().as_bytes());
 
@@ -936,7 +980,7 @@ fn sanitize_file_name(name: &str) -> String {
     let mut trimmed = sanitized.trim_start_matches('.');
 
     // Trim trailing dots and spaces (Windows extension blocklist bypass prevention).
-    trimmed = trimmed.trim_end_matches(|c: char| c == '.' || c == ' ');
+    trimmed = trimmed.trim_end_matches(['.', ' ']);
 
     if trimmed.is_empty() {
         "file".to_string()
@@ -1043,7 +1087,6 @@ mod tests {
             file_name: "test.txt".into(),
             size_bytes: data.len() as u64,
             mime_type: "text/plain".into(),
-            sha256_checksum: hex::encode(Sha256::digest(data)),
         }
     }
 
@@ -1090,7 +1133,8 @@ mod tests {
                 .receive_chunk(chunk_idx as u32, chunk.to_vec())
                 .unwrap();
         }
-        let dest = transfer.finalize("".to_string()).unwrap();
+        let hash = hex::encode(sha2::Sha256::digest(&data));
+        let dest = transfer.finalize(hash).unwrap();
         let written = std::fs::read(&dest).unwrap();
         assert_eq!(written, data.as_slice());
     }

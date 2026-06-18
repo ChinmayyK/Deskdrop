@@ -43,7 +43,7 @@ if-addrs = "0.13"
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # UUID
 uuid = { version = "1", features = ["serde", "v4"] }

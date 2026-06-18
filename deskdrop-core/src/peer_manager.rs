@@ -1082,7 +1082,9 @@ mod tests {
             )
             .unwrap();
         manager.forget_device(id).unwrap();
-        assert!(manager.get(id).is_none());
+        let peer = manager.get(id).unwrap();
+        assert!(!peer.trusted);
+        assert!(!peer.remembered);
     }
 
     #[test]

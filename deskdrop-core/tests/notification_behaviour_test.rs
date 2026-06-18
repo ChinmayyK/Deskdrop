@@ -94,7 +94,7 @@ fn forgotten_peer_not_in_auto_reconnect_list() {
                 !p.should_auto_reconnect(),
                 "forgotten peer must not auto-reconnect"
             );
-            assert!(p.trusted, "forgotten peer trust must be preserved");
+            assert!(!p.trusted, "forgotten peer trust must be revoked");
         } else {
             assert!(p.should_auto_reconnect(), "other peers must auto-reconnect");
         }
