@@ -1241,9 +1241,9 @@ struct DeviceCentricDashboardView: View {
                     .padding(.bottom, 30)
                 }
 
-                if !store.connectedDevices.isEmpty {
+                if !store.devices.isEmpty {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
-                        ForEach(store.connectedDevices, id: \.id) { device in
+                        ForEach(store.devices, id: \.id) { device in
                             CompactDeviceCard(device: device, store: store) {
                                 pendingFileTarget = device
                                 showingFilePicker = true

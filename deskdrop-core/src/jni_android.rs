@@ -1254,6 +1254,30 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_initiatePairing(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_reconnectPeer(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    device_id_jstr: JString,
+) -> jboolean {
+    if handle == 0 {
+        return 0;
+    }
+    let device_id: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id) else {
+        return 0;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.reconnect_peer_by_id(device_id)) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_disconnectPeer(
     mut env: JNIEnv,
     _class: JClass,

@@ -261,6 +261,8 @@ pub enum IpcRequest {
         #[serde(default)]
         port: Option<u16>,
     },
+    /// Reconnect to a peer by its ID using all known historical network addresses.
+    ReconnectPeer { device_id: String },
     /// Re-push a previously-received clipboard item identified by its content hash.
     /// Optionally restrict to one target device.
     PushClipboardHash {
@@ -936,6 +938,15 @@ pub async fn handle_ipc_request(
             match eng.connect_to_peer(host, p).await {
                 Ok(()) => IpcResponse::ok_empty(),
                 Err(e) => IpcResponse::err(e.to_string()),
+            }
+        }
+        IpcRequest::ReconnectPeer { device_id } => {
+            match crate::ipc::parse_uuid(&device_id) {
+                Ok(id) => match eng.reconnect_peer_by_id(id).await {
+                    Ok(_) => IpcResponse::ok_empty(),
+                    Err(e) => IpcResponse::err(e.to_string()),
+                },
+                Err(_) => IpcResponse::err("invalid device id"),
             }
         }
         IpcRequest::GetPeerSettings { device_id } => match crate::ipc::parse_uuid(&device_id) {

@@ -642,6 +642,13 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state.engine.connect_to_peer(ip, port).await?;
             Ok(IpcResponse::ok_empty())
         }
+        IpcRequest::ReconnectPeer { device_id } => match parse_uuid(&device_id) {
+            Ok(id) => match state.engine.reconnect_peer_by_id(id).await {
+                Ok(_) => Ok(IpcResponse::ok_empty()),
+                Err(e) => Ok(IpcResponse::error(e.to_string())),
+            },
+            Err(_) => Ok(IpcResponse::error("invalid device id")),
+        },
         // ConnectManual: resolve hostname (may be a name, not a bare IP) then connect.
         IpcRequest::ConnectManual { host, port } => {
             use std::net::ToSocketAddrs;

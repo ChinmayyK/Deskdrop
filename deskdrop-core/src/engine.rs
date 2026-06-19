@@ -2096,6 +2096,7 @@ if let Some(sha256_checksum) = final_checksum {
             vec![addr],
             None,
             DiscoverySource::Manual,
+            true, // Manual connection clears blocks
         )
         .await
         {
@@ -2110,17 +2111,58 @@ if let Some(sha256_checksum) = final_checksum {
         }
     }
 
+    pub async fn reconnect_peer_by_id(&self, device_id: Uuid) -> Result<()> {
+        let _ = self
+            .shared
+            .peer_manager
+            .set_explicit_disconnect(device_id, false);
+            
+        let peer = self
+            .shared
+            .peer_manager
+            .get(device_id)
+            .context("peer not found")?;
+            
+        let endpoints = peer.socket_addrs();
+        if endpoints.is_empty() {
+            return Err(anyhow::anyhow!("no known endpoints for peer {}", device_id));
+        }
+
+        let shared = self.shared.clone();
+        tokio::spawn(async move {
+            tracing::debug!(
+                peer_id = %device_id,
+                endpoints = ?endpoints,
+                "manual reconnect_peer_by_id triggered"
+            );
+            let _ = shared.peer_manager.mark_connecting(device_id, Some(endpoints[0]));
+            if let Err(e) = connect_once(shared.clone(), endpoints, Some(device_id), DiscoverySource::Manual, true).await {
+                tracing::warn!("Manual reconnect failed: {}", e);
+                let _ = shared.peer_manager.mark_disconnected(device_id, Some(e.to_string()));
+                let _ = shared.event_tx.send(EngineEvent::PeerDisconnected {
+                    device_id,
+                    device_name: None,
+                    reason: Some(e.to_string()),
+                });
+            }
+        });
+
+        Ok(())
+    }
+
     pub async fn disconnect_peer(&self, device_id: Uuid) -> Result<bool> {
         let _ = self
             .shared
             .peer_manager
             .set_explicit_disconnect(device_id, true)?;
+            
         let session = self.shared.peer_manager.shutdown_peer_session(device_id)?;
         if let Some(session) = session {
             if let Some(shutdown_tx) = session.shutdown_tx {
                 let _ = shutdown_tx.send(SessionShutdown {
                     reason: "manually disconnected".to_string(),
                     send_bye: true,
+                    explicit_disconnect: true,
                 });
             }
             let _ = self
@@ -2488,6 +2530,7 @@ if let Some(sha256_checksum) = final_checksum {
                     let _ = shutdown_tx.send(crate::peer_manager::SessionShutdown {
                         reason: "device forgotten".to_string(),
                         send_bye: true,
+                        explicit_disconnect: false,
                     });
                 }
             }
@@ -2624,7 +2667,7 @@ if let Some(sha256_checksum) = final_checksum {
                                 endpoints = ?endpoints,
                                 "auto-reconnector: attempting reconnection"
                             );
-                            let _ = connect_once(shared_clone, endpoints, Some(peer_id), discovery)
+                            let _ = connect_once(shared_clone, endpoints, Some(peer_id), discovery, false)
                                 .await;
                         });
                     }
@@ -2883,6 +2926,7 @@ async fn handle_network_change(shared: EngineShared, change: NetworkChangeEvent)
                 let _ = shutdown_tx.send(SessionShutdown {
                     reason: reason.clone(),
                     send_bye: false,
+                    explicit_disconnect: false,
                 });
             }
         }
@@ -3173,7 +3217,10 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
 
     tracing::Span::current().record("device_id", &tracing::field::display(hs.peer_device_id));
 
-    if shared
+    if hs.is_manual_reconnect {
+        tracing::debug!("Peer manually initiated reconnect; clearing explicit disconnect");
+        let _ = shared.peer_manager.set_explicit_disconnect(hs.peer_device_id, false);
+    } else if shared
         .peer_manager
         .is_explicitly_disconnected(hs.peer_device_id)
     {
@@ -3257,6 +3304,7 @@ async fn connect_loop(
             endpoints.clone(),
             expected_device_id,
             discovery,
+            false,
         )
         .await
         {
@@ -3301,12 +3349,14 @@ async fn connect_once(
     endpoints: Vec<SocketAddr>,
     expected_device_id: Option<Uuid>,
     discovery: DiscoverySource,
+    is_manual_reconnect: bool,
 ) -> Result<()> {
     let started = Instant::now();
     let mut tasks = tokio::task::JoinSet::new();
     for &ep in &endpoints {
         let timeout_dur = shared.config.connect_timeout;
         tasks.spawn(async move {
+            tracing::warn!("connect_once: attempting to connect to {}", ep);
             let res = timeout(timeout_dur, TcpStream::connect(ep)).await;
             (ep, res)
         });
@@ -3330,9 +3380,14 @@ async fn connect_once(
         }
     }
 
-    let mut stream = connected_stream.ok_or_else(|| {
-        last_err.unwrap_or_else(|| anyhow::anyhow!("all connection attempts failed"))
-    })?;
+    let mut stream = match connected_stream {
+        Some(s) => s,
+        None => {
+            let err_msg = last_err.unwrap_or_else(|| anyhow::anyhow!("all connection attempts failed"));
+            tracing::warn!("connect_once: all connection attempts failed: {}", err_msg);
+            return Err(err_msg);
+        }
+    };
     let endpoint = connected_endpoint.unwrap();
     network::optimize_stream(&stream, "outgoing engine stream");
 
@@ -3344,6 +3399,7 @@ async fn connect_once(
         shared.config.device_id,
         name_to_send,
         shared.identity_key.clone(),
+        is_manual_reconnect,
     )
     .await?;
 
@@ -3483,6 +3539,7 @@ fn register_session(
             let _ = old_shutdown.send(SessionShutdown {
                 reason: format!("session migrated to {}", endpoint),
                 send_bye: true,
+                explicit_disconnect: false,
             });
         }
     }
@@ -4847,6 +4904,11 @@ if let Some(sha256_checksum) = final_checksum {
                         origin_device,
                     }) => {
                         touch_last_seen();
+                        if action == "system:explicit_disconnect" {
+                            tracing::info!("Peer explicitly disconnected. Pausing auto-reconnect.");
+                            let _ = shared.peer_manager.set_explicit_disconnect(peer_id, true);
+                            break "explicitly disconnected by peer".to_string();
+                        }
                         tracing::info!("Received CallAction: {} from {:?}", action, origin_device);
                         let _ = shared
                             .event_tx
@@ -5005,6 +5067,12 @@ if let Some(sha256_checksum) = final_checksum {
                 shutdown = &mut shutdown_rx => {
                     match shutdown {
                         Ok(cmd) => {
+                            if cmd.explicit_disconnect {
+                                let _ = sess_tx.send(&AppMessage::CallAction {
+                                    action: "system:explicit_disconnect".to_string(),
+                                    origin_device: shared.config.device_id,
+                                }).await;
+                            }
                             if cmd.send_bye {
                                 let _ = sess_tx.send(&AppMessage::Bye).await;
                             }
@@ -5140,6 +5208,7 @@ if let Some(sha256_checksum) = final_checksum {
                                     peer_endpoints,
                                     Some(peer_id),
                                     peer_discovery,
+                                    false,
                                 )
                                 .await;
                             }

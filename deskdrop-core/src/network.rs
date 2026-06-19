@@ -252,6 +252,7 @@ pub struct HandshakeResult {
     pub peer_device_name: String,
     pub peer_identity_pubkey_bytes: [u8; 32],
     pub peer_already_trusted: bool,
+    pub is_manual_reconnect: bool,
 }
 
 /// Initiator side (we connected to the peer).
@@ -265,6 +266,7 @@ pub async fn handshake_initiator(
     my_device_id: Uuid,
     my_device_name: &str,
     my_identity_key: std::sync::Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
+    is_manual_reconnect: bool,
 ) -> Result<HandshakeResult> {
     let ephemeral = EphemeralKeypair::generate();
     let my_nonce = crate::crypto::random_nonce16();
@@ -302,12 +304,19 @@ pub async fn handshake_initiator(
         .unwrap()
         .compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
+    let metadata = crate::protocol::DeviceMetadata {
+        device_name: my_device_name.to_string(),
+        is_manual_reconnect: Some(is_manual_reconnect),
+        ..Default::default()
+    };
+    let metadata_json = serde_json::to_string(&metadata).ok();
+
     let hello = AppMessage::Hello {
         device_id: my_device_id,
         device_name: my_device_name.to_string(),
         identity_pubkey: my_identity_key.read().unwrap().public_bytes,
         identity_proof,
-        metadata_json: None,
+        metadata_json,
     };
 
     send_encrypted(stream, &mut session, &hello)
@@ -371,6 +380,7 @@ pub async fn handshake_initiator(
         peer_device_name: device_name,
         peer_identity_pubkey_bytes: identity_pubkey,
         peer_already_trusted: trusted,
+        is_manual_reconnect: false,
     })
 }
 
@@ -426,11 +436,18 @@ where
         device_name,
         identity_pubkey,
         identity_proof,
-        ..
+        metadata_json,
     } = hello_msg
     else {
         anyhow::bail!("expected Hello");
     };
+
+    let mut is_manual_reconnect = false;
+    if let Some(json) = metadata_json {
+        if let Ok(metadata) = serde_json::from_str::<crate::protocol::DeviceMetadata>(&json) {
+            is_manual_reconnect = metadata.is_manual_reconnect.unwrap_or(false);
+        }
+    }
 
     if !ephemeral.verify_proof(&identity_pubkey, &session_salt, &identity_proof) {
         anyhow::bail!("handshake failed: invalid identity proof (MITM or spoofed key)");
@@ -469,6 +486,7 @@ where
         peer_device_name: device_name,
         peer_identity_pubkey_bytes: identity_pubkey,
         peer_already_trusted: peer_is_trusted,
+        is_manual_reconnect,
     })
 }
 

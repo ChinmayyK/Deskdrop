@@ -186,6 +186,9 @@ pub struct DeviceMetadata {
     pub platform_version: String,
     /// Deskdrop app version
     pub app_version: String,
+    /// Indicates if the initiator is manually trying to reconnect.
+    #[serde(default)]
+    pub is_manual_reconnect: Option<bool>,
 }
 
 // ── File transfer metadata ────────────────────────────────────────────────────

@@ -297,21 +297,13 @@ class MainActivity : ComponentActivity() {
                         window.decorView.postDelayed({ refreshDashboardState() }, 200)
                     },
                     onConnectPeer = { peer ->
-                        val ipStr = peer.ip
-                        if (!ipStr.isNullOrBlank()) {
-                            val ip = if (ipStr.contains(":")) ipStr.substringBefore(":") else ipStr
-                            val port = if (ipStr.contains(":")) ipStr.substringAfter(":").toIntOrNull() ?: 47823 else 47823
-                            ContextCompat.startForegroundService(this@MainActivity,
-                                Intent(this@MainActivity, DeskdropService::class.java).apply {
-                                    action = DeskdropService.ACTION_CONNECT_MANUAL
-                                    putExtra("ip", ip)
-                                    putExtra("port", port)
-                                }
-                            )
-                            showSnack("Connecting to ${peer.name}...")
-                        } else {
-                            showSnack("Cannot connect: no IP known for ${peer.name}")
-                        }
+                        ContextCompat.startForegroundService(this@MainActivity,
+                            Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_RECONNECT_PEER
+                                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                            }
+                        )
+                        showSnack("Connecting to ${peer.name}...")
                     },
                     onDisconnectPeer = { peer ->
                         ContextCompat.startForegroundService(this@MainActivity,

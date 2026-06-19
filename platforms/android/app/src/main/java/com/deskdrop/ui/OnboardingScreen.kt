@@ -257,8 +257,9 @@ private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCance
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val rawDigits = selectedPeer.pairingPin.filter { it.isDigit() }
-                    val digits = if (rawDigits.isNotEmpty() && rawDigits.length < 6) rawDigits.padStart(6, '0') else rawDigits
+                    val rawStr = selectedPeer.pairingPin.filter { it.isDigit() }
+                    val digits = rawStr.padStart(6, '0').takeLast(6)
+                    android.util.Log.d("PairingUI", "original: ${selectedPeer.pairingPin}, rawStr: $rawStr, digits: $digits")
                     digits.forEachIndexed { index, char ->
                         Box(
                             modifier = Modifier

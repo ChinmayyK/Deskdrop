@@ -227,6 +227,7 @@ struct LivePeerSession {
 pub struct SessionShutdown {
     pub reason: String,
     pub send_bye: bool,
+    pub explicit_disconnect: bool,
 }
 
 #[derive(Debug)]

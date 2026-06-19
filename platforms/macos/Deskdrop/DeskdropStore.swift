@@ -431,9 +431,7 @@ final class DeskdropStore: ObservableObject {
     func connect(_ device: ManagedDevice) {
         Task {
             try? await ipc.setAutoConnect(deviceId: device.id, enabled: true)
-            if let ip = device.ip, !ip.isEmpty {
-                try? await ipc.connectManual(address: ip)
-            }
+            try? await ipc.reconnectPeer(deviceId: device.id)
             await refresh()
         }
     }

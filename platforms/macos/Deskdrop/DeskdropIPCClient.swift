@@ -384,6 +384,12 @@ extension DeskdropIPCClient {
         }
         _ = try await send(cmd: cmd)
     }
+    
+    /// Reconnect to a peer by its ID, using all historical endpoints.
+    func reconnectPeer(deviceId: String) async throws {
+        let cmd: [String: Any] = ["cmd": "reconnect_peer", "device_id": deviceId]
+        _ = try await send(cmd: cmd)
+    }
 
     /// Re-push a previously-received clipboard item (by hash) to connected peers.
     func sendClipboardByHash(hash: String, targetDeviceId: String?) async throws {

@@ -151,6 +151,7 @@ object DeskdropJni {
     @JvmStatic external fun reportDiscoveredPeer(handle: Long, deviceId: String, deviceName: String, ip: String, port: Int): Int
     @JvmStatic external fun initiatePairing(handle: Long, deviceId: String): Int
     @JvmStatic external fun disconnectPeer(handle: Long, deviceId: String): Int
+    @JvmStatic external fun reconnectPeer(handle: Long, deviceId: String): Boolean
 
     /**
      * Returns this engine's stable device UUID as a hyphenated string
@@ -337,6 +338,7 @@ class DeskdropService : Service() {
         const val ACTION_SEND_PAIRING_REQUEST = "com.deskdrop.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "com.deskdrop.RESPOND_TO_PAIRING"
         const val ACTION_DISCONNECT_PEER    = "com.deskdrop.DISCONNECT_PEER"
+        const val ACTION_RECONNECT_PEER     = "com.deskdrop.RECONNECT_PEER"
 
         // Intent extras
         const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
@@ -622,6 +624,16 @@ class DeskdropService : Service() {
                 if (!ip.isNullOrBlank() && engineHandle != 0L) {
                     val result = DeskdropJni.connectToPeer(engineHandle, ip, port)
                     Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
+                }
+                return START_STICKY
+            }
+            ACTION_RECONNECT_PEER -> {
+                val targetId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID)
+                if (!targetId.isNullOrBlank() && engineHandle != 0L) {
+                    DeskdropJni.reconnectPeer(engineHandle, targetId)
+                    Log.i(TAG, "Reconnecting to peer $targetId")
+                } else {
+                    Log.e(TAG, "Failed to reconnect: targetId=$targetId, engineHandle=$engineHandle")
                 }
                 return START_STICKY
             }
@@ -2519,7 +2531,7 @@ class DeskdropService : Service() {
             }
 
             val peerVersion = if (Build.VERSION.SDK_INT >= 21) info.attributes["v"]?.let { String(it) } else null
-            if (peerVersion != null && peerVersion != "3") {
+            if (peerVersion != null && peerVersion != "4") {
                 Log.i(TAG, "NSD: skipping ${info.serviceName} due to protocol version $peerVersion")
                 return
             }
