@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 
 struct TransfersDashboardView: View {
     @ObservedObject var store: DeskdropStore
@@ -8,6 +9,10 @@ struct TransfersDashboardView: View {
         store.activityFeed.filter { $0.kind == "file_transfer_complete" || $0.kind == "file_transfer_started" }
     }
     
+    @State private var quickLookURL: URL?
+    @State private var hoveredItemId: Int64?
+    @State private var spaceMonitor: Any?
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
@@ -65,7 +70,15 @@ struct TransfersDashboardView: View {
                     } else {
                         VStack(spacing: 0) {
                             ForEach(historyItems) { item in
-                                TransferHistoryRow(entry: item)
+                                TransferHistoryRow(entry: item) {
+                                    if let dest = item.dest_path, !dest.isEmpty {
+                                        quickLookURL = URL(fileURLWithPath: dest)
+                                    }
+                                }
+                                .onHover { isHovering in
+                                    if isHovering { hoveredItemId = item.id }
+                                    else if hoveredItemId == item.id { hoveredItemId = nil }
+                                }
                                 if item.id != historyItems.last?.id {
                                     Divider()
                                         .opacity(0.5)
@@ -81,6 +94,23 @@ struct TransfersDashboardView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.clear)
+        .quickLookPreview($quickLookURL)
+        .onAppear {
+            spaceMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                if event.keyCode == 49, let hoveredId = hoveredItemId { // Spacebar
+                    if let target = historyItems.first(where: { $0.id == hoveredId }), let dest = target.dest_path, !dest.isEmpty {
+                        quickLookURL = URL(fileURLWithPath: dest)
+                        return nil // Consume event
+                    }
+                }
+                return event
+            }
+        }
+        .onDisappear {
+            if let monitor = spaceMonitor {
+                NSEvent.removeMonitor(monitor)
+            }
+        }
     }
 }
 
@@ -207,6 +237,7 @@ struct ActiveTransferCard: View {
 
 private struct TransferHistoryRow: View {
     let entry: IpcActivityEntry
+    var onPreview: (() -> Void)? = nil
     
     var formattedTime: String {
         let date = Date(timeIntervalSince1970: TimeInterval(entry.timestamp_ms) / 1000.0)
@@ -252,19 +283,31 @@ private struct TransferHistoryRow: View {
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(CRTheme.inkSoft.opacity(0.6))
             
-            // Folder action
+            // Actions
             if let dest = entry.dest_path, !dest.isEmpty {
-                Button {
-                    let url = URL(fileURLWithPath: dest)
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                } label: {
-                    Image(systemName: "folder")
-                        .font(.system(size: 14))
-                        .foregroundStyle(CRTheme.brandElectric)
+                HStack(spacing: 12) {
+                    Button { onPreview?() } label: {
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    }
+                    .buttonStyle(.plain)
+                    .crHoverScale(scale: 1.05)
+                    .help("Quick Look (Space)")
+                    
+                    Button {
+                        let url = URL(fileURLWithPath: dest)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    } label: {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    }
+                    .buttonStyle(.plain)
+                    .crHoverScale(scale: 1.05)
+                    .help("Show in Finder")
                 }
-                .buttonStyle(.plain)
                 .padding(.leading, 8)
-                .crHoverScale(scale: 1.05)
             }
         }
         .padding(.vertical, 12)

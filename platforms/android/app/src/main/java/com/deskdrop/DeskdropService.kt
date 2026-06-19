@@ -265,14 +265,21 @@ enum class BackgroundSyncMode {
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
+enum class TransferState {
+    INCOMING, PROGRESS, PAUSED, CANCELED, FAILED, COMPLETED
+}
+
 data class TransferProgress(
     val id: String,
     val fileName: String,
     val percent: Int,
     val bytesReceived: Long,
+    val totalBytes: Long = 0,
     val speedBps: Long,
     val etaSecs: Long,
-    var isPaused: Boolean = false
+    var isPaused: Boolean = false,
+    val state: TransferState = TransferState.PROGRESS,
+    val peerName: String = ""
 )
 
 class DeskdropService : Service() {
@@ -1115,10 +1122,23 @@ class DeskdropService : Service() {
                     kind = ActivityKind.FILE_TRANSFER_INCOMING, preview = fileName,
                     transferId = tid, fileTotalBytes = totalBytes))
                 
-                // Automatically accept incoming file transfers from trusted connected peers for seamless multi-file sharing!
-                if (engineHandle != 0L) {
+                val peer = currentPeerSnapshots().firstOrNull { it.id == DeskdropJni.eventDeviceId(ev) }
+                if (peer?.trusted == true && engineHandle != 0L) {
                     DeskdropJni.acceptFileTransfer(engineHandle, tid)
                 } else {
+                    activeTransfers[tid] = TransferProgress(
+                        id = tid,
+                        fileName = fileName,
+                        percent = 0,
+                        bytesReceived = 0,
+                        totalBytes = totalBytes,
+                        speedBps = 0,
+                        etaSecs = 0,
+                        isPaused = false,
+                        state = TransferState.INCOMING,
+                        peerName = from
+                    )
+                    publishActiveTransfers()
                     showFileTransferIncomingNotification(from, fileName, totalBytes, tid)
                 }
             }
@@ -1144,8 +1164,15 @@ class DeskdropService : Service() {
                     etaSecs = etaSecs
                 )
                 
-                val isPaused = activeTransfers[tid]?.isPaused ?: false
-                activeTransfers[tid] = TransferProgress(tid, name, percent, bytesReceived, speedBps, etaSecs, isPaused)
+                val existing = activeTransfers[tid]
+                val isPaused = existing?.isPaused ?: false
+                val totalBytes = existing?.totalBytes ?: 0L
+                val peerName = existing?.peerName ?: from
+                activeTransfers[tid] = TransferProgress(
+                    id = tid, fileName = name, percent = percent, bytesReceived = bytesReceived, 
+                    totalBytes = totalBytes, speedBps = speedBps, etaSecs = etaSecs, 
+                    isPaused = isPaused, state = TransferState.PROGRESS, peerName = peerName
+                )
                 publishActiveTransfers()
                 
                 updateFileTransferNotificationProgress(
@@ -1215,7 +1242,7 @@ class DeskdropService : Service() {
                 val tid = DeskdropJni.eventTransferId(ev) ?: return
                 val state = activeTransfers[tid]
                 if (state != null) {
-                    val newState = state.copy(isPaused = true)
+                    val newState = state.copy(isPaused = true, state = TransferState.PAUSED)
                     activeTransfers[tid] = newState
                     publishActiveTransfers()
                     updateFileTransferNotificationProgress(
@@ -1234,7 +1261,7 @@ class DeskdropService : Service() {
                 val tid = DeskdropJni.eventTransferId(ev) ?: return
                 val state = activeTransfers[tid]
                 if (state != null) {
-                    val newState = state.copy(isPaused = false)
+                    val newState = state.copy(isPaused = false, state = TransferState.PROGRESS)
                     activeTransfers[tid] = newState
                     publishActiveTransfers()
                     updateFileTransferNotificationProgress(
@@ -2910,7 +2937,7 @@ class DeskdropService : Service() {
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(launchPi)
             .addAction(

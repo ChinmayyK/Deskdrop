@@ -3,6 +3,8 @@ import UniformTypeIdentifiers
 import Foundation
 import SystemConfiguration
 import CoreImage.CIFilterBuiltins
+import Carbon.HIToolbox
+import QuickLook
 
 // MARK: - Root
 
@@ -115,16 +117,14 @@ private struct FloatingNavItem: View {
                         .font(.system(size: 13, weight: .bold))
                 }
             }
-            .foregroundStyle(isSelected ? .white : (hovered ? CRTheme.ink : CRTheme.inkSoft))
+            .foregroundStyle(isSelected ? CRTheme.brandElectric : (hovered ? CRTheme.ink : CRTheme.inkSoft))
             .padding(.horizontal, isSelected ? 16 : 14)
             .padding(.vertical, 10)
             .background {
                 if isSelected {
                     Capsule()
-                        .fill(CRTheme.brandElectric)
+                        .fill(CRTheme.ink.opacity(0.08))
                         .matchedGeometryEffect(id: "NAV_TAB", in: namespace)
-                        .shadow(color: CRTheme.brandElectric.opacity(0.35), radius: 8, y: 3)
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
                 } else if hovered {
                     Capsule()
                         .fill(CRTheme.ink.opacity(0.04))
@@ -545,6 +545,9 @@ private struct TimelineSectionView: View {
     let density: CRDensityMode
     @State private var search     = ""
     @State private var filterKind = "all"
+    @State private var quickLookURL: URL?
+    @State private var hoveredItemId: Int64?
+    @State private var spaceMonitor: Any?
     private let filters = [("all","All"),("text","Text"),("image","Image"),("file","File")]
 
     private var pinnedItems: [TimelineItem] {
@@ -585,7 +588,13 @@ private struct TimelineSectionView: View {
                             groupLabel("PINNED", icon: "pin.fill", tint: CRTheme.accentGold)
                                 .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 6)
                             VStack(spacing: density.cardSpacing) {
-                                ForEach(pinnedItems) { TimelineCard(item: $0, store: store, density: density) }
+                                ForEach(pinnedItems) { item in
+                                    TimelineCard(item: item, store: store, density: density)
+                                        .onHover { isHovering in
+                                            if isHovering { hoveredItemId = item.id }
+                                            else if hoveredItemId == item.id { hoveredItemId = nil }
+                                        }
+                                }
                             }
                             .padding(.horizontal, 20)
                             .padding(.bottom, 14)
@@ -617,6 +626,10 @@ private struct TimelineSectionView: View {
                                         .modifier(MasonryGridModifier())
                                         .transition(.scale(scale: 0.95).combined(with: .opacity))
                                         .animation(.crSpring, value: filteredItems.count)
+                                        .onHover { isHovering in
+                                            if isHovering { hoveredItemId = item.id }
+                                            else if hoveredItemId == item.id { hoveredItemId = nil }
+                                        }
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -625,6 +638,23 @@ private struct TimelineSectionView: View {
                     }
                     .padding(.bottom, 24)
                 }
+            }
+        }
+        .quickLookPreview($quickLookURL)
+        .onAppear {
+            spaceMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                if event.keyCode == 49, let hoveredId = hoveredItemId { // Spacebar
+                    if let target = store.timeline.first(where: { $0.id == hoveredId }), let path = target.filePath, !path.isEmpty {
+                        quickLookURL = URL(fileURLWithPath: path)
+                        return nil // Consume event
+                    }
+                }
+                return event
+            }
+        }
+        .onDisappear {
+            if let monitor = spaceMonitor {
+                NSEvent.removeMonitor(monitor)
             }
         }
     }
@@ -700,11 +730,11 @@ private struct DevicesSectionView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
-                // Quick-action row — full width stacked vertically so content isn't cramped
-                VStack(spacing: 8) {
+                // 2x2 Widget Grid
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
                     MagicLinkPairingCard(store: store)
-                    ManualConnectCard(store: store)
                     FileShareCard(store: store) { pendingFileTarget = $0; showingFileImporter = true }
+                    ManualConnectCard(store: store)
                 }
                 .padding(.top, 18)
 
@@ -938,19 +968,30 @@ private struct DeviceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 11) {
-                DeviceAvatar(name: device.name, platform: nil, size: 38, color: accent)
+                ZStack {
+                    Circle().fill(accent.opacity(0.12))
+                        .frame(width: 38, height: 38)
+                    Image(systemName: device.name.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
+                        .font(.system(size: 18, weight: .light))
+                        .foregroundStyle(accent)
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(device.name)
-                            .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                            .font(.system(size: 14, weight: .semibold)).foregroundStyle(CRTheme.ink)
                             .lineLimit(1)
+                            .layoutPriority(1)
+                        
                         HStack(spacing: 3) {
                             StatusDot(isOnline: device.isConnected, size: 6)
                             Text(device.connectionState.label)
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(device.connectionState.color)
                         }
+                        
+                        Spacer(minLength: 8)
+                        
                         if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
                             BatteryIndicatorPill(level: battery.level, charging: battery.charging)
                         }
@@ -1002,14 +1043,13 @@ private struct DeviceCard: View {
 
             // Actions
             CRDivider()
-            HStack(spacing: 7) {
+            HStack(spacing: 8) {
                 if device.isConnected {
-                    Button("Disconnect") { store.disconnect(device) }
-                        .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentOrange))
+                    ModernDeviceCardButton(icon: "wifi.slash", color: CRTheme.accentOrange, help: "Disconnect") { store.disconnect(device) }
                 } else if device.canReconnect {
-                    Button("Reconnect") { store.scanForDevices() }
-                        .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                    ModernDeviceCardButton(icon: "arrow.triangle.2.circlepath", color: CRTheme.brandElectric, help: "Reconnect") { store.scanForDevices() }
                 }
+                
                 if device.trustState != .trusted {
                     if device.pairingRequested || device.outgoingPairingWaiting {
                         if let pin = device.pairingPin, !pin.isEmpty {
@@ -1019,21 +1059,21 @@ private struct DeviceCard: View {
                                 .padding(.horizontal, 8)
                         }
                         if device.pairingRequested {
-                            Button("Accept") { store.respondToPairing(device, accepted: true) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
-                            Button("Decline") { store.respondToPairing(device, accepted: false) }.buttonStyle(CRDestructiveButtonStyle())
+                            ModernDeviceCardButton(icon: "checkmark", color: CRTheme.accentGreen, help: "Accept") { store.respondToPairing(device, accepted: true) }
+                            ModernDeviceCardButton(icon: "xmark", color: CRTheme.accentRed, help: "Decline") { store.respondToPairing(device, accepted: false) }
                         } else {
                             Text("Waiting...")
                                 .foregroundStyle(CRTheme.inkSoft)
                                 .font(.system(size: 13))
                         }
                     } else {
-                        Button("Pair") { store.sendPairingRequest(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                        ModernDeviceCardButton(icon: "link", color: CRTheme.brandElectric, help: "Pair") { store.sendPairingRequest(device) }
                     }
-                    Button("Remove") { store.forget(device) }.buttonStyle(CRSecondaryButtonStyle())
+                    ModernDeviceCardButton(icon: "trash", color: CRTheme.inkSoft, help: "Remove") { store.forget(device) }
                 } else {
-                    Button("Rename")       { rename(device) }.buttonStyle(CRSecondaryButtonStyle())
-                    Button("Revoke Trust") { store.revoke(device) }.buttonStyle(CRDestructiveButtonStyle())
-                    Button("Forget")       { Task { try? await DeskdropIPCClient.shared.forgetDevice(deviceId: device.id); store.scanForDevices() } }.buttonStyle(CRDestructiveButtonStyle())
+                    ModernDeviceCardButton(icon: "pencil", color: CRTheme.inkSoft, help: "Rename") { rename(device) }
+                    ModernDeviceCardButton(icon: "lock.slash", color: CRTheme.accentOrange, help: "Revoke Trust") { store.revoke(device) }
+                    ModernDeviceCardButton(icon: "trash", color: CRTheme.accentRed, help: "Forget") { Task { try? await DeskdropIPCClient.shared.forgetDevice(deviceId: device.id); store.scanForDevices() } }
                 }
                 Spacer()
             }
@@ -1051,19 +1091,22 @@ private struct ManualConnectCard: View {
     @ObservedObject var store: DeskdropStore
     @State private var hovered = false
     var body: some View {
-        HStack(spacing: 12) {
-            CRIconChip(systemName: "network", tint: CRTheme.accentBlue, size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Manual Connect").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
-                Text("Connect to a specific IP address and port").font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                CRIconChip(systemName: "network", tint: CRTheme.brandElectric, size: 28)
+                Spacer()
+                Button("Connect") { store.connectManual() }
+                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
             }
-            Spacer()
-            TextField("192.168.1.20:47823", text: $store.manualConnectAddress)
-                .crInput().frame(width: 160)
-            Button("Connect") { store.connectManual() }.buttonStyle(CRPrimaryButtonStyle())
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Manual Connect").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                TextField("IP Address:Port", text: $store.manualConnectAddress)
+                    .crInput()
+                    .font(.system(size: 11.5))
+            }
         }
-        .padding(14).frame(maxWidth: .infinity)
-        .crCard(cornerRadius: 8, highlighted: hovered)
+        .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.brandElectric)
         .onHover { hovered = $0 }.animation(.crFast, value: hovered)
     }
 }
@@ -1075,22 +1118,29 @@ private struct FileShareCard: View {
     let chooseTarget: (ManagedDevice?) -> Void
     @State private var hovered = false
     var body: some View {
-        HStack(spacing: 12) {
-            CRIconChip(systemName: "arrow.up.doc.fill", tint: CRTheme.brandElectric, size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Send a File").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
-                Text("Push a document, image, or archive to peers").font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                CRIconChip(systemName: "arrow.up.doc.fill", tint: CRTheme.brandElectric, size: 28)
+                Spacer()
+                Button("Send") { chooseTarget(nil) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
             }
-            Spacer()
-            Button("Send to all") { chooseTarget(nil) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-            if !store.connectedDevices.isEmpty {
-                Menu("Choose…") {
-                    ForEach(store.connectedDevices) { d in Button(d.name) { chooseTarget(d) } }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Send a File").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                if !store.connectedDevices.isEmpty {
+                    Menu("Choose target…") {
+                        ForEach(store.connectedDevices) { d in Button(d.name) { chooseTarget(d) } }
+                    }
+                    .buttonStyle(CRSecondaryButtonStyle())
+                } else {
+                    Text("Push documents to peers")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(CRSecondaryButtonStyle())
             }
         }
-        .padding(14).frame(maxWidth: .infinity)
+        .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.brandElectric)
         .onHover { hovered = $0 }.animation(.crFast, value: hovered)
     }
@@ -1144,7 +1194,7 @@ struct DeviceCentricDashboardView: View {
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    Text("Welcome back, \(NSUserName().capitalized)!")
+                    Text("Ecosystem")
                         .font(.system(size: 28, weight: .semibold, design: .rounded))
                         .foregroundStyle(CRTheme.ink)
                     Spacer()
@@ -1206,11 +1256,11 @@ struct DeviceCentricDashboardView: View {
                         .padding(.horizontal, 40)
                 }
                 
-                // Quick Actions
-                VStack(spacing: 14) {
+                // Quick Actions Grid
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
                     MagicLinkPairingCard(store: store)
-                    ManualConnectCard(store: store)
                     FileShareCard(store: store) { pendingFileTarget = $0; showingFilePicker = true }
+                    ManualConnectCard(store: store)
                 }
                 .padding(.horizontal, 40)
                 .padding(.top, 32)
@@ -1250,6 +1300,28 @@ private struct CompactEmptyState: View {
     }
 }
 
+struct ModernDeviceCardButton: View {
+    let icon: String
+    let color: Color
+    let help: String
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .foregroundStyle(isHovered ? color : CRTheme.inkSoft)
+                .background(isHovered ? color.opacity(0.15) : CRTheme.inkSoft.opacity(0.08), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .onHover { isHovered = $0 }
+        .animation(.crFast, value: isHovered)
+    }
+}
+
 private struct CompactDeviceCard: View {
     let device: ManagedDevice
     @ObservedObject var store: DeskdropStore
@@ -1261,131 +1333,96 @@ private struct CompactDeviceCard: View {
         HStack(spacing: 16) {
             // Icon
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(device.name.lowercased().contains("mac") ?
-                          LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandViolet], startPoint: .topLeading, endPoint: .bottomTrailing) :
-                          LinearGradient(colors: [Color(hex: 0x059669), Color(hex: 0x34D399)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 48, height: 48)
+                Circle()
+                    .fill(CRTheme.brandElectric.opacity(0.1))
+                    .frame(width: 44, height: 44)
+                
                 if device.name.lowercased().contains("mac") {
                     Image(systemName: "laptopcomputer")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.white)
-                } else if let imgPath = Bundle.main.path(forResource: "AndroidLogo", ofType: "png"), let nsImg = NSImage(contentsOfFile: imgPath) {
-                    Image(nsImage: nsImg)
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 24, height: 24)
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
+                        .font(.system(size: 20, weight: .light))
+                        .foregroundStyle(CRTheme.brandElectric)
                 } else {
                     Image(systemName: "smartphone")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(CRTheme.brandElectric)
                 }
             }
             
-            // Text
-            VStack(alignment: .leading, spacing: 4) {
-                Text(device.name)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(CRTheme.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+            VStack(alignment: .leading, spacing: 8) {
+                // Top Row: Name and Status Indicators
+                HStack(alignment: .center) {
+                    Text(device.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(CRTheme.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    
+                    Spacer(minLength: 8)
+                    
+                    // Status Indicators at top right
+                    HStack(spacing: 6) {
+                        if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
+                            NetworkIndicatorPill(type: net.networkType)
+                        }
+                        if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
+                            BatteryIndicatorPill(level: battery.level, charging: battery.charging)
+                        }
+                    }
+                }
                 
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Circle().fill(CRTheme.accentGreen).frame(width: 6, height: 6)
-                        Text("Connected")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(CRTheme.accentGreen)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
+                // Bottom Row: Connection Status and Actions
+                HStack(alignment: .center) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(device.isConnected ? CRTheme.accentGreen : CRTheme.inkSoft)
+                            .frame(width: 6, height: 6)
+                        Text(device.isConnected ? "Connected" : "Offline")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(device.isConnected ? CRTheme.accentGreen : CRTheme.inkSoft)
                     }
-                    if let battery = store.peerBatteries.first(where: { $0.deviceId == device.id }) {
-                        BatteryIndicatorPill(level: battery.level, charging: battery.charging)
-                    }
-                    if let net = store.peerNetworks.first(where: { $0.deviceId == device.id }) {
-                        NetworkIndicatorPill(type: net.networkType)
-                    }
-                }
-            }
-            
-            Spacer(minLength: 8)
-            
-            // Actions
-            HStack(spacing: 8) {
-                if device.isConnected {
-                    Button(action: {
-                        Task {
-                            try? await DeskdropIPCClient.shared.sendPushText("__DESKDROP_PING__", targetDeviceId: device.id)
-                        }
-                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "bell.badge.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                            Text("Ping")
-                                .font(.system(size: 12, weight: .bold))
-                                .lineLimit(1)
-                        }
-                        .fixedSize(horizontal: true, vertical: true)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .foregroundStyle(CRTheme.accentBlue)
-                        .background(CRTheme.accentBlue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Ping Phone")
                     
-                    Button(action: onSendFiles) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "folder.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                            Text("Files")
-                                .font(.system(size: 12, weight: .bold))
-                                .lineLimit(1)
-                        }
-                        .fixedSize(horizontal: true, vertical: true)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .foregroundStyle(CRTheme.brandElectric)
-                        .background(CRTheme.brandElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Send Files")
+                    Spacer(minLength: 8)
                     
-                    Button(action: { store.disconnect(device) }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 13, weight: .semibold))
-                            Text("Disconnect")
-                                .font(.system(size: 12, weight: .bold))
-                                .lineLimit(1)
+                    // Action Buttons
+                    HStack(spacing: 8) {
+                        if device.isConnected {
+                            ModernDeviceCardButton(
+                                icon: "bell.badge.fill",
+                                color: CRTheme.accentBlue,
+                                help: "Ping",
+                                action: {
+                                    Task { try? await DeskdropIPCClient.shared.sendPushText("__DESKDROP_PING__", targetDeviceId: device.id) }
+                                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+                                }
+                            )
+                            
+                            ModernDeviceCardButton(
+                                icon: "folder.fill",
+                                color: CRTheme.brandElectric,
+                                help: "Send Files",
+                                action: onSendFiles
+                            )
+                            
+                            ModernDeviceCardButton(
+                                icon: "xmark",
+                                color: CRTheme.accentRed,
+                                help: "Disconnect",
+                                action: { store.disconnect(device) }
+                            )
+                        } else {
+                            ModernDeviceCardButton(
+                                icon: "antenna.radiowaves.left.and.right",
+                                color: CRTheme.brandElectric,
+                                help: "Connect",
+                                action: { store.connect(device) }
+                            )
                         }
-                        .fixedSize(horizontal: true, vertical: true)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .foregroundStyle(CRTheme.accentRed)
-                        .background(CRTheme.accentRed.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
-                    .buttonStyle(.plain)
-                    .help("Disconnect")
-                } else {
-                    Button(action: { store.connect(device) }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "antenna.radiowaves.left.and.right")
-                                .font(.system(size: 13, weight: .semibold))
-                            Text("Connect")
-                                .font(.system(size: 12, weight: .bold))
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .foregroundStyle(CRTheme.brandElectric)
-                        .background(CRTheme.brandElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Connect")
                 }
             }
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .background(CRTheme.surfaceElevated)
         .crCard(cornerRadius: 16)
         .overlay {
@@ -1603,17 +1640,25 @@ struct MagicLinkPairingCard: View {
     @State private var showingQR = false
     
     var body: some View {
-        HStack(spacing: 12) {
-            CRIconChip(systemName: "qrcode", tint: CRTheme.accentGreen, size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Magic Link pairing").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
-                Text("Pair a phone or tablet instantly using a QR code").font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                CRIconChip(systemName: "qrcode", tint: CRTheme.brandElectric, size: 28)
+                Spacer()
+                Button("Show") { showingQR = true }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
             }
-            Spacer()
-            Button("Show QR Code") { showingQR = true }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.accentGreen))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Magic Link pairing")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(CRTheme.ink)
+                Text("Pair instantly via QR")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(CRTheme.inkSoft)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(14).frame(maxWidth: .infinity)
-        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.accentGreen)
+        .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.brandElectric)
         .onHover { hovered = $0 }.animation(.crFast, value: hovered)
         .sheet(isPresented: $showingQR) {
             QRCodePairingSheet(store: store)

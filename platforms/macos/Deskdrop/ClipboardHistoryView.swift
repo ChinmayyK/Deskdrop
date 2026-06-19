@@ -66,14 +66,7 @@ struct QuickAccessHistoryView: View {
 
     var body: some View {
         ZStack {
-            CRVisualEffect(material: .popover).ignoresSafeArea()
-            LinearGradient(
-                stops: [
-                    .init(color: QuickAccessSurface.chromeTop, location: 0),
-                    .init(color: QuickAccessSurface.chromeBottom, location: 1)
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            ).ignoresSafeArea()
+            CRVisualEffect(material: .hudWindow, blendingMode: .behindWindow).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Search bar
@@ -137,13 +130,14 @@ struct QuickAccessHistoryView: View {
                 QAFooter()
             }
         }
-        .frame(width: 580, height: 600)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .frame(width: 680, height: 540)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(QuickAccessSurface.stroke, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
         }
-        .shadow(color: .black.opacity(0.2), radius: 60, x: 0, y: 30)
+        .preferredColorScheme(.dark)
+        .shadow(color: .black.opacity(0.4), radius: 60, x: 0, y: 30)
         .onAppear { searchFocused = true }
         .onChange(of: search) { _ in selectedIndex = 0; expandedID = nil }
         .background(
@@ -203,7 +197,7 @@ private struct QASearchBar: View {
 
             TextField("Search clipboard history…", text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 24, weight: .light))
+                .font(.system(size: 28, weight: .regular, design: .rounded))
                 .foregroundStyle(CRTheme.ink)
                 .focused(focused)
 
@@ -275,13 +269,8 @@ private struct QuickSendStrip: View {
         }
         .padding(14)
         .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(LinearGradient(colors: [CRTheme.brandElectric.opacity(0.15), CRTheme.brandViolet.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(LinearGradient(colors: [CRTheme.brandElectric.opacity(0.35), CRTheme.brandViolet.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
-                }
-                .shadow(color: CRTheme.brandElectric.opacity(0.15), radius: 12, y: 6)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.06))
         }
     }
 
@@ -302,8 +291,7 @@ private struct QuickSendStrip: View {
                             .padding(.horizontal, 9).padding(.vertical, 5)
                             .background {
                                 Capsule()
-                                    .fill(QuickAccessSurface.cardStrong)
-                                    .overlay { Capsule().strokeBorder(QuickAccessSurface.stroke, lineWidth: 0.5) }
+                                    .fill(Color.white.opacity(0.1))
                             }
                         }
                         .buttonStyle(.plain)
@@ -408,18 +396,13 @@ private struct QuickRow: View {
             }
         }
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isSelected ? CRTheme.surfaceElevated : (hovered ? CRTheme.surfaceElevated.opacity(0.4) : .clear))
-                .overlay {
-                    if isSelected || hovered {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(isSelected ? CRTheme.brandElectric.opacity(0.5) : CRTheme.stroke, lineWidth: isSelected ? 1.5 : 0.5)
-                    }
-                }
-                .shadow(color: isSelected ? CRTheme.brandElectric.opacity(0.15) : .black.opacity(0.03), radius: isSelected ? 8 : 4, y: isSelected ? 3 : 1)
+            if isSelected {
+                Rectangle().fill(Color.white.opacity(0.12))
+            } else if hovered {
+                Rectangle().fill(Color.white.opacity(0.05))
+            }
         }
-        .padding(.horizontal, 4).padding(.vertical, 2)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(Rectangle())
         .onTapGesture { onTap() }
         .onHover { hovered = $0 }
         .animation(.crFast, value: isSelected)
@@ -462,12 +445,8 @@ private struct QAFooter: View {
             QAHint(keys: ["Esc"], label: "close")
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
-        .background {
-            Rectangle()
-                .fill(CRTheme.surface.opacity(0.85))
-                .overlay(alignment: .top) {
-                    Rectangle().fill(QuickAccessSurface.divider).frame(height: 0.5)
-                }
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.white.opacity(0.1)).frame(height: 0.5)
         }
     }
 }

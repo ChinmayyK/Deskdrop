@@ -144,6 +144,13 @@ class MainActivity : ComponentActivity() {
         requestRuntimePermissions()
         requestBatteryOptimizationExemption()
 
+        val imageLoader = coil.ImageLoader.Builder(this)
+            .components {
+                add(coil.decode.VideoFrameDecoder.Factory())
+            }
+            .build()
+        coil.Coil.setImageLoader(imageLoader)
+
         setContent {
             val activeTransfers by DeskdropService.activeTransfersFlow.collectAsState()
 
@@ -360,9 +367,32 @@ class MainActivity : ComponentActivity() {
                             putExtra(DeskdropService.EXTRA_TRANSFER_ID, tid)
                         })
                     },
+                    onActionAcceptTransfer = { tid ->
+                        ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, DeskdropService::class.java).apply {
+                            action = DeskdropService.ACTION_ACCEPT_FILE_TRANSFER
+                            putExtra(DeskdropService.EXTRA_TRANSFER_ID, tid)
+                        })
+                    },
+                    onActionRejectTransfer = { tid ->
+                        ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, DeskdropService::class.java).apply {
+                            action = DeskdropService.ACTION_REJECT_FILE_TRANSFER
+                            putExtra(DeskdropService.EXTRA_TRANSFER_ID, tid)
+                        })
+                    },
                     onActionSendFiles = { targetId ->
                         targetDeviceIdForNextSend = targetId
                         filePickerLauncher.launch("*/*")
+                    },
+                    onDropFiles = { targetId, uris ->
+                        if (uris.isNotEmpty()) {
+                            val intent = Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_PUSH_SHARED_URI
+                                putStringArrayListExtra(DeskdropService.EXTRA_SHARED_URIS, java.util.ArrayList(uris.map { it.toString() }))
+                                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, targetId)
+                            }
+                            ContextCompat.startForegroundService(this@MainActivity, intent)
+                            showSnack("Sending ${uris.size} file(s)...")
+                        }
                     },
                     onForgetPeer = { peer ->
                         ContextCompat.startForegroundService(this@MainActivity,

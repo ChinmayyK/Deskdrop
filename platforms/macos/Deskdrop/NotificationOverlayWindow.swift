@@ -25,10 +25,10 @@ final class DeskdropToastWindowManager: NSObject {
             object: nil
         )
 
-        store.$toasts
+        Publishers.CombineLatest(store.$toasts, store.$activeTransfers)
             .receive(on: RunLoop.main)
-            .sink { [weak self] toasts in
-                self?.handleToastUpdate(toasts)
+            .sink { [weak self] toasts, transfers in
+                self?.handleUpdate(toasts: toasts, transfers: transfers)
             }
             .store(in: &cancellables)
     }
@@ -37,9 +37,9 @@ final class DeskdropToastWindowManager: NSObject {
         NotificationCenter.default.removeObserver(self)
     }
 
-    private func handleToastUpdate(_ toasts: [ToastItem]) {
+    private func handleUpdate(toasts: [ToastItem], transfers: [FileTransferState]) {
         layoutPanel()
-        if toasts.isEmpty {
+        if toasts.isEmpty && transfers.isEmpty {
             panel.orderOut(nil)
         } else {
             panel.orderFrontRegardless()
@@ -101,6 +101,17 @@ private struct ToastOverlayPanelView: View {
 
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
+            // Dynamic Island Transfers (Highest Priority)
+            ForEach(store.activeTransfers) { transfer in
+                DynamicIslandTransferCard(transfer: transfer, store: store)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.85)),
+                        removal: .opacity.combined(with: .scale(scale: 0.95))
+                    ))
+                    .zIndex(Double(transfer.id.hashValue))
+            }
+            
+            // Standard Toasts
             ForEach(Array(store.toasts.suffix(3).reversed())) { toast in
                 ToastOverlayCard(
                     toast: toast,
@@ -117,7 +128,119 @@ private struct ToastOverlayPanelView: View {
         .padding(.top, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(10)
-        .animation(.spring(response: 0.45, dampingFraction: 0.65, blendDuration: 0.1), value: store.toasts.map(\.id))
+        .animation(.spring(response: 0.45, dampingFraction: 0.65, blendDuration: 0.1), value: store.toasts.map(\.id.uuidString) + store.activeTransfers.map(\.id))
+    }
+}
+
+// MARK: - Dynamic Island Card
+
+private struct DynamicIslandTransferCard: View {
+    let transfer: FileTransferState
+    @ObservedObject var store: DeskdropStore
+
+    var progressColor: Color {
+        switch transfer.status {
+        case .paused: return CRTheme.stroke
+        case .failed: return CRTheme.accentRed
+        default: return CRTheme.brandElectric
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            // Left Icon
+            Image(systemName: "arrow.down.doc.fill")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(progressColor)
+                .frame(width: 20)
+
+            // Content Column
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(transfer.fileName)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                    
+                    Text("• \(transfer.percent)%")
+                        .font(.system(size: 11, weight: .bold, design: .default))
+                        .foregroundStyle(progressColor)
+                        .lineLimit(1)
+                }
+                
+                Text("Receiving from \(transfer.fromDeviceName)")
+                    .font(.system(size: 12, weight: .medium, design: .default))
+                    .foregroundStyle(Color.primary.opacity(0.7))
+                    .lineLimit(1)
+
+                if case .incoming = transfer.status {
+                    // Waiting state
+                } else if case .failed = transfer.status {
+                    // Failed state
+                } else {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.primary.opacity(0.1))
+                                .frame(height: 4)
+                            
+                            Capsule()
+                                .fill(progressColor)
+                                .frame(width: max(0, geo.size.width * CGFloat(transfer.percent) / 100.0), height: 4)
+                        }
+                    }
+                    .frame(height: 4)
+                    .padding(.top, 4)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            // Dynamic Action Button based on status
+            if case .incoming = transfer.status {
+                HStack(spacing: 4) {
+                    Button(action: { store.acceptFileTransfer(transfer) }) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(CRTheme.accentGreen)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button(action: { store.rejectFileTransfer(transfer) }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(CRTheme.accentRed)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else if case .transferring = transfer.status {
+                Button(action: { store.pauseFileTransfer(transfer) }) {
+                    Image(systemName: "pause.circle.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(0.4))
+                }
+                .buttonStyle(.plain)
+            } else if case .paused = transfer.status {
+                Button(action: { store.resumeFileTransfer(transfer) }) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(0.4))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minWidth: 260, maxWidth: 360, alignment: .leading)
+        .background {
+            Capsule(style: .continuous)
+                .fill(CRTheme.surface.opacity(0.85))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                )
+                .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
+        }
     }
 }
 

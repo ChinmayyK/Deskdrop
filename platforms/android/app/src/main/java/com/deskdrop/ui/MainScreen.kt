@@ -19,6 +19,7 @@ import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import androidx.compose.animation.fadeOut
@@ -58,7 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.asImageBitmap
-import com.deskdrop.DeskdropService
+import com.deskdrop.*
 import com.deskdrop.ui.getLocalIpAddress
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.draw.blur
@@ -66,6 +67,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import com.deskdrop.ActivityEntry
 import com.deskdrop.ActivityKind
 import com.deskdrop.PeerSnapshot
@@ -109,7 +114,10 @@ fun MainScreen(
     onActionPauseTransfer: (String) -> Unit,
     onActionResumeTransfer: (String) -> Unit,
     onActionCancelTransfer: (String) -> Unit,
+    onActionAcceptTransfer: (String) -> Unit,
+    onActionRejectTransfer: (String) -> Unit,
     onActionSendFiles: (String?) -> Unit,
+    onDropFiles: (String, List<android.net.Uri>) -> Unit = { _, _ -> },
     onApplyClipboard: (ActivityEntry) -> Unit,
     onTrustPeer: (PeerSnapshot) -> Unit,
     onRejectPeer: (PeerSnapshot) -> Unit,
@@ -157,6 +165,7 @@ fun MainScreen(
                                 onActionPairMagicLink = onActionPairMagicLink,
                                 onManualIp = onManualIp,
                                 onActionSendFiles = onActionSendFiles,
+                                onDropFiles = onDropFiles,
                                 onActionStreamCamera = onActionStreamCamera,
                                 onApplyClipboard = onApplyClipboard,
                                 onActionPauseTransfer = onActionPauseTransfer,
@@ -164,6 +173,8 @@ fun MainScreen(
                                 onActionCancelTransfer = onActionCancelTransfer,
                                 onForgetPeer = onForgetPeer,
                                 onRejectPeer = onRejectPeer,
+                                onTrustPeer = onTrustPeer,
+                                onSendPairingRequest = onSendPairingRequest,
                                 onDeleteActivity = onDeleteActivity,
                                 onResendActivity = onResendActivity,
                                 onReplayOnboarding = onReplayOnboarding,
@@ -217,6 +228,17 @@ fun MainScreen(
                         )
                     )
             )
+
+            // Dynamic Island Overlay
+            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp)) {
+                DynamicIslandOverlay(
+                    activeTransfers = activeTransfers,
+                    isDark = isDark,
+                    onAccept = onActionAcceptTransfer,
+                    onReject = onActionRejectTransfer,
+                    onCancel = onActionCancelTransfer
+                )
+            }
             
             Box(
                 modifier = Modifier
@@ -296,6 +318,7 @@ fun HomeTab(
     onActionPairMagicLink: () -> Unit,
     onManualIp: () -> Unit,
     onActionSendFiles: (String?) -> Unit,
+    onDropFiles: (String, List<android.net.Uri>) -> Unit,
     onActionStreamCamera: () -> Unit,
     onApplyClipboard: (ActivityEntry) -> Unit,
     onActionPauseTransfer: (String) -> Unit,
@@ -303,6 +326,8 @@ fun HomeTab(
     onActionCancelTransfer: (String) -> Unit,
     onForgetPeer: (PeerSnapshot) -> Unit,
     onRejectPeer: (PeerSnapshot) -> Unit,
+    onTrustPeer: (PeerSnapshot) -> Unit,
+    onSendPairingRequest: (PeerSnapshot) -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit,
     onResendActivity: (ActivityEntry) -> Unit,
     onReplayOnboarding: () -> Unit,
@@ -362,17 +387,16 @@ fun HomeTab(
                     var showQrDialog by remember { mutableStateOf(false) }
 
                     // Show QR Code Action
-                    Row(
+                    Box(
                         modifier = Modifier
                             .crPressScale(0.95f)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(CircleShape)
                             .clickable { showQrDialog = true }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .background(CRTheme.textHigh(isDark).copy(alpha = 0.05f))
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(imageVector = Icons.Default.QrCode, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Show QR", style = CRTypography.caption, color = CRTheme.blueSoft)
+                        Icon(imageVector = Icons.Default.QrCode, contentDescription = "Show QR", tint = CRTheme.textHigh(isDark), modifier = Modifier.size(18.dp))
                     }
 
                     if (showQrDialog) {
@@ -418,34 +442,31 @@ fun HomeTab(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     // Inline Add Action (Scan QR)
-                    Row(
+                    Box(
                         modifier = Modifier
                             .crPressScale(0.95f)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(CircleShape)
                             .clickable { onActionPairMagicLink() }
-                            .background(CRTheme.brandElectric.copy(alpha = 0.15f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .background(CRTheme.textHigh(isDark).copy(alpha = 0.05f))
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = null, tint = CRTheme.brandElectric, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Scan QR", style = CRTypography.caption, color = CRTheme.brandElectric)
+                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan QR", tint = CRTheme.textHigh(isDark), modifier = Modifier.size(18.dp))
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
                     // Manual IP Action
-                    Row(
+                    Box(
                         modifier = Modifier
                             .crPressScale(0.95f)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(CircleShape)
                             .clickable { onManualIp() }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .background(CRTheme.textHigh(isDark).copy(alpha = 0.05f))
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(imageVector = Icons.Default.Language, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("IP", style = CRTypography.caption, color = CRTheme.blueSoft)
+                        Icon(imageVector = Icons.Default.Language, contentDescription = "Manual IP", tint = CRTheme.textHigh(isDark), modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -479,6 +500,8 @@ fun HomeTab(
                         isDark = isDark, 
                         peer = peer,
                         onSendFiles = { onActionSendFiles(peer.id) },
+                        onDropFiles = { uris -> onDropFiles(peer.id, uris) },
+                        onPair = { onSendPairingRequest(peer) },
                         onForget = { onForgetPeer(peer) },
                         onReject = { onRejectPeer(peer) },
                         modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp)
@@ -586,7 +609,7 @@ fun QuickActionsGrid(
                 else if (diff < 3600) "Last synced ${diff / 60}m ago"
                 else "Last synced ${diff / 3600}h ago"
             } else "Send copied text & images",
-            color = CRTheme.brandElectric,
+            color = CRTheme.blueSoft,
             onClick = onActionPushClipboard
         )
         
@@ -598,7 +621,7 @@ fun QuickActionsGrid(
                 enabled = enabled,
                 icon = Icons.Default.Folder,
                 label = "Files",
-                color = CRTheme.brandViolet,
+                color = CRTheme.blueSoft,
                 onClick = onActionSendFiles
             )
             QuickActionCard(
@@ -607,7 +630,7 @@ fun QuickActionsGrid(
                 enabled = enabled,
                 icon = Icons.Default.Videocam,
                 label = "Camera",
-                color = CRTheme.brandCyan,
+                color = CRTheme.blueSoft,
                 onClick = onActionStreamCamera
             )
             QuickActionCard(
@@ -616,7 +639,7 @@ fun QuickActionsGrid(
                 enabled = enabled,
                 icon = Icons.Default.Link,
                 label = "Links",
-                color = CRTheme.brandPink,
+                color = CRTheme.blueSoft,
                 onClick = onActionLinks
             )
         }
@@ -895,7 +918,7 @@ fun ActivityTimelineSection(
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("View All", style = CRTypography.caption, color = CRTheme.brandElectric)
+                        Text("View All", style = CRTypography.caption, color = CRTheme.blueSoft)
                     }
                 }
             }
@@ -930,6 +953,57 @@ fun ActivityTimelineSection(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ImagePreviewDialog(
+    filePath: String,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.9f))
+        ) {
+            coil.compose.AsyncImage(
+                model = "file://$filePath",
+                contentDescription = "Image Preview",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { onDismiss() })
+                    },
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            )
+            
+            // Close Button
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(24.dp)
+                    .statusBarsPadding()
+                    .size(44.dp)
+                    .crGlassCard(isDark = true, cornerRadius = 22.dp, onClick = onDismiss)
+                    .background(Color.White.copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }
@@ -976,13 +1050,22 @@ fun TimelineActivityRow(
     val dotColor = when(entry.kind) {
         ActivityKind.PEER_CONNECTED -> CRTheme.accentGreen
         ActivityKind.PEER_DISCONNECTED -> CRTheme.textMedium(isDark)
-        ActivityKind.FILE_RECEIVED, ActivityKind.FILE_SENT, ActivityKind.FILE_TRANSFER_COMPLETE -> CRTheme.brandCyan
-        else -> CRTheme.brandElectric
+        ActivityKind.FILE_RECEIVED, ActivityKind.FILE_SENT, ActivityKind.FILE_TRANSFER_COMPLETE -> CRTheme.cyanSoft
+        else -> CRTheme.blueSoft
     }
+
+    var showPreview by remember { mutableStateOf(false) }
+    
+    val isMediaFile = (entry.kind == ActivityKind.FILE_RECEIVED || entry.kind == ActivityKind.FILE_TRANSFER_COMPLETE) && 
+            entry.destPath.lowercase().let { it.endsWith(".jpg") || it.endsWith(".jpeg") || it.endsWith(".png") || it.endsWith(".webp") || it.endsWith(".gif") || it.endsWith(".mp4") || it.endsWith(".mkv") }
 
     val offsetX = remember { androidx.compose.animation.core.Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
     
+    if (showPreview && isMediaFile) {
+        ImagePreviewDialog(filePath = entry.destPath, onDismiss = { showPreview = false })
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1027,34 +1110,50 @@ fun TimelineActivityRow(
                     indication = null
                 ) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onApply(entry)
+                    if (isMediaFile) {
+                        showPreview = true
+                    } else {
+                        onApply(entry)
+                    }
                 }
         ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon Bullet
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(dotColor.copy(alpha = 0.15f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = icon,
+            // Icon Bullet or Thumbnail
+            if (isMediaFile) {
+                coil.compose.AsyncImage(
+                    model = "file://${entry.destPath}",
                     contentDescription = null,
-                    tint = dotColor,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .border(1.dp, CRTheme.stroke(isDark), CircleShape),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                 )
+            } else {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(dotColor.copy(alpha = 0.15f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = dotColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.width(8.dp))
             
             // Content
             Column(modifier = Modifier.weight(1f).padding(vertical = 4.dp)) {
-                Text(text = title, style = CRTypography.label, color = CRTheme.textHigh(isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(text = subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = title, style = CRTypography.label, color = CRTheme.textHigh(isDark), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(text = subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             
             IconButton(
@@ -1097,11 +1196,14 @@ fun TimelineActivityRow(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun DeviceCard(
     isDark: Boolean,
     peer: PeerSnapshot,
     onSendFiles: () -> Unit,
+    onDropFiles: (List<android.net.Uri>) -> Unit = {},
+    onPair: () -> Unit,
     onForget: () -> Unit,
     onReject: () -> Unit,
     modifier: Modifier = Modifier.width(170.dp)
@@ -1111,7 +1213,7 @@ fun DeviceCard(
     var showMenu by remember { mutableStateOf(false) }
     
     val infiniteTransition = rememberInfiniteTransition(label = "glow")
-    val glowAlpha by infiniteTransition.animateFloat(
+    val idleGlowAlpha by infiniteTransition.animateFloat(
         initialValue = 0.1f,
         targetValue = 0.4f,
         animationSpec = infiniteRepeatable(
@@ -1120,19 +1222,53 @@ fun DeviceCard(
         ),
         label = "glow_alpha"
     )
+
+    var isHovered by remember { mutableStateOf(false) }
+    val glowAlpha = if (isHovered) 1.0f else (if (peer.isConnected) idleGlowAlpha else 0.0f)
     
-    Box(modifier = modifier.height(116.dp)) {
+    Box(modifier = modifier
+        .height(116.dp)
+        .dragAndDropTarget(
+            shouldStartDragAndDrop = { event -> 
+                val androidEvent = event.toAndroidDragEvent()
+                androidEvent.clipData != null && androidEvent.clipData.itemCount > 0
+            },
+            target = object : DragAndDropTarget {
+                override fun onDrop(event: DragAndDropEvent): Boolean {
+                    isHovered = false
+                    val androidEvent = event.toAndroidDragEvent()
+                    val clipData = androidEvent.clipData ?: return false
+                    val uris = mutableListOf<android.net.Uri>()
+                    for (i in 0 until clipData.itemCount) {
+                        clipData.getItemAt(i).uri?.let { uris.add(it) }
+                    }
+                    if (uris.isNotEmpty()) {
+                        onDropFiles(uris)
+                        return true
+                    }
+                    return false
+                }
+                override fun onEntered(event: DragAndDropEvent) { isHovered = true }
+                override fun onExited(event: DragAndDropEvent) { isHovered = false }
+                override fun onEnded(event: DragAndDropEvent) { isHovered = false }
+            }
+        )
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .crPressScale(targetScale = 0.95f)
                 .then(
-                    if (peer.isConnected) Modifier.border(1.dp, CRTheme.statusGreen.copy(alpha = glowAlpha), RoundedCornerShape(24.dp))
+                    if (glowAlpha > 0f) Modifier.border(if (isHovered) 2.dp else 1.dp, CRTheme.statusGreen.copy(alpha = glowAlpha), RoundedCornerShape(24.dp))
                     else Modifier
                 )
                 .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    showMenu = true
+                    if (!peer.trusted) {
+                        onPair()
+                    } else {
+                        showMenu = true
+                    }
                 })
                 .padding(20.dp),
             horizontalAlignment = Alignment.Start,
@@ -1156,16 +1292,6 @@ fun DeviceCard(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                if (peer.isConnected) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .blur(2.dp)
-                            .background(CRTheme.statusGreen, CircleShape)
-                    ) {
-                        Box(modifier = Modifier.size(8.dp).background(CRTheme.statusGreen, CircleShape))
-                    }
-                }
             }
             
             Column {
@@ -1173,21 +1299,37 @@ fun DeviceCard(
                     text = peer.name,
                     style = CRTypography.label,
                     color = CRTheme.textHigh(isDark),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (peer.trusted) {
-                    Text(
-                        text = if (peer.isConnected) "Nearby" else "Offline",
-                        style = CRTypography.caption,
-                        color = CRTheme.textMedium(isDark)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (peer.isConnected) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 6.dp)
+                                    .size(6.dp)
+                                    .blur(1.dp)
+                                    .background(CRTheme.statusGreen, CircleShape)
+                            ) {
+                                Box(modifier = Modifier.size(6.dp).background(CRTheme.statusGreen, CircleShape))
+                            }
+                        }
+                        Text(
+                            text = if (peer.isConnected) "Nearby" else "Offline",
+                            style = CRTypography.caption,
+                            color = CRTheme.textMedium(isDark)
+                        )
+                    }
                 } else {
-                    Text(
-                        text = "Pending",
-                        style = CRTypography.caption,
-                        color = CRTheme.statusAmber
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.padding(end = 6.dp).size(6.dp).background(CRTheme.statusAmber, CircleShape))
+                        Text(
+                            text = "Pending",
+                            style = CRTypography.caption,
+                            color = CRTheme.statusAmber
+                        )
+                    }
                 }
             }
         }
@@ -1735,7 +1877,7 @@ fun BottomDock(
                     .width(indicatorRight - indicatorLeft)
                     .height(48.dp)
                     .padding(horizontal = 2.dp)
-                    .background(CRTheme.blueSoft.copy(alpha = 0.2f), CircleShape)
+                    .background(CRTheme.textHigh(isDark).copy(alpha = 0.08f), CircleShape)
             )
             
             Row(
@@ -1785,3 +1927,117 @@ fun BottomDock(
     }
 }
 
+@Composable
+fun DynamicIslandOverlay(
+    activeTransfers: List<TransferProgress>,
+    isDark: Boolean,
+    onAccept: (String) -> Unit,
+    onReject: (String) -> Unit,
+    onCancel: (String) -> Unit
+) {
+    val activeTransfer = activeTransfers.firstOrNull { 
+        it.state == TransferState.INCOMING || it.state == TransferState.PROGRESS || it.state == TransferState.PAUSED 
+    }
+
+    androidx.compose.animation.AnimatedVisibility(
+        visible = activeTransfer != null,
+        enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it - 50 }) + androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it - 50 }) + androidx.compose.animation.fadeOut()
+    ) {
+        if (activeTransfer != null) {
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .crGlassCard(isDark = isDark, cornerRadius = 32.dp, onClick = {})
+                    .background(CRTheme.surfaceElevated(isDark), RoundedCornerShape(32.dp))
+                    .border(1.dp, CRTheme.stroke(isDark).copy(alpha = 0.5f), RoundedCornerShape(32.dp))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Content left side
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        val icon = if (activeTransfer.state == TransferState.INCOMING) Icons.Default.NotificationsActive else Icons.Default.FileDownload
+                        val color = if (activeTransfer.state == TransferState.INCOMING) CRTheme.accentAmber else CRTheme.blueSoft
+                        
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(color.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                        }
+                        
+                        Spacer(modifier = Modifier.width(12.dp))
+                        
+                        Column {
+                            val title = if (activeTransfer.state == TransferState.INCOMING) "Incoming from ${activeTransfer.peerName}" else "Receiving ${activeTransfer.fileName}"
+                            Text(title, style = CRTypography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = CRTheme.textHigh(isDark), maxLines = 1)
+                            
+                            val subtitle = if (activeTransfer.state == TransferState.INCOMING) {
+                                "${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
+                            } else {
+                                val percent = if (activeTransfer.totalBytes > 0) (activeTransfer.bytesReceived * 100) / activeTransfer.totalBytes else 0
+                                "$percent% • ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.bytesReceived)} / ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
+                            }
+                            Text(subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 1)
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    // Buttons right side
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (activeTransfer.state == TransferState.INCOMING) {
+                            // Reject Button
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { onReject(activeTransfer.id) }
+                                    .background(CRTheme.accentRed.copy(alpha = 0.15f))
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Reject", tint = CRTheme.accentRed, modifier = Modifier.size(18.dp))
+                            }
+                            
+                            // Accept Button
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { onAccept(activeTransfer.id) }
+                                    .background(CRTheme.accentGreen)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Accept", style = CRTypography.caption.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                            }
+                        } else {
+                            // Cancel progress button
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { onCancel(activeTransfer.id) }
+                                    .background(CRTheme.textHigh(isDark).copy(alpha = 0.1f))
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = CRTheme.textHigh(isDark), modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

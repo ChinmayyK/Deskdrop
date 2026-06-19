@@ -67,39 +67,70 @@ import com.deskdrop.ui.theme.CRTheme
  */
 class DeskdropTileService : TileService() {
 
+    private val statusReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            refreshTile()
+        }
+    }
+
     override fun onStartListening() {
         super.onStartListening()
+        
+        // Register receiver to auto-update tile when DeskdropService broadcasts changes
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(statusReceiver, android.content.IntentFilter(DeskdropService.ACTION_STATUS_CHANGED), android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(statusReceiver, android.content.IntentFilter(DeskdropService.ACTION_STATUS_CHANGED))
+        }
+        
         refreshTile()
+    }
+
+    override fun onStopListening() {
+        super.onStopListening()
+        try {
+            unregisterReceiver(statusReceiver)
+        } catch (e: Exception) {
+            // Ignored
+        }
     }
 
     override fun onClick() {
         super.onClick()
-        pushClipboard()
+        toggleSync()
     }
 
     private fun refreshTile() {
         val tile = qsTile ?: return
         val prefs   = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
+        val isSyncEnabled = prefs.getBoolean("sync_enabled", true)
         val count   = prefs.getInt("connected_count", 0)
 
-        tile.state = if (count > 0) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "Push Clipboard"
+        tile.state = if (isSyncEnabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.label = "Deskdrop Sync"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            tile.subtitle = when {
-                count == 0   -> "No devices"
-                count == 1   -> "1 device"
-                else         -> "$count devices"
+            tile.subtitle = if (isSyncEnabled) {
+                when {
+                    count == 0   -> "Scanning"
+                    count == 1   -> "1 device"
+                    else         -> "$count devices"
+                }
+            } else {
+                "Paused"
             }
         }
 
-        tile.contentDescription = "Push Clipboard to Mac"
+        tile.contentDescription = "Toggle Deskdrop Discoverability"
         tile.updateTile()
     }
 
-    private fun pushClipboard() {
+    private fun toggleSync() {
+        val prefs = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
+        val isSyncEnabled = prefs.getBoolean("sync_enabled", true)
+        
         val intent = Intent(this, DeskdropService::class.java).apply {
-            action = DeskdropService.ACTION_PUSH_CLIPBOARD
+            action = if (isSyncEnabled) DeskdropService.ACTION_PAUSE_SYNC else DeskdropService.ACTION_RESUME_SYNC
         }
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -108,11 +139,13 @@ class DeskdropTileService : TileService() {
                 startService(intent)
             }
         }
-        Toast.makeText(
-            applicationContext,
-            "Pushing clipboard...",
-            Toast.LENGTH_SHORT
-        ).show()
+        // State will update via broadcast, but we can do an optimistic UI update here
+        val tile = qsTile ?: return
+        tile.state = if (!isSyncEnabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            tile.subtitle = if (!isSyncEnabled) "Scanning" else "Paused"
+        }
+        tile.updateTile()
     }
 }
 

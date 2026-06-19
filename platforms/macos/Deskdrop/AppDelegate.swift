@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var menuBarDropView: MenuBarDropView?
     private var quickAccessWindow: NSWindow?
     private var diagnosticsWindow: NSWindow?
+    private var fileBannerManager: FileBannerWindowManager!
     private var previousConnectedCount = 0
     private var menuPanel: NSPanel!
     private var localEventMonitor: Any?
@@ -47,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         bindStore()
         toastWindowManager = DeskdropToastWindowManager(store: store)
         callBannerManager = CallBannerWindowManager(store: store)
+        fileBannerManager = FileBannerWindowManager()
         registerHotKeys()
         registerSleepWakeObservers()
         registerStoreNotifications()
@@ -232,6 +234,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             button.addSubview(dropView)
             menuBarDropView = dropView
             button.toolTip  = "Deskdrop — Drag files here to send to your device"
+            
+            button.window?.registerForDraggedTypes([
+                .fileURL,
+                .init(rawValue: "com.apple.pasteboard.promised-file-url"),
+                .init(rawValue: "com.apple.NSFilePromiseItemMetaData")
+            ])
+            button.window?.delegate = self
         }
 
         let panel = NSPanel(
@@ -300,7 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
         quickAccessController = Self.makePanel(
             title: "Quick Access",
-            size:  NSSize(width: 480, height: 560),
+            size:  NSSize(width: 680, height: 540),
             rootView: QuickAccessHistoryView(store: store)
         )
         commandPaletteController = Self.makePanel(
@@ -524,22 +533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let title = "File Received"
             let body = fileName
             
-            store.showToast(
-                title: title,
-                body: body,
-                tint: CRTheme.accentBlue,
-                systemImage: "doc",
-                ttl: 6.0,
-                primaryAction: ToastAction(title: "Reveal in Finder", role: .primary) {
-                    let url = URL(fileURLWithPath: destPath)
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                },
-                secondaryAction: ToastAction(title: "Copy", role: .secondary) {
-                    let url = URL(fileURLWithPath: destPath)
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.writeObjects([url as NSPasteboardWriting])
-                }
-            )
+            fileBannerManager.show(title: title, body: body)
             
         case "remote_notification":
             // Respect the user's toggle for Android Notification Mirroring
@@ -672,6 +666,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             id: 3, keyCode: UInt32(kVK_ANSI_C),
             modifiers: UInt32(cmdKey | shiftKey)
         ) { [weak self] in self?.forcePushClipboard() }
+
+        // Ctrl+D to toggle Drop Canvas in lower middle
+        GlobalHotKeyManager.shared.register(
+            id: 4, keyCode: UInt32(kVK_ANSI_D),
+            modifiers: UInt32(controlKey)
+        ) { [weak self] in self?.toggleDropCanvas() }
     }
 
     /// F24: Push the current Mac clipboard to all connected peers immediately.
@@ -1059,7 +1059,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
         if let global = globalEventMonitor { NSEvent.removeMonitor(global); globalEventMonitor = nil }
     }
 
-    func menuBarDropViewDidEnterDrag(_ view: MenuBarDropView) {
+    private func ensureDropCanvasWindow() {
         if dropCanvasWindow == nil {
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
@@ -1075,6 +1075,29 @@ extension AppDelegate: MenuBarDropViewDelegate {
             panel.contentViewController = NSHostingController(rootView: DropCanvasView(store: store))
             dropCanvasWindow = panel
         }
+    }
+
+    @objc private func toggleDropCanvas() {
+        if let win = dropCanvasWindow, win.isVisible {
+            closeDropCanvas()
+            return
+        }
+        ensureDropCanvasWindow()
+        guard let screen = NSScreen.main else { return }
+        
+        let panelWidth: CGFloat = 320
+        let panelHeight: CGFloat = 180
+        let x = screen.frame.midX - (panelWidth / 2)
+        // Lower middle of screen
+        let y = screen.visibleFrame.minY + 80
+        
+        dropCanvasWindow?.setFrame(NSRect(x: x, y: y, width: panelWidth, height: panelHeight), display: true)
+        dropCanvasWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func menuBarDropViewDidEnterDrag(_ view: MenuBarDropView) {
+        ensureDropCanvasWindow()
         
         guard let button = statusItem.button, let window = button.window else { return }
         
@@ -1151,5 +1174,21 @@ extension AppDelegate: MenuBarDropViewDelegate {
         }
         
         query.enableUpdates()
+    }
+}
+
+// MARK: - NSDraggingDestination for Status Bar Window
+extension AppDelegate: NSDraggingDestination, NSWindowDelegate {
+    func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return menuBarDropView?.draggingEntered(sender) ?? []
+    }
+    func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return menuBarDropView?.draggingUpdated(sender) ?? []
+    }
+    func draggingExited(_ sender: NSDraggingInfo?) {
+        menuBarDropView?.draggingExited(sender)
+    }
+    func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        return menuBarDropView?.performDragOperation(sender) ?? false
     }
 }

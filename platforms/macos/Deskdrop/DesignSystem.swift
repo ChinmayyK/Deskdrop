@@ -257,7 +257,11 @@ struct CRSearchField: View {
         .padding(.vertical, 8)
         .background {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.black.opacity(0.12)) // Darker translucent fill
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.black.opacity(0.08)) // Subtle tint
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .strokeBorder(isFocused ? CRTheme.brandElectric.opacity(0.8) : Color.white.opacity(0.1), lineWidth: 1.0)
