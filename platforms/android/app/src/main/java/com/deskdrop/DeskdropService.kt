@@ -202,6 +202,12 @@ object DeskdropJni {
      * Triggers immediate reconnection to all known trusted peers.
      */
     @JvmStatic external fun notifyNetworkRestored(handle: Long): Int
+
+    /**
+     * Notify the Rust engine whether the Android device is sleeping (Doze mode / screen off).
+     * The engine uses this to relax heartbeat timeouts to zero-drain the battery.
+     */
+    @JvmStatic external fun notifySleepState(handle: Long, isAsleep: Boolean): Int
 }
 
 // ── Activity feed model ───────────────────────────────────────────────────────
@@ -452,7 +458,8 @@ class DeskdropService : Service() {
     private val nsdRetryCount = AtomicLong(0L)
     private var nsdRetryRunnable: Runnable? = null
 
-    // WakeLock & WifiLock removed — rely on connectedDevice foreground service type.
+    // WifiLock — keeps the Wi-Fi radio awake without keeping the CPU awake.
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
     // MulticastLock — held for the lifetime of the service.
     // Many OEM WiFi drivers (Samsung, Xiaomi, OnePlus, Realme) suppress
@@ -545,6 +552,47 @@ class DeskdropService : Service() {
     private val pollInterval  get() = if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE) POLL_FULL_MS  else POLL_REDUCED_MS
     private val clipInterval  get() = if (syncMode() == BackgroundSyncMode.ALWAYS_ACTIVE) CLIP_FULL_MS  else CLIP_REDUCED_MS
 
+    // ── Screen / Doze wake receiver ───────────────────────────────────────────
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            when (intent.action) {
+                Intent.ACTION_SCREEN_ON -> {
+                    Log.i(TAG, "Device woke up (Screen ON) — forcing reconnect/discovery")
+                    handler.post {
+                        val h = engineHandle
+                        if (h != 0L) {
+                            Thread { DeskdropJni.notifySleepState(h, false) }.start()
+                        }
+                        restartDiscoveryNow()
+                        if (h != 0L) {
+                            Thread { DeskdropJni.notifyNetworkRestored(h) }.start()
+                        }
+                    }
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    Log.i(TAG, "Screen OFF: Notifying Rust engine to relax heartbeats")
+                    val h = engineHandle
+                    if (h != 0L) {
+                        Thread { DeskdropJni.notifySleepState(h, true) }.start()
+                    }
+                }
+                android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> {
+                    if (!pm.isDeviceIdleMode) {
+                        Log.i(TAG, "Device woke up (Doze ended) — forcing reconnect/discovery")
+                        handler.post {
+                            restartDiscoveryNow()
+                            val h = engineHandle
+                            if (h != 0L) {
+                                Thread { DeskdropJni.notifyNetworkRestored(h) }.start()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── Service lifecycle ─────────────────────────────────────────────────────
 
     override fun onCreate() {
@@ -562,6 +610,14 @@ class DeskdropService : Service() {
             true,
             screenshotObserver
         )
+
+        // Register screen/doze receiver
+        val screenFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+        }
+        registerReceiver(screenReceiver, screenFilter)
         
         setServiceRunning(true)
     }
@@ -880,6 +936,7 @@ class DeskdropService : Service() {
         unregisterNetworkCallback()
         cancelNsdRetry()
         releaseMulticastLock()
+        releaseWifiLock()
         handler.removeCallbacksAndMessages(null)
         
         isRunning = false
@@ -906,9 +963,11 @@ class DeskdropService : Service() {
         unregisterPairingReceiver()
         
         try { unregisterReceiver(smsReceiver) } catch (e: Exception) {}
+        try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
         try { contentResolver.unregisterContentObserver(screenshotObserver) } catch (e: Exception) {}
         pingPlayer?.release()
         pingPlayer = null
+        
         
         super.onDestroy()
     }
@@ -928,8 +987,35 @@ class DeskdropService : Service() {
         super.onTaskRemoved(rootIntent)
     }
 
-    // ── WakeLock & WifiLock removed ───────────────────────────────────────────
+    // ── WifiLock ──────────────────────────────────────────────────────────────
+    //
+    // Unlike a WakeLock (which forces the CPU to stay awake and drains 5% battery/hr),
+    // a WifiLock simply tells the Wi-Fi chipset not to disassociate from the router
+    // during Doze mode. When the Mac sends its 5-minute ping, the Wi-Fi chipset
+    // briefly wakes the CPU to ACK the TCP packet, then goes right back to sleep.
 
+    private fun acquireWifiLock() {
+        if (wifiLock?.isHeld == true) return
+        val wm = runCatching {
+            applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager
+        }.getOrNull() ?: return
+
+        // WIFI_MODE_FULL tells the OS to keep the Wi-Fi radio on, but allows the CPU to sleep.
+        wifiLock = wm.createWifiLock(
+            android.net.wifi.WifiManager.WIFI_MODE_FULL,
+            "Deskdrop::WifiLock"
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+        Log.i(TAG, "WifiLock acquired (Zero-Drain mode)")
+    }
+
+    private fun releaseWifiLock() {
+        runCatching { wifiLock?.let { if (it.isHeld) it.release() } }
+        wifiLock = null
+        Log.i(TAG, "WifiLock released")
+    }
     // ── Multicast lock ────────────────────────────────────────────────────────
     //
     // Held for the entire service lifetime (not just during drain) because mDNS
@@ -994,6 +1080,7 @@ class DeskdropService : Service() {
         if (engineHandle == 0L) return
         handler.post {
             acquireMulticastLock()
+            acquireWifiLock()
             stopNsdDiscovery()
             startNsdDiscovery()
             cancelNsdRetry()
@@ -2713,6 +2800,7 @@ class DeskdropService : Service() {
                 Log.i(TAG, "Network: default network available — restarting discovery + reconnecting peers")
                 handler.post {
                     acquireMulticastLock() // Fix: Acquire multicast lock only when network is available
+                    acquireWifiLock()
                     
                     // Brief delay lets the IP stack settle before mDNS re-registers.
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }

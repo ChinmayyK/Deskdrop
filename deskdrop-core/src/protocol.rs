@@ -250,6 +250,9 @@ pub enum AppMessage {
     HistoryMetadata {
         entry: HistoryMetadata,
     },
+    DeviceSleepState {
+        is_asleep: bool,
+    },
     ClipboardAck {
         seq: u64,
     },

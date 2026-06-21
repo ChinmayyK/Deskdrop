@@ -448,6 +448,8 @@ struct EngineShared {
     history: Arc<Mutex<crate::history::History>>,
     /// In-memory feedback event log (most-recent N events).
     feedback: Arc<Mutex<crate::engine_support::FeedbackLog>>,
+    /// Tracks when the local device woke up from sleep. Prevents immediate disconnects when waking from deep sleep.
+    local_last_wake: Arc<std::sync::atomic::AtomicU64>,
     /// Active phone call state (set on ringing/offhook, cleared on idle).
     active_call: Arc<Mutex<Option<ActiveCallState>>>,
     /// Per-peer battery levels (F20). Keyed by device UUID.
@@ -547,6 +549,12 @@ impl Engine {
                 )
             })),
             feedback: Arc::new(Mutex::new(crate::engine_support::FeedbackLog::new(200))),
+            local_last_wake: Arc::new(std::sync::atomic::AtomicU64::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+            )),
             active_call: Arc::new(Mutex::new(None)),
             peer_batteries: Arc::new(Mutex::new(std::collections::HashMap::new())),
             local_battery: Arc::new(Mutex::new(None)),
@@ -2085,7 +2093,31 @@ if let Some(sha256_checksum) = final_checksum {
     /// (e.g., Wi-Fi comes back after Doze). Immediately attempts to reconnect
     /// to all known trusted peers.
     pub async fn reconnect_all_peers(&self) {
+        let now_millis = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        self.shared.local_last_wake.store(now_millis, std::sync::atomic::Ordering::Relaxed);
+        
         reconnect_known_peers(self.shared.clone()).await;
+    }
+
+    /// Broadcast sleep state to all connected peers.
+    pub async fn notify_sleep_state(&self, is_asleep: bool) {
+        if !is_asleep {
+            let now_millis = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
+            self.shared.local_last_wake.store(now_millis, std::sync::atomic::Ordering::Relaxed);
+        }
+        let msg = AppMessage::DeviceSleepState { is_asleep };
+        let peers = self.shared.peer_manager.all_trusted_senders();
+        for (peer_id, tx) in peers {
+            if self.is_trusted(peer_id).await {
+                let _ = tx.send(msg.clone()).await;
+            }
+        }
     }
 
     pub async fn connect_to_peer(&self, ip: String, port: u16) -> Result<()> {
@@ -3627,9 +3659,11 @@ fn register_session(
                 .as_millis() as u64,
         ));
         let ping_sent_at = std::sync::Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
+        let peer_sleeping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let rx_last_seen = last_seen.clone();
         let rx_ping_sent_at = ping_sent_at.clone();
+        let rx_peer_sleeping = peer_sleeping.clone();
         let rx_shared = shared.clone();
         let rx_peer_name = peer_name.clone();
         let rx_session_outbox_tx = session_outbox_tx.clone();
@@ -4543,6 +4577,18 @@ if let Some(sha256_checksum) = final_checksum {
                             })
                             .await;
                     }
+                    Ok(AppMessage::DeviceSleepState { is_asleep }) => {
+                        touch_last_seen();
+                        tracing::info!(peer = %peer_name, is_asleep, "received device sleep state");
+                        rx_peer_sleeping.store(is_asleep, std::sync::atomic::Ordering::Relaxed);
+                        // Send an instant ping if they just woke up to update their last_seen_millis
+                        // and prevent their local 15s grace period from expiring before our next tick.
+                        if !is_asleep {
+                            let ping = probe::make_ping();
+                            *rx_ping_sent_at.lock().unwrap() = Some(std::time::Instant::now());
+                            let _ = rx_session_outbox_tx.send(ping).await;
+                        }
+                    }
                     Ok(AppMessage::ClipboardAck { seq }) => {
                         touch_last_seen();
                         let _ = shared.peer_manager.update_last_sync(peer_id);
@@ -5056,6 +5102,11 @@ if let Some(sha256_checksum) = final_checksum {
             }
         });
 
+        let mut last_tick_millis = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+
         let disconnect_reason = loop {
             let now_millis = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -5084,14 +5135,50 @@ if let Some(sha256_checksum) = final_checksum {
                     }
                 }
                 _ = heartbeat.tick() => {
-                    if now_millis.saturating_sub(last_seen_millis) > shared.config.heartbeat_timeout.as_millis() as u64 {
-                        break "heartbeat timeout".to_string();
+                    let tick_delta = now_millis.saturating_sub(last_tick_millis);
+                    last_tick_millis = now_millis;
+
+                    // If this tokio interval tick took significantly longer than expected (e.g. > 20s),
+                    // the OS almost certainly suspended our CPU (Doze mode or sleep).
+                    // We implicitly grant ourselves a fresh 15-second grace period.
+                    if tick_delta > (shared.config.heartbeat_interval.as_millis() as u64) + 5000 {
+                        shared.local_last_wake.store(now_millis, std::sync::atomic::Ordering::Relaxed);
                     }
+
+                    let is_sleeping = peer_sleeping.load(std::sync::atomic::Ordering::Relaxed);
+                    let timeout = if is_sleeping {
+                        // 24 hours timeout if peer is sleeping
+                        24 * 60 * 60 * 1000
+                    } else {
+                        shared.config.heartbeat_timeout.as_millis() as u64
+                    };
+
+                    let time_since_seen = now_millis.saturating_sub(last_seen_millis);
+                    let time_since_wake = now_millis.saturating_sub(shared.local_last_wake.load(std::sync::atomic::Ordering::Relaxed));
+                    
+                    // Only timeout if we haven't seen a heartbeat in `timeout` ms AND 
+                    // we've been awake for at least `timeout` ms. 
+                    // This prevents us from disconnecting immediately when our own CPU wakes from deep sleep.
+                    if time_since_seen > timeout && time_since_wake > timeout {
+                        break format!("heartbeat timeout (sleeping: {is_sleeping}, time_since_seen: {time_since_seen}, time_since_wake: {time_since_wake})");
+                    }
+                    
                     shared.file_transfers.lock().await.prune_stale_transfers();
-                    let ping = probe::make_ping();
-                    *ping_sent_at.lock().unwrap() = Some(std::time::Instant::now());
-                    if let Err(err) = sess_tx.send(&ping).await {
-                        break format!("heartbeat send failed: {err}");
+                    
+                    // Only send a ping if awake, OR if asleep and we haven't seen them for 5 minutes
+                    let should_ping = if !is_sleeping {
+                        true
+                    } else {
+                        let last_ping_elapsed = ping_sent_at.lock().unwrap().map(|i| i.elapsed().as_millis() as u64).unwrap_or(u64::MAX);
+                        last_ping_elapsed > 5 * 60 * 1000
+                    };
+                    
+                    if should_ping {
+                        let ping = probe::make_ping();
+                        *ping_sent_at.lock().unwrap() = Some(std::time::Instant::now());
+                        if let Err(err) = sess_tx.send(&ping).await {
+                            break format!("heartbeat send failed: {err}");
+                        }
                     }
                 }
                 Some(msg) = outbox_rx.recv() => {

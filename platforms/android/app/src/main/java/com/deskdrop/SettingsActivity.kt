@@ -146,6 +146,11 @@ class SettingsActivity : ComponentActivity() {
         sendBroadcast(Intent(DeskdropService.ACTION_SETTINGS_CHANGED).setPackage(packageName))
     }
 
+    private fun saveLongPref(key: String, value: Long) {
+        getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putLong(key, value).apply()
+        sendBroadcast(Intent(DeskdropService.ACTION_SETTINGS_CHANGED).setPackage(packageName))
+    }
+
     private fun showRenameDialog() {
         val field = EditText(this).apply {
             setText(deviceName.value)

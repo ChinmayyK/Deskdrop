@@ -1603,3 +1603,18 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifyNetworkRestored(
     rt().block_on(h.engine.reconnect_all_peers());
     0
 }
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifySleepState(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    is_asleep: jboolean,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.notify_sleep_state(is_asleep != 0));
+    0
+}
