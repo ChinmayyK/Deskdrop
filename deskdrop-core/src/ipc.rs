@@ -940,15 +940,13 @@ pub async fn handle_ipc_request(
                 Err(e) => IpcResponse::err(e.to_string()),
             }
         }
-        IpcRequest::ReconnectPeer { device_id } => {
-            match crate::ipc::parse_uuid(&device_id) {
-                Ok(id) => match eng.reconnect_peer_by_id(id).await {
-                    Ok(_) => IpcResponse::ok_empty(),
-                    Err(e) => IpcResponse::err(e.to_string()),
-                },
-                Err(_) => IpcResponse::err("invalid device id"),
-            }
-        }
+        IpcRequest::ReconnectPeer { device_id } => match crate::ipc::parse_uuid(&device_id) {
+            Ok(id) => match eng.reconnect_peer_by_id(id).await {
+                Ok(_) => IpcResponse::ok_empty(),
+                Err(e) => IpcResponse::err(e.to_string()),
+            },
+            Err(_) => IpcResponse::err("invalid device id"),
+        },
         IpcRequest::GetPeerSettings { device_id } => match crate::ipc::parse_uuid(&device_id) {
             Ok(id) => IpcResponse::ok(eng.get_peer_settings(id).await),
             Err(_) => IpcResponse::err("invalid device id"),

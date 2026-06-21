@@ -44,7 +44,9 @@ pub enum ChunkKind {
 /// of heap on every outgoing clipboard push (HIGH-06).  We now borrow the
 /// underlying bytes for the threshold check and only materialise the chunks
 /// after we know the payload is large enough to warrant chunking.
-pub fn maybe_chunk<'a>(content: &'a ClipboardContent) -> Option<impl Iterator<Item = ChunkMessage> + 'a> {
+pub fn maybe_chunk<'a>(
+    content: &'a ClipboardContent,
+) -> Option<impl Iterator<Item = ChunkMessage> + 'a> {
     // Borrow the raw bytes without cloning — used for length check and checksum.
     let raw: &'a [u8] = match content {
         ClipboardContent::Text(s) => s.as_bytes(),
@@ -78,13 +80,13 @@ pub fn maybe_chunk<'a>(content: &'a ClipboardContent) -> Option<impl Iterator<It
         kind,
     });
 
-    let chunks = chunk_slices.enumerate().map(move |(index, slice)| {
-        ChunkMessage::Chunk {
+    let chunks = chunk_slices
+        .enumerate()
+        .map(move |(index, slice)| ChunkMessage::Chunk {
             transfer_id: id,
             index: index as u32,
             data: slice.to_vec(),
-        }
-    });
+        });
 
     let end_msg = std::iter::once(ChunkMessage::End { transfer_id: id });
 
@@ -337,7 +339,9 @@ mod tests {
     #[test]
     fn large_payload_roundtrip_with_checksum() {
         let original = make_content(CHUNK_SIZE * 3 + 7777);
-        let msgs = maybe_chunk(&original).expect("should chunk").collect::<Vec<_>>();
+        let msgs = maybe_chunk(&original)
+            .expect("should chunk")
+            .collect::<Vec<_>>();
         assert!(msgs.len() > 3);
 
         let mut r = Reassembler::default();

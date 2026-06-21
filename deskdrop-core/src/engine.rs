@@ -2199,11 +2199,14 @@ impl Engine {
                 let _ = shared
                     .peer_manager
                     .mark_disconnected(device_id, Some(e.to_string()));
-                let _ = shared.event_tx.send(EngineEvent::PeerDisconnected {
-                    device_id,
-                    device_name: None,
-                    reason: Some(e.to_string()),
-                }).await;
+                let _ = shared
+                    .event_tx
+                    .send(EngineEvent::PeerDisconnected {
+                        device_id,
+                        device_name: None,
+                        reason: Some(e.to_string()),
+                    })
+                    .await;
             }
         });
 

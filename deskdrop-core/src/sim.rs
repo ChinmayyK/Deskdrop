@@ -177,7 +177,7 @@ impl SimNetwork {
     /// Create an n-node fully-connected mesh.
     pub fn mesh(n: usize) -> Vec<(SimNode, Vec<mpsc::Sender<AppMessage>>)> {
         let seq = Arc::new(AtomicU64::new(1));
-        
+
         let mut in_txs: Vec<mpsc::Sender<AppMessage>> = Vec::new();
         let mut in_rxs = Vec::new();
         let mut out_txs: Vec<mpsc::Sender<AppMessage>> = Vec::new();
@@ -205,7 +205,7 @@ impl SimNetwork {
 
             let mut rx = out_rxs[i].take().unwrap();
             let senders = bcast_txs.clone();
-            
+
             tokio::spawn(async move {
                 while let Some(msg) = rx.recv().await {
                     for tx in &senders {
@@ -405,7 +405,7 @@ mod tests {
         // Both 1 and 2 should receive it.
         let msg1 = node1.next_clipboard().await.expect("node 1 should receive");
         let msg2 = node2.next_clipboard().await.expect("node 2 should receive");
-        
+
         assert_eq!(msg1, ClipboardContent::Text("broadcast from 0".into()));
         assert_eq!(msg2, ClipboardContent::Text("broadcast from 0".into()));
 
@@ -413,11 +413,17 @@ mod tests {
         // Node 0 already sent it, so it shouldn't apply it again.
         // Node 2 just received it, so it shouldn't apply it again.
         node1.send_text("broadcast from 0").await;
-        
+
         let echo0 = node0.next_clipboard().await;
         let echo2 = node2.next_clipboard().await;
-        
-        assert!(echo0.is_none(), "node 0 should suppress its own original broadcast");
-        assert!(echo2.is_none(), "node 2 should suppress duplicate hash from node 1");
+
+        assert!(
+            echo0.is_none(),
+            "node 0 should suppress its own original broadcast"
+        );
+        assert!(
+            echo2.is_none(),
+            "node 2 should suppress duplicate hash from node 1"
+        );
     }
 }

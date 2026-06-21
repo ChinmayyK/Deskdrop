@@ -37,7 +37,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 pub const FILE_CHUNK_SIZE: usize = 256 * 1024; // 256 KB per chunk — larger chunks saturate
-                                                    // encrypt/serialize/frame/flush overhead.
+                                               // encrypt/serialize/frame/flush overhead.
 
 /// HIGH-03 FIX: Maximum transfer size (4 GB). Rejects announced transfers
 /// exceeding this limit to prevent disk-bomb attacks via pre-allocation.
@@ -265,7 +265,7 @@ impl OutboundTransfer {
         };
         let bytes_sent = (self.next_chunk as u64) * (FILE_CHUNK_SIZE as u64);
         let bytes_sent = bytes_sent.min(self.meta.size_bytes);
-        
+
         let elapsed = self.created_at.elapsed();
         let speed_bps = if elapsed.as_secs() > 0 {
             Some(bytes_sent / elapsed.as_secs())
@@ -395,8 +395,8 @@ impl InboundTransfer {
                 .write(true)
                 .open(tmp)
                 .with_context(|| format!("creating temp file {}", tmp.display()))?;
-            // Removed file.set_len() to prevent blocking the async runtime with 
-            // synchronous zero-filling on Android flash storage. The file will 
+            // Removed file.set_len() to prevent blocking the async runtime with
+            // synchronous zero-filling on Android flash storage. The file will
             // grow naturally as chunks are written.
             self.file_handle = Some(file);
         }
@@ -419,21 +419,35 @@ impl InboundTransfer {
         self.hasher = hasher;
     }
 
-    pub fn validate_chunk(&mut self, chunk_index: u32, data_len: usize) -> Result<(u64, usize, bool)> {
+    pub fn validate_chunk(
+        &mut self,
+        chunk_index: u32,
+        data_len: usize,
+    ) -> Result<(u64, usize, bool)> {
         self.last_active_at = Instant::now();
-        anyhow::ensure!(self.status == TransferStatus::Transferring, "transfer is not active");
+        anyhow::ensure!(
+            self.status == TransferStatus::Transferring,
+            "transfer is not active"
+        );
         anyhow::ensure!(!self.paused, "transfer is paused");
         anyhow::ensure!(data_len <= 4 * 1024 * 1024, "chunk size exceeds limit");
-        anyhow::ensure!(chunk_index < self.total_chunks, "chunk {} out of range", chunk_index);
-        
+        anyhow::ensure!(
+            chunk_index < self.total_chunks,
+            "chunk {} out of range",
+            chunk_index
+        );
+
         if chunk_index < self.total_chunks - 1 {
             anyhow::ensure!(data_len == FILE_CHUNK_SIZE, "non-final chunk size mismatch");
         }
-        
+
         if chunk_index < self.received_chunk_count {
             return Ok((0, 0, true)); // duplicate
         }
-        anyhow::ensure!(chunk_index == self.received_chunk_count, "out-of-order chunk");
+        anyhow::ensure!(
+            chunk_index == self.received_chunk_count,
+            "out-of-order chunk"
+        );
 
         let offset = (chunk_index as u64) * (FILE_CHUNK_SIZE as u64);
         let mut padding = 0;

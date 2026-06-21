@@ -65,9 +65,7 @@ async fn run() -> Result<()> {
             .with_env_filter(env_filter)
             .init();
     } else {
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
-            .init();
+        tracing_subscriber::fmt().with_env_filter(env_filter).init();
     }
 
     let settings_store =
@@ -149,7 +147,7 @@ async fn run() -> Result<()> {
     }
 
     // ── Virtual Camera TCP Frame Server ───────────────────────────────────────
-    // A lightweight HTTP/TCP endpoint purely for the Virtual Camera extension 
+    // A lightweight HTTP/TCP endpoint purely for the Virtual Camera extension
     // to bypass CMIOExtension UNIX socket sandbox restrictions.
     {
         let camera_state = state.clone();
@@ -158,7 +156,11 @@ async fn run() -> Result<()> {
             let listener = match tokio::net::TcpListener::bind(addr).await {
                 Ok(l) => l,
                 Err(e) => {
-                    tracing::warn!("Failed to bind virtual camera TCP server on {}: {}", addr, e);
+                    tracing::warn!(
+                        "Failed to bind virtual camera TCP server on {}: {}",
+                        addr,
+                        e
+                    );
                     return;
                 }
             };

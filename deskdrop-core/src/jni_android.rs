@@ -288,7 +288,9 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_interruptWait(
         return;
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
-    let _ = h.event_tx.try_send(crate::engine::EngineEvent::Warning("interrupt".into()));
+    let _ = h
+        .event_tx
+        .try_send(crate::engine::EngineEvent::Warning("interrupt".into()));
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
