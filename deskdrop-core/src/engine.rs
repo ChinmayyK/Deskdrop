@@ -1,7 +1,7 @@
 use crate::activity::ActivityFeed;
 use crate::dedup::hash_content;
 use crate::discovery::{Discovery, PeerEvent, PeerInfo};
-use crate::file_transfer::{default_save_dir, FileTransferManager, FileTransferMessage};
+use crate::file_transfer::{default_save_dir, FileTransferManager};
 use crate::identity::IdentityStore;
 use crate::mesh::{ClipboardApplyPolicy, MeshRouter};
 use crate::network::{self, PeerSession, Server};
@@ -263,9 +263,6 @@ pub enum EngineEvent {
     },
     Warning(String),
 }
-
-
-
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -1889,7 +1886,7 @@ impl Engine {
                                     None => break 'outer,
                                 }
                             };
-                            
+
                             let instr = match instr_res {
                                 Ok(Some(i)) => i,
                                 Ok(None) => break,
@@ -1900,24 +1897,34 @@ impl Engine {
                                     break 'outer;
                                 }
                             };
-                            
+
                             let (chunk_index, data_res) = match instr {
-                                crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
-                                    (chunk_index, Ok(data))
-                                }
-                                crate::file_transfer::ChunkInstruction::File { chunk_index, path, offset, len } => {
+                                crate::file_transfer::ChunkInstruction::Memory {
+                                    chunk_index,
+                                    data,
+                                } => (chunk_index, Ok(data)),
+                                crate::file_transfer::ChunkInstruction::File {
+                                    chunk_index,
+                                    path,
+                                    offset,
+                                    len,
+                                } => {
                                     let read_res = tokio::task::spawn_blocking(move || {
-                                        let mut file = std::fs::File::open(&path).map_err(anyhow::Error::from)?;
-                                        use std::io::{Seek, Read, SeekFrom};
-                                        file.seek(SeekFrom::Start(offset)).map_err(anyhow::Error::from)?;
+                                        let mut file = std::fs::File::open(&path)
+                                            .map_err(anyhow::Error::from)?;
+                                        use std::io::{Read, Seek, SeekFrom};
+                                        file.seek(SeekFrom::Start(offset))
+                                            .map_err(anyhow::Error::from)?;
                                         let mut buf = vec![0u8; len];
                                         file.read_exact(&mut buf).map_err(anyhow::Error::from)?;
                                         Ok::<Vec<u8>, anyhow::Error>(buf)
-                                    }).await.unwrap();
+                                    })
+                                    .await
+                                    .unwrap();
                                     (chunk_index, read_res)
                                 }
                             };
-                            
+
                             let msg = {
                                 let mut mgr = bg_shared.file_transfers.lock().await;
                                 match mgr.get_outbound_mut(&bg_transfer_id) {
@@ -1961,18 +1968,23 @@ impl Engine {
                     }
 
                     let final_checksum = {
-    let mut mgr = bg_shared.file_transfers.lock().await;
-    mgr.get_outbound_mut(&bg_transfer_id)
-        .and_then(|transfer| if transfer.is_all_sent() { Some(transfer.finalize_checksum()) } else { None })
-};
-if let Some(sha256_checksum) = final_checksum {
-    let _ = bg_outbox
-        .send(AppMessage::FileTransferComplete {
-            transfer_id: bg_transfer_id,
-            sha256_checksum,
-        })
-        .await;
-}
+                        let mut mgr = bg_shared.file_transfers.lock().await;
+                        mgr.get_outbound_mut(&bg_transfer_id).and_then(|transfer| {
+                            if transfer.is_all_sent() {
+                                Some(transfer.finalize_checksum())
+                            } else {
+                                None
+                            }
+                        })
+                    };
+                    if let Some(sha256_checksum) = final_checksum {
+                        let _ = bg_outbox
+                            .send(AppMessage::FileTransferComplete {
+                                transfer_id: bg_transfer_id,
+                                sha256_checksum,
+                            })
+                            .await;
+                    }
                 });
             }
         }
@@ -2097,8 +2109,10 @@ if let Some(sha256_checksum) = final_checksum {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        self.shared.local_last_wake.store(now_millis, std::sync::atomic::Ordering::Relaxed);
-        
+        self.shared
+            .local_last_wake
+            .store(now_millis, std::sync::atomic::Ordering::Relaxed);
+
         reconnect_known_peers(self.shared.clone()).await;
     }
 
@@ -2109,7 +2123,9 @@ if let Some(sha256_checksum) = final_checksum {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis() as u64;
-            self.shared.local_last_wake.store(now_millis, std::sync::atomic::Ordering::Relaxed);
+            self.shared
+                .local_last_wake
+                .store(now_millis, std::sync::atomic::Ordering::Relaxed);
         }
         let msg = AppMessage::DeviceSleepState { is_asleep };
         let peers = self.shared.peer_manager.all_trusted_senders();
@@ -2148,13 +2164,13 @@ if let Some(sha256_checksum) = final_checksum {
             .shared
             .peer_manager
             .set_explicit_disconnect(device_id, false);
-            
+
         let peer = self
             .shared
             .peer_manager
             .get(device_id)
             .context("peer not found")?;
-            
+
         let endpoints = peer.socket_addrs();
         if endpoints.is_empty() {
             return Err(anyhow::anyhow!("no known endpoints for peer {}", device_id));
@@ -2167,15 +2183,27 @@ if let Some(sha256_checksum) = final_checksum {
                 endpoints = ?endpoints,
                 "manual reconnect_peer_by_id triggered"
             );
-            let _ = shared.peer_manager.mark_connecting(device_id, Some(endpoints[0]));
-            if let Err(e) = connect_once(shared.clone(), endpoints, Some(device_id), DiscoverySource::Manual, true).await {
+            let _ = shared
+                .peer_manager
+                .mark_connecting(device_id, Some(endpoints[0]));
+            if let Err(e) = connect_once(
+                shared.clone(),
+                endpoints,
+                Some(device_id),
+                DiscoverySource::Manual,
+                true,
+            )
+            .await
+            {
                 tracing::warn!("Manual reconnect failed: {}", e);
-                let _ = shared.peer_manager.mark_disconnected(device_id, Some(e.to_string()));
+                let _ = shared
+                    .peer_manager
+                    .mark_disconnected(device_id, Some(e.to_string()));
                 let _ = shared.event_tx.send(EngineEvent::PeerDisconnected {
                     device_id,
                     device_name: None,
                     reason: Some(e.to_string()),
-                });
+                }).await;
             }
         });
 
@@ -2187,7 +2215,7 @@ if let Some(sha256_checksum) = final_checksum {
             .shared
             .peer_manager
             .set_explicit_disconnect(device_id, true)?;
-            
+
         let session = self.shared.peer_manager.shutdown_peer_session(device_id)?;
         if let Some(session) = session {
             if let Some(shutdown_tx) = session.shutdown_tx {
@@ -2323,9 +2351,10 @@ if let Some(sha256_checksum) = final_checksum {
         if changed.is_some() {
             self.shared.peer_manager.update_trust(device_id, true)?;
             let _ = self.shared.peer_manager.set_auto_connect(device_id, true);
-            
+
             // Push local battery and network status to the newly trusted peer.
-            let mut target_tx: Option<tokio::sync::mpsc::Sender<crate::protocol::AppMessage>> = None;
+            let mut target_tx: Option<tokio::sync::mpsc::Sender<crate::protocol::AppMessage>> =
+                None;
             for (id, tx) in self.shared.peer_manager.active_senders() {
                 if id == device_id {
                     target_tx = Some(tx);
@@ -2336,19 +2365,23 @@ if let Some(sha256_checksum) = final_checksum {
                 let sh = self.shared.clone();
                 tokio::spawn(async move {
                     if let Some((level, charging)) = *sh.local_battery.lock().await {
-                        let _ = tx.send(AppMessage::BatteryStatus {
-                            level,
-                            charging,
-                            origin_device: sh.config.device_id,
-                            origin_device_name: sh.config.device_name.clone(),
-                        }).await;
+                        let _ = tx
+                            .send(AppMessage::BatteryStatus {
+                                level,
+                                charging,
+                                origin_device: sh.config.device_id,
+                                origin_device_name: sh.config.device_name.clone(),
+                            })
+                            .await;
                     }
                     if let Some(net) = sh.local_network.lock().await.clone() {
-                        let _ = tx.send(AppMessage::NetworkStatus {
-                            network_type: net,
-                            origin_device: sh.config.device_id,
-                            origin_device_name: sh.config.device_name.clone(),
-                        }).await;
+                        let _ = tx
+                            .send(AppMessage::NetworkStatus {
+                                network_type: net,
+                                origin_device: sh.config.device_id,
+                                origin_device_name: sh.config.device_name.clone(),
+                            })
+                            .await;
                     }
                 });
             }
@@ -2417,7 +2450,7 @@ if let Some(sha256_checksum) = final_checksum {
                 .get(target_device)
                 .and_then(|p| p.pairing_pin.clone())
                 .unwrap_or_else(|| "------".to_string());
-            
+
             let device_name = self
                 .shared
                 .peer_manager
@@ -2463,7 +2496,7 @@ if let Some(sha256_checksum) = final_checksum {
                                     .get(target_device)
                                     .and_then(|p| p.pairing_pin.clone())
                                     .unwrap_or_else(|| "------".to_string());
-                                
+
                                 let device_name = shared
                                     .peer_manager
                                     .get(target_device)
@@ -2699,8 +2732,14 @@ if let Some(sha256_checksum) = final_checksum {
                                 endpoints = ?endpoints,
                                 "auto-reconnector: attempting reconnection"
                             );
-                            let _ = connect_once(shared_clone, endpoints, Some(peer_id), discovery, false)
-                                .await;
+                            let _ = connect_once(
+                                shared_clone,
+                                endpoints,
+                                Some(peer_id),
+                                discovery,
+                                false,
+                            )
+                            .await;
                         });
                     }
                 }
@@ -3247,11 +3286,13 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
     )
     .await?;
 
-    tracing::Span::current().record("device_id", &tracing::field::display(hs.peer_device_id));
+    tracing::Span::current().record("device_id", tracing::field::display(hs.peer_device_id));
 
     if hs.is_manual_reconnect {
         tracing::debug!("Peer manually initiated reconnect; clearing explicit disconnect");
-        let _ = shared.peer_manager.set_explicit_disconnect(hs.peer_device_id, false);
+        let _ = shared
+            .peer_manager
+            .set_explicit_disconnect(hs.peer_device_id, false);
     } else if shared
         .peer_manager
         .is_explicitly_disconnected(hs.peer_device_id)
@@ -3296,7 +3337,9 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         DiscoverySource::Mdns,
     )?;
 
-    let _ = shared.peer_manager.set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
+    let _ = shared
+        .peer_manager
+        .set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
 
     register_session(
         shared,
@@ -3415,7 +3458,8 @@ async fn connect_once(
     let mut stream = match connected_stream {
         Some(s) => s,
         None => {
-            let err_msg = last_err.unwrap_or_else(|| anyhow::anyhow!("all connection attempts failed"));
+            let err_msg =
+                last_err.unwrap_or_else(|| anyhow::anyhow!("all connection attempts failed"));
             tracing::warn!("connect_once: all connection attempts failed: {}", err_msg);
             return Err(err_msg);
         }
@@ -3484,7 +3528,9 @@ async fn connect_once(
         discovery,
     )?;
 
-    let _ = shared.peer_manager.set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
+    let _ = shared
+        .peer_manager
+        .set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
 
     register_session(
         shared,
@@ -3598,19 +3644,23 @@ fn register_session(
         let sh = shared.clone();
         tokio::spawn(async move {
             if let Some((level, charging)) = *sh.local_battery.lock().await {
-                let _ = outbox.send(AppMessage::BatteryStatus {
-                    level,
-                    charging,
-                    origin_device: sh.config.device_id,
-                    origin_device_name: sh.config.device_name.clone(),
-                }).await;
+                let _ = outbox
+                    .send(AppMessage::BatteryStatus {
+                        level,
+                        charging,
+                        origin_device: sh.config.device_id,
+                        origin_device_name: sh.config.device_name.clone(),
+                    })
+                    .await;
             }
             if let Some(net) = sh.local_network.lock().await.clone() {
-                let _ = outbox.send(AppMessage::NetworkStatus {
-                    network_type: net,
-                    origin_device: sh.config.device_id,
-                    origin_device_name: sh.config.device_name.clone(),
-                }).await;
+                let _ = outbox
+                    .send(AppMessage::NetworkStatus {
+                        network_type: net,
+                        origin_device: sh.config.device_id,
+                        origin_device_name: sh.config.device_name.clone(),
+                    })
+                    .await;
             }
         });
     }
@@ -4032,22 +4082,30 @@ fn register_session(
                                 // With 1 MB chunks, reading 8 at a time = 8 MB per lock cycle.
                                 const BATCH_SIZE: usize = 8;
                                 'outer: loop {
-                                    let (batch, progs) = match read_outbound_chunks(bg_shared.clone(), bg_transfer_id, BATCH_SIZE).await {
+                                    let (batch, progs) = match read_outbound_chunks(
+                                        bg_shared.clone(),
+                                        bg_transfer_id,
+                                        BATCH_SIZE,
+                                    )
+                                    .await
+                                    {
                                         Some((batch, progs)) => (batch, progs),
                                         None => break 'outer,
                                     };
 
                                     if let Some((prog, fname)) = progs.last() {
-                                        let _ = bg_event_tx.send(EngineEvent::FileTransferProgress {
-                                            transfer_id: bg_transfer_id,
-                                            from_device: bg_peer_id,
-                                            file_name: fname.clone(),
-                                            percent: prog.percent,
-                                            bytes_received: prog.bytes_received,
-                                            total_bytes: prog.total_bytes,
-                                            speed_bps: prog.speed_bps,
-                                            eta_secs: prog.eta_secs,
-                                        }).await;
+                                        let _ = bg_event_tx
+                                            .send(EngineEvent::FileTransferProgress {
+                                                transfer_id: bg_transfer_id,
+                                                from_device: bg_peer_id,
+                                                file_name: fname.clone(),
+                                                percent: prog.percent,
+                                                bytes_received: prog.bytes_received,
+                                                total_bytes: prog.total_bytes,
+                                                speed_bps: prog.speed_bps,
+                                                eta_secs: prog.eta_secs,
+                                            })
+                                            .await;
                                     }
 
                                     if batch.is_empty() {
@@ -4061,18 +4119,23 @@ fn register_session(
                                 }
 
                                 let final_checksum = {
-    let mut mgr = bg_shared.file_transfers.lock().await;
-    mgr.get_outbound_mut(&bg_transfer_id)
-        .and_then(|transfer| if transfer.is_all_sent() { Some(transfer.finalize_checksum()) } else { None })
-};
-if let Some(sha256_checksum) = final_checksum {
-    let _ = bg_outbox
-        .send(AppMessage::FileTransferComplete {
-            transfer_id: bg_transfer_id,
-            sha256_checksum,
-        })
-        .await;
-}
+                                    let mut mgr = bg_shared.file_transfers.lock().await;
+                                    mgr.get_outbound_mut(&bg_transfer_id).and_then(|transfer| {
+                                        if transfer.is_all_sent() {
+                                            Some(transfer.finalize_checksum())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                };
+                                if let Some(sha256_checksum) = final_checksum {
+                                    let _ = bg_outbox
+                                        .send(AppMessage::FileTransferComplete {
+                                            transfer_id: bg_transfer_id,
+                                            sha256_checksum,
+                                        })
+                                        .await;
+                                }
                             });
                         }
                     }
@@ -4106,7 +4169,7 @@ if let Some(sha256_checksum) = final_checksum {
                                                 (Ok((offset, padding, false)), ctx)
                                             }
                                         }
-                                        Err(e) => (Err(e), None)
+                                        Err(e) => (Err(e), None),
                                     }
                                 }
                             } else {
@@ -4126,8 +4189,8 @@ if let Some(sha256_checksum) = final_checksum {
                                 } else if let Some((mut file, mut hasher)) = io_ctx {
                                     let data_len = data.len();
                                     let res = tokio::task::spawn_blocking(move || {
-                                        use std::io::{Seek, Write, SeekFrom};
                                         use sha2::Digest;
+                                        use std::io::{Seek, SeekFrom, Write};
                                         if let Err(e) = file.seek(SeekFrom::Start(offset)) {
                                             return Err(anyhow::anyhow!("seek error: {}", e));
                                         }
@@ -4136,11 +4199,13 @@ if let Some(sha256_checksum) = final_checksum {
                                         }
                                         hasher.update(&data);
                                         if padding > 0 {
-                                            hasher.update(&vec![0u8; padding]);
+                                            hasher.update(vec![0u8; padding]);
                                         }
                                         Ok::<_, anyhow::Error>((file, hasher))
-                                    }).await.unwrap();
-                                    
+                                    })
+                                    .await
+                                    .unwrap();
+
                                     match res {
                                         Ok((file, hasher)) => {
                                             let mut mgr = shared.file_transfers.lock().await;
@@ -4232,7 +4297,10 @@ if let Some(sha256_checksum) = final_checksum {
                             }
                         }
                     }
-                    Ok(AppMessage::FileTransferComplete { transfer_id, sha256_checksum }) => {
+                    Ok(AppMessage::FileTransferComplete {
+                        transfer_id,
+                        sha256_checksum,
+                    }) => {
                         touch_last_seen();
                         if !shared
                             .peer_manager
@@ -4336,29 +4404,42 @@ if let Some(sha256_checksum) = final_checksum {
                         {
                             continue;
                         }
-                        
+
                         let (file_name, peer_name) = {
                             let mut mgr = shared.file_transfers.lock().await;
-                            let fname = mgr.get_outbound_mut(&transfer_id).map(|t| t.meta.file_name.clone()).unwrap_or_default();
+                            let fname = mgr
+                                .get_outbound_mut(&transfer_id)
+                                .map(|t| t.meta.file_name.clone())
+                                .unwrap_or_default();
                             mgr.remove_outbound(&transfer_id);
-                            let pname = shared.peer_manager.get(peer_id).map(|p| p.friendly_name.clone()).unwrap_or_default();
+                            let pname = shared
+                                .peer_manager
+                                .get(peer_id)
+                                .map(|p| p.friendly_name.clone())
+                                .unwrap_or_default();
                             (fname, pname)
                         };
-                        
+
                         if success {
-                            let _ = shared.event_tx.send(EngineEvent::FileTransferComplete {
-                                transfer_id,
-                                from_device: peer_id,
-                                from_name: peer_name,
-                                file_name,
-                                dest_path: std::path::PathBuf::new(),
-                            }).await;
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::FileTransferComplete {
+                                    transfer_id,
+                                    from_device: peer_id,
+                                    from_name: peer_name,
+                                    file_name,
+                                    dest_path: std::path::PathBuf::new(),
+                                })
+                                .await;
                         } else {
-                            let _ = shared.event_tx.send(EngineEvent::FileTransferFailed {
-                                transfer_id,
-                                from_device: peer_id,
-                                reason: error.unwrap_or_else(|| "Unknown error".to_string()),
-                            }).await;
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::FileTransferFailed {
+                                    transfer_id,
+                                    from_device: peer_id,
+                                    reason: error.unwrap_or_else(|| "Unknown error".to_string()),
+                                })
+                                .await;
                         }
                     }
                     Ok(AppMessage::FileTransferCancel {
@@ -4460,50 +4541,63 @@ if let Some(sha256_checksum) = final_checksum {
                             tokio::spawn(async move {
                                 const BATCH_SIZE: usize = 8;
                                 'outer: loop {
-                                let mut batch = Vec::with_capacity(BATCH_SIZE);
-                                for _ in 0..BATCH_SIZE {
-                                let instr_res = {
-                                let mut mgr = bg_shared.file_transfers.lock().await;
-                                match mgr.get_outbound_mut(&bg_transfer_id) {
-                                Some(transfer) => transfer.next_chunk_instruction(),
-                                None => break 'outer,
-                                }
-                                };
+                                    let mut batch = Vec::with_capacity(BATCH_SIZE);
+                                    for _ in 0..BATCH_SIZE {
+                                        let instr_res = {
+                                            let mut mgr = bg_shared.file_transfers.lock().await;
+                                            match mgr.get_outbound_mut(&bg_transfer_id) {
+                                                Some(transfer) => transfer.next_chunk_instruction(),
+                                                None => break 'outer,
+                                            }
+                                        };
 
-                                let instr = match instr_res {
-                                Ok(Some(i)) => i,
-                                Ok(None) => break,
-                                Err(err) => {
-                                tracing::warn!(error = %err, "failed to generate chunk instruction");
-                                let mut mgr = bg_shared.file_transfers.lock().await;
-                                mgr.cancel_outbound(&bg_transfer_id);
-                                break 'outer;
-                                }
-                                };
+                                        let instr = match instr_res {
+                                            Ok(Some(i)) => i,
+                                            Ok(None) => break,
+                                            Err(err) => {
+                                                tracing::warn!(error = %err, "failed to generate chunk instruction");
+                                                let mut mgr = bg_shared.file_transfers.lock().await;
+                                                mgr.cancel_outbound(&bg_transfer_id);
+                                                break 'outer;
+                                            }
+                                        };
 
-                                let (chunk_index, data_res) = match instr {
-                                crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
-                                (chunk_index, Ok(data))
-                                }
-                                crate::file_transfer::ChunkInstruction::File { chunk_index, path, offset, len } => {
-                                let read_res = tokio::task::spawn_blocking(move || {
-                                let mut file = std::fs::File::open(&path).map_err(anyhow::Error::from)?;
-                                use std::io::{Seek, Read, SeekFrom};
-                                file.seek(SeekFrom::Start(offset)).map_err(anyhow::Error::from)?;
-                                let mut buf = vec![0u8; len];
-                                file.read_exact(&mut buf).map_err(anyhow::Error::from)?;
-                                Ok::<Vec<u8>, anyhow::Error>(buf)
-                                }).await.unwrap();
-                                (chunk_index, read_res)
-                                }
-                                };
+                                        let (chunk_index, data_res) = match instr {
+                                            crate::file_transfer::ChunkInstruction::Memory {
+                                                chunk_index,
+                                                data,
+                                            } => (chunk_index, Ok(data)),
+                                            crate::file_transfer::ChunkInstruction::File {
+                                                chunk_index,
+                                                path,
+                                                offset,
+                                                len,
+                                            } => {
+                                                let read_res =
+                                                    tokio::task::spawn_blocking(move || {
+                                                        let mut file =
+                                                            std::fs::File::open(&path)
+                                                                .map_err(anyhow::Error::from)?;
+                                                        use std::io::{Read, Seek, SeekFrom};
+                                                        file.seek(SeekFrom::Start(offset))
+                                                            .map_err(anyhow::Error::from)?;
+                                                        let mut buf = vec![0u8; len];
+                                                        file.read_exact(&mut buf)
+                                                            .map_err(anyhow::Error::from)?;
+                                                        Ok::<Vec<u8>, anyhow::Error>(buf)
+                                                    })
+                                                    .await
+                                                    .unwrap();
+                                                (chunk_index, read_res)
+                                            }
+                                        };
 
-                                let msg = {
-                                let mut mgr = bg_shared.file_transfers.lock().await;
-                                match mgr.get_outbound_mut(&bg_transfer_id) {
-                                Some(transfer) => match data_res {
-                                Ok(data) => {
-                                match transfer.process_chunk_data(chunk_index, data) {
+                                        let msg = {
+                                            let mut mgr = bg_shared.file_transfers.lock().await;
+                                            match mgr.get_outbound_mut(&bg_transfer_id) {
+                                                Some(transfer) => match data_res {
+                                                    Ok(data) => {
+                                                        match transfer.process_chunk_data(chunk_index, data) {
                                 crate::file_transfer::FileTransferMessage::Chunk {
                                 transfer_id,
                                 chunk_index,
@@ -4517,42 +4611,47 @@ if let Some(sha256_checksum) = final_checksum {
                                 },
                                 _ => continue,
                                 }
-                                }
-                                Err(err) => {
-                                tracing::warn!(error = %err, "failed to read file chunk");
-                                mgr.cancel_outbound(&bg_transfer_id);
-                                break 'outer;
-                                }
-                                },
-                                None => break 'outer,
-                                }
-                                };
-                                batch.push(msg);
-                                }
+                                                    }
+                                                    Err(err) => {
+                                                        tracing::warn!(error = %err, "failed to read file chunk");
+                                                        mgr.cancel_outbound(&bg_transfer_id);
+                                                        break 'outer;
+                                                    }
+                                                },
+                                                None => break 'outer,
+                                            }
+                                        };
+                                        batch.push(msg);
+                                    }
 
-                                if batch.is_empty() {
-                                break;
-                                }
-                                for wire_msg in batch {
-                                if bg_outbox.send(wire_msg).await.is_err() {
-                                break 'outer;
-                                }
-                                }
+                                    if batch.is_empty() {
+                                        break;
+                                    }
+                                    for wire_msg in batch {
+                                        if bg_outbox.send(wire_msg).await.is_err() {
+                                            break 'outer;
+                                        }
+                                    }
                                 }
 
                                 let final_checksum = {
-    let mut mgr = bg_shared.file_transfers.lock().await;
-    mgr.get_outbound_mut(&bg_transfer_id)
-        .and_then(|transfer| if transfer.is_all_sent() { Some(transfer.finalize_checksum()) } else { None })
-};
-if let Some(sha256_checksum) = final_checksum {
-    let _ = bg_outbox
-        .send(AppMessage::FileTransferComplete {
-            transfer_id: bg_transfer_id,
-            sha256_checksum,
-        })
-        .await;
-}
+                                    let mut mgr = bg_shared.file_transfers.lock().await;
+                                    mgr.get_outbound_mut(&bg_transfer_id).and_then(|transfer| {
+                                        if transfer.is_all_sent() {
+                                            Some(transfer.finalize_checksum())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                };
+                                if let Some(sha256_checksum) = final_checksum {
+                                    let _ = bg_outbox
+                                        .send(AppMessage::FileTransferComplete {
+                                            transfer_id: bg_transfer_id,
+                                            sha256_checksum,
+                                        })
+                                        .await;
+                                }
                             });
                         }
                     }
@@ -4877,7 +4976,12 @@ if let Some(sha256_checksum) = final_checksum {
                         origin_device_name,
                     }) => {
                         touch_last_seen();
-                        tracing::info!("Received BatteryStatus: level={}, charging={} from {}", level, charging, origin_device);
+                        tracing::info!(
+                            "Received BatteryStatus: level={}, charging={} from {}",
+                            level,
+                            charging,
+                            origin_device
+                        );
                         // MED-03 FIX: Only process battery status from trusted peers.
                         if !shared
                             .peer_manager
@@ -4885,7 +4989,10 @@ if let Some(sha256_checksum) = final_checksum {
                             .map(|p| p.trusted)
                             .unwrap_or(false)
                         {
-                            tracing::warn!("Ignoring BatteryStatus from untrusted peer {}", peer_id);
+                            tracing::warn!(
+                                "Ignoring BatteryStatus from untrusted peer {}",
+                                peer_id
+                            );
                             continue;
                         }
                         // Persist in shared state for IPC status polling.
@@ -5155,16 +5262,16 @@ if let Some(sha256_checksum) = final_checksum {
 
                     let time_since_seen = now_millis.saturating_sub(last_seen_millis);
                     let time_since_wake = now_millis.saturating_sub(shared.local_last_wake.load(std::sync::atomic::Ordering::Relaxed));
-                    
-                    // Only timeout if we haven't seen a heartbeat in `timeout` ms AND 
-                    // we've been awake for at least `timeout` ms. 
+
+                    // Only timeout if we haven't seen a heartbeat in `timeout` ms AND
+                    // we've been awake for at least `timeout` ms.
                     // This prevents us from disconnecting immediately when our own CPU wakes from deep sleep.
                     if time_since_seen > timeout && time_since_wake > timeout {
                         break format!("heartbeat timeout (sleeping: {is_sleeping}, time_since_seen: {time_since_seen}, time_since_wake: {time_since_wake})");
                     }
-                    
+
                     shared.file_transfers.lock().await.prune_stale_transfers();
-                    
+
                     // Only send a ping if awake, OR if asleep and we haven't seen them for 5 minutes
                     let should_ping = if !is_sleeping {
                         true
@@ -5172,7 +5279,7 @@ if let Some(sha256_checksum) = final_checksum {
                         let last_ping_elapsed = ping_sent_at.lock().unwrap().map(|i| i.elapsed().as_millis() as u64).unwrap_or(u64::MAX);
                         last_ping_elapsed > 5 * 60 * 1000
                     };
-                    
+
                     if should_ping {
                         let ping = probe::make_ping();
                         *ping_sent_at.lock().unwrap() = Some(std::time::Instant::now());
@@ -5370,12 +5477,14 @@ fn ensure_parent(path: &Path) -> Result<()> {
     Ok(())
 }
 
-
 async fn read_outbound_chunks(
     shared: crate::engine::EngineShared,
     transfer_id: [u8; 16],
     batch_size: usize,
-) -> Option<(Vec<AppMessage>, Vec<(crate::file_transfer::TransferProgress, String)>)> {
+) -> Option<(
+    Vec<AppMessage>,
+    Vec<(crate::file_transfer::TransferProgress, String)>,
+)> {
     let mut msgs = Vec::with_capacity(batch_size);
     let mut progs = Vec::with_capacity(batch_size);
     for _ in 0..batch_size {
@@ -5383,7 +5492,13 @@ async fn read_outbound_chunks(
             let mut mgr = shared.file_transfers.lock().await;
             let t = match mgr.get_outbound_mut(&transfer_id) {
                 Some(t) => t,
-                None => return if msgs.is_empty() { None } else { Some((msgs, progs)) },
+                None => {
+                    return if msgs.is_empty() {
+                        None
+                    } else {
+                        Some((msgs, progs))
+                    }
+                }
             };
             match t.next_chunk_instruction() {
                 Ok(Some(i)) => i,
@@ -5395,10 +5510,15 @@ async fn read_outbound_chunks(
                 }
             }
         };
-        
+
         let data = match instr {
             crate::file_transfer::ChunkInstruction::Memory { ref data, .. } => data.clone(),
-            crate::file_transfer::ChunkInstruction::File { ref path, offset, len, .. } => {
+            crate::file_transfer::ChunkInstruction::File {
+                ref path,
+                offset,
+                len,
+                ..
+            } => {
                 let path = path.clone();
                 let res = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
                     use std::io::{Read, Seek};
@@ -5407,7 +5527,9 @@ async fn read_outbound_chunks(
                     let mut buf = vec![0u8; len];
                     file.read_exact(&mut buf)?;
                     Ok(buf)
-                }).await.unwrap();
+                })
+                .await
+                .unwrap();
                 match res {
                     Ok(d) => d,
                     Err(e) => {
@@ -5419,12 +5541,18 @@ async fn read_outbound_chunks(
                 }
             }
         };
-        
+
         let (msg, prog, fname) = {
             let mut mgr = shared.file_transfers.lock().await;
             let t = match mgr.get_outbound_mut(&transfer_id) {
                 Some(t) => t,
-                None => return if msgs.is_empty() { None } else { Some((msgs, progs)) },
+                None => {
+                    return if msgs.is_empty() {
+                        None
+                    } else {
+                        Some((msgs, progs))
+                    }
+                }
             };
             let c_idx = match instr {
                 crate::file_transfer::ChunkInstruction::Memory { chunk_index, .. } => chunk_index,
@@ -5433,13 +5561,24 @@ async fn read_outbound_chunks(
             let msg = t.process_chunk_data(c_idx, data);
             (msg, t.progress(), t.meta.file_name.clone())
         };
-        
-        if let crate::file_transfer::FileTransferMessage::Chunk { transfer_id, chunk_index, total_chunks, data } = msg {
-            msgs.push(AppMessage::FileChunk { transfer_id, chunk_index, total_chunks, data });
+
+        if let crate::file_transfer::FileTransferMessage::Chunk {
+            transfer_id,
+            chunk_index,
+            total_chunks,
+            data,
+        } = msg
+        {
+            msgs.push(AppMessage::FileChunk {
+                transfer_id,
+                chunk_index,
+                total_chunks,
+                data,
+            });
             progs.push((prog, fname));
         }
     }
-    
+
     if msgs.is_empty() {
         None
     } else {

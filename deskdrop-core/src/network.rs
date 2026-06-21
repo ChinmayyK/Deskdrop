@@ -698,8 +698,12 @@ mod tests {
 
         let id_a = Uuid::new_v4();
         let id_b = Uuid::new_v4();
-        let key_a = std::sync::Arc::new(std::sync::RwLock::new(crate::identity::IdentityKey::generate()));
-        let key_b = std::sync::Arc::new(std::sync::RwLock::new(crate::identity::IdentityKey::generate()));
+        let key_a = std::sync::Arc::new(std::sync::RwLock::new(
+            crate::identity::IdentityKey::generate(),
+        ));
+        let key_b = std::sync::Arc::new(std::sync::RwLock::new(
+            crate::identity::IdentityKey::generate(),
+        ));
 
         let key_b_clone = key_b.clone();
         let server_handle = tokio::spawn(async move {
@@ -716,7 +720,7 @@ mod tests {
         });
 
         let mut client = TcpStream::connect(addr).await.unwrap();
-        let initiator_result = handshake_initiator(&mut client, id_a, "PeerA", key_a)
+        let initiator_result = handshake_initiator(&mut client, id_a, "PeerA", key_a, false)
             .await
             .unwrap();
 
