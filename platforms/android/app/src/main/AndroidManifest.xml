@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ── Network ───────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -10,7 +11,7 @@
     <uses-permission android:name="android.permission.NSD_SERVICE" />
 
     <!-- ── Clipboard (Android 10+ restricts background reads) ────────── -->
-    <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" tools:ignore="ProtectedPermissions" />
 
     <!-- ── Foreground service ────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

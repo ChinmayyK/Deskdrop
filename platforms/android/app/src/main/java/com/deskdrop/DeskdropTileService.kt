@@ -77,11 +77,12 @@ class DeskdropTileService : TileService() {
         super.onStartListening()
         
         // Register receiver to auto-update tile when DeskdropService broadcasts changes
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(statusReceiver, android.content.IntentFilter(DeskdropService.ACTION_STATUS_CHANGED), android.content.Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(statusReceiver, android.content.IntentFilter(DeskdropService.ACTION_STATUS_CHANGED))
-        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            statusReceiver,
+            android.content.IntentFilter(DeskdropService.ACTION_STATUS_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         
         refreshTile()
     }

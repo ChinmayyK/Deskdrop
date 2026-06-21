@@ -1458,7 +1458,7 @@ class DeskdropService : Service() {
                 val msg = DeskdropJni.eventText(ev) ?: return
                 Log.w(TAG, "Engine warning: $msg")
                 if (msg == "Pairing request was declined." || msg == "Pairing request was accepted.") {
-                    sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI"))
+                    sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
                 }
                 addActivity(ActivityEntry(deviceName = "System",
                     kind = ActivityKind.WARNING, preview = msg.take(80)))
