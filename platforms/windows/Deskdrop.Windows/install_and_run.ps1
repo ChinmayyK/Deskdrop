@@ -40,21 +40,11 @@ if (Test-Path $dllSource) {
 }
 
 # 2. Check for .NET SDK
-$dotnetCmd = "dotnet"
-if (-not (Get-Command "dotnet" -ErrorAction SilentlyContinue)) {
-    $localDotnet = "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe"
-    if (Test-Path $localDotnet) {
-        $dotnetCmd = $localDotnet
-        Write-Host "[+] Found local .NET SDK installation."
-    } else {
-        Write-Host "[-] .NET SDK not found. Installing .NET 8 SDK automatically..." -ForegroundColor Cyan
-        Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile "dotnet-install.ps1"
-        powershell -ExecutionPolicy Bypass -File .\dotnet-install.ps1 -Channel 8.0
-        $dotnetCmd = $localDotnet
-    }
-} else {
-    Write-Host "[+] .NET SDK found in system PATH."
+$dotnetCmd = "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe"
+if (-not (Test-Path $dotnetCmd)) {
+    $dotnetCmd = "dotnet"
 }
+Write-Host "[+] Using .NET SDK at $dotnetCmd"
 
 # 3. Publish the Application
 $installPath = "$env:LOCALAPPDATA\DeskdropApp"

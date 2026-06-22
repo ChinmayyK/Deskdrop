@@ -69,7 +69,7 @@ class CameraStreamActivity : ComponentActivity() {
         cameraExecutor.shutdown()
         val handle = DeskdropService.activeEngineHandle
         if (handle != 0L) {
-            DeskdropJni.stopCameraStream(handle)
+// DeskdropJni.stopCameraStream(handle)
         }
     }
 

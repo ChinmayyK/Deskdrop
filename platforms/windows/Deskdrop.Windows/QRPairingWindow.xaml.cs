@@ -58,10 +58,13 @@ namespace Deskdrop.Windows
                     var name = settings != null && settings.RootElement.TryGetProperty("data", out var sData) && sData.TryGetProperty("device_name", out var nProp) && nProp.ValueKind == JsonValueKind.String 
                                 ? nProp.GetString() : Environment.MachineName;
                     
-                    var fp = root.TryGetProperty("local_fingerprint", out var fProp) 
-                                ? fProp.GetString() : "";
-
-                    var ip = root.TryGetProperty("bind_ip", out var ipProp) ? ipProp.GetString() : GetLocalIPAddress();
+                    var fp = root.TryGetProperty("local_fingerprint", out var fProp) ? fProp.GetString() : "";
+                    var ipStr = root.TryGetProperty("bind_ip", out var ipProp) ? ipProp.GetString() : null;
+                    if (string.IsNullOrEmpty(ipStr) || ipStr == "0.0.0.0")
+                    {
+                        ipStr = GetLocalIPAddress();
+                    }
+                    var ip = ipStr;
                     var port = root.TryGetProperty("bind_port", out var pProp) && pProp.TryGetInt32(out var p) ? p : 47823;
 
                     var url = $"deskdrop://pair?name={Uri.EscapeDataString(name ?? "")}&ip={ip}&port={port}&fingerprint={fp}";

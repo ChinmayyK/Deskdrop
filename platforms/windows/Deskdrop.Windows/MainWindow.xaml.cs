@@ -542,6 +542,7 @@ namespace Deskdrop.Windows
                     // If OnboardingWindow fails to load (e.g. XAML resource errors),
                     // silently skip onboarding rather than crashing the whole app.
                     System.Diagnostics.Debug.WriteLine($"OnboardingWindow failed: {ex.Message}");
+                    System.Windows.MessageBox.Show($"OnboardingWindow failed: {ex.Message}\n{ex.StackTrace}");
                     _hasCompletedOnboarding = true;
                 }
             }
@@ -594,9 +595,37 @@ namespace Deskdrop.Windows
             {
                 System.Threading.Tasks.Task.Run(() =>
                 {
-                    DaemonClient.Send(new { cmd = "disconnect_peer", device_id = deviceId });
+                    DaemonClient.Send(new { cmd = "forget_device", device_id = deviceId });
                     RefreshDevicesListUI();
                 });
+            }
+        }
+
+        private void BtnPingDevice_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    DaemonClient.Send(new { cmd = "push_text_to", text = "Ping from Windows!", target = deviceId });
+                });
+            }
+        }
+
+        private void BtnFilesDevice_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
+            {
+                var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = false };
+                if (dialog.ShowDialog() == true)
+                {
+                    System.Threading.Tasks.Task.Run(() =>
+                    {
+                        var path = dialog.FileName;
+                        var name = System.IO.Path.GetFileName(path);
+                        DaemonClient.Send(new { cmd = "send_file_path", path = path, name = name, mime = "application/octet-stream", target_device = deviceId });
+                    });
+                }
             }
         }
 

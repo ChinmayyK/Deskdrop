@@ -85,12 +85,10 @@ object DeskdropJni {
     @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
     @JvmStatic external fun pushVideoFrame(handle: Long, data: ByteArray): Int
     @JvmStatic external fun pushBatteryStatus(handle: Long, level: Int, charging: Boolean): Int
-    @JvmStatic external fun pushNetworkStatus(handle: Long, networkType: String): Int
-    @JvmStatic external fun stopCameraStream(handle: Long): Int
+
+
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
-    @JvmStatic external fun waitEvent(handle: Long): Long
-    @JvmStatic external fun interruptWait(handle: Long)
     @JvmStatic external fun eventType(event: Long): Int
     @JvmStatic external fun freeEvent(event: Long)
 
@@ -416,6 +414,8 @@ class DeskdropService : Service() {
     // Set once the engine starts; used in makeResolveListener() to skip our own advertisement.
     private var myDeviceUuidPrefix: String? = null
     private var myDeviceId: String? = null
+    private var pendingManualConnectIp: String? = null
+    private var pendingManualConnectPort: Int = 47823
 
     // Actual NSD service name as reported by onServiceRegistered (may differ from requested
     // if Android resolved a collision by appending " (2)" etc.).
@@ -677,9 +677,18 @@ class DeskdropService : Service() {
             ACTION_CONNECT_MANUAL -> {
                 val ip = intent?.getStringExtra("ip")
                 val port = intent?.getIntExtra("port", 47823) ?: 47823
-                if (!ip.isNullOrBlank() && engineHandle != 0L) {
-                    val result = DeskdropJni.connectToPeer(engineHandle, ip, port)
-                    Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
+                println("DeskdropService_DEBUG: ACTION_CONNECT_MANUAL received. ip=$ip, port=$port, engineHandle=$engineHandle")
+                if (!ip.isNullOrBlank()) {
+                    if (engineHandle != 0L) {
+                        println("DeskdropService_DEBUG: Triggering connectToPeer immediately")
+                        val result = DeskdropJni.connectToPeer(engineHandle, ip, port)
+                        Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
+                    } else {
+                        println("DeskdropService_DEBUG: Engine not ready, queuing manual connect to $ip:$port")
+                        Log.i(TAG, "Engine not ready, queuing manual connect to $ip:$port")
+                        pendingManualConnectIp = ip
+                        pendingManualConnectPort = port
+                    }
                 }
                 return START_STICKY
             }
@@ -876,6 +885,16 @@ class DeskdropService : Service() {
                 startBatteryMonitor()
             }
 
+            // Process any pending manual connect that was queued before engine started
+            val pIp = pendingManualConnectIp
+            if (pIp != null && engineHandle != 0L) {
+                pendingManualConnectIp = null
+                val pPort = pendingManualConnectPort
+                println("DeskdropService_DEBUG: Processing pending manual connect to $pIp:$pPort")
+                Log.i(TAG, "Processing pending manual connect to $pIp:$pPort")
+                DeskdropJni.connectToPeer(engineHandle, pIp, pPort)
+            }
+
             if (intent?.action == ACTION_PUSH_TEXT) {
                 intent.getStringExtra("text")?.takeIf { it.isNotBlank() }?.let { text ->
                     if (engineHandle != 0L && hasConnectedPeers()) {
@@ -940,9 +959,6 @@ class DeskdropService : Service() {
         handler.removeCallbacksAndMessages(null)
         
         isRunning = false
-        if (engineHandle != 0L) {
-            DeskdropJni.interruptWait(engineHandle)
-        }
         eventDrainThread?.join(1000)
 
         engineLock.writeLock().lock()
@@ -1099,24 +1115,17 @@ class DeskdropService : Service() {
                 engineLock.readLock().lock()
                 val ev = try {
                     if (engineHandle != 0L) {
-                        DeskdropJni.waitEvent(engineHandle)
+                        DeskdropJni.pollEvent(engineHandle)
                     } else 0L
                 } finally {
                     engineLock.readLock().unlock()
                 }
                 
                 if (ev != 0L) {
-                    if (DeskdropJni.eventType(ev) == DeskdropJni.CR_EVENT_WARNING) {
-                        val text = DeskdropJni.eventText(ev)
-                        if (text == "interrupt") {
-                            DeskdropJni.freeEvent(ev)
-                            continue
-                        }
-                    }
                     handler.post {
                         try { handleEvent(ev) } finally { DeskdropJni.freeEvent(ev) }
                     }
-                } else if (engineHandle == 0L) {
+                } else {
                     Thread.sleep(100)
                 }
             }
@@ -2473,7 +2482,7 @@ class DeskdropService : Service() {
             serviceType = NSD_SERVICE_TYPE
             port        = DEFAULT_DESKDROP_PORT
             setAttribute("id", myDeviceId ?: "")
-            setAttribute("v", "4")
+            setAttribute("v", "3")
         }
 
         val regListener = object : NsdManager.RegistrationListener {
@@ -2827,7 +2836,7 @@ class DeskdropService : Service() {
                 val h = engineHandle
                 if (h != 0L) {
                     Thread {
-                        DeskdropJni.pushNetworkStatus(h, type)
+                        DeskdropJni.notifyNetworkRestored(h)
                     }.start()
                 }
             }
@@ -2836,7 +2845,7 @@ class DeskdropService : Service() {
                 Log.i(TAG, "Network: default network lost — stopping discovery, scheduling retry")
                 val h = engineHandle
                 if (h != 0L) {
-                    Thread { DeskdropJni.pushNetworkStatus(h, "offline") }.start()
+                    Thread { DeskdropJni.notifyNetworkRestored(h) }.start()
                 }
                 handler.post {
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }
