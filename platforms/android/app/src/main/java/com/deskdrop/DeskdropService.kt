@@ -593,6 +593,24 @@ class DeskdropService : Service() {
         }
     }
 
+    // ── Custom broadcast receiver ─────────────────────────────────────────────
+    private val customReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
+            Log.i(TAG, "Custom broadcast received: $action")
+            if (action == "com.deskdrop.CUSTOM_BROADCAST") {
+                val message = intent.getStringExtra("message") ?: "ping"
+                Log.i(TAG, "Custom broadcast message: $message")
+                
+                val h = engineHandle
+                if (h != 0L) {
+                    // Example action: broadcast a generic notification/warning to peers or local logs
+                    DeskdropJni.pushNotification(h, "custom_br", context.packageName, "Custom Broadcast", message)
+                }
+            }
+        }
+    }
+
     // ── Service lifecycle ─────────────────────────────────────────────────────
 
     override fun onCreate() {
@@ -618,6 +636,9 @@ class DeskdropService : Service() {
             addAction(android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
         }
         registerReceiver(screenReceiver, screenFilter)
+        
+        val customFilter = IntentFilter("com.deskdrop.CUSTOM_BROADCAST")
+        ContextCompat.registerReceiver(this, customReceiver, customFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
         
         setServiceRunning(true)
     }
@@ -978,6 +999,7 @@ class DeskdropService : Service() {
         persistStatus()
         unregisterPairingReceiver()
         
+        try { unregisterReceiver(customReceiver) } catch (e: Exception) {}
         try { unregisterReceiver(smsReceiver) } catch (e: Exception) {}
         try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
         try { contentResolver.unregisterContentObserver(screenshotObserver) } catch (e: Exception) {}
