@@ -43,7 +43,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-macos
-          path: platforms/macos/build/Deskdrop.dmg
+          path: |
+            platforms/macos/build/Deskdrop.dmg
+            platforms/macos/build/Deskdrop-macOS.zip
 
   # ── Windows x64 installer ─────────────────────────────────────────────────
   release-windows:
@@ -135,7 +137,7 @@ jobs:
         run: |
           cargo build --release --bin deskdrop-daemon -p deskdrop-core
           cargo build --release --bin deskdrop-cli -p deskdrop-cli
-          cargo build --release --bin deskdrop-gtk -p deskdrop-gtk
+          cargo build --release --bin deskdrop-gtk -p deskdrop-linux
 
       - name: Package .tar.gz
         run: |
@@ -182,7 +184,7 @@ jobs:
             ### Downloads
             | Platform | File |
             |---|---|
-            | macOS (Apple Silicon) | `Deskdrop.dmg` |
+            | macOS (Apple Silicon) | `Deskdrop.dmg` or `Deskdrop-macOS.zip` |
             | Windows 10/11 x64 | `Deskdrop.exe` |
             | Android 8.0+      | `app-release.apk` |
             | Linux x86_64      | `deskdrop-linux-x86_64.tar.gz` |
@@ -191,6 +193,7 @@ jobs:
             See [CHANGELOG.md](CHANGELOG.md).
           files: |
             release-artifacts/**/*.dmg
+            release-artifacts/**/*.zip
             release-artifacts/**/*.exe
             release-artifacts/**/*.apk
             release-artifacts/**/*.tar.gz
