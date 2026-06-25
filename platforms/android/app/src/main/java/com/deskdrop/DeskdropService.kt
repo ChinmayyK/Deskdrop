@@ -1350,7 +1350,14 @@ class DeskdropService : Service() {
                 val finalPath = publicUriStr ?: destPath
                 updateActivityTransferComplete(tid, finalPath)
                 cancelFileTransferNotification(tid)
-                showFileTransferCompleteNotification(from, fileName, publicUriStr)
+
+                val uriToOpen = if (publicUriStr != null) {
+                    android.net.Uri.parse(publicUriStr)
+                } else {
+                    androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", File(destPath))
+                }
+
+                showFileTransferCompleteNotification(from, fileName, uriToOpen)
                 activeTransfers.remove(tid)
                 publishActiveTransfers()
             }
@@ -1698,30 +1705,28 @@ class DeskdropService : Service() {
         notificationManager.notify(transferNotifId(tid), builder.build())
     }
 
-    private fun showFileTransferCompleteNotification(from: String, fileName: String, publicUriStr: String?) {
-        val openIntent = if (!publicUriStr.isNullOrEmpty()) {
-            val uri = android.net.Uri.parse(publicUriStr)
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-        } else null
-
-        val openPi = openIntent?.let {
-            PendingIntent.getActivity(this, (publicUriStr ?: fileName).hashCode(), it,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    private fun showFileTransferCompleteNotification(from: String, fileName: String, uri: android.net.Uri) {
+        val mimeType = contentResolver.getType(uri) 
+            ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(java.io.File(fileName).extension.lowercase()) 
+            ?: "*/*"
+            
+        val openIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
+
+        val openPi = PendingIntent.getActivity(this, uri.hashCode(), openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("File received from $from")
             .setContentText(fileName)
             .setAutoCancel(true)
-        if (openPi != null) builder.setContentIntent(openPi)
+            .setContentIntent(openPi)
         
         // Use a dynamic notification ID unique to the file
-        // so multiple files don't overwrite each other!
-        val notifId = NOTIF_ID_FILE_BASE + ((publicUriStr ?: fileName).hashCode() and 0xFFF)
+        val notifId = NOTIF_ID_FILE_BASE + (uri.hashCode() and 0xFFF)
         notificationManager.notify(notifId, builder.build())
     }
 
@@ -1988,12 +1993,14 @@ class DeskdropService : Service() {
 
     private fun saveFileToPublicDownloads(sourceFile: File): String? {
         if (!sourceFile.exists()) return null
+        val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(sourceFile.extension.lowercase()) ?: "*/*"
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = contentResolver
             val contentValues = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, sourceFile.name)
-                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "*/*")
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Deskdrop")
             }
             val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return null
             try {
@@ -2009,7 +2016,7 @@ class DeskdropService : Service() {
             }
         } else {
             // For Android 9 and below, write directly using file system
-            val destDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val destDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "Deskdrop")
             destDir.mkdirs()
             val destFile = File(destDir, sourceFile.name)
             try {
