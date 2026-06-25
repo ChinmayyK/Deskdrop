@@ -182,6 +182,13 @@ if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
         --icon-size 128 \
         --app-drop-link 400 200 \
         "${MACOS_DIR}/build/Deskdrop.dmg" \
-        "${APP_BUNDLE}"
-    log "✅ DMG: ${MACOS_DIR}/build/Deskdrop.dmg"
+        "${APP_BUNDLE}" || {
+            log "create-dmg failed (headless CI), falling back to zip..."
+            (cd "${MACOS_DIR}/build" && zip -rq "Deskdrop-macOS.zip" "${PRODUCT_NAME}.app")
+        }
+    log "✅ DMG (or zip fallback) created."
+else
+    log "Creating zip archive..."
+    (cd "${MACOS_DIR}/build" && zip -rq "Deskdrop-macOS.zip" "${PRODUCT_NAME}.app")
+    log "✅ ZIP: ${MACOS_DIR}/build/Deskdrop-macOS.zip"
 fi

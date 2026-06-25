@@ -12,39 +12,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+
+
 jobs:
-  # ── macOS universal binary + DMG ──────────────────────────────────────────
-  release-macos:
-    name: macOS Release
-    runs-on: macos-14   # Apple Silicon runner
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
-      - name: Rust Cache
-        uses: swatinem/rust-cache@v2
-
-      - name: Build arm64
-        run: cargo build --release --target aarch64-apple-darwin -p deskdrop-core
-
-      - name: Build x86_64
-        run: cargo build --release --target x86_64-apple-darwin -p deskdrop-core
-
-      - name: Install create-dmg
-        run: brew install create-dmg
-
-      - name: Build macOS App & DMG
-        run: bash scripts/build-macos.sh --release
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: deskdrop-macos
-          path: platforms/macos/build/Deskdrop.dmg
-
   # ── Windows x64 installer ─────────────────────────────────────────────────
   release-windows:
     name: Windows Release
@@ -135,7 +105,7 @@ jobs:
         run: |
           cargo build --release --bin deskdrop-daemon -p deskdrop-core
           cargo build --release --bin deskdrop-cli -p deskdrop-cli
-          cargo build --release --bin deskdrop-gtk -p deskdrop-gtk
+          cargo build --release --bin deskdrop-gtk -p deskdrop-linux
 
       - name: Package .tar.gz
         run: |
@@ -157,7 +127,7 @@ jobs:
   # ── Create GitHub Release ─────────────────────────────────────────────────
   create-release:
     name: Create GitHub Release
-    needs: [release-macos, release-windows, release-android, release-linux]
+    needs: [release-windows, release-android, release-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -182,7 +152,6 @@ jobs:
             ### Downloads
             | Platform | File |
             |---|---|
-            | macOS (Apple Silicon) | `Deskdrop.dmg` |
             | Windows 10/11 x64 | `Deskdrop.exe` |
             | Android 8.0+      | `app-release.apk` |
             | Linux x86_64      | `deskdrop-linux-x86_64.tar.gz` |
@@ -190,7 +159,6 @@ jobs:
             ### What's new
             See [CHANGELOG.md](CHANGELOG.md).
           files: |
-            release-artifacts/**/*.dmg
             release-artifacts/**/*.exe
             release-artifacts/**/*.apk
             release-artifacts/**/*.tar.gz

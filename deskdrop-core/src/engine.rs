@@ -3164,10 +3164,13 @@ fn display_peers_for_status(
         }
     }
 
-    let mut peers: Vec<_> = deduped.into_values().map(|mut p| {
-        p.lifecycle_state = Some(p.lifecycle_state());
-        p
-    }).collect();
+    let mut peers: Vec<_> = deduped
+        .into_values()
+        .map(|mut p| {
+            p.lifecycle_state = Some(p.lifecycle_state());
+            p
+        })
+        .collect();
     peers.sort_by(|left, right| {
         peer_display_rank(left)
             .cmp(&peer_display_rank(right))
