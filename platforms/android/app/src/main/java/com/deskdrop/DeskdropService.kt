@@ -2511,7 +2511,7 @@ class DeskdropService : Service() {
             serviceType = NSD_SERVICE_TYPE
             port        = DEFAULT_DESKDROP_PORT
             setAttribute("id", myDeviceId ?: "")
-            setAttribute("v", "3")
+            setAttribute("v", "4")
         }
 
         val regListener = object : NsdManager.RegistrationListener {

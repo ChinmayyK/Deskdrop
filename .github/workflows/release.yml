@@ -131,16 +131,18 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev pkg-config
 
-      - name: Build daemon + CLI
+      - name: Build daemon + CLI + GTK
         run: |
           cargo build --release --bin deskdrop-daemon -p deskdrop-core
           cargo build --release --bin deskdrop-cli -p deskdrop-cli
+          cargo build --release --bin deskdrop-gtk -p deskdrop-gtk
 
       - name: Package .tar.gz
         run: |
           mkdir -p dist/deskdrop/usr/local/bin
           cp target/release/deskdrop-daemon dist/deskdrop/usr/local/bin/
           cp target/release/deskdrop-cli    dist/deskdrop/usr/local/bin/
+          cp target/release/deskdrop-gtk    dist/deskdrop/usr/local/bin/
           cp platforms/linux/deskdrop.service dist/deskdrop/
           cp platforms/linux/deskdrop.desktop dist/deskdrop/
           cp README.md LICENSE dist/deskdrop/
