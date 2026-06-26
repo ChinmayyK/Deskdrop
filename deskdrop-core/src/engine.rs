@@ -624,16 +624,15 @@ impl Engine {
                 tracing::warn!(error = %err, "failed to set broadcast flag on UDP beacon socket");
             }
 
-            let device_id_str = shared.config.device_id.to_string();
-            // Payload format: DESKDROP_BEACON:<uuid>:<tcp_port>:<device_name>
-            let mut payload = format!(
+            // TRU-06: Do NOT include device_name in the beacon — only opaque UUIDs
+            // are broadcast. The friendly device name is exchanged only after a
+            // successful encrypted handshake via HelloFrame/HelloAck.
+            // Format: DESKDROP_BEACON:<uuid>:<tcp_port>:<protocol_version>
+            let payload = format!(
                 "DESKDROP_BEACON:{}:{}:{}",
-                device_id_str, shared.config.port, shared.config.device_name
+                shared.config.device_id, shared.config.port, crate::protocol::PROTOCOL_VERSION
             )
             .into_bytes();
-            if payload.len() > 512 {
-                payload.truncate(512);
-            }
 
             let broadcast_addr: SocketAddr =
                 "255.255.255.255:47824".parse().expect("static IP is valid");
@@ -649,8 +648,29 @@ impl Engine {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(1500));
             loop {
                 interval.tick().await;
+                // Send to limited broadcast address.
                 if let Err(err) = socket.send_to(&payload, broadcast_addr).await {
                     tracing::trace!(error = %err, "failed to send UDP beacon");
+                }
+                // Also send to subnet-directed broadcast addresses for better
+                // delivery on networks that filter limited broadcast.
+                if let Ok(ifaces) = if_addrs::get_if_addrs() {
+                    for iface in ifaces {
+                        if iface.is_loopback() {
+                            continue;
+                        }
+                        if let if_addrs::IfAddr::V4(v4) = &iface.addr {
+                            if let Some(bcast) = v4.broadcast {
+                                let dest = SocketAddr::new(
+                                    std::net::IpAddr::V4(bcast),
+                                    47824,
+                                );
+                                if dest != broadcast_addr {
+                                    let _ = socket.send_to(&payload, dest).await;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -662,7 +682,7 @@ impl Engine {
             let socket = match tokio::net::UdpSocket::bind("0.0.0.0:47824").await {
                 Ok(s) => s,
                 Err(err) => {
-                    tracing::warn!(error = %err, "failed to bind UDP listener socket");
+                    tracing::warn!(error = %err, "failed to bind UDP listener socket on port 47824");
                     return;
                 }
             };
@@ -671,77 +691,104 @@ impl Engine {
                 match socket.recv_from(&mut buf).await {
                     Ok((len, addr)) => {
                         let text = String::from_utf8_lossy(&buf[..len]);
-                        if text.starts_with("DESKDROP_BEACON:") {
-                            let parts: Vec<&str> = text.splitn(4, ':').collect();
-                            if parts.len() >= 3 {
-                                if let Ok(peer_id) = uuid::Uuid::parse_str(parts[1]) {
-                                    if peer_id != shared.config.device_id {
-                                        let peer_name = if parts.len() == 4 {
-                                            parts[3].to_string()
-                                        } else {
-                                            format!("device-{}", &peer_id.to_string()[..8])
-                                        };
-                                        if let Ok(peer_port) = parts[2].parse::<u16>() {
-                                            let peer_addr = SocketAddr::new(addr.ip(), peer_port);
-
-                                            let trusted = {
-                                                let trust_guard = shared.trust.lock().await;
-                                                trust_guard.is_trusted(peer_id)
-                                            };
-
-                                            if let Err(err) = shared.peer_manager.upsert_peer(
-                                                peer_id,
-                                                peer_name.clone(),
-                                                peer_addr,
-                                                trusted,
-                                                DiscoverySource::UdpBeacon,
-                                            ) {
-                                                tracing::warn!(error = %err, "failed to upsert UDP beacon peer");
-                                            } else {
-                                                if !should_initiate_session(
-                                                    &shared,
-                                                    peer_id,
-                                                    DiscoverySource::UdpBeacon,
-                                                )
-                                                .await
-                                                {
-                                                    continue;
-                                                }
-                                                if shared.peer_manager.live_endpoint(peer_id)
-                                                    == Some(peer_addr)
-                                                {
-                                                    continue;
-                                                }
-                                                if matches!(
-                                                    shared.peer_manager.get(peer_id),
-                                                    Some(record) if record.status == PeerConnectionState::Connecting && record.socket_addrs().contains(&peer_addr)
-                                                ) {
-                                                    continue;
-                                                }
-
-                                                tracing::info!(
-                                                    "UDP Beacon discovered peer {} at {}",
-                                                    peer_id,
-                                                    peer_addr
-                                                );
-                                                let shared_clone = shared.clone();
-                                                tokio::spawn(async move {
-                                                    if let Err(err) = connect_loop(
-                                                        shared_clone,
-                                                        vec![peer_addr],
-                                                        Some(peer_id),
-                                                        DiscoverySource::UdpBeacon,
-                                                    )
-                                                    .await
-                                                    {
-                                                        tracing::warn!(peer_id = %peer_id, error = %err, "UDP beacon peer connection failed");
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    }
+                        if !text.starts_with("DESKDROP_BEACON:") {
+                            continue;
+                        }
+                        let parts: Vec<&str> = text.splitn(5, ':').collect();
+                        // Accept both new format (4 fields: magic:uuid:port:version)
+                        // and legacy format (4 fields: magic:uuid:port:name).
+                        if parts.len() < 3 {
+                            continue;
+                        }
+                        let peer_id = match uuid::Uuid::parse_str(parts[1]) {
+                            Ok(id) => id,
+                            Err(_) => continue,
+                        };
+                        if peer_id == shared.config.device_id {
+                            continue;
+                        }
+                        let peer_port = match parts[2].parse::<u16>() {
+                            Ok(p) => p,
+                            Err(_) => continue,
+                        };
+                        // Protocol version check: if the 4th field parses as a
+                        // small integer, treat it as a version. Otherwise, treat
+                        // it as a legacy device name (backward compatibility).
+                        let peer_name;
+                        if parts.len() >= 4 {
+                            if let Ok(version) = parts[3].parse::<u16>() {
+                                // New format — check protocol compatibility.
+                                if version != crate::protocol::PROTOCOL_VERSION {
+                                    tracing::debug!(
+                                        "UDP beacon: skipping peer {} with protocol v{} (we speak v{})",
+                                        peer_id, version, crate::protocol::PROTOCOL_VERSION
+                                    );
+                                    continue;
                                 }
+                                peer_name = format!("device-{}", &peer_id.to_string()[..8]);
+                            } else {
+                                // Legacy format — 4th field is device name.
+                                peer_name = parts[3].to_string();
                             }
+                        } else {
+                            peer_name = format!("device-{}", &peer_id.to_string()[..8]);
+                        }
+
+                        let peer_addr = SocketAddr::new(addr.ip(), peer_port);
+
+                        let trusted = {
+                            let trust_guard = shared.trust.lock().await;
+                            trust_guard.is_trusted(peer_id)
+                        };
+
+                        if let Err(err) = shared.peer_manager.upsert_peer(
+                            peer_id,
+                            peer_name.clone(),
+                            peer_addr,
+                            trusted,
+                            DiscoverySource::UdpBeacon,
+                        ) {
+                            tracing::warn!(error = %err, "failed to upsert UDP beacon peer");
+                        } else {
+                            if !should_initiate_session(
+                                &shared,
+                                peer_id,
+                                DiscoverySource::UdpBeacon,
+                            )
+                            .await
+                            {
+                                continue;
+                            }
+                            if shared.peer_manager.live_endpoint(peer_id)
+                                == Some(peer_addr)
+                            {
+                                continue;
+                            }
+                            if matches!(
+                                shared.peer_manager.get(peer_id),
+                                Some(record) if record.status == PeerConnectionState::Connecting && record.socket_addrs().contains(&peer_addr)
+                            ) {
+                                continue;
+                            }
+
+                            tracing::info!(
+                                "UDP Beacon discovered peer {} at {}",
+                                peer_id,
+                                peer_addr
+                            );
+                            let shared_clone = shared.clone();
+                            tokio::spawn(async move {
+                                if let Err(err) = connect_loop(
+                                    shared_clone,
+                                    vec![peer_addr],
+                                    Some(peer_id),
+                                    DiscoverySource::UdpBeacon,
+                                )
+                                .await
+                                {
+                                    tracing::warn!(peer_id = %peer_id, error = %err, "UDP beacon peer connection failed");
+                                }
+                            });
                         }
                     }
                     Err(err) => {

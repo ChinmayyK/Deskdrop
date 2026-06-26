@@ -72,8 +72,9 @@
               KeyPath="yes" />
       </Component>
 
-      <!-- Firewall exception — allow inbound on port 47823 -->
+      <!-- Firewall exceptions — TCP data channel + UDP discovery ports -->
       <Component Id="FirewallRule" Guid="c3d4e5f6-a7b8-9012-cdef-123456789012">
+        <!-- TCP 47823: encrypted clipboard sync and file transfer data channel -->
         <util:FirewallException
           xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
           Id="DeskdropFirewall"
@@ -82,6 +83,33 @@
           Protocol="tcp"
           Scope="localSubnet"
           Description="Deskdrop LAN clipboard sync" />
+        <!-- UDP 47824: broadcast beacon peer discovery -->
+        <util:FirewallException
+          xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+          Id="DeskdropFirewallUdpBroadcast"
+          Name="Deskdrop UDP Broadcast"
+          Port="47824"
+          Protocol="udp"
+          Scope="localSubnet"
+          Description="Deskdrop LAN broadcast peer discovery" />
+        <!-- UDP 47825: multicast beacon peer discovery -->
+        <util:FirewallException
+          xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+          Id="DeskdropFirewallUdpMulticast"
+          Name="Deskdrop UDP Multicast"
+          Port="47825"
+          Protocol="udp"
+          Scope="localSubnet"
+          Description="Deskdrop LAN multicast peer discovery" />
+        <!-- UDP 5353: mDNS service discovery -->
+        <util:FirewallException
+          xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+          Id="DeskdropFirewallMdns"
+          Name="Deskdrop mDNS"
+          Port="5353"
+          Protocol="udp"
+          Scope="localSubnet"
+          Description="Deskdrop mDNS service discovery" />
         <RegistryValue
           Root="HKMU"
           Key="Software\Deskdrop"
