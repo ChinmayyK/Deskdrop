@@ -15,7 +15,10 @@ struct StopwatchTextModifier: AnimatableModifier {
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundColor(.secondary)
                 .frame(width: 50, alignment: .trailing)
-                .animation(nil, value: textStr)
+                .transaction { transaction in
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
         )
     }
 }
@@ -96,14 +99,16 @@ struct StopwatchTransferTextModifier: AnimatableModifier {
                         .font(.system(size: 11, design: .rounded))
                         .foregroundStyle(CRTheme.inkSoft)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .animation(nil, value: dashboardText)
                 } else {
                     Text(sizeStr)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(CRTheme.inkSoft)
                         .frame(maxWidth: .infinity, alignment: .trailing)
-                        .animation(nil, value: sizeStr)
                 }
+            }
+            .transaction { transaction in
+                transaction.animation = nil
+                transaction.disablesAnimations = true
             }
         )
     }
