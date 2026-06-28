@@ -1920,88 +1920,36 @@ impl Engine {
             if was_outbound && target_device.map(|td| td == peer_id).unwrap_or(true) {
                 let bg_outbox = tx.clone();
                 let bg_shared = self.shared.clone();
+                let bg_event_tx = self.shared.event_tx.clone();
                 let bg_transfer_id = transfer_id;
+                let bg_peer_id = peer_id;
                 tokio::spawn(async move {
                     const BATCH_SIZE: usize = 8;
                     'outer: loop {
-                        let mut batch = Vec::with_capacity(BATCH_SIZE);
-                        for _ in 0..BATCH_SIZE {
-                            let instr_res = {
-                                let mut mgr = bg_shared.file_transfers.lock().await;
-                                match mgr.get_outbound_mut(&bg_transfer_id) {
-                                    Some(transfer) => transfer.next_chunk_instruction(),
-                                    None => break 'outer,
-                                }
-                            };
+                        let (batch, progs) = match read_outbound_chunks(
+                            bg_shared.clone(),
+                            bg_transfer_id,
+                            BATCH_SIZE,
+                        )
+                        .await
+                        {
+                            Some((batch, progs)) => (batch, progs),
+                            None => break 'outer,
+                        };
 
-                            let instr = match instr_res {
-                                Ok(Some(i)) => i,
-                                Ok(None) => break,
-                                Err(err) => {
-                                    tracing::warn!(error = %err, "failed to generate chunk instruction");
-                                    let mut mgr = bg_shared.file_transfers.lock().await;
-                                    mgr.cancel_outbound(&bg_transfer_id);
-                                    break 'outer;
-                                }
-                            };
-
-                            let (chunk_index, data_res) = match instr {
-                                crate::file_transfer::ChunkInstruction::Memory {
-                                    chunk_index,
-                                    data,
-                                } => (chunk_index, Ok(data)),
-                                crate::file_transfer::ChunkInstruction::File {
-                                    chunk_index,
-                                    path,
-                                    offset,
-                                    len,
-                                } => {
-                                    let read_res = tokio::task::spawn_blocking(move || {
-                                        let mut file = std::fs::File::open(&path)
-                                            .map_err(anyhow::Error::from)?;
-                                        use std::io::{Read, Seek, SeekFrom};
-                                        file.seek(SeekFrom::Start(offset))
-                                            .map_err(anyhow::Error::from)?;
-                                        let mut buf = vec![0u8; len];
-                                        file.read_exact(&mut buf).map_err(anyhow::Error::from)?;
-                                        Ok::<Vec<u8>, anyhow::Error>(buf)
-                                    })
-                                    .await
-                                    .unwrap();
-                                    (chunk_index, read_res)
-                                }
-                            };
-
-                            let msg = {
-                                let mut mgr = bg_shared.file_transfers.lock().await;
-                                match mgr.get_outbound_mut(&bg_transfer_id) {
-                                    Some(transfer) => match data_res {
-                                        Ok(data) => {
-                                            match transfer.process_chunk_data(chunk_index, data) {
-                                                crate::file_transfer::FileTransferMessage::Chunk {
-                                                    transfer_id,
-                                                    chunk_index,
-                                                    total_chunks,
-                                                    data,
-                                                } => AppMessage::FileChunk {
-                                                    transfer_id,
-                                                    chunk_index,
-                                                    total_chunks,
-                                                    data,
-                                                },
-                                                _ => continue,
-                                            }
-                                        }
-                                        Err(err) => {
-                                            tracing::warn!(error = %err, "failed to read file chunk");
-                                            mgr.cancel_outbound(&bg_transfer_id);
-                                            break 'outer;
-                                        }
-                                    },
-                                    None => break 'outer,
-                                }
-                            };
-                            batch.push(msg);
+                        if let Some((prog, fname)) = progs.last() {
+                            let _ = bg_event_tx
+                                .send(EngineEvent::FileTransferProgress {
+                                    transfer_id: bg_transfer_id,
+                                    from_device: bg_peer_id,
+                                    file_name: fname.clone(),
+                                    percent: prog.percent,
+                                    bytes_received: prog.bytes_received,
+                                    total_bytes: prog.total_bytes,
+                                    speed_bps: prog.speed_bps,
+                                    eta_secs: prog.eta_secs,
+                                })
+                                .await;
                         }
 
                         if batch.is_empty() {

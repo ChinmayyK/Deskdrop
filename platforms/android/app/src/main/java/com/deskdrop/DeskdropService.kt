@@ -285,7 +285,8 @@ data class TransferProgress(
     val etaSecs: Long,
     var isPaused: Boolean = false,
     val state: TransferState = TransferState.PROGRESS,
-    val peerName: String = ""
+    val peerName: String = "",
+    val isOutbound: Boolean = false
 )
 
 class DeskdropService : Service() {
@@ -1297,12 +1298,17 @@ class DeskdropService : Service() {
                 
                 val existing = activeTransfers[tid]
                 val isPaused = existing?.isPaused ?: false
-                val totalBytes = existing?.totalBytes ?: 0L
+                // Use eventTransferTotalBytes to get the real total even for outbound transfers
+                val totalBytes = DeskdropJni.eventTransferTotalBytes(ev).let { if (it > 0) it else (existing?.totalBytes ?: 0L) }
                 val peerName = existing?.peerName ?: from
+                // If it wasn't already in activeTransfers (no INCOMING event), it is an outbound transfer!
+                val isOutbound = existing?.isOutbound ?: true
+                
                 activeTransfers[tid] = TransferProgress(
                     id = tid, fileName = name, percent = percent, bytesReceived = bytesReceived, 
                     totalBytes = totalBytes, speedBps = speedBps, etaSecs = etaSecs, 
-                    isPaused = isPaused, state = TransferState.PROGRESS, peerName = peerName
+                    isPaused = isPaused, state = TransferState.PROGRESS, peerName = peerName,
+                    isOutbound = isOutbound
                 )
                 publishActiveTransfers()
                 
@@ -1313,7 +1319,8 @@ class DeskdropService : Service() {
                     bytesReceived = bytesReceived,
                     speedBps = speedBps,
                     etaSecs = etaSecs,
-                    isPaused = isPaused
+                    isPaused = isPaused,
+                    isOutbound = isOutbound
                 )
             }
 
@@ -1393,7 +1400,8 @@ class DeskdropService : Service() {
                         bytesReceived = newState.bytesReceived,
                         speedBps = newState.speedBps,
                         etaSecs = newState.etaSecs,
-                        isPaused = true
+                        isPaused = true,
+                        isOutbound = newState.isOutbound
                     )
                 }
             }
@@ -1412,7 +1420,8 @@ class DeskdropService : Service() {
                         bytesReceived = newState.bytesReceived,
                         speedBps = newState.speedBps,
                         etaSecs = newState.etaSecs,
-                        isPaused = false
+                        isPaused = false,
+                        isOutbound = newState.isOutbound
                     )
                 }
             }
@@ -1680,7 +1689,8 @@ class DeskdropService : Service() {
         bytesReceived: Long,
         speedBps: Long,
         etaSecs: Long,
-        isPaused: Boolean = false
+        isPaused: Boolean = false,
+        isOutbound: Boolean = false
     ) {
         val cancelIntent = Intent(ACTION_CANCEL_FILE_TRANSFER).apply {
             `package` = packageName
@@ -1698,7 +1708,7 @@ class DeskdropService : Service() {
 
         val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Receiving $fileName")
+            .setContentTitle(if (isOutbound) "Sending $fileName" else "Receiving $fileName")
             .setContentText(buildTransferStatusLine(percent, bytesReceived, speedBps, etaSecs) + if (isPaused) " (Paused)" else "")
             .setProgress(100, percent, false)
             .setOngoing(true)

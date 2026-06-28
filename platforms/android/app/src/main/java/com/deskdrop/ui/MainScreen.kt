@@ -1965,7 +1965,7 @@ fun DynamicIslandOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        val icon = if (activeTransfer.state == TransferState.INCOMING) Icons.Default.NotificationsActive else Icons.Default.FileDownload
+                        val icon = if (activeTransfer.state == TransferState.INCOMING) Icons.Default.NotificationsActive else if (activeTransfer.isOutbound) Icons.Default.FileUpload else Icons.Default.FileDownload
                         val color = if (activeTransfer.state == TransferState.INCOMING) CRTheme.accentAmber else CRTheme.blueSoft
                         
                         Box(
@@ -1980,7 +1980,7 @@ fun DynamicIslandOverlay(
                         Spacer(modifier = Modifier.width(12.dp))
                         
                         Column {
-                            val title = if (activeTransfer.state == TransferState.INCOMING) "Incoming from ${activeTransfer.peerName}" else "Receiving ${activeTransfer.fileName}"
+                            val title = if (activeTransfer.state == TransferState.INCOMING) "Incoming from ${activeTransfer.peerName}" else if (activeTransfer.isOutbound) "Sending ${activeTransfer.fileName}" else "Receiving ${activeTransfer.fileName}"
                             Text(title, style = CRTypography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = CRTheme.textHigh(isDark), maxLines = 1)
                             
                             val subtitle = if (activeTransfer.state == TransferState.INCOMING) {
