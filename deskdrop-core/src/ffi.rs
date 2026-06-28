@@ -492,6 +492,19 @@ pub unsafe extern "C" fn deskdrop_event_transfer_total_bytes(event: *const PbEve
     }
 }
 
+/// Get bytes received for FileTransferProgress events; -1 otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_transfer_bytes_received(event: *const PbEvent) -> i64 {
+    if event.is_null() {
+        return -1;
+    }
+    if let EngineEvent::FileTransferProgress { bytes_received, .. } = &(*event).inner {
+        *bytes_received as i64
+    } else {
+        -1
+    }
+}
+
 /// Get the destination path for FileTransferComplete events.
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_transfer_dest_path(event: *mut PbEvent) -> *const c_char {

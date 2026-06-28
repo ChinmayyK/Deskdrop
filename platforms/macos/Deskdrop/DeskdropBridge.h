@@ -78,6 +78,7 @@ const char *deskdrop_event_transfer_id(PbEvent *event);
 const char *deskdrop_event_transfer_file_name(PbEvent *event);
 int32_t     deskdrop_event_transfer_percent(const PbEvent *event);
 int64_t     deskdrop_event_transfer_total_bytes(const PbEvent *event);
+int64_t     deskdrop_event_transfer_bytes_received(const PbEvent *event);
 const char *deskdrop_event_transfer_dest_path(PbEvent *event);
 int32_t     deskdrop_accept_file_transfer(DeskdropHandle *handle,
                                            const char *transfer_id_hex);

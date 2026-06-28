@@ -499,7 +499,7 @@
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding FileName}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
                                                     <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource InkSoft}" FontSize="12" Margin="0,2,0,0"/>
-                                                    <ProgressBar Value="{Binding Percent}" Maximum="100" Height="4" Margin="0,6,0,0" Foreground="{Binding ProgressColor}" Background="#33FFFFFF" BorderThickness="0"/>
+                                                    <ProgressBar Value="{Binding PercentFloat}" Maximum="100" Height="4" Margin="0,6,0,0" Foreground="{Binding ProgressColor}" Background="#33FFFFFF" BorderThickness="0"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
                                                     <Button   FontSize="14" Width="32" Height="32" Style="{StaticResource ModernButton}" Background="{Binding PrimaryBackground}" Foreground="{Binding PrimaryForeground}" Margin="0,0,8,0" Click="BtnTransferPrimaryAction_Click" Visibility="{Binding PrimaryVisible, Converter={StaticResource BooleanToVisibilityConverter}}"><iconPacks:PackIconLucide Kind="{Binding PrimaryIcon}"/></Button>

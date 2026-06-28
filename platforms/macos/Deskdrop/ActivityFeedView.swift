@@ -502,27 +502,29 @@ struct FileTransferBanner: View {
                     Text(transfer.fileName)
                         .font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink).lineLimit(1)
                     Spacer()
-                    Text(transfer.formattedSize)
-                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(CRTheme.inkSoft)
+                    StopwatchSizeText(bytesReceived: Double(transfer.bytesReceived), totalBytes: transfer.totalBytes, isDashboard: false)
+                        .animation(.linear(duration: 0.25), value: transfer.bytesReceived)
                 }
 
                 if case .transferring = transfer.status {
                     VStack(alignment: .leading, spacing: 4) {
-                        CRProgressBar(value: Double(transfer.percent) / 100.0, tint: CRTheme.accentIndigo)
+                        let prog = transfer.totalBytes > 0 ? Double(transfer.bytesReceived) / Double(transfer.totalBytes) : 1.0
+                        StopwatchProgressView(progress: prog, tint: CRTheme.accentIndigo)
+                            .animation(.linear(duration: 0.25), value: prog)
                         HStack {
                             Text("From \(transfer.fromDeviceName)")
                             Spacer()
-                            Text("\(transfer.percent)%")
                         }
                         .font(.system(size: 11)).foregroundStyle(CRTheme.inkSoft)
                     }
                 } else if case .paused = transfer.status {
                     VStack(alignment: .leading, spacing: 4) {
-                        CRProgressBar(value: Double(transfer.percent) / 100.0, tint: CRTheme.accentOrange)
+                        let prog = transfer.totalBytes > 0 ? Double(transfer.bytesReceived) / Double(transfer.totalBytes) : 1.0
+                        StopwatchProgressView(progress: prog, tint: CRTheme.accentOrange)
+                            .animation(.linear(duration: 0.25), value: prog)
                         HStack {
                             Text("Paused - From \(transfer.fromDeviceName)")
                             Spacer()
-                            Text("\(transfer.percent)%")
                         }
                         .font(.system(size: 11)).foregroundStyle(CRTheme.inkSoft)
                     }

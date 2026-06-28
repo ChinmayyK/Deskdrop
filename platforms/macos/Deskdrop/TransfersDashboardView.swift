@@ -132,7 +132,7 @@ struct ActiveTransferCard: View {
         switch transfer.status {
         case .incoming: return "Waiting for approval..."
         case .transferring:
-            var text = "\(transfer.percent)% • \(transfer.formattedSize)"
+            var text = "\(transfer.formattedProgressSize)"
             if let speed = transfer.speedBps {
                 let mbps = Double(speed) / 1_048_576.0
                 if mbps >= 1.0 { text += String(format: " • %.1f MB/s", mbps) }
@@ -142,7 +142,7 @@ struct ActiveTransferCard: View {
                 text += " • \(eta)s remaining"
             }
             return text
-        case .paused: return "Paused • \(transfer.percent)% of \(transfer.formattedSize)"
+        case .paused: return "Paused • \(transfer.formattedProgressSize)"
         case .verifying: return "Verifying..."
         case .complete: return "Complete"
         case .failed(let r): return "Failed: \(r)"
@@ -170,9 +170,14 @@ struct ActiveTransferCard: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 
-                Text(statusText)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(CRTheme.inkSoft)
+                if case .transferring = transfer.status {
+                    StopwatchSizeText(bytesReceived: Double(transfer.bytesReceived), totalBytes: transfer.totalBytes, speedBps: transfer.speedBps, etaSecs: transfer.etaSecs, isDashboard: true)
+                        .animation(.linear(duration: 0.25), value: transfer.bytesReceived)
+                } else {
+                    Text(statusText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(CRTheme.inkSoft)
+                }
                 
                 // Progress Bar
                 if case .incoming = transfer.status {
@@ -180,19 +185,10 @@ struct ActiveTransferCard: View {
                 } else if case .failed = transfer.status {
                     // No progress bar for failed
                 } else {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.black.opacity(0.1))
-                                .frame(height: 4)
-                            
-                            Capsule()
-                                .fill(progressColor)
-                                .frame(width: max(0, geo.size.width * CGFloat(transfer.percent) / 100.0), height: 4)
-                        }
-                    }
-                    .frame(height: 4)
-                    .padding(.top, 4)
+                    let prog = transfer.totalBytes > 0 ? Double(transfer.bytesReceived) / Double(transfer.totalBytes) : 1.0
+                    StopwatchProgressView(progress: prog, tint: progressColor)
+                        .animation(.linear(duration: 0.25), value: prog)
+                        .padding(.top, 4)
                 }
             }
             

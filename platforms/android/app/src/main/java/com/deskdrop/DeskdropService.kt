@@ -38,6 +38,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 // ── JNI Bridge ────────────────────────────────────────────────────────────────
@@ -1343,21 +1344,24 @@ class DeskdropService : Service() {
                     
                     return
                 }
-                
-                // Copy the file from private app storage to public Downloads!
-                val publicUriStr = saveFileToPublicDownloads(File(destPath))
-                
-                val finalPath = publicUriStr ?: destPath
-                updateActivityTransferComplete(tid, finalPath)
-                cancelFileTransferNotification(tid)
+                // Offload the heavy file copy to a background coroutine so we don't block the JNI thread and freeze the UI
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val publicUriStr = saveFileToPublicDownloads(File(destPath))
+                    
+                    val finalPath = publicUriStr ?: destPath
+                    updateActivityTransferComplete(tid, finalPath)
+                    cancelFileTransferNotification(tid)
 
-                val uriToOpen = if (publicUriStr != null) {
-                    android.net.Uri.parse(publicUriStr)
-                } else {
-                    androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", File(destPath))
+                    val uriToOpen = if (publicUriStr != null) {
+                        android.net.Uri.parse(publicUriStr)
+                    } else {
+                        androidx.core.content.FileProvider.getUriForFile(this@DeskdropService, "$packageName.fileprovider", File(destPath))
+                    }
+
+                    showFileTransferCompleteNotification(from, fileName, uriToOpen)
                 }
-
-                showFileTransferCompleteNotification(from, fileName, uriToOpen)
+                
+                // Immediately remove from active transfers so the UI progress bar disappears without getting stuck
                 activeTransfers.remove(tid)
                 publishActiveTransfers()
             }

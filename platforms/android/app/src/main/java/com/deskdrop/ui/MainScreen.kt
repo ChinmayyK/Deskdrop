@@ -661,6 +661,13 @@ fun ActiveTransferCard(
             .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
             .padding(24.dp)
     ) {
+        val targetProgress = if (transfer.totalBytes > 0) (transfer.bytesReceived.toFloat() / transfer.totalBytes.toFloat()) else 1f
+        val animatedProgress by animateFloatAsState(
+            targetValue = targetProgress,
+            animationSpec = tween(durationMillis = 250, easing = LinearEasing),
+            label = "transfer_progress"
+        )
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -685,7 +692,7 @@ fun ActiveTransferCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (transfer.isPaused) "Paused" else "${transfer.percent}% • " + 
+                    text = if (transfer.isPaused) "Paused" else String.format(java.util.Locale.US, "%.2f%%", animatedProgress * 100) + " • " + 
                            if (transfer.speedBps > 0) "${transfer.speedBps / 1024 / 1024} MB/s" else "Calculating...",
                     style = CRTypography.caption,
                     color = CRTheme.textMedium(isDark),
@@ -698,11 +705,6 @@ fun ActiveTransferCard(
         Spacer(modifier = Modifier.height(16.dp))
         
         // Progress Bar
-        val animatedProgress by animateFloatAsState(
-            targetValue = transfer.percent / 100f,
-            animationSpec = tween(durationMillis = 500, easing = LinearEasing),
-            label = "transfer_progress"
-        )
         Box(
             modifier = Modifier
                 .fillMaxWidth()

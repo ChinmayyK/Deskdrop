@@ -166,6 +166,18 @@ struct FileTransferState: Identifiable {
         if kb >= 1.0 { return String(format: "%.0f KB", kb) }
         return "\(totalBytes) B"
     }
+
+    var formattedProgressSize: String {
+        let mbTotal = Double(totalBytes) / 1_048_576.0
+        let mbRecv = Double(bytesReceived) / 1_048_576.0
+        if mbTotal >= 1.0 { return String(format: "%.2f / %.2f MB", mbRecv, mbTotal) }
+        
+        let kbTotal = Double(totalBytes) / 1_024.0
+        let kbRecv = Double(bytesReceived) / 1_024.0
+        if kbTotal >= 1.0 { return String(format: "%.2f / %.2f KB", kbRecv, kbTotal) }
+        
+        return "\(bytesReceived) / \(totalBytes) B"
+    }
 }
 
 enum FileTransferStatus {

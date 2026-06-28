@@ -115,7 +115,7 @@ namespace Deskdrop.Windows
         private long _bytes_total;
         public long bytes_total { get => _bytes_total; set => SetProperty(ref _bytes_total, value); }
         private long _bytes_received;
-        public long bytes_received { get => _bytes_received; set => SetProperty(ref _bytes_received, value); }
+        public long bytes_received { get => _bytes_received; set { if(SetProperty(ref _bytes_received, value)) { OnPropertyChanged(nameof(PercentFloat)); OnPropertyChanged(nameof(PercentText)); } } }
         private int _percent;
         public int percent { get => _percent; set { if(SetProperty(ref _percent, value)) OnPropertyChanged(nameof(PercentText)); } }
         private string _status = "";
@@ -124,8 +124,9 @@ namespace Deskdrop.Windows
         public string? destination { get => _destination; set => SetProperty(ref _destination, value); }
 
         public string FileName => file_name;
+        public double PercentFloat => bytes_total > 0 ? ((double)bytes_received / bytes_total * 100) : 100.0;
         public int Percent => percent;
-        public string PercentText => $"{percent}%";
+        public string PercentText => $"{PercentFloat:0.00}%";
         public string StatusText => status == "in_progress" ? $"Receiving from {from_device}..." : status;
         public string ProgressColor => status == "completed" ? "#34C759" : (status == "failed" ? "#FF3B30" : "#007AFF");
 
