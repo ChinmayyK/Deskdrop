@@ -206,12 +206,13 @@ fun CameraPreview(executor: ExecutorService, modifier: Modifier = Modifier) {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
+                val frameProcessor = FrameProcessor()
                 val imageAnalyzer = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also {
                         it.setAnalyzer(executor) { image ->
-                            processImage(image)
+                            frameProcessor.processImage(image)
                         }
                     }
 
@@ -237,50 +238,52 @@ fun CameraPreview(executor: ExecutorService, modifier: Modifier = Modifier) {
     )
 }
 
-private var nv21Buffer: ByteArray? = null
-private val jpegOutputStream = ByteArrayOutputStream(1024 * 1024)
+private class FrameProcessor {
+    private var nv21Buffer: ByteArray? = null
+    private val jpegOutputStream = java.io.ByteArrayOutputStream(1024 * 1024)
 
-private fun processImage(image: ImageProxy) {
-    try {
-        if (image.format == ImageFormat.YUV_420_888) {
-            val yBuffer = image.planes[0].buffer
-            val uBuffer = image.planes[1].buffer
-            val vBuffer = image.planes[2].buffer
+    fun processImage(image: ImageProxy) {
+        try {
+            if (image.format == ImageFormat.YUV_420_888) {
+                val yBuffer = image.planes[0].buffer
+                val uBuffer = image.planes[1].buffer
+                val vBuffer = image.planes[2].buffer
 
-            val ySize = yBuffer.remaining()
-            val uSize = uBuffer.remaining()
-            val vSize = vBuffer.remaining()
-            val totalSize = ySize + uSize + vSize
+                val ySize = yBuffer.remaining()
+                val uSize = uBuffer.remaining()
+                val vSize = vBuffer.remaining()
+                val totalSize = ySize + uSize + vSize
 
-            var nv21 = nv21Buffer
-            if (nv21 == null || nv21.size != totalSize) {
-                nv21 = ByteArray(totalSize)
-                nv21Buffer = nv21
-            }
+                var nv21 = nv21Buffer
+                if (nv21 == null || nv21.size != totalSize) {
+                    nv21 = ByteArray(totalSize)
+                    nv21Buffer = nv21
+                }
 
-            yBuffer.get(nv21, 0, ySize)
-            vBuffer.get(nv21, ySize, vSize)
-            uBuffer.get(nv21, ySize + vSize, uSize)
+                yBuffer.get(nv21, 0, ySize)
+                vBuffer.get(nv21, ySize, vSize)
+                uBuffer.get(nv21, ySize + vSize, uSize)
 
-            val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-            jpegOutputStream.reset()
-            // Improved quality for clearer video feed while maintaining reasonable network usage
-            yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 85, jpegOutputStream)
-            val jpegBytes = jpegOutputStream.toByteArray()
+                val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
+                jpegOutputStream.reset()
+                // Improved quality for clearer video feed while maintaining reasonable network usage
+                yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 85, jpegOutputStream)
+                val jpegBytes = jpegOutputStream.toByteArray()
 
-            val handle = DeskdropService.activeEngineHandle
-            if (handle != 0L) {
-                val result = DeskdropJni.pushVideoFrame(handle, jpegBytes)
-                android.util.Log.d("CameraStream", "Pushed frame: ${jpegBytes.size} bytes, result=$result")
+                val handle = DeskdropService.activeEngineHandle
+                if (handle != 0L) {
+                    val result = DeskdropJni.pushVideoFrame(handle, jpegBytes)
+                    android.util.Log.d("CameraStream", "Pushed frame: ${jpegBytes.size} bytes, result=$result")
+                } else {
+                    android.util.Log.w("CameraStream", "Engine handle is 0 — service not running? Cannot push frame.")
+                }
             } else {
-                android.util.Log.w("CameraStream", "Engine handle is 0 — service not running? Cannot push frame.")
+                android.util.Log.w("CameraStream", "Unexpected image format: ${image.format}")
             }
-        } else {
-            android.util.Log.w("CameraStream", "Unexpected image format: ${image.format}")
+        } catch (e: Exception) {
+            android.util.Log.e("CameraStream", "Error processing image", e)
+        } finally {
+            image.close()
         }
-    } catch (e: Exception) {
-        android.util.Log.e("CameraStream", "Error processing image", e)
-    } finally {
-        image.close()
     }
 }

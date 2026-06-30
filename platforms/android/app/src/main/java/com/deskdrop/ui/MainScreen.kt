@@ -664,7 +664,7 @@ fun ActiveTransferCard(
         val targetProgress = if (transfer.totalBytes > 0) (transfer.bytesReceived.toFloat() / transfer.totalBytes.toFloat()) else 1f
         val animatedProgress by animateFloatAsState(
             targetValue = targetProgress,
-            animationSpec = tween(durationMillis = 250, easing = LinearEasing),
+            animationSpec = tween(durationMillis = 1000, easing = LinearEasing),
             label = "transfer_progress"
         )
 

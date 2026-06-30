@@ -400,7 +400,7 @@ class DeskdropService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var lastClipboardSignature: String? = null
     private var suppressNext = false
-    private val connectedPeerIds = linkedMapOf<String, String>()  // deviceId → displayName
+    private val connectedPeerIds = java.util.concurrent.ConcurrentHashMap<String, String>()  // deviceId → displayName
     private val engineStarted = AtomicBoolean(false)
     private val notificationManager by lazy { getSystemService(NotificationManager::class.java) }
 
@@ -1250,14 +1250,10 @@ class DeskdropService : Service() {
                 )
                 val fileName  = DeskdropJni.eventTransferFileName(ev) ?: "file"
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev)
-                addActivity(ActivityEntry(deviceName = from,
-                    kind = ActivityKind.FILE_TRANSFER_INCOMING, preview = fileName,
-                    transferId = tid, fileTotalBytes = totalBytes))
                 
-                val peer = currentPeerSnapshots().firstOrNull { it.id == DeskdropJni.eventDeviceId(ev) }
-                if (peer?.trusted == true && engineHandle != 0L) {
-                    DeskdropJni.acceptFileTransfer(engineHandle, tid)
-                } else {
+                val isOutboundFeed = synchronized(feedLock) { activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
+                
+                if (isOutboundFeed) {
                     activeTransfers[tid] = TransferProgress(
                         id = tid,
                         fileName = fileName,
@@ -1267,11 +1263,36 @@ class DeskdropService : Service() {
                         speedBps = 0,
                         etaSecs = 0,
                         isPaused = false,
-                        state = TransferState.INCOMING,
-                        peerName = from
+                        state = TransferState.PROGRESS,
+                        peerName = from,
+                        isOutbound = true
                     )
                     publishActiveTransfers()
-                    showFileTransferIncomingNotification(from, fileName, totalBytes, tid)
+                } else {
+                    addActivity(ActivityEntry(deviceName = from,
+                        kind = ActivityKind.FILE_TRANSFER_INCOMING, preview = fileName,
+                        transferId = tid, fileTotalBytes = totalBytes))
+                    
+                    val peer = currentPeerSnapshots().firstOrNull { it.id == DeskdropJni.eventDeviceId(ev) }
+                    if (peer?.trusted == true && engineHandle != 0L) {
+                        DeskdropJni.acceptFileTransfer(engineHandle, tid)
+                    } else {
+                        activeTransfers[tid] = TransferProgress(
+                            id = tid,
+                            fileName = fileName,
+                            percent = 0,
+                            bytesReceived = 0,
+                            totalBytes = totalBytes,
+                            speedBps = 0,
+                            etaSecs = 0,
+                            isPaused = false,
+                            state = TransferState.INCOMING,
+                            peerName = from,
+                            isOutbound = false
+                        )
+                        publishActiveTransfers()
+                        showFileTransferIncomingNotification(from, fileName, totalBytes, tid)
+                    }
                 }
             }
 
@@ -1301,8 +1322,8 @@ class DeskdropService : Service() {
                 // Use eventTransferTotalBytes to get the real total even for outbound transfers
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev).let { if (it > 0) it else (existing?.totalBytes ?: 0L) }
                 val peerName = existing?.peerName ?: from
-                // If it wasn't already in activeTransfers (no INCOMING event), it is an outbound transfer!
-                val isOutbound = existing?.isOutbound ?: true
+                val isOutboundFeed = synchronized(feedLock) { activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
+                val isOutbound = isOutboundFeed || (existing?.isOutbound ?: true)
                 
                 activeTransfers[tid] = TransferProgress(
                     id = tid, fileName = name, percent = percent, bytesReceived = bytesReceived, 
