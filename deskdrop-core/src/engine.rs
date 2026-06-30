@@ -1918,7 +1918,7 @@ impl Engine {
             // If we are the sender, we need to restart the chunking loop!
             // `tx` is the `session_outbox_tx` for this peer.
             if was_outbound && target_device.map(|td| td == peer_id).unwrap_or(true) {
-                let bg_outbox = tx.clone();
+                let bg_outbox = self.shared.peer_manager.file_sender(peer_id).unwrap_or(tx.clone());
                 let bg_shared = self.shared.clone();
                 let bg_event_tx = self.shared.event_tx.clone();
                 let bg_transfer_id = transfer_id;
@@ -3597,6 +3597,7 @@ fn register_session(
     // If the network is slower than disk I/O, this applies backpressure to the
     // file reading loop so we don't blow up Android's memory limits.
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(64);
+    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(64);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
     match shared
         .peer_manager
@@ -3613,6 +3614,7 @@ fn register_session(
         peer_id,
         endpoint,
         outbox_tx.clone(),
+        file_outbox_tx.clone(),
         shutdown_tx,
     )?;
 
@@ -4076,7 +4078,7 @@ fn register_session(
                                     transfer.resume_from(resume_from_chunk);
                                 }
                             }
-                            let bg_outbox = session_outbox_tx.clone();
+                            let bg_outbox = shared.peer_manager.file_sender(peer_id).unwrap_or(session_outbox_tx.clone());
                             let bg_shared = shared.clone();
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_transfer_id = transfer_id;
@@ -4147,7 +4149,8 @@ fn register_session(
                         transfer_id,
                         chunk_index,
                         total_chunks: _,
-                        data,
+                        data: mut payload,
+                        compressed,
                     }) => {
                         touch_last_seen();
                         if !shared
@@ -4158,6 +4161,21 @@ fn register_session(
                         {
                             continue;
                         }
+                        
+                        let data = if compressed {
+                            match lz4_flex::decompress_size_prepended(&payload) {
+                                Ok(d) => d,
+                                Err(e) => {
+                                    tracing::error!("Failed to decompress file chunk: {}", e);
+                                    let mut mgr = shared.file_transfers.lock().await;
+                                    mgr.cancel_inbound(&transfer_id, "decompression failed");
+                                    continue;
+                                }
+                            }
+                        } else {
+                            payload
+                        };
+
                         let (validation, io_ctx) = {
                             let mut mgr = shared.file_transfers.lock().await;
                             if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
@@ -4181,22 +4199,25 @@ fn register_session(
                             }
                         };
 
-                        let (progress, should_ack) = match validation {
+                        let progress_and_ack = match validation {
                             Ok((offset, padding, is_duplicate)) => {
                                 if is_duplicate {
                                     let mut mgr = shared.file_transfers.lock().await;
-                                    if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
-                                        (Some(transfer.progress_snapshot()), transfer.should_ack())
+                                    if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                        Some((t.progress_snapshot(), t.should_ack(), t.meta.file_name.clone(), t.last_confirmed_chunk))
                                     } else {
-                                        (None, false)
+                                        None
                                     }
                                 } else if let Some((mut file, mut hasher)) = io_ctx {
                                     let data_len = data.len();
                                     let res = tokio::task::spawn_blocking(move || {
                                         use sha2::Digest;
                                         use std::io::{Seek, SeekFrom, Write};
-                                        if let Err(e) = file.seek(SeekFrom::Start(offset)) {
-                                            return Err(anyhow::anyhow!("seek error: {}", e));
+                                        let current_pos = file.stream_position().unwrap_or(u64::MAX);
+                                        if current_pos != offset {
+                                            if let Err(e) = file.seek(SeekFrom::Start(offset)) {
+                                                return Err(anyhow::anyhow!("seek error: {}", e));
+                                            }
                                         }
                                         if let Err(e) = file.write_all(&data) {
                                             return Err(anyhow::anyhow!("write error: {}", e));
@@ -4216,40 +4237,33 @@ fn register_session(
                                             if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
                                                 t.restore_io_context(file, hasher);
                                                 let prog = t.commit_chunk(chunk_index, data_len);
-                                                (Some(prog), t.should_ack())
+                                                Some((prog, t.should_ack(), t.meta.file_name.clone(), t.last_confirmed_chunk))
                                             } else {
-                                                (None, false)
+                                                None
                                             }
                                         }
                                         Err(e) => {
                                             tracing::error!("Disk I/O error: {}", e);
-                                            (None, false)
+                                            None
                                         }
                                     }
                                 } else {
                                     tracing::error!("Transfer accepted but missing file handle");
-                                    (None, false)
+                                    None
                                 }
                             }
                             Err(e) => {
                                 tracing::error!("Failed to validate chunk: {:?}", e);
-                                (None, false)
+                                None
                             }
                         };
-                        if let Some(prog) = progress {
-                            let from_device = peer_id;
-                            let file_name = shared
-                                .file_transfers
-                                .lock()
-                                .await
-                                .get_inbound_mut(&transfer_id)
-                                .map(|t| t.meta.file_name.clone())
-                                .unwrap_or_default();
+
+                        if let Some((prog, should_ack, file_name, last_confirmed)) = progress_and_ack {
                             let _ = shared
                                 .event_tx
                                 .send(EngineEvent::FileTransferProgress {
                                     transfer_id,
-                                    from_device,
+                                    from_device: peer_id,
                                     file_name,
                                     percent: prog.percent,
                                     bytes_received: prog.bytes_received,
@@ -4258,21 +4272,15 @@ fn register_session(
                                     eta_secs: prog.eta_secs,
                                 })
                                 .await;
-                        }
-                        if should_ack {
-                            let last_confirmed = shared
-                                .file_transfers
-                                .lock()
-                                .await
-                                .get_inbound_mut(&transfer_id)
-                                .map(|t| t.last_confirmed_chunk)
-                                .unwrap_or(0);
-                            let _ = rx_session_outbox_tx
-                                .send(AppMessage::FileChunkAck {
-                                    transfer_id,
-                                    last_confirmed_chunk: last_confirmed,
-                                })
-                                .await;
+                            
+                            if should_ack {
+                                let _ = rx_session_outbox_tx
+                                    .send(AppMessage::FileChunkAck {
+                                        transfer_id,
+                                        last_confirmed_chunk: last_confirmed,
+                                    })
+                                    .await;
+                            }
                         }
                     }
                     Ok(AppMessage::FileChunkAck {
@@ -4601,17 +4609,19 @@ fn register_session(
                                             match mgr.get_outbound_mut(&bg_transfer_id) {
                                                 Some(transfer) => match data_res {
                                                     Ok(data) => {
-                                                        match transfer.process_chunk_data(chunk_index, data) {
+                                                        match transfer.process_chunk_data(chunk_index, data, false) {
                                 crate::file_transfer::FileTransferMessage::Chunk {
                                 transfer_id,
                                 chunk_index,
                                 total_chunks,
                                 data,
+                                compressed: _,
                                 } => AppMessage::FileChunk {
                                 transfer_id,
                                 chunk_index,
                                 total_chunks,
                                 data,
+                                compressed: false,
                                 },
                                 _ => continue,
                                 }
@@ -5226,6 +5236,7 @@ fn register_session(
             let last_seen_millis = last_seen.load(std::sync::atomic::Ordering::Relaxed);
 
             tokio::select! {
+                biased;
                 shutdown = &mut shutdown_rx => {
                     match shutdown {
                         Ok(cmd) => {
@@ -5293,11 +5304,12 @@ fn register_session(
                     }
                 }
                 Some(msg) = outbox_rx.recv() => {
-                    let result = match &msg {
-                        AppMessage::FileChunk { .. } => sess_tx.send_no_flush(&msg).await,
-                        _ => sess_tx.send(&msg).await,
-                    };
-                    if let Err(err) = result {
+                    if let Err(err) = sess_tx.send(&msg).await {
+                        break format!("send failed: {err}");
+                    }
+                }
+                Some(msg) = file_outbox_rx.recv() => {
+                    if let Err(err) = sess_tx.send_no_flush(&msg).await {
                         break format!("send failed: {err}");
                     }
                 }
@@ -5489,97 +5501,126 @@ async fn read_outbound_chunks(
     Vec<AppMessage>,
     Vec<(crate::file_transfer::TransferProgress, String)>,
 )> {
-    let mut msgs = Vec::with_capacity(batch_size);
-    let mut progs = Vec::with_capacity(batch_size);
-    for _ in 0..batch_size {
-        let instr = {
-            let mut mgr = shared.file_transfers.lock().await;
-            let t = match mgr.get_outbound_mut(&transfer_id) {
-                Some(t) => t,
-                None => {
-                    return if msgs.is_empty() {
-                        None
-                    } else {
-                        Some((msgs, progs))
-                    }
-                }
-            };
-            match t.next_chunk_instruction() {
-                Ok(Some(i)) => i,
-                Ok(None) => break,
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to get next chunk instruction");
-                    mgr.cancel_outbound(&transfer_id);
-                    return None;
-                }
-            }
-        };
+    let mut instrs = Vec::with_capacity(batch_size);
+    let mut io_ctx = None;
 
-        let data = match instr {
-            crate::file_transfer::ChunkInstruction::Memory { ref data, .. } => data.clone(),
-            crate::file_transfer::ChunkInstruction::File {
-                ref path,
-                offset,
-                len,
-                ..
-            } => {
-                let path = path.clone();
-                let res = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
-                    use std::io::{Read, Seek};
-                    let mut file = std::fs::File::open(&path)?;
-                    file.seek(std::io::SeekFrom::Start(offset))?;
-                    let mut buf = vec![0u8; len];
-                    file.read_exact(&mut buf)?;
-                    Ok(buf)
-                })
-                .await
-                .unwrap();
-                match res {
-                    Ok(d) => d,
+    {
+        let mut mgr = shared.file_transfers.lock().await;
+        if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+            io_ctx = t.take_io_context();
+            for _ in 0..batch_size {
+                match t.next_chunk_instruction() {
+                    Ok(Some(i)) => instrs.push(i),
+                    Ok(None) => break,
                     Err(e) => {
-                        tracing::warn!(error = %e, "failed to read outbound file chunk");
-                        let mut mgr = shared.file_transfers.lock().await;
+                        tracing::warn!(error = %e, "failed to get next chunk instruction");
                         mgr.cancel_outbound(&transfer_id);
                         return None;
                     }
                 }
             }
-        };
+        } else {
+            return None;
+        }
+    }
 
-        let (msg, prog, fname) = {
-            let mut mgr = shared.file_transfers.lock().await;
-            let t = match mgr.get_outbound_mut(&transfer_id) {
-                Some(t) => t,
-                None => {
-                    return if msgs.is_empty() {
-                        None
+    if instrs.is_empty() {
+        if let Some((f, h)) = io_ctx {
+            if let Some(t) = shared.file_transfers.lock().await.get_outbound_mut(&transfer_id) {
+                t.restore_io_context(f, h);
+            }
+        }
+        return None;
+    }
+
+    let res = tokio::task::spawn_blocking(move || -> anyhow::Result<(Option<(Option<std::fs::File>, sha2::Sha256)>, Vec<(u32, Vec<u8>, bool)>)> {
+        use std::io::{Read, Seek};
+        use sha2::Digest;
+        
+        let mut chunk_data = Vec::with_capacity(instrs.len());
+        let (mut f, mut hasher) = io_ctx.unwrap_or((None, sha2::Sha256::new())); // Memory chunks might not have io_ctx, but we'll return it anyway
+
+        for instr in instrs {
+            match instr {
+                crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
+                    hasher.update(&data);
+                    let compressed = lz4_flex::compress_prepend_size(&data);
+                    if compressed.len() < data.len() {
+                        chunk_data.push((chunk_index, compressed, true));
                     } else {
-                        Some((msgs, progs))
+                        chunk_data.push((chunk_index, data, false));
                     }
                 }
-            };
-            let c_idx = match instr {
-                crate::file_transfer::ChunkInstruction::Memory { chunk_index, .. } => chunk_index,
-                crate::file_transfer::ChunkInstruction::File { chunk_index, .. } => chunk_index,
-            };
-            let msg = t.process_chunk_data(c_idx, data);
-            (msg, t.progress(), t.meta.file_name.clone())
-        };
+                crate::file_transfer::ChunkInstruction::File { chunk_index, path, offset, len } => {
+                    if f.is_none() {
+                        f = Some(std::fs::File::open(&path)?);
+                    }
+                    if let Some(ref mut file) = f {
+                        let current_pos = file.stream_position().unwrap_or(u64::MAX);
+                        if current_pos != offset {
+                            file.seek(std::io::SeekFrom::Start(offset))?;
+                        }
+                        let mut buf = vec![0u8; len];
+                        file.read_exact(&mut buf)?;
+                        
+                        hasher.update(&buf);
+                        let compressed = lz4_flex::compress_prepend_size(&buf);
+                        if compressed.len() < buf.len() {
+                            chunk_data.push((chunk_index, compressed, true));
+                        } else {
+                            chunk_data.push((chunk_index, buf, false));
+                        }
+                    }
+                }
+            }
+        }
+        Ok((Some((f, hasher)), chunk_data))
+    })
+    .await
+    .unwrap();
 
-        if let crate::file_transfer::FileTransferMessage::Chunk {
-            transfer_id,
-            chunk_index,
-            total_chunks,
-            data,
-        } = msg
-        {
-            msgs.push(AppMessage::FileChunk {
-                transfer_id,
-                chunk_index,
-                total_chunks,
-                data,
-            });
-            progs.push((prog, fname));
+    let (io_ctx, chunk_data) = match res {
+        Ok(res) => res,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to read outbound file chunks");
+            let mut mgr = shared.file_transfers.lock().await;
+            mgr.cancel_outbound(&transfer_id);
+            return None;
+        }
+    };
+
+    let mut msgs = Vec::with_capacity(chunk_data.len());
+    let mut progs = Vec::with_capacity(chunk_data.len());
+
+    {
+        let mut mgr = shared.file_transfers.lock().await;
+        if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+            if let Some((f, h)) = io_ctx {
+                t.restore_io_context(f, h);
+            }
+            let fname = t.meta.file_name.clone();
+            for (c_idx, data, compressed) in chunk_data {
+                let msg = t.process_chunk_data(c_idx, data, compressed);
+                if let crate::file_transfer::FileTransferMessage::Chunk {
+                    transfer_id,
+                    chunk_index,
+                    total_chunks,
+                    data,
+                    compressed,
+                } = msg
+                {
+                    msgs.push(AppMessage::FileChunk {
+                        transfer_id,
+                        chunk_index,
+                        total_chunks,
+                        data,
+                        compressed,
+                    });
+                    progs.push((t.progress(), fname.clone()));
+                }
+            }
+        } else {
+            return None;
         }
     }
 

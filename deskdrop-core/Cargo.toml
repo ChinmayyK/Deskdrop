@@ -58,6 +58,7 @@ dirs = "5"
 thiserror = "1"
 anyhow = "1"
 default-net = "0.22.0"
+lz4_flex = "0.13.1"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 mdns-sd = "0.10"

@@ -200,9 +200,15 @@ async fn send_encrypted(
         .encrypt_in_place(&mut buffer)
         .context("encrypting")?;
     let len = (12 + buffer.len()) as u32;
-    stream.write_all(&len.to_le_bytes()).await?;
-    stream.write_all(nonce.as_slice()).await?;
-    stream.write_all(&buffer).await?;
+    let len_bytes = len.to_le_bytes();
+
+    use bytes::Buf;
+    let mut chained = Buf::chain(
+        Buf::chain(std::io::Cursor::new(len_bytes), std::io::Cursor::new(nonce.to_vec())),
+        std::io::Cursor::new(buffer)
+    );
+
+    stream.write_all_buf(&mut chained).await?;
     stream.flush().await?;
     Ok(())
 }
@@ -220,9 +226,15 @@ async fn send_encrypted_no_flush(
         .encrypt_in_place(&mut buffer)
         .context("encrypting")?;
     let len = (12 + buffer.len()) as u32;
-    stream.write_all(&len.to_le_bytes()).await?;
-    stream.write_all(nonce.as_slice()).await?;
-    stream.write_all(&buffer).await?;
+    let len_bytes = len.to_le_bytes();
+
+    use bytes::Buf;
+    let mut chained = Buf::chain(
+        Buf::chain(std::io::Cursor::new(len_bytes), std::io::Cursor::new(nonce.to_vec())),
+        std::io::Cursor::new(buffer)
+    );
+
+    stream.write_all_buf(&mut chained).await?;
     Ok(())
 }
 

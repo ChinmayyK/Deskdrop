@@ -285,6 +285,8 @@ pub enum AppMessage {
         chunk_index: u32,
         total_chunks: u32,
         data: Vec<u8>,
+        #[serde(default)]
+        compressed: bool,
     },
     /// Periodic acknowledgement from receiver → sender.
     FileChunkAck {

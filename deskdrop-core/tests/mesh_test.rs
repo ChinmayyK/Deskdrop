@@ -48,7 +48,7 @@ fn three_device_fanout_all_receive() {
         .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(10 + i as u8), tx.clone(), stop)
+        mgr.replace_live_session(id, peer_addr(10 + i as u8), tx.clone(), tx.clone(), stop)
             .unwrap();
         txs.push(tx);
     }
@@ -76,7 +76,7 @@ fn pause_sync_removes_one_from_fanout() {
         .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(20 + i as u8), tx, stop)
+        mgr.replace_live_session(id, peer_addr(20 + i as u8), tx.clone(), tx, stop)
             .unwrap();
     }
 
@@ -121,7 +121,7 @@ fn peer_disconnect_does_not_cascade() {
         .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(30 + i as u8), tx, stop)
+        mgr.replace_live_session(id, peer_addr(30 + i as u8), tx.clone(), tx, stop)
             .unwrap();
     }
 

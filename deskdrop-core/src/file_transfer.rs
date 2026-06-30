@@ -31,7 +31,7 @@ use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -68,6 +68,8 @@ pub enum FileTransferMessage {
         chunk_index: u32,
         total_chunks: u32,
         data: Vec<u8>,
+        #[serde(default)]
+        compressed: bool,
     },
     /// Periodic acknowledgement from receiver.
     ChunkAck {
@@ -203,7 +205,25 @@ impl OutboundTransfer {
                 read_file_chunk_from_file(cached_file.as_mut().unwrap(), idx, self.meta.size_bytes)?
             }
         };
-        Ok(Some(self.process_chunk_data(idx, data)))
+        if let Some(h) = &mut self.hasher {
+            h.update(&data);
+        }
+        Ok(Some(self.process_chunk_data(idx, data, false)))
+    }
+    pub fn take_io_context(&mut self) -> Option<(Option<std::fs::File>, sha2::Sha256)> {
+        let file = if let OutboundSource::FilePath(_, cached_file) = &mut self.source {
+            cached_file.take()
+        } else {
+            None
+        };
+        self.hasher.take().map(|h| (file, h))
+    }
+
+    pub fn restore_io_context(&mut self, file: Option<std::fs::File>, hasher: sha2::Sha256) {
+        if let OutboundSource::FilePath(_, cached_file) = &mut self.source {
+            *cached_file = file;
+        }
+        self.hasher = Some(hasher);
     }
 
     pub fn next_chunk_instruction(&mut self) -> Result<Option<ChunkInstruction>> {
@@ -236,16 +256,14 @@ impl OutboundTransfer {
         Ok(Some(instr))
     }
 
-    pub fn process_chunk_data(&mut self, chunk_index: u32, data: Vec<u8>) -> FileTransferMessage {
+    pub fn process_chunk_data(&mut self, chunk_index: u32, data: Vec<u8>, compressed: bool) -> FileTransferMessage {
         self.next_chunk = chunk_index + 1;
-        if let Some(h) = &mut self.hasher {
-            h.update(&data);
-        }
         FileTransferMessage::Chunk {
             transfer_id: self.transfer_id,
             chunk_index,
             total_chunks: self.total_chunks,
             data,
+            compressed,
         }
     }
 
@@ -330,7 +348,7 @@ pub struct InboundTransfer {
     /// Temp file path for streaming writes.
     pub tmp_path: Option<PathBuf>,
     /// Persistent file handle to avoid re-opening on every chunk.
-    pub file_handle: Option<std::fs::File>,
+    pub file_handle: Option<BufWriter<std::fs::File>>,
     /// Final destination path.
     pub dest_path: Option<PathBuf>,
     pub from_device: Uuid,
@@ -387,17 +405,15 @@ impl InboundTransfer {
                 .write(true)
                 .open(tmp)
                 .with_context(|| format!("creating temp file {}", tmp.display()))?;
-            // Removed file.set_len() to prevent blocking the async runtime with
-            // synchronous zero-filling on Android flash storage. The file will
-            // grow naturally as chunks are written.
-            self.file_handle = Some(file);
+            // Wrap in BufWriter to coalesce writes
+            self.file_handle = Some(BufWriter::with_capacity(2 * 1024 * 1024, file));
         }
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
         Ok(())
     }
 
-    pub fn take_io_context(&mut self) -> Option<(std::fs::File, sha2::Sha256)> {
+    pub fn take_io_context(&mut self) -> Option<(BufWriter<std::fs::File>, sha2::Sha256)> {
         if let Some(file) = self.file_handle.take() {
             let hasher = std::mem::replace(&mut self.hasher, sha2::Sha256::new());
             Some((file, hasher))
@@ -406,7 +422,7 @@ impl InboundTransfer {
         }
     }
 
-    pub fn restore_io_context(&mut self, file: std::fs::File, hasher: sha2::Sha256) {
+    pub fn restore_io_context(&mut self, file: BufWriter<std::fs::File>, hasher: sha2::Sha256) {
         self.file_handle = Some(file);
         self.hasher = hasher;
     }
@@ -520,8 +536,10 @@ impl InboundTransfer {
             actual
         );
 
-        // Drop the file handle so the OS releases the lock before renaming.
-        self.file_handle = None;
+        // Flush and drop the file handle so the OS releases the lock before renaming.
+        if let Some(mut file) = self.file_handle.take() {
+            let _ = file.flush();
+        }
 
         let tmp = self.tmp_path.as_ref().context("no temp path")?;
 

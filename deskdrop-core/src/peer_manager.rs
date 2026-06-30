@@ -220,6 +220,7 @@ struct LivePeerSession {
     session_id: u64,
     endpoint: SocketAddr,
     sender: mpsc::Sender<AppMessage>,
+    file_sender: mpsc::Sender<AppMessage>,
     shutdown_tx: Option<oneshot::Sender<SessionShutdown>>,
 }
 
@@ -500,6 +501,7 @@ impl PeerManager {
         device_id: Uuid,
         endpoint: SocketAddr,
         sender: mpsc::Sender<AppMessage>,
+        file_sender: mpsc::Sender<AppMessage>,
         shutdown_tx: oneshot::Sender<SessionShutdown>,
     ) -> Result<(u64, Option<ReplacedSession>)> {
         let session_id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
@@ -527,6 +529,7 @@ impl PeerManager {
                 session_id,
                 endpoint,
                 sender,
+                file_sender,
                 shutdown_tx: Some(shutdown_tx),
             },
         );
@@ -779,6 +782,22 @@ impl PeerManager {
             })
             .map(|(id, session)| (*id, session.sender.clone()))
             .collect()
+    }
+
+    pub fn sender(&self, device_id: Uuid) -> Option<mpsc::Sender<AppMessage>> {
+        self.live
+            .read()
+            .unwrap()
+            .get(&device_id)
+            .map(|s| s.sender.clone())
+    }
+
+    pub fn file_sender(&self, device_id: Uuid) -> Option<mpsc::Sender<AppMessage>> {
+        self.live
+            .read()
+            .unwrap()
+            .get(&device_id)
+            .map(|s| s.file_sender.clone())
     }
 
     /// All connected peers regardless of sync state (for heartbeats / control).
@@ -1059,7 +1078,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(1);
         let (stop, _stop_rx) = oneshot::channel();
         manager
-            .replace_live_session(id, SocketAddr::from(([192, 168, 1, 10], 47823)), tx, stop)
+            .replace_live_session(id, SocketAddr::from(([192, 168, 1, 10], 47823)), tx.clone(), tx, stop)
             .unwrap();
         assert_eq!(manager.active_senders().len(), 1);
         manager.set_sync_enabled(id, false).unwrap();
@@ -1105,12 +1124,12 @@ mod tests {
         let (tx1, _rx1) = mpsc::channel(1);
         let (stop1, _stop1_rx) = oneshot::channel();
         let (first_session_id, _) = manager
-            .replace_live_session(id, SocketAddr::from(([192, 168, 1, 8], 47823)), tx1, stop1)
+            .replace_live_session(id, SocketAddr::from(([192, 168, 1, 8], 47823)), tx1.clone(), tx1, stop1)
             .unwrap();
         let (tx2, _rx2) = mpsc::channel(1);
-        let (stop2, _stop2_rx) = oneshot::channel();
+        let (stop2, _stop_rx2) = oneshot::channel();
         let (second_session_id, replaced) = manager
-            .replace_live_session(id, SocketAddr::from(([172, 20, 10, 4], 47823)), tx2, stop2)
+            .replace_live_session(id, SocketAddr::from(([172, 20, 10, 4], 47823)), tx2.clone(), tx2, stop2)
             .unwrap();
         let replaced = replaced.unwrap();
         assert_eq!(replaced.session_id, first_session_id);
@@ -1163,9 +1182,9 @@ mod tests {
         assert_eq!(manager.connected_count(), 0, "no live sessions yet");
 
         let (tx, _rx) = mpsc::channel(1);
-        let (stop, _) = oneshot::channel();
+        let (stop, _stop_rx) = oneshot::channel();
         manager
-            .replace_live_session(id_a, SocketAddr::from(([192, 168, 1, 10], 47823)), tx, stop)
+            .replace_live_session(id_a, SocketAddr::from(([192, 168, 1, 10], 47823)), tx.clone(), tx, stop)
             .unwrap();
 
         assert_eq!(manager.connected_count(), 1);
@@ -1221,7 +1240,7 @@ mod tests {
             let (tx, _rx) = mpsc::channel(1);
             let (stop, _) = oneshot::channel();
             manager
-                .replace_live_session(id, SocketAddr::from((ip, 47823)), tx, stop)
+                .replace_live_session(id, SocketAddr::from((ip, 47823)), tx.clone(), tx, stop)
                 .unwrap();
         }
 
