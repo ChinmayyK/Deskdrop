@@ -109,7 +109,8 @@ object CRTypography {
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
-        letterSpacing = 0.3.sp
+        letterSpacing = 0.3.sp,
+        fontFeatureSettings = "tnum"
     )
 }
 

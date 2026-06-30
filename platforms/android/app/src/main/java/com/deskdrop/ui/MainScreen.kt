@@ -664,7 +664,7 @@ fun ActiveTransferCard(
         val targetProgress = if (transfer.totalBytes > 0) (transfer.bytesReceived.toFloat() / transfer.totalBytes.toFloat()) else 1f
         val animatedProgress by animateFloatAsState(
             targetValue = targetProgress,
-            animationSpec = tween(durationMillis = 100, easing = LinearEasing),
+            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
             label = "transfer_progress"
         )
 
@@ -1983,11 +1983,17 @@ fun DynamicIslandOverlay(
                             val title = if (activeTransfer.state == TransferState.INCOMING) "Incoming from ${activeTransfer.peerName}" else if (activeTransfer.isOutbound) "Sending ${activeTransfer.fileName}" else "Receiving ${activeTransfer.fileName}"
                             Text(title, style = CRTypography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = CRTheme.textHigh(isDark), maxLines = 1)
                             
+                            val targetProgress = if (activeTransfer.totalBytes > 0) (activeTransfer.bytesReceived.toFloat() / activeTransfer.totalBytes.toFloat()) else 1f
+                            val animatedProgress by animateFloatAsState(
+                                targetValue = targetProgress,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+                                label = "overlay_progress"
+                            )
                             val subtitle = if (activeTransfer.state == TransferState.INCOMING) {
                                 "${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
                             } else {
-                                val percent = if (activeTransfer.totalBytes > 0) (activeTransfer.bytesReceived * 100) / activeTransfer.totalBytes else 0
-                                "$percent% • ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.bytesReceived)} / ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
+                                val percentStr = String.format(java.util.Locale.US, "%.2f%%", animatedProgress * 100)
+                                "$percentStr • ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.bytesReceived)} / ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
                             }
                             Text(subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 1)
                         }
