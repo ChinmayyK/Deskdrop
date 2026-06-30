@@ -375,6 +375,7 @@ class DeskdropService : Service() {
         // Global activity feed — readable by UI without binding to the service
         @JvmField val activityFeed = ArrayDeque<ActivityEntry>()
         @JvmField val feedLock     = Any()
+        @JvmField val pendingOutboundTransferIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
         fun addToFeed(entry: ActivityEntry) {
             synchronized(feedLock) {
@@ -1273,24 +1274,25 @@ class DeskdropService : Service() {
                         kind = ActivityKind.FILE_TRANSFER_INCOMING, preview = fileName,
                         transferId = tid, fileTotalBytes = totalBytes))
                     
+                    activeTransfers[tid] = TransferProgress(
+                        id = tid,
+                        fileName = fileName,
+                        percent = 0,
+                        bytesReceived = 0,
+                        totalBytes = totalBytes,
+                        speedBps = 0,
+                        etaSecs = 0,
+                        isPaused = false,
+                        state = TransferState.INCOMING,
+                        peerName = from,
+                        isOutbound = false
+                    )
+                    publishActiveTransfers()
+
                     val peer = currentPeerSnapshots().firstOrNull { it.id == DeskdropJni.eventDeviceId(ev) }
                     if (peer?.trusted == true && engineHandle != 0L) {
                         DeskdropJni.acceptFileTransfer(engineHandle, tid)
                     } else {
-                        activeTransfers[tid] = TransferProgress(
-                            id = tid,
-                            fileName = fileName,
-                            percent = 0,
-                            bytesReceived = 0,
-                            totalBytes = totalBytes,
-                            speedBps = 0,
-                            etaSecs = 0,
-                            isPaused = false,
-                            state = TransferState.INCOMING,
-                            peerName = from,
-                            isOutbound = false
-                        )
-                        publishActiveTransfers()
                         showFileTransferIncomingNotification(from, fileName, totalBytes, tid)
                     }
                 }
@@ -1323,7 +1325,7 @@ class DeskdropService : Service() {
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev).let { if (it > 0) it else (existing?.totalBytes ?: 0L) }
                 val peerName = existing?.peerName ?: from
                 val isOutboundFeed = synchronized(feedLock) { activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
-                val isOutbound = isOutboundFeed || (existing?.isOutbound ?: true)
+                val isOutbound = pendingOutboundTransferIds.contains(tid) || isOutboundFeed || (existing?.isOutbound ?: true)
                 
                 activeTransfers[tid] = TransferProgress(
                     id = tid, fileName = name, percent = percent, bytesReceived = bytesReceived, 
@@ -1863,6 +1865,7 @@ class DeskdropService : Service() {
                         null
                     )
                     if (tid != null) {
+                        pendingOutboundTransferIds.add(tid)
                         addToFeed(
                             ActivityEntry(
                                 deviceName = "All devices",
@@ -1926,6 +1929,7 @@ class DeskdropService : Service() {
                 targetDeviceId
             )
             if (tid != null) {
+                pendingOutboundTransferIds.add(tid)
                 sentAny = true
                 Log.i(
                     TAG,
