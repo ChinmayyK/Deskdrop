@@ -1863,11 +1863,10 @@ fun DynamicIslandOverlay(
                                     "${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
                                 } else {
                                     val percentStr = String.format(java.util.Locale.US, "%.2f%%", animatedProgress * 100)
-                                    if (isExpanded) {
-                                        "$percentStr • ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.bytesReceived)} / ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
-                                    } else {
-                                        "$percentStr • ${if (activeTransfer.speedBps > 0) "${activeTransfer.speedBps / 1024 / 1024} MB/s" else "Calculating..."}"
-                                    }
+                                    val formattedReceived = android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.bytesReceived)
+                                    val formattedTotal = android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)
+                                    val speedStr = if (activeTransfer.speedBps > 0) "${activeTransfer.speedBps / 1024 / 1024} MB/s" else "Calculating..."
+                                    "$percentStr • $formattedReceived / $formattedTotal • $speedStr"
                                 }
                                 Text(subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
