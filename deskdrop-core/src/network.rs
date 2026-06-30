@@ -36,8 +36,8 @@ const KEEPALIVE_IDLE: Duration = Duration::from_secs(10);
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(3);
 #[allow(dead_code)]
 const KEEPALIVE_RETRIES: u32 = 3;
-const SOCKET_BUFFER_MIN: usize = 4 * 1024 * 1024; // 4 MB
-const SOCKET_BUFFER_PREFERRED: usize = 8 * 1024 * 1024; // 8 MB — room for ≥2 full chunks in flight
+const SOCKET_BUFFER_MIN: usize = 8 * 1024 * 1024; // 8 MB
+const SOCKET_BUFFER_PREFERRED: usize = 16 * 1024 * 1024; // 16 MB — room for multiple 1 MB chunks in flight
 
 // ── TCP helpers ───────────────────────────────────────────────────────────────
 

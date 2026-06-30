@@ -36,14 +36,14 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub const FILE_CHUNK_SIZE: usize = 256 * 1024; // 256 KB per chunk — larger chunks saturate
-                                               // encrypt/serialize/frame/flush overhead.
+pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chunks reduce
+                                               // encrypt/serialize/frame overhead per byte.
 
 /// HIGH-03 FIX: Maximum transfer size (4 GB). Rejects announced transfers
 /// exceeding this limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = 1024 * 1024 * 1024 * 1024; // 1 TB
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 64; // ACK every 16 MB — keeps the pipeline full
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 32; // ACK every 32 MB — keeps the pipeline full
                                              // on LAN while still bounding in-flight data.
 
 pub type TransferId = [u8; 16];

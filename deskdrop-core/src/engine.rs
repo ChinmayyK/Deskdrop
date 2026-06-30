@@ -1924,7 +1924,7 @@ impl Engine {
                 let bg_transfer_id = transfer_id;
                 let bg_peer_id = peer_id;
                 tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 8;
+                    const BATCH_SIZE: usize = 16;
                     'outer: loop {
                         let (batch, progs) = match read_outbound_chunks(
                             bg_shared.clone(),
@@ -3593,10 +3593,10 @@ fn register_session(
     trusted: bool,
     discovery: DiscoverySource,
 ) -> Result<()> {
-    // 16 capacity * 4 MB chunk size = ~64 MB max queued memory.
+    // 64 capacity * 1 MB chunk size = ~64 MB max queued memory.
     // If the network is slower than disk I/O, this applies backpressure to the
     // file reading loop so we don't blow up Android's memory limits.
-    let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(16);
+    let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(64);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
     match shared
         .peer_manager
@@ -4084,7 +4084,7 @@ fn register_session(
                             tokio::spawn(async move {
                                 // Batch multiple chunk reads per mutex lock to reduce contention.
                                 // With 1 MB chunks, reading 8 at a time = 8 MB per lock cycle.
-                                const BATCH_SIZE: usize = 8;
+                                const BATCH_SIZE: usize = 16;
                                 'outer: loop {
                                     let (batch, progs) = match read_outbound_chunks(
                                         bg_shared.clone(),
