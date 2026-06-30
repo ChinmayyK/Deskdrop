@@ -664,7 +664,7 @@ fun ActiveTransferCard(
         val targetProgress = if (transfer.totalBytes > 0) (transfer.bytesReceived.toFloat() / transfer.totalBytes.toFloat()) else 1f
         val animatedProgress by animateFloatAsState(
             targetValue = targetProgress,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+            animationSpec = tween(durationMillis = 250, easing = LinearEasing),
             label = "transfer_progress"
         )
 
@@ -1986,7 +1986,7 @@ fun DynamicIslandOverlay(
                             val targetProgress = if (activeTransfer.totalBytes > 0) (activeTransfer.bytesReceived.toFloat() / activeTransfer.totalBytes.toFloat()) else 1f
                             val animatedProgress by animateFloatAsState(
                                 targetValue = targetProgress,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+                                animationSpec = tween(durationMillis = 250, easing = LinearEasing),
                                 label = "overlay_progress"
                             )
                             val subtitle = if (activeTransfer.state == TransferState.INCOMING) {
