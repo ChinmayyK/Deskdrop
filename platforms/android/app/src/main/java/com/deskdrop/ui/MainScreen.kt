@@ -236,7 +236,9 @@ fun MainScreen(
                     isDark = isDark,
                     onAccept = onActionAcceptTransfer,
                     onReject = onActionRejectTransfer,
-                    onCancel = onActionCancelTransfer
+                    onCancel = onActionCancelTransfer,
+                    onPause = onActionPauseTransfer,
+                    onResume = onActionResumeTransfer
                 )
             }
             
@@ -341,31 +343,6 @@ fun HomeTab(
         val hasConnectedPeers = peers.any { it.isConnected || it.trusted }
         
         Spacer(modifier = Modifier.height(24.dp)) // Contextual gap from Status Strip
-        
-        if (activeTransfers.isNotEmpty()) {
-            Text(
-                text = "Active Transfers",
-                style = CRTypography.h2,
-                color = CRTheme.textHigh(isDark),
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(activeTransfers) { t ->
-                    ActiveTransferCard(
-                        isDark = isDark,
-                        transfer = t,
-                        onPause = { onActionPauseTransfer(t.id) },
-                        onResume = { onActionResumeTransfer(t.id) },
-                        onCancel = { onActionCancelTransfer(t.id) }
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(32.dp))
-        }
 
         if (peers.isEmpty()) {
             EmptyStateEcosystem(isDark = isDark, onReplayOnboarding = onReplayOnboarding)
@@ -647,123 +624,6 @@ fun QuickActionsGrid(
 }
 
 @Composable
-fun ActiveTransferCard(
-    isDark: Boolean,
-    transfer: TransferProgress,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onCancel: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    Column(
-        modifier = Modifier
-            .width(320.dp)
-            .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
-            .padding(24.dp)
-    ) {
-        val targetProgress = if (transfer.totalBytes > 0) (transfer.bytesReceived.toFloat() / transfer.totalBytes.toFloat()) else 1f
-        val animatedProgress by animateFloatAsState(
-            targetValue = targetProgress,
-            animationSpec = tween(durationMillis = 250, easing = LinearEasing),
-            label = "transfer_progress"
-        )
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(CRTheme.brandCyan.copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Folder,
-                    contentDescription = null,
-                    tint = CRTheme.brandCyan,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = transfer.fileName,
-                    style = CRTypography.label,
-                    color = CRTheme.textHigh(isDark),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = if (transfer.isPaused) "Paused" else String.format(java.util.Locale.US, "%.2f%%", animatedProgress * 100) + " • " + 
-                           if (transfer.speedBps > 0) "${transfer.speedBps / 1024 / 1024} MB/s" else "Calculating...",
-                    style = CRTypography.caption,
-                    color = CRTheme.textMedium(isDark),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Progress Bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                .clip(RoundedCornerShape(4.dp))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(animatedProgress.coerceIn(0f, 1f))
-                    .height(8.dp)
-                    .background(if (transfer.isPaused) CRTheme.accentAmber else CRTheme.brandCyan)
-            )
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Action Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        if (transfer.isPaused) onResume() else onPause()
-                    }),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (transfer.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                    contentDescription = if (transfer.isPaused) "Resume" else "Pause",
-                    tint = CRTheme.textHigh(isDark),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onCancel()
-                    }),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Cancel",
-                    tint = CRTheme.accentRed,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun QuickActionCardPrimary(
@@ -1935,11 +1795,15 @@ fun DynamicIslandOverlay(
     isDark: Boolean,
     onAccept: (String) -> Unit,
     onReject: (String) -> Unit,
-    onCancel: (String) -> Unit
+    onCancel: (String) -> Unit,
+    onPause: (String) -> Unit,
+    onResume: (String) -> Unit
 ) {
     val activeTransfer = activeTransfers.firstOrNull { 
         it.state == TransferState.INCOMING || it.state == TransferState.PROGRESS || it.state == TransferState.PAUSED 
     }
+
+    var isExpanded by remember { mutableStateOf(false) }
 
     androidx.compose.animation.AnimatedVisibility(
         visible = activeTransfer != null,
@@ -1947,100 +1811,180 @@ fun DynamicIslandOverlay(
         exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it - 50 }) + androidx.compose.animation.fadeOut()
     ) {
         if (activeTransfer != null) {
+            val targetProgress = if (activeTransfer.totalBytes > 0) (activeTransfer.bytesReceived.toFloat() / activeTransfer.totalBytes.toFloat()) else 1f
+            val animatedProgress by animateFloatAsState(
+                targetValue = targetProgress,
+                animationSpec = tween(durationMillis = 250, easing = LinearEasing),
+                label = "overlay_progress"
+            )
+            
             Box(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
-                    .crGlassCard(isDark = isDark, cornerRadius = 32.dp, onClick = {})
-                    .background(CRTheme.surfaceElevated(isDark), RoundedCornerShape(32.dp))
-                    .border(1.dp, CRTheme.stroke(isDark).copy(alpha = 0.5f), RoundedCornerShape(32.dp))
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .crGlassCard(isDark = isDark, cornerRadius = if (isExpanded) 24.dp else 32.dp, onClick = {
+                        if (activeTransfer.state != TransferState.INCOMING) {
+                            isExpanded = !isExpanded
+                        }
+                    })
+                    .background(CRTheme.surfaceElevated(isDark), RoundedCornerShape(if (isExpanded) 24.dp else 32.dp))
+                    .border(1.dp, CRTheme.stroke(isDark).copy(alpha = 0.5f), RoundedCornerShape(if (isExpanded) 24.dp else 32.dp))
+                    .padding(horizontal = 16.dp, vertical = if (isExpanded) 16.dp else 12.dp)
+                    .animateContentSize()
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // Content left side
+                Column {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        val icon = if (activeTransfer.state == TransferState.INCOMING) Icons.Default.NotificationsActive else if (activeTransfer.isOutbound) Icons.Default.FileUpload else Icons.Default.FileDownload
-                        val color = if (activeTransfer.state == TransferState.INCOMING) CRTheme.accentAmber else CRTheme.blueSoft
-                        
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(color.copy(alpha = 0.15f), CircleShape),
-                            contentAlignment = Alignment.Center
+                        // Content left side
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                            val icon = if (activeTransfer.state == TransferState.INCOMING) Icons.Default.NotificationsActive else if (activeTransfer.isOutbound) Icons.Default.FileUpload else Icons.Default.FileDownload
+                            val color = if (activeTransfer.state == TransferState.INCOMING) CRTheme.accentAmber else CRTheme.blueSoft
+                            
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(color.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                            }
+                            
+                            Spacer(modifier = Modifier.width(12.dp))
+                            
+                            Column {
+                                val title = if (activeTransfer.state == TransferState.INCOMING) "Incoming from ${activeTransfer.peerName}" else if (activeTransfer.isOutbound) "Sending ${activeTransfer.fileName}" else "Receiving ${activeTransfer.fileName}"
+                                Text(title, style = CRTypography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = CRTheme.textHigh(isDark), maxLines = 1)
+                                
+                                val subtitle = if (activeTransfer.state == TransferState.INCOMING) {
+                                    "${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
+                                } else {
+                                    val percentStr = String.format(java.util.Locale.US, "%.2f%%", animatedProgress * 100)
+                                    if (isExpanded) {
+                                        "$percentStr • ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.bytesReceived)} / ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
+                                    } else {
+                                        "$percentStr • ${if (activeTransfer.speedBps > 0) "${activeTransfer.speedBps / 1024 / 1024} MB/s" else "Calculating..."}"
+                                    }
+                                }
+                                Text(subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                         
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
                         
-                        Column {
-                            val title = if (activeTransfer.state == TransferState.INCOMING) "Incoming from ${activeTransfer.peerName}" else if (activeTransfer.isOutbound) "Sending ${activeTransfer.fileName}" else "Receiving ${activeTransfer.fileName}"
-                            Text(title, style = CRTypography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = CRTheme.textHigh(isDark), maxLines = 1)
-                            
-                            val targetProgress = if (activeTransfer.totalBytes > 0) (activeTransfer.bytesReceived.toFloat() / activeTransfer.totalBytes.toFloat()) else 1f
-                            val animatedProgress by animateFloatAsState(
-                                targetValue = targetProgress,
-                                animationSpec = tween(durationMillis = 250, easing = LinearEasing),
-                                label = "overlay_progress"
-                            )
-                            val subtitle = if (activeTransfer.state == TransferState.INCOMING) {
-                                "${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
-                            } else {
-                                val percentStr = String.format(java.util.Locale.US, "%.2f%%", animatedProgress * 100)
-                                "$percentStr • ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.bytesReceived)} / ${android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current, activeTransfer.totalBytes)}"
+                        // Buttons right side
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (activeTransfer.state == TransferState.INCOMING) {
+                                // Reject Button
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable { onReject(activeTransfer.id) }
+                                        .background(CRTheme.accentRed.copy(alpha = 0.15f))
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Reject", tint = CRTheme.accentRed, modifier = Modifier.size(18.dp))
+                                }
+                                
+                                // Accept Button
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable { onAccept(activeTransfer.id) }
+                                        .background(CRTheme.accentGreen)
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Accept", style = CRTypography.caption.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                }
+                            } else if (!isExpanded) {
+                                // Cancel progress button (only in collapsed state, in expanded it moves down)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable { onCancel(activeTransfer.id) }
+                                        .background(CRTheme.textHigh(isDark).copy(alpha = 0.1f))
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Cancel", tint = CRTheme.textHigh(isDark), modifier = Modifier.size(18.dp))
+                                }
                             }
-                            Text(subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 1)
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
-                    
-                    // Buttons right side
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (activeTransfer.state == TransferState.INCOMING) {
-                            // Reject Button
+
+                    if (isExpanded && activeTransfer.state != TransferState.INCOMING) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Progress Bar
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f), RoundedCornerShape(3.dp))
+                                .clip(RoundedCornerShape(3.dp))
+                        ) {
                             Box(
                                 modifier = Modifier
+                                    .fillMaxWidth(animatedProgress.coerceIn(0f, 1f))
+                                    .height(6.dp)
+                                    .background(if (activeTransfer.isPaused) CRTheme.accentAmber else CRTheme.brandCyan)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Action Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val haptic = LocalHapticFeedback.current
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
                                     .clip(CircleShape)
-                                    .clickable { onReject(activeTransfer.id) }
-                                    .background(CRTheme.accentRed.copy(alpha = 0.15f))
-                                    .padding(8.dp),
+                                    .background(CRTheme.textHigh(isDark).copy(alpha = 0.05f))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (activeTransfer.isPaused) onResume(activeTransfer.id) else onPause(activeTransfer.id)
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "Reject", tint = CRTheme.accentRed, modifier = Modifier.size(18.dp))
+                                Icon(
+                                    imageVector = if (activeTransfer.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                    contentDescription = if (activeTransfer.isPaused) "Resume" else "Pause",
+                                    tint = CRTheme.textHigh(isDark),
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
-                            
-                            // Accept Button
+                            Spacer(modifier = Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier
+                                    .size(40.dp)
                                     .clip(CircleShape)
-                                    .clickable { onAccept(activeTransfer.id) }
-                                    .background(CRTheme.accentGreen)
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    .background(CRTheme.accentRed.copy(alpha = 0.1f))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onCancel(activeTransfer.id)
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("Accept", style = CRTypography.caption.copy(fontWeight = FontWeight.Bold), color = Color.White)
-                            }
-                        } else {
-                            // Cancel progress button
-                            Box(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .clickable { onCancel(activeTransfer.id) }
-                                    .background(CRTheme.textHigh(isDark).copy(alpha = 0.1f))
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = CRTheme.textHigh(isDark), modifier = Modifier.size(18.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Cancel",
+                                    tint = CRTheme.accentRed,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
