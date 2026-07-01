@@ -793,6 +793,17 @@ pub unsafe extern "C" fn deskdrop_push_video_frame(
     0
 }
 
+/// Stop the camera stream and broadcast stop message to all peers.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_stop_camera_stream(handle: *mut DeskdropHandle) -> c_int {
+    if handle.is_null() {
+        return -1;
+    }
+    let h = &*handle;
+    runtime().block_on(h.engine.stop_camera_stream());
+    0
+}
+
 // ── Windows P/Invoke helpers ──────────────────────────────────────────────────
 
 /// Respond to a TOFU prompt.  `trust` = 1 to accept, 0 to reject.

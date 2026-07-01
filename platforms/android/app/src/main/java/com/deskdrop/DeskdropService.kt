@@ -142,6 +142,8 @@ object DeskdropJni {
     /** Resume a paused file transfer. */
     @JvmStatic external fun resumeFileTransfer(engineHandle: Long, transferIdHex: String): Int
 
+    @JvmStatic external fun stopCameraStream(engineHandle: Long): Int
+
     /**
      * Connect to a peer discovered via Android NSD.
      * Returns 0 on success, -1 on error.
