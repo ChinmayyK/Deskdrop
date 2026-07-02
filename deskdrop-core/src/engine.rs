@@ -4376,6 +4376,12 @@ fn register_session(
                                     .await;
                             }
                             Err(e) => {
+                                {
+                                    let mut mgr = shared.file_transfers.lock().await;
+                                    if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                        t.status = crate::file_transfer::TransferStatus::Failed;
+                                    }
+                                }
                                 let hex_tid = hex::encode(transfer_id);
                                 shared.activity.lock().await.record_file_transfer_failed(
                                     peer_id,
@@ -4518,14 +4524,6 @@ fn register_session(
                     }
                     Ok(AppMessage::FileTransferResume { transfer_id }) => {
                         touch_last_seen();
-                        if !shared
-                            .peer_manager
-                            .get(peer_id)
-                            .map(|p| p.trusted)
-                            .unwrap_or(false)
-                        {
-                            continue;
-                        }
                         let mut was_outbound = false;
                         {
                             let mut mgr = shared.file_transfers.lock().await;
@@ -4547,100 +4545,47 @@ fn register_session(
 
                         if was_outbound {
                             // Resume the background chunk loop if we are the sender
-                            let bg_outbox = session_outbox_tx.clone();
+                            let bg_outbox = shared
+                                .peer_manager
+                                .file_sender(peer_id)
+                                .unwrap_or(session_outbox_tx.clone());
                             let bg_shared = shared.clone();
                             let bg_transfer_id = transfer_id;
+                            let bg_event_tx = shared.event_tx.clone();
+                            let bg_peer_id = peer_id;
                             tokio::spawn(async move {
-                                const BATCH_SIZE: usize = 8;
+                                const BATCH_SIZE: usize = 16;
                                 'outer: loop {
-                                    let mut batch = Vec::with_capacity(BATCH_SIZE);
-                                    for _ in 0..BATCH_SIZE {
-                                        let instr_res = {
-                                            let mut mgr = bg_shared.file_transfers.lock().await;
-                                            match mgr.get_outbound_mut(&bg_transfer_id) {
-                                                Some(transfer) => transfer.next_chunk_instruction(),
-                                                None => break 'outer,
-                                            }
-                                        };
-
-                                        let instr = match instr_res {
-                                            Ok(Some(i)) => i,
-                                            Ok(None) => break,
-                                            Err(err) => {
-                                                tracing::warn!(error = %err, "failed to generate chunk instruction");
-                                                let mut mgr = bg_shared.file_transfers.lock().await;
-                                                mgr.cancel_outbound(&bg_transfer_id);
-                                                break 'outer;
-                                            }
-                                        };
-
-                                        let (chunk_index, data_res) = match instr {
-                                            crate::file_transfer::ChunkInstruction::Memory {
-                                                chunk_index,
-                                                data,
-                                            } => (chunk_index, Ok(data)),
-                                            crate::file_transfer::ChunkInstruction::File {
-                                                chunk_index,
-                                                path,
-                                                offset,
-                                                len,
-                                            } => {
-                                                let read_res =
-                                                    tokio::task::spawn_blocking(move || {
-                                                        let mut file =
-                                                            std::fs::File::open(&path)
-                                                                .map_err(anyhow::Error::from)?;
-                                                        use std::io::{Read, Seek, SeekFrom};
-                                                        file.seek(SeekFrom::Start(offset))
-                                                            .map_err(anyhow::Error::from)?;
-                                                        let mut buf = vec![0u8; len];
-                                                        file.read_exact(&mut buf)
-                                                            .map_err(anyhow::Error::from)?;
-                                                        Ok::<Vec<u8>, anyhow::Error>(buf)
-                                                    })
-                                                    .await
-                                                    .unwrap();
-                                                (chunk_index, read_res)
-                                            }
-                                        };
-
-                                        let msg = {
-                                            let mut mgr = bg_shared.file_transfers.lock().await;
-                                            match mgr.get_outbound_mut(&bg_transfer_id) {
-                                                Some(transfer) => match data_res {
-                                                    Ok(data) => {
-                                                        match transfer.process_chunk_data(chunk_index, data, false) {
-                                crate::file_transfer::FileTransferMessage::Chunk {
-                                transfer_id,
-                                chunk_index,
-                                total_chunks,
-                                data,
-                                compressed: _,
-                                } => AppMessage::FileChunk {
-                                transfer_id,
-                                chunk_index,
-                                total_chunks,
-                                data,
-                                compressed: false,
-                                },
-                                _ => continue,
-                                }
-                                                    }
-                                                    Err(err) => {
-                                                        tracing::warn!(error = %err, "failed to read file chunk");
-                                                        mgr.cancel_outbound(&bg_transfer_id);
-                                                        break 'outer;
-                                                    }
-                                                },
-                                                None => break 'outer,
-                                            }
-                                        };
-                                        batch.push(msg);
+                                    let (batch, progs) = match read_outbound_chunks(
+                                        bg_shared.clone(),
+                                        bg_transfer_id,
+                                        BATCH_SIZE,
+                                    )
+                                    .await
+                                    {
+                                        Some((batch, progs)) => (batch, progs),
+                                        None => break 'outer,
+                                    };
+                                    
+                                    // Send progress updates
+                                    for (prog, fname) in progs {
+                                        let _ = bg_event_tx.send(EngineEvent::FileTransferProgress {
+                                            transfer_id: bg_transfer_id,
+                                            from_device: bg_peer_id,
+                                            file_name: fname,
+                                            percent: prog.percent,
+                                            bytes_received: prog.bytes_received,
+                                            total_bytes: prog.total_bytes,
+                                            speed_bps: prog.speed_bps,
+                                            eta_secs: prog.eta_secs,
+                                        }).await;
                                     }
 
                                     if batch.is_empty() {
-                                        break;
+                                        break 'outer;
                                     }
+
+                                    // Send the batch
                                     for wire_msg in batch {
                                         if bg_outbox.send(wire_msg).await.is_err() {
                                             break 'outer;
@@ -5561,8 +5506,16 @@ async fn read_outbound_chunks(
                             file.seek(std::io::SeekFrom::Start(offset))?;
                         }
                         let mut buf = vec![0u8; len];
-                        file.read_exact(&mut buf)?;
-                        
+                        let mut read_bytes = 0;
+                        while read_bytes < len {
+                            let n = file.read(&mut buf[read_bytes..])?;
+                            if n == 0 { break; }
+                            read_bytes += n;
+                        }
+                        if read_bytes < len {
+                            tracing::warn!("Outbound chunk truncated: read {} instead of {} bytes", read_bytes, len);
+                            buf.truncate(read_bytes);
+                        }
                         hasher.update(&buf);
                         let compressed = lz4_flex::compress_prepend_size(&buf);
                         if compressed.len() < buf.len() {

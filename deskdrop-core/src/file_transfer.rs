@@ -253,6 +253,7 @@ impl OutboundTransfer {
                 }
             }
         };
+        self.next_chunk += 1;
         Ok(Some(instr))
     }
 

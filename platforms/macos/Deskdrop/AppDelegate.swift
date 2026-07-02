@@ -534,6 +534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let body = fileName
             
             fileBannerManager.show(title: title, body: body)
+            sendSystemNotification(title: title, body: body)
             
         case "remote_notification":
             // Respect the user's toggle for Android Notification Mirroring
