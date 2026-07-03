@@ -531,4 +531,3 @@ That means:
 - clearer recovery
 
 If we execute in that order, Deskdrop can become not just a technically impressive cross-device tool, but a product people are comfortable relying on every day.
-
