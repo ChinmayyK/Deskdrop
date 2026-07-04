@@ -282,7 +282,7 @@ impl PeerManager {
         let path = self.path.clone();
 
         let store_to_save = {
-            let store = self.store.read().unwrap();
+            let store = self.store.read().unwrap_or_else(|e| e.into_inner());
             PeerStoreData {
                 peers: store
                     .peers
@@ -318,11 +318,11 @@ impl PeerManager {
     }
 
     pub fn list(&self) -> Vec<PeerRecord> {
-        self.store.read().unwrap().peers.values().cloned().collect()
+        self.store.read().unwrap_or_else(|e| e.into_inner()).peers.values().cloned().collect()
     }
 
     pub fn get(&self, device_id: Uuid) -> Option<PeerRecord> {
-        self.store.read().unwrap().peers.get(&device_id).cloned()
+        self.store.read().unwrap_or_else(|e| e.into_inner()).peers.get(&device_id).cloned()
     }
 
     pub fn upsert_peer(
@@ -345,15 +345,15 @@ impl PeerManager {
         discovery: DiscoverySource,
         platform: Option<String>,
     ) -> Result<PeerRecord> {
-        if self.store.read().unwrap().peers.len() > 1000 {
+        if self.store.read().unwrap_or_else(|e| e.into_inner()).peers.len() > 1000 {
             self.prune_stale_peers();
-            if self.store.read().unwrap().peers.len() > 1000 {
+            if self.store.read().unwrap_or_else(|e| e.into_inner()).peers.len() > 1000 {
                 return Err(anyhow::anyhow!("Peer limit reached"));
             }
         }
         let now = now_secs();
         let record = {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
 
             let is_placeholder = |name: &str| {
                 name.starts_with("device-") || name.eq_ignore_ascii_case("Deskdrop Device")
@@ -468,7 +468,7 @@ impl PeerManager {
         }
 
         {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             let entry = store.peers.entry(device_id).or_insert_with(|| PeerRecord {
                 id: device_id,
                 port: endpoint
@@ -506,7 +506,7 @@ impl PeerManager {
     ) -> Result<(u64, Option<ReplacedSession>)> {
         let session_id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
         {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             let entry = store.peers.entry(device_id).or_insert_with(|| PeerRecord {
                 id: device_id,
                 port: endpoint.port(),
@@ -523,7 +523,7 @@ impl PeerManager {
             entry.explicit_disconnect = false;
         }
 
-        let replaced = self.live.write().unwrap().insert(
+        let replaced = self.live.write().unwrap_or_else(|e| e.into_inner()).insert(
             device_id,
             LivePeerSession {
                 session_id,
@@ -546,9 +546,9 @@ impl PeerManager {
     }
 
     pub fn mark_disconnected(&self, device_id: Uuid, reason: Option<String>) -> Result<()> {
-        self.live.write().unwrap().remove(&device_id);
+        self.live.write().unwrap_or_else(|e| e.into_inner()).remove(&device_id);
         {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Disconnected;
                 entry.last_error = reason;
@@ -565,7 +565,7 @@ impl PeerManager {
         reason: Option<String>,
     ) -> Result<bool> {
         {
-            let live = self.live.read().unwrap();
+            let live = self.live.read().unwrap_or_else(|e| e.into_inner());
             if let Some(current) = live.get(&device_id) {
                 if current.session_id != session_id {
                     return Ok(false);
@@ -583,7 +583,7 @@ impl PeerManager {
         if let Some(live_endpoint) = self.live_endpoint(device_id) {
             if live_endpoint != endpoint {
                 {
-                    let mut store = self.store.write().unwrap();
+                    let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
                     if let Some(entry) = store.peers.get_mut(&device_id) {
                         if !entry.ips.contains(&live_endpoint.ip()) {
                             entry.ips.push(live_endpoint.ip());
@@ -597,9 +597,9 @@ impl PeerManager {
             }
         }
 
-        self.live.write().unwrap().remove(&device_id);
+        self.live.write().unwrap_or_else(|e| e.into_inner()).remove(&device_id);
         {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Failed;
                 entry.last_error = Some(reason);
@@ -610,7 +610,7 @@ impl PeerManager {
 
     pub fn update_trust(&self, device_id: Uuid, trusted: bool) -> Result<()> {
         {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.trusted = trusted;
             }
@@ -620,7 +620,7 @@ impl PeerManager {
 
     pub fn update_last_sync(&self, device_id: Uuid) -> Result<()> {
         {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.last_sync = Some(now_secs());
                 entry.last_seen = Some(now_secs());
@@ -633,7 +633,7 @@ impl PeerManager {
 
     pub fn set_sync_enabled(&self, device_id: Uuid, enabled: bool) -> Result<bool> {
         let found = {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.sync_enabled = enabled;
                 true
@@ -649,7 +649,7 @@ impl PeerManager {
 
     pub fn set_auto_connect(&self, device_id: Uuid, auto_connect: bool) -> Result<bool> {
         let found = {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.auto_connect = auto_connect;
                 true
@@ -666,7 +666,7 @@ impl PeerManager {
     /// Sets whether this peer has an active pairing request pending.
     pub fn set_pairing_requested(&self, device_id: Uuid, requested: bool) -> Result<bool> {
         let changed = {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.pairing_requested = requested;
                 true
@@ -682,7 +682,7 @@ impl PeerManager {
 
     pub fn set_outgoing_pairing_waiting(&self, device_id: Uuid, waiting: bool) -> Result<bool> {
         let changed = {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.outgoing_pairing_waiting = waiting;
                 true
@@ -699,7 +699,7 @@ impl PeerManager {
     /// Sets the pairing PIN for this peer.
     pub fn set_pairing_pin(&self, device_id: Uuid, pin: Option<String>) -> Result<bool> {
         let found = {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.pairing_pin = pin;
                 true
@@ -715,7 +715,7 @@ impl PeerManager {
 
     pub fn set_explicit_disconnect(&self, device_id: Uuid, explicit: bool) -> Result<bool> {
         let found = {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.explicit_disconnect = explicit;
                 if explicit {
@@ -745,7 +745,7 @@ impl PeerManager {
 
     pub fn forget_device(&self, device_id: Uuid) -> Result<bool> {
         let found = {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.trusted = false;
                 entry.remembered = false;
@@ -768,7 +768,7 @@ impl PeerManager {
 
     /// Connected + trusted + sync_enabled peers — receives clipboard payloads.
     pub fn active_senders(&self) -> Vec<(Uuid, mpsc::Sender<AppMessage>)> {
-        let store = self.store.read().unwrap();
+        let store = self.store.read().unwrap_or_else(|e| e.into_inner());
         self.live
             .read()
             .unwrap()
@@ -812,7 +812,7 @@ impl PeerManager {
 
     /// All connected AND trusted peers (for manual file transfers, ignoring sync_enabled).
     pub fn all_trusted_senders(&self) -> Vec<(Uuid, mpsc::Sender<AppMessage>)> {
-        let store = self.store.read().unwrap();
+        let store = self.store.read().unwrap_or_else(|e| e.into_inner());
         self.live
             .read()
             .unwrap()
@@ -831,8 +831,8 @@ impl PeerManager {
     /// - It has at least one known address (from addr_history or current IPs)
     /// - It was not explicitly disconnected by the user
     pub fn peers_needing_probe(&self) -> Vec<PeerRecord> {
-        let store = self.store.read().unwrap();
-        let live = self.live.read().unwrap();
+        let store = self.store.read().unwrap_or_else(|e| e.into_inner());
+        let live = self.live.read().unwrap_or_else(|e| e.into_inner());
         store
             .peers
             .values()
@@ -850,7 +850,7 @@ impl PeerManager {
     }
 
     pub fn is_connected(&self, device_id: Uuid) -> bool {
-        self.live.read().unwrap().contains_key(&device_id)
+        self.live.read().unwrap_or_else(|e| e.into_inner()).contains_key(&device_id)
     }
 
     pub fn live_endpoint(&self, device_id: Uuid) -> Option<SocketAddr> {
@@ -901,11 +901,11 @@ impl PeerManager {
 
     pub fn shutdown_all_sessions(&self, reason: &str) -> Result<Vec<ReplacedSession>> {
         let sessions = {
-            let mut live = self.live.write().unwrap();
+            let mut live = self.live.write().unwrap_or_else(|e| e.into_inner());
             std::mem::take(&mut *live)
         };
         {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             for entry in store.peers.values_mut() {
                 entry.status = PeerConnectionState::Disconnected;
                 entry.last_error = Some(reason.to_string());
@@ -923,9 +923,9 @@ impl PeerManager {
     }
 
     pub fn shutdown_peer_session(&self, device_id: Uuid) -> Result<Option<ReplacedSession>> {
-        let removed = self.live.write().unwrap().remove(&device_id);
+        let removed = self.live.write().unwrap_or_else(|e| e.into_inner()).remove(&device_id);
         {
-            let mut store = self.store.write().unwrap();
+            let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Disconnected;
                 entry.last_error = Some("manually disconnected".to_string());

@@ -587,7 +587,7 @@ impl Engine {
                 .map(|i| i.ip)
                 .unwrap_or(initial_bind.ip())
         };
-        let _identity_pubkey = shared.identity_key.read().unwrap().public_bytes;
+        let _identity_pubkey = shared.identity_key.read().unwrap_or_else(|e| e.into_inner()).public_bytes;
 
         if let Some(discovery_tx) = &engine.shared.discovery_tx {
             let _ = discovery_tx
@@ -1359,7 +1359,7 @@ impl Engine {
 
     pub async fn rotate_identity_key(&self) -> Result<()> {
         let new_key = {
-            let mut key_lock = self.shared.identity_key.write().unwrap();
+            let mut key_lock = self.shared.identity_key.write().unwrap_or_else(|e| e.into_inner());
             let store = crate::identity::IdentityStore::new(&self.shared.config.identity_path);
             *key_lock = store.rotate()?;
             key_lock.public_bytes
@@ -4149,7 +4149,7 @@ fn register_session(
                         transfer_id,
                         chunk_index,
                         total_chunks: _,
-                        data: mut payload,
+                        data: payload,
                         compressed,
                     }) => {
                         touch_last_seen();
@@ -4643,7 +4643,7 @@ fn register_session(
                         // and prevent their local 15s grace period from expiring before our next tick.
                         if !is_asleep {
                             let ping = probe::make_ping();
-                            *rx_ping_sent_at.lock().unwrap() = Some(std::time::Instant::now());
+                            *rx_ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
                             let _ = rx_session_outbox_tx.send(ping).await;
                         }
                     }
@@ -4874,7 +4874,7 @@ fn register_session(
                         // using the Instant captured at send time, which is
                         // far more accurate than round-tripping wall-clock ms
                         // over the network (HIGH-03).
-                        let maybe_sent_at = rx_ping_sent_at.lock().unwrap().take();
+                        let maybe_sent_at = rx_ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()).take();
                         if let Some(sent_at) = maybe_sent_at {
                             let rtt_us = probe::measure_rtt_us(sent_at);
                             let result = ProbeResult::from_samples(vec![rtt_us]);
@@ -5236,13 +5236,13 @@ fn register_session(
                     let should_ping = if !is_sleeping {
                         true
                     } else {
-                        let last_ping_elapsed = ping_sent_at.lock().unwrap().map(|i| i.elapsed().as_millis() as u64).unwrap_or(u64::MAX);
+                        let last_ping_elapsed = ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()).map(|i| i.elapsed().as_millis() as u64).unwrap_or(u64::MAX);
                         last_ping_elapsed > 5 * 60 * 1000
                     };
 
                     if should_ping {
                         let ping = probe::make_ping();
-                        *ping_sent_at.lock().unwrap() = Some(std::time::Instant::now());
+                        *ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
                         if let Err(err) = sess_tx.send(&ping).await {
                             break format!("heartbeat send failed: {err}");
                         }

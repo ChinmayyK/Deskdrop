@@ -265,7 +265,7 @@ impl MetricsRegistry {
     // ── Peer lifecycle ────────────────────────────────────────────────────────
 
     pub fn peer_connected(&self, device_id: Uuid, name: String) {
-        self.peers.write().unwrap().insert(
+        self.peers.write().unwrap_or_else(|e| e.into_inner()).insert(
             device_id,
             PeerMetricsEntry {
                 name,
@@ -280,7 +280,7 @@ impl MetricsRegistry {
     }
 
     pub fn peer_disconnected(&self, device_id: Uuid) {
-        self.peers.write().unwrap().remove(&device_id);
+        self.peers.write().unwrap_or_else(|e| e.into_inner()).remove(&device_id);
     }
 
     // ── Record events ─────────────────────────────────────────────────────────
@@ -288,7 +288,7 @@ impl MetricsRegistry {
     pub fn record_send(&self, device_id: Uuid, bytes: u64) {
         self.global.pushes_sent.fetch_add(1, Relaxed);
         self.global.bytes_sent.fetch_add(bytes, Relaxed);
-        if let Some(p) = self.peers.write().unwrap().get_mut(&device_id) {
+        if let Some(p) = self.peers.write().unwrap_or_else(|e| e.into_inner()).get_mut(&device_id) {
             p.pushes_sent += 1;
             p.bytes_sent += bytes;
         }
@@ -297,14 +297,14 @@ impl MetricsRegistry {
     pub fn record_receive(&self, device_id: Uuid, bytes: u64) {
         self.global.pushes_received.fetch_add(1, Relaxed);
         self.global.bytes_received.fetch_add(bytes, Relaxed);
-        if let Some(p) = self.peers.write().unwrap().get_mut(&device_id) {
+        if let Some(p) = self.peers.write().unwrap_or_else(|e| e.into_inner()).get_mut(&device_id) {
             p.pushes_received += 1;
             p.bytes_received += bytes;
         }
     }
 
     pub fn record_rtt(&self, device_id: Uuid, rtt_us: u64) {
-        if let Some(p) = self.peers.write().unwrap().get_mut(&device_id) {
+        if let Some(p) = self.peers.write().unwrap_or_else(|e| e.into_inner()).get_mut(&device_id) {
             p.latency.record(rtt_us);
         }
     }
@@ -345,7 +345,7 @@ impl MetricsRegistry {
     }
 
     pub fn peer_count(&self) -> usize {
-        self.peers.read().unwrap().len()
+        self.peers.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 

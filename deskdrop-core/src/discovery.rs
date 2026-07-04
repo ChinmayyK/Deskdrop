@@ -187,7 +187,7 @@ mod platform {
                                 // This prevents redundant connect attempts when mDNS
                                 // re-announces the same peer after a network change.
                                 {
-                                    let mut map = resolved.lock().unwrap();
+                                    let mut map = resolved.lock().unwrap_or_else(|e| e.into_inner());
                                     let fullname = info.get_fullname().to_string();
                                     if let Some(&existing_id) = map.get(&fullname) {
                                         if existing_id == peer_id {
@@ -216,7 +216,7 @@ mod platform {
 
                             ServiceEvent::ServiceRemoved(_, fullname) => {
                                 debug!("mDNS: service removed: {}", fullname);
-                                let removed = { resolved.lock().unwrap().remove(&fullname) };
+                                let removed = { resolved.lock().unwrap_or_else(|e| e.into_inner()).remove(&fullname) };
                                 if let Some(peer_id) = removed {
                                     if tx.send(PeerEvent::Lost(peer_id)).await.is_err() {
                                         break;
