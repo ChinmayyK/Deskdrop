@@ -966,3 +966,4 @@ Spend the phase time on:
 - polish states
 
 That is the path to a Windows app that can stand beside macOS and Android without excuses.
+
