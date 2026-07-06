@@ -31,6 +31,11 @@ use tokio::time::timeout;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+pub(crate) mod telemetry;
+pub(crate) mod clipboard;
+pub(crate) mod file_ops;
+pub(crate) use file_ops::*;
+
 /// RFC 7396 JSON merge-patch: recursively overwrite `target` with non-null
 /// fields from `patch`, removing null-keyed fields.
 fn json_merge_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
@@ -414,45 +419,46 @@ pub struct PeerNetworkState {
 }
 
 #[derive(Clone)]
-struct EngineShared {
-    config: EngineConfig,
-    trust: Arc<Mutex<TrustStore>>,
-    peer_manager: Arc<PeerManager>,
-    event_tx: mpsc::Sender<EngineEvent>,
-    identity_key: Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
-    network_state: Arc<Mutex<RuntimeNetworkState>>,
-    listener_tx: mpsc::Sender<ListenerCommand>,
-    discovery_tx: Option<mpsc::Sender<DiscoveryCommand>>,
-    network_reconcile: Arc<Mutex<()>>,
+pub(crate) struct EngineShared {
+    pub(crate) config: EngineConfig,
+    pub(crate) trust: Arc<Mutex<TrustStore>>,
+    pub(crate) peer_manager: Arc<PeerManager>,
+    pub(crate) event_tx: mpsc::Sender<EngineEvent>,
+    pub(crate) identity_key: Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
+    pub(crate) network_state: Arc<Mutex<RuntimeNetworkState>>,
+    pub(crate) listener_tx: mpsc::Sender<ListenerCommand>,
+    pub(crate) discovery_tx: Option<mpsc::Sender<DiscoveryCommand>>,
+    pub(crate) network_reconcile: Arc<Mutex<()>>,
     // ── New: mesh-aware shared state ─────────────────────────────────────────
     /// Mesh fanout router + relay dedup (shared, lock-protected).
-    mesh_router: Arc<Mutex<MeshRouter>>,
+    pub(crate) mesh_router: Arc<Mutex<MeshRouter>>,
     /// Cross-device activity feed.
-    activity: Arc<Mutex<ActivityFeed>>,
+    pub(crate) activity: Arc<Mutex<ActivityFeed>>,
     /// File transfer manager.
-    file_transfers: Arc<Mutex<FileTransferManager>>,
+    pub(crate) file_transfers: Arc<Mutex<FileTransferManager>>,
     /// Clipboard apply policy (timeline-first vs auto-apply).
-    apply_policy: Arc<Mutex<ClipboardApplyPolicy>>,
+    pub(crate) apply_policy: Arc<Mutex<ClipboardApplyPolicy>>,
     /// Settings snapshot for policy decisions (updated lazily).
-    settings: Arc<Mutex<Settings>>,
-    /// Per-peer link-quality probes — drives adaptive chunk sizing (HIGH-03).\n    /// Keyed by peer device UUID; populated on first Pong receipt.
-    quality_probes: Arc<Mutex<std::collections::HashMap<uuid::Uuid, QualityProbe>>>,
+    pub(crate) settings: Arc<Mutex<Settings>>,
+    /// Per-peer link-quality probes — drives adaptive chunk sizing (HIGH-03).
+    /// Keyed by peer device UUID; populated on first Pong receipt.
+    pub(crate) quality_probes: Arc<Mutex<std::collections::HashMap<uuid::Uuid, QualityProbe>>>,
     /// Clipboard content store — maps content hash → text payload for repush.
-    clipboard_store: Arc<Mutex<crate::engine_support::ClipboardStore>>,
+    pub(crate) clipboard_store: Arc<Mutex<crate::engine_support::ClipboardStore>>,
     /// Local clipboard reader (platform abstraction for push_current_clipboard).
-    local_clipboard: Arc<Mutex<crate::engine_support::LocalClipboard>>,
+    pub(crate) local_clipboard: Arc<Mutex<crate::engine_support::LocalClipboard>>,
     /// Persistent history store.
-    history: Arc<Mutex<crate::history::History>>,
+    pub(crate) history: Arc<Mutex<crate::history::History>>,
     /// In-memory feedback event log (most-recent N events).
-    feedback: Arc<Mutex<crate::engine_support::FeedbackLog>>,
+    pub(crate) feedback: Arc<Mutex<crate::engine_support::FeedbackLog>>,
     /// Tracks when the local device woke up from sleep. Prevents immediate disconnects when waking from deep sleep.
-    local_last_wake: Arc<std::sync::atomic::AtomicU64>,
+    pub(crate) local_last_wake: Arc<std::sync::atomic::AtomicU64>,
     /// Active phone call state (set on ringing/offhook, cleared on idle).
-    active_call: Arc<Mutex<Option<ActiveCallState>>>,
+    pub(crate) active_call: Arc<Mutex<Option<ActiveCallState>>>,
     /// Per-peer battery levels (F20). Keyed by device UUID.
-    peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
+    pub(crate) peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
     /// Cache of local battery state to push to newly connected peers.
-    local_battery: Arc<Mutex<Option<(u8, bool)>>>,
+    pub(crate) local_battery: Arc<Mutex<Option<(u8, bool)>>>,
     /// Cache of local network state to push to newly connected peers.
     local_network: Arc<Mutex<Option<String>>>,
     /// Per-peer network status. Keyed by device UUID.
@@ -471,8 +477,8 @@ struct EngineShared {
 
 #[derive(Clone)]
 pub struct Engine {
-    shared: EngineShared,
-    seq: Arc<Mutex<u64>>,
+    pub(crate) shared: EngineShared,
+    pub(crate) seq: std::sync::Arc<tokio::sync::Mutex<u64>>,
 }
 
 impl Engine {
@@ -802,473 +808,25 @@ impl Engine {
 
     // ── Call Continuity ───────────────────────────────────────────────────────
 
-    /// Push a phone call state change to all connected, trusted peers.
-    /// Called by the Android JNI layer when PhoneStateListener fires.
-    pub async fn push_call_state(&self, state: String, number: String, contact_name: String) {
-        let msg = AppMessage::CallStateUpdate {
-            state,
-            number,
-            contact_name,
-            origin_device: self.shared.config.device_id,
-            origin_device_name: self.shared.config.device_name.clone(),
-        };
 
-        let peers = self.shared.peer_manager.all_connected_senders();
-        for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
-                continue;
-            };
-            if !peer.trusted {
-                continue;
-            }
-            let _ = tx.send(msg.clone()).await;
-        }
-    }
 
-    /// Send an accept/decline call action to a specific Android peer.
-    /// Called by the macOS IPC layer when the user taps Accept or Decline.
-    pub async fn send_call_action(&self, action: String, target_device: Uuid) {
-        tracing::info!(
-            "send_call_action: action={}, target_device={}",
-            action,
-            target_device
-        );
-        let msg = AppMessage::CallAction {
-            action,
-            origin_device: self.shared.config.device_id,
-        };
-
-        let peers = self.shared.peer_manager.all_connected_senders();
-        tracing::info!(
-            "send_call_action: all connected peers count={}",
-            peers.len()
-        );
-        for (peer_id, tx) in peers {
-            tracing::info!("send_call_action: checking peer_id={}", peer_id);
-            if peer_id != target_device {
-                tracing::info!(
-                    "send_call_action: peer_id mismatch (expected {}, got {})",
-                    target_device,
-                    peer_id
-                );
-                continue;
-            }
-            tracing::info!(
-                "send_call_action: peer MATCHED! Sending call action message over socket..."
-            );
-            let _ = tx.send(msg.clone()).await;
-        }
-    }
-
-    /// Get the current active phone call state, if any.
-    /// Returns None when no call is in progress.
-    pub async fn active_call(&self) -> Option<ActiveCallState> {
-        self.shared.active_call.lock().await.clone()
-    }
 
     // ── F20: Battery synchronization ──────────────────────────────────────────
 
-    /// Push this device's battery status to all connected trusted peers.
-    pub async fn push_battery_status(&self, level: u8, charging: bool) {
-        *self.shared.local_battery.lock().await = Some((level, charging));
-        let msg = AppMessage::BatteryStatus {
-            level,
-            charging,
-            origin_device: self.shared.config.device_id,
-            origin_device_name: self.shared.config.device_name.clone(),
-        };
 
-        let peers = self.shared.peer_manager.all_trusted_senders();
-        for (peer_id, tx) in peers {
-            if self.is_trusted(peer_id).await {
-                let _ = tx.send(msg.clone()).await;
-            }
-        }
-    }
 
-    /// Push this device's network status to all connected trusted peers.
-    pub async fn push_network_status(&self, network_type: String) {
-        *self.shared.local_network.lock().await = Some(network_type.clone());
-        let msg = AppMessage::NetworkStatus {
-            network_type,
-            origin_device: self.shared.config.device_id,
-            origin_device_name: self.shared.config.device_name.clone(),
-        };
 
-        let peers = self.shared.peer_manager.all_trusted_senders();
-        for (peer_id, tx) in peers {
-            if self.is_trusted(peer_id).await {
-                let _ = tx.send(msg.clone()).await;
-            }
-        }
-    }
 
-    /// Relay a push notification to all connected, trusted peers.
-    pub async fn push_notification(
-        &self,
-        id: String,
-        package: String,
-        title: String,
-        text: String,
-    ) {
-        let msg = AppMessage::NotificationRelay {
-            id,
-            package,
-            title,
-            text,
-            origin_device: self.shared.config.device_id,
-            origin_device_name: self.shared.config.device_name.clone(),
-        };
 
-        let peers = self.shared.peer_manager.all_connected_senders();
-        for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
-                continue;
-            };
-            if !peer.trusted {
-                continue;
-            }
-            let _ = tx.send(msg.clone()).await;
-        }
-    }
 
-    pub async fn push_camera_frame(&self, data: Vec<u8>) {
-        let msg = AppMessage::CameraFrame {
-            origin_device: self.shared.config.device_id,
-            data,
-        };
-        let peers = self.shared.peer_manager.all_connected_senders();
-        for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
-                continue;
-            };
-            if !peer.trusted {
-                continue;
-            }
-            let _ = tx.send(msg.clone()).await;
-        }
-    }
 
-    pub async fn stop_camera_stream(&self) {
-        let msg = AppMessage::CameraStreamStop {
-            origin_device: self.shared.config.device_id,
-        };
-        let peers = self.shared.peer_manager.all_connected_senders();
-        for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
-                continue;
-            };
-            if !peer.trusted {
-                continue;
-            }
-            let _ = tx.send(msg.clone()).await;
-        }
-    }
 
-    /// Get battery states for all peers that have reported their level.
-    pub async fn peer_batteries(&self) -> Vec<PeerBatteryState> {
-        self.shared
-            .peer_batteries
-            .lock()
-            .await
-            .values()
-            .cloned()
-            .collect()
-    }
-
-    /// Get network states for all peers that have reported their network.
-    pub async fn peer_networks(&self) -> Vec<PeerNetworkState> {
-        self.shared
-            .peer_networks
-            .lock()
-            .await
-            .values()
-            .cloned()
-            .collect()
-    }
-
-    pub async fn push_clipboard(&self, content: ClipboardContent) -> usize {
-        self.push_clipboard_to(content, SyncTarget::All)
-            .await
-            .delivered_count()
-    }
-
-    pub async fn push_clipboard_to(
-        &self,
-        content: ClipboardContent,
-        target: SyncTarget,
-    ) -> SyncDispatchReport {
-        let seq = {
-            let mut guard = self.seq.lock().await;
-            // Use wrapping_add so the counter rolls over safely after u64::MAX
-            // instead of panicking in debug builds (LOW-01).
-            *guard = guard.wrapping_add(1);
-            *guard
-        };
-
-        // Hash for dedup + activity recording.
-        let hash = hash_content(&content);
-
-        // Register in mesh router so we never echo back to ourselves.
-        {
-            let mut router = self.shared.mesh_router.lock().await;
-            router.register_local_send(hash);
-        }
-
-        // Dedup check to prevent echoing clipboard events triggered by local OS listener reflection.
-        let should_send = {
-            let mut dedup = self.shared.dedup.lock().await;
-            dedup.should_send(hash)
-        };
-        if !should_send {
-            tracing::debug!("suppressing local clipboard push (echo)");
-            return SyncDispatchReport {
-                seq,
-                target: target.clone(),
-                peers: Vec::new(),
-            };
-        }
-
-        // Record in activity feed.
-        {
-            let mut feed = self.shared.activity.lock().await;
-            if let ClipboardContent::Text(ref text) = content {
-                feed.record_local_clipboard_text(
-                    self.shared.config.device_id,
-                    self.shared.config.device_name.clone(),
-                    text,
-                    hex::encode(hash),
-                );
-            }
-        }
-
-        // Record text in clipboard_store for future repush by hash.
-        if let ClipboardContent::Text(ref text) = content {
-            self.shared
-                .clipboard_store
-                .lock()
-                .await
-                .insert(hex::encode(hash), text.clone());
-        }
-
-        // Optionally compress images before sending.
-        let compress_enabled = self.shared.settings.lock().await.sync_images;
-        let content = if matches!(content, ClipboardContent::Image { .. }) && compress_enabled {
-            let (compressed, stats) = crate::compress::compress_image(content, true).await;
-            if let Some(ref s) = stats {
-                tracing::debug!(compression = %s, "image compressed for send");
-            }
-            compressed
-        } else {
-            content
-        };
-
-        // Re-hash after potential compression so the wire message is consistent.
-        let hash = hash_content(&content);
-
-        let shared_content = std::sync::Arc::new(content);
-
-        let relay_path = vec![self.shared.config.device_name.clone()];
-        let msg = AppMessage::ClipboardPush {
-            seq,
-            content: std::sync::Arc::clone(&shared_content),
-            origin_device: self.shared.config.device_id,
-            origin_device_name: self.shared.config.device_name.clone(),
-            relay_path: relay_path.clone(),
-        };
-        let metadata = HistoryMetadata::from_content(
-            &shared_content,
-            self.shared.config.device_name.clone(),
-            false,
-        );
-
-        let peers = self.shared.peer_manager.active_senders();
-        let mut report = SyncDispatchReport {
-            seq,
-            target: target.clone(),
-            peers: Vec::new(),
-        };
-
-        for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
-                continue;
-            };
-
-            if !peer.trusted {
-                report.peers.push(SyncDispatchPeer {
-                    device_id: peer_id,
-                    device_name: peer.friendly_name,
-                    delivered: false,
-                    metadata_only: false,
-                    reason: Some("peer is not trusted".into()),
-                });
-                continue;
-            }
-
-            if !peer.is_sync_eligible() {
-                report.peers.push(SyncDispatchPeer {
-                    device_id: peer_id,
-                    device_name: peer.friendly_name,
-                    delivered: false,
-                    metadata_only: false,
-                    reason: Some("sync paused for this peer".into()),
-                });
-                continue;
-            }
-
-            let is_target = match target {
-                SyncTarget::All => true,
-                SyncTarget::Device(target_id) => target_id == peer_id,
-            };
-
-            // Mesh router dedup check.
-            let should_relay = {
-                let mut router = self.shared.mesh_router.lock().await;
-                router.should_relay_to(hash, self.shared.config.device_id, peer_id, &relay_path)
-            };
-
-            if !should_relay {
-                report.peers.push(SyncDispatchPeer {
-                    device_id: peer_id,
-                    device_name: peer.friendly_name,
-                    delivered: false,
-                    metadata_only: false,
-                    reason: Some("mesh dedup: already delivered".into()),
-                });
-                continue;
-            }
-
-            let app_message = if is_target {
-                msg.clone()
-            } else {
-                AppMessage::HistoryMetadata {
-                    entry: metadata.clone(),
-                }
-            };
-
-            let send_result = match tx.try_send(app_message.clone()) {
-                Ok(()) => Ok(()),
-                Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => tx.send(app_message).await,
-                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
-                    Err(tokio::sync::mpsc::error::SendError(app_message))
-                }
-            };
-
-            match send_result {
-                Ok(()) => report.peers.push(SyncDispatchPeer {
-                    device_id: peer_id,
-                    device_name: peer.friendly_name,
-                    delivered: true,
-                    metadata_only: !is_target,
-                    reason: None,
-                }),
-                Err(_) => {
-                    let reason = "peer queue unavailable".to_string();
-                    let _ = self
-                        .shared
-                        .event_tx
-                        .send(EngineEvent::ClipboardSyncFailed {
-                            peer_device: peer_id,
-                            peer_name: peer.friendly_name.clone(),
-                            seq,
-                            reason: reason.clone(),
-                        })
-                        .await;
-                    report.peers.push(SyncDispatchPeer {
-                        device_id: peer_id,
-                        device_name: peer.friendly_name,
-                        delivered: false,
-                        metadata_only: !is_target,
-                        reason: Some(reason),
-                    });
-                }
-            }
-        }
-
-        report
-    }
 
     // ── Activity Feed ─────────────────────────────────────────────────────────
 
-    /// Get recent activity feed entries (up to `limit`).
-    pub async fn activity_recent(&self, limit: usize) -> Vec<crate::activity::ActivityEntry> {
-        self.shared
-            .activity
-            .lock()
-            .await
-            .recent(limit)
-            .into_iter()
-            .cloned()
-            .collect()
-    }
 
-    /// Get activity feed entries added after `since_id`.
-    pub async fn activity_since(&self, since_id: u64) -> Vec<crate::activity::ActivityEntry> {
-        self.shared
-            .activity
-            .lock()
-            .await
-            .since(since_id)
-            .into_iter()
-            .cloned()
-            .collect()
-    }
 
-    /// Get pending remote clipboard items not yet applied locally.
-    pub async fn pending_remote_clipboards(&self) -> Vec<crate::activity::ActivityEntry> {
-        self.shared
-            .activity
-            .lock()
-            .await
-            .pending_remote_clipboards()
-            .into_iter()
-            .cloned()
-            .collect()
-    }
 
-    /// Explicitly apply a remote clipboard item by its content hash.
-    /// Marks it applied in the feed and emits `ClipboardReceived { auto_applied: true }`.
-    pub async fn apply_clipboard_by_hash(&self, content_hash: String) -> Result<bool> {
-        // Find the matching pending entry.
-        let entry = {
-            let feed = self.shared.activity.lock().await;
-            feed.pending_remote_clipboards()
-                .into_iter()
-                .find(|e| e.content_hash.as_deref() == Some(&content_hash))
-                .cloned()
-        };
-        let Some(entry) = entry else {
-            return Ok(false);
-        };
-        let from_device = entry.device_id;
-        let from_name = entry.device_name.clone();
-        let text = self
-            .shared
-            .clipboard_store
-            .lock()
-            .await
-            .get_text_by_hash(&content_hash)
-            .or(entry.text_preview.clone())
-            .unwrap_or_default();
-        {
-            let mut feed = self.shared.activity.lock().await;
-            feed.record_clipboard_applied(from_device, from_name.clone(), content_hash);
-        }
-        // Emit event so the platform layer writes to local clipboard.
-        let _ = self
-            .shared
-            .event_tx
-            .send(EngineEvent::ClipboardReceived {
-                from_device,
-                from_name,
-                content: std::sync::Arc::new(ClipboardContent::Text(text)),
-                auto_applied: true,
-                relay_path: entry.relay_path,
-                activity_id: entry.id,
-            })
-            .await;
-        Ok(true)
-    }
 
     // ── Settings ──────────────────────────────────────────────────────────────
 
@@ -1399,115 +957,17 @@ impl Engine {
 
     // ── History ───────────────────────────────────────────────────────────────
 
-    pub async fn history_recent(&self, n: usize) -> Vec<crate::history::HistoryEntry> {
-        self.shared
-            .history
-            .lock()
-            .await
-            .recent(n)
-            .cloned()
-            .collect()
-    }
 
-    pub async fn history_search(
-        &self,
-        query: String,
-        limit: usize,
-    ) -> Vec<crate::history::HistoryEntry> {
-        self.shared
-            .history
-            .lock()
-            .await
-            .search_fulltext(&query)
-            .take(limit)
-            .cloned()
-            .collect()
-    }
 
-    pub async fn history_repush(&self, id: u64, target: SyncTarget) -> Result<()> {
-        let entry = self
-            .shared
-            .history
-            .lock()
-            .await
-            .get(id)
-            .cloned()
-            .context("history entry not found")?;
-        if let crate::history::HistoryPayload::Text {
-            full_text, preview, ..
-        } = entry.payload
-        {
-            let text = full_text.unwrap_or(preview);
-            self.push_clipboard_to(ClipboardContent::Text(text), target)
-                .await;
-        }
-        Ok(())
-    }
 
-    pub async fn history_set_pinned(&self, id: u64, pinned: bool) -> Result<()> {
-        self.shared.history.lock().await.set_pinned(id, pinned)?;
-        Ok(())
-    }
 
-    pub async fn history_delete(&self, id: u64) -> Result<bool> {
-        self.shared.history.lock().await.remove(id)
-    }
 
-    pub async fn history_clear(&self) -> Result<()> {
-        self.shared.history.lock().await.clear()
-    }
 
-    pub async fn history_export_csv(&self) -> String {
-        self.shared.history.lock().await.export_csv()
-    }
 
-    pub async fn history_export_json(&self) -> Result<String> {
-        self.shared.history.lock().await.export_json()
-    }
 
-    pub async fn history_stats(&self) -> crate::history::HistoryStats {
-        self.shared.history.lock().await.stats()
-    }
 
-    pub async fn history_add_tag(&self, id: u64, tag: String) -> Result<()> {
-        self.shared.history.lock().await.add_tag(id, &tag)?;
-        Ok(())
-    }
 
-    pub async fn history_remove_tag(&self, id: u64, tag: String) -> Result<()> {
-        self.shared.history.lock().await.remove_tag(id, &tag)?;
-        Ok(())
-    }
 
-    #[allow(clippy::too_many_arguments)]
-    pub async fn history_filtered(
-        &self,
-        kind: Option<String>,
-        device: Option<String>,
-        from_secs: Option<u64>,
-        to_secs: Option<u64>,
-        tag: Option<String>,
-        limit: usize,
-        pinned_only: bool,
-    ) -> Vec<crate::history::HistoryEntry> {
-        let filter = crate::history::HistoryFilter {
-            kind,
-            device,
-            from_secs,
-            to_secs,
-            tag,
-            limit: Some(limit),
-            pinned_only,
-        };
-        self.shared
-            .history
-            .lock()
-            .await
-            .filter(&filter)
-            .take(limit)
-            .cloned()
-            .collect()
-    }
 
     /// Record a local text entry in history without syncing it to peers.
     pub async fn remember_text(&self, text: String) -> Result<()> {
@@ -1541,73 +1001,9 @@ impl Engine {
 
     // ── Templates ─────────────────────────────────────────────────────────────
 
-    pub async fn template_list(&self) -> Vec<crate::settings::ClipboardTemplate> {
-        self.shared
-            .settings
-            .lock()
-            .await
-            .clipboard_templates
-            .clone()
-    }
 
-    pub async fn template_push(&self, name: String, target: SyncTarget) -> Result<()> {
-        let templates = self
-            .shared
-            .settings
-            .lock()
-            .await
-            .clipboard_templates
-            .clone();
-        let tmpl = templates
-            .iter()
-            .find(|t| t.name == name)
-            .cloned()
-            .with_context(|| format!("template '{}' not found", name))?;
-        let content = crate::protocol::ClipboardContent::Text(tmpl.text);
-        match target {
-            SyncTarget::All => {
-                self.push_clipboard(content).await;
-            }
-            SyncTarget::Device(id) => {
-                self.push_clipboard_to(content, SyncTarget::Device(id))
-                    .await;
-            }
-        }
-        Ok(())
-    }
 
-    pub async fn template_set(
-        &self,
-        name: String,
-        text: String,
-        description: String,
-    ) -> Result<()> {
-        let mut settings = self.shared.settings.lock().await;
-        if let Some(t) = settings
-            .clipboard_templates
-            .iter_mut()
-            .find(|t| t.name == name)
-        {
-            t.text = text;
-            t.description = description;
-        } else {
-            settings
-                .clipboard_templates
-                .push(crate::settings::ClipboardTemplate {
-                    name,
-                    text,
-                    description,
-                });
-        }
-        Ok(())
-    }
 
-    pub async fn template_remove(&self, name: String) -> Result<bool> {
-        let mut settings = self.shared.settings.lock().await;
-        let before = settings.clipboard_templates.len();
-        settings.clipboard_templates.retain(|t| t.name != name);
-        Ok(settings.clipboard_templates.len() < before)
-    }
 
     // ── Per-peer settings ─────────────────────────────────────────────────────
 
@@ -2028,22 +1424,6 @@ impl Engine {
         Ok(())
     }
 
-    /// Push the current OS clipboard content to connected peers.
-    /// The daemon reads the clipboard via the platform clipboard API.
-    pub async fn push_current_clipboard(&self, target: SyncTarget) -> Result<()> {
-        let text = self
-            .shared
-            .local_clipboard
-            .lock()
-            .await
-            .read_text()
-            .context("reading local clipboard")?;
-        if let Some(text) = text {
-            self.push_clipboard_to(ClipboardContent::Text(text), target)
-                .await;
-        }
-        Ok(())
-    }
 
     /// Returns this engine's stable device UUID.
     /// Used by the Android JNI bridge to filter out self-connections during NSD.
@@ -5438,148 +4818,3 @@ fn ensure_parent(path: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn read_outbound_chunks(
-    shared: crate::engine::EngineShared,
-    transfer_id: [u8; 16],
-    batch_size: usize,
-) -> Option<(
-    Vec<AppMessage>,
-    Vec<(crate::file_transfer::TransferProgress, String)>,
-)> {
-    let mut instrs = Vec::with_capacity(batch_size);
-    let mut io_ctx = None;
-
-    {
-        let mut mgr = shared.file_transfers.lock().await;
-        if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-            io_ctx = t.take_io_context();
-            for _ in 0..batch_size {
-                match t.next_chunk_instruction() {
-                    Ok(Some(i)) => instrs.push(i),
-                    Ok(None) => break,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "failed to get next chunk instruction");
-                        mgr.cancel_outbound(&transfer_id);
-                        return None;
-                    }
-                }
-            }
-        } else {
-            return None;
-        }
-    }
-
-    if instrs.is_empty() {
-        if let Some((f, h)) = io_ctx {
-            if let Some(t) = shared.file_transfers.lock().await.get_outbound_mut(&transfer_id) {
-                t.restore_io_context(f, h);
-            }
-        }
-        return None;
-    }
-
-    let res = tokio::task::spawn_blocking(move || -> anyhow::Result<(Option<(Option<std::fs::File>, sha2::Sha256)>, Vec<(u32, Vec<u8>, bool)>)> {
-        use std::io::{Read, Seek};
-        use sha2::Digest;
-        
-        let mut chunk_data = Vec::with_capacity(instrs.len());
-        let (mut f, mut hasher) = io_ctx.unwrap_or((None, sha2::Sha256::new())); // Memory chunks might not have io_ctx, but we'll return it anyway
-
-        for instr in instrs {
-            match instr {
-                crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
-                    hasher.update(&data);
-                    let compressed = lz4_flex::compress_prepend_size(&data);
-                    if compressed.len() < data.len() {
-                        chunk_data.push((chunk_index, compressed, true));
-                    } else {
-                        chunk_data.push((chunk_index, data, false));
-                    }
-                }
-                crate::file_transfer::ChunkInstruction::File { chunk_index, path, offset, len } => {
-                    if f.is_none() {
-                        f = Some(std::fs::File::open(&path)?);
-                    }
-                    if let Some(ref mut file) = f {
-                        let current_pos = file.stream_position().unwrap_or(u64::MAX);
-                        if current_pos != offset {
-                            file.seek(std::io::SeekFrom::Start(offset))?;
-                        }
-                        let mut buf = vec![0u8; len];
-                        let mut read_bytes = 0;
-                        while read_bytes < len {
-                            let n = file.read(&mut buf[read_bytes..])?;
-                            if n == 0 { break; }
-                            read_bytes += n;
-                        }
-                        if read_bytes < len {
-                            tracing::warn!("Outbound chunk truncated: read {} instead of {} bytes", read_bytes, len);
-                            buf.truncate(read_bytes);
-                        }
-                        hasher.update(&buf);
-                        let compressed = lz4_flex::compress_prepend_size(&buf);
-                        if compressed.len() < buf.len() {
-                            chunk_data.push((chunk_index, compressed, true));
-                        } else {
-                            chunk_data.push((chunk_index, buf, false));
-                        }
-                    }
-                }
-            }
-        }
-        Ok((Some((f, hasher)), chunk_data))
-    })
-    .await
-    .unwrap();
-
-    let (io_ctx, chunk_data) = match res {
-        Ok(res) => res,
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to read outbound file chunks");
-            let mut mgr = shared.file_transfers.lock().await;
-            mgr.cancel_outbound(&transfer_id);
-            return None;
-        }
-    };
-
-    let mut msgs = Vec::with_capacity(chunk_data.len());
-    let mut progs = Vec::with_capacity(chunk_data.len());
-
-    {
-        let mut mgr = shared.file_transfers.lock().await;
-        if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-            if let Some((f, h)) = io_ctx {
-                t.restore_io_context(f, h);
-            }
-            let fname = t.meta.file_name.clone();
-            for (c_idx, data, compressed) in chunk_data {
-                let msg = t.process_chunk_data(c_idx, data, compressed);
-                if let crate::file_transfer::FileTransferMessage::Chunk {
-                    transfer_id,
-                    chunk_index,
-                    total_chunks,
-                    data,
-                    compressed,
-                } = msg
-                {
-                    msgs.push(AppMessage::FileChunk {
-                        transfer_id,
-                        chunk_index,
-                        total_chunks,
-                        data,
-                        compressed,
-                    });
-                    progs.push((t.progress(), fname.clone()));
-                }
-            }
-        } else {
-            return None;
-        }
-    }
-
-    if msgs.is_empty() {
-        None
-    } else {
-        Some((msgs, progs))
-    }
-}
