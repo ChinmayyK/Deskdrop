@@ -143,7 +143,7 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
             colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft),
             modifier = Modifier.fillMaxWidth(0.7f).height(56.dp)
         ) {
-            Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp), tint = CRTheme.bg(isDark))
+            Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan QR code", modifier = Modifier.size(20.dp), tint = CRTheme.bg(isDark))
             Spacer(modifier = Modifier.width(8.dp))
             Text("SCAN QR CODE", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
         }
@@ -186,7 +186,7 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
                         ) {
                             Icon(
                                 if (peer.name.lowercase().contains("mac")) Icons.Rounded.LaptopMac else Icons.Rounded.Computer,
-                                contentDescription = null,
+                                contentDescription = "Device",
                                 tint = CRTheme.textHigh(isDark),
                                 modifier = Modifier.size(24.dp)
                             )
@@ -231,7 +231,7 @@ private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCance
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Icon(
                         Icons.Rounded.Lock, 
-                        contentDescription = null, 
+                        contentDescription = "Secure pairing", 
                         tint = CRTheme.statusGreen,
                         modifier = Modifier.size(20.dp)
                     )
@@ -304,7 +304,7 @@ private fun StepThreeSendSample(isDark: Boolean, selectedPeer: PeerSnapshot?, on
             colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft),
             modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
         ) {
-            Icon(Icons.Rounded.Send, contentDescription = null, tint = CRTheme.bg(isDark))
+            Icon(Icons.Rounded.Send, contentDescription = "Send", tint = CRTheme.bg(isDark))
             Spacer(modifier = Modifier.width(8.dp))
             Text("SEND TEST MESSAGE", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
         }
@@ -342,7 +342,7 @@ private fun StepFourCompletion(isDark: Boolean) {
                 .background(CRTheme.statusGreen.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = CRTheme.statusGreen, modifier = Modifier.size(48.dp))
+            Icon(Icons.Rounded.CheckCircle, contentDescription = "Success", tint = CRTheme.statusGreen, modifier = Modifier.size(48.dp))
         }
         Spacer(modifier = Modifier.height(24.dp))
         Text("You're all set!", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
@@ -390,7 +390,7 @@ fun RadarAnimation(isDark: Boolean) {
         ) {
             Icon(
                 Icons.Rounded.Search, 
-                contentDescription = null, 
+                contentDescription = "Search", 
                 tint = CRTheme.brandCyan, 
                 modifier = Modifier.size(24.dp)
             )
@@ -412,7 +412,7 @@ fun LinkingAnimation(isDark: Boolean) {
     )
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Smartphone, contentDescription = null, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(40.dp))
+        Icon(Icons.Rounded.Smartphone, contentDescription = "Phone", tint = CRTheme.textHigh(isDark), modifier = Modifier.size(40.dp))
         Spacer(modifier = Modifier.width(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             repeat(3) { i ->
@@ -425,6 +425,6 @@ fun LinkingAnimation(isDark: Boolean) {
             }
         }
         Spacer(modifier = Modifier.width(16.dp))
-        Icon(Icons.Rounded.LaptopMac, contentDescription = null, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(48.dp))
+        Icon(Icons.Rounded.LaptopMac, contentDescription = "Computer", tint = CRTheme.textHigh(isDark), modifier = Modifier.size(48.dp))
     }
 }

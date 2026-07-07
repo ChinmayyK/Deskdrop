@@ -206,9 +206,10 @@ class MainActivity : ComponentActivity() {
                                 val svc = Intent(this@MainActivity, DeskdropService::class.java).apply {
                                     action = DeskdropService.ACTION_PUSH_CLIPBOARD
                                     putExtra(DeskdropService.EXTRA_CLIPBOARD_TEXT, "Hello from Android")
+                                    putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
                                 }
                                 ContextCompat.startForegroundService(this@MainActivity, svc)
-                                showSnack("Sample sent to ${peer.name}")
+                                showSnack("Sending sample to ${peer.name}…")
                             },
                             onScanQr = {
                                 startQrScanner()

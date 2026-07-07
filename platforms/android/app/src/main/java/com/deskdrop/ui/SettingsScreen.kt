@@ -204,7 +204,7 @@ fun SettingsScreen(
                             
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Rounded.Edit, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("TAP TO EDIT NAME", style = CRTypography.caption, color = CRTheme.blueSoft)
                             }
@@ -413,7 +413,7 @@ fun SettingsScreen(
                                     modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.statusAmber.copy(alpha = 0.1f)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Rounded.Warning, contentDescription = null, tint = CRTheme.statusAmber, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Rounded.Warning, contentDescription = "Warning", tint = CRTheme.statusAmber, modifier = Modifier.size(20.dp))
                                 }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Text(
@@ -452,7 +452,7 @@ fun SettingsScreen(
                                 .border(1.dp, CRTheme.stroke(isDarkMode), RoundedCornerShape(16.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Rounded.EnergySavingsLeaf, contentDescription = null, tint = CRTheme.statusGreen, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Rounded.EnergySavingsLeaf, contentDescription = "Deskdrop", tint = CRTheme.statusGreen, modifier = Modifier.size(32.dp))
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(text = "Deskdrop", style = CRTypography.h2, color = CRTheme.textHigh(isDarkMode))
@@ -533,7 +533,7 @@ fun SettingsSwitchRow(
             modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.surface(isDark)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = title, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         

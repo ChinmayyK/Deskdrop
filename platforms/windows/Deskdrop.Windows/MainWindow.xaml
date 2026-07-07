@@ -828,19 +828,19 @@
                     <!-- Quick Actions, Status & Windows Controls (Right) -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0">
                         <!-- Status Indicator -->
-                        <Ellipse Width="8" Height="8" Fill="{StaticResource BrandGreen}" Margin="0,0,6,0"/>
-                        <TextBlock Text="Active" Foreground="{StaticResource InkSoft}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        <Ellipse x:Name="HeaderStatusDot" Width="8" Height="8" Fill="{StaticResource BrandGreen}" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="HeaderStatusText" Text="Checking…" Foreground="{StaticResource InkSoft}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0"/>
                         
                         <!-- Quick Actions Capsule -->
                         <Border Background="{StaticResource SurfaceElevated}" CornerRadius="16" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="4" Margin="0,0,16,0">
                             <StackPanel Orientation="Horizontal">
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Click="NavDiagnostics_Click" ToolTip="Scan Network" AutomationProperties.Name="Scan">
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Click="NavScan_Click" ToolTip="Scan Network" AutomationProperties.Name="Scan">
                                     <iconPacks:PackIconLucide Kind="Wifi" Width="14" Height="14"/>
                                 </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Margin="2,0,0,0" Click="NavDiagnostics_Click" ToolTip="Send File" AutomationProperties.Name="Send">
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Margin="2,0,0,0" Click="BtnSendFile_Click" ToolTip="Send File" AutomationProperties.Name="Send">
                                     <iconPacks:PackIconLucide Kind="Send" Width="14" Height="14"/>
                                 </Button>
-                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Margin="2,0,0,0" Click="NavDiagnostics_Click" ToolTip="QR Code" AutomationProperties.Name="QRCode">
+                                <Button Style="{StaticResource ModernButton}" Background="Transparent" Foreground="{StaticResource InkSoft}" BorderThickness="0" Width="32" Height="32" Padding="0" Margin="2,0,0,0" Click="BtnShowQR_Click" ToolTip="QR Code" AutomationProperties.Name="QRCode">
                                     <iconPacks:PackIconLucide Kind="QrCode" Width="14" Height="14"/>
                                 </Button>
                                 <Border Width="1" Height="16" Background="{StaticResource Stroke}" Margin="4,0,4,0"/>

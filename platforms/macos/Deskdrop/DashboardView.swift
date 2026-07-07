@@ -227,7 +227,7 @@ private struct ContinuityHeaderView: View {
                 // Network Status
                 HStack(spacing: 6) {
                     StatusDot(isOnline: store.connectedCount > 0, size: 8)
-                    Text(store.connectedCount > 0 ? "Active" : "Offline")
+                    Text(store.connectedCount > 0 ? "Active · \(store.connectedCount) device\(store.connectedCount == 1 ? "" : "s")" : "Offline")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(CRTheme.inkSoft)
                         .fixedSize()
@@ -354,7 +354,7 @@ private struct CompanionDeviceCard: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     StatusDot(isOnline: device.isConnected, size: 6)
-                    Text(device.connectionState == .connected ? "Clipboard Ready" : device.connectionState.label.capitalized)
+                    Text(device.connectionState.label.capitalized)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(CRTheme.inkSoft)
                     if connectedPeers > 1 {
@@ -1887,7 +1887,7 @@ struct DeviceIdentityCard: View {
                             .font(.system(size: 11))
                     }
                     
-                    Text(isOnline ? "Active · 23ms" : "Offline") // Mock ping
+                    Text(isOnline ? "Active" : "Offline")
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .foregroundStyle(isOnline ? platformBrand : CRTheme.inkSubtle)

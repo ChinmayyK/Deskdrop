@@ -21,6 +21,8 @@
     <!-- Hardened runtime — allow loading the Rust dylib -->
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <false/>
+    <!-- Required: libdeskdrop_core.dylib is built separately and may not share
+         the same code signing identity. Remove once dylib signing is unified. -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
 </dict>

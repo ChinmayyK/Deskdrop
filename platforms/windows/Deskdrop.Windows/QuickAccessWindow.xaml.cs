@@ -178,5 +178,31 @@ namespace Deskdrop.Windows
                 Close();
             }
         }
+
+        private void Border_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter || e.Key == Key.Space)
+            {
+                if (sender is FrameworkElement el)
+                {
+                    el.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+                    {
+                        RoutedEvent = UIElement.MouseLeftButtonDownEvent
+                    });
+                }
+                e.Handled = true;
+            }
+        }
+
+        private void BtnHeaderDiagnostics_Click(object sender, RoutedEventArgs e)
+        {
+            DashboardRequested?.Invoke(this, EventArgs.Empty);
+            Close();
+        }
+
+        private void BtnHeaderQuit_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
+        }
     }
 }

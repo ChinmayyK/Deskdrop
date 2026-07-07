@@ -21,12 +21,21 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            storeFile file(System.getenv("DESKDROP_KEYSTORE") ?: "release.keystore")
+            storePassword System.getenv("DESKDROP_STORE_PASSWORD") ?: ""
+            keyAlias System.getenv("DESKDROP_KEY_ALIAS") ?: "deskdrop"
+            keyPassword System.getenv("DESKDROP_KEY_PASSWORD") ?: ""
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug // replace with release keystore for production
+            signingConfig signingConfigs.release
         }
         debug {
             applicationIdSuffix ".debug"

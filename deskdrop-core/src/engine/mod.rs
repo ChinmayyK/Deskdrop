@@ -14,7 +14,10 @@ use crate::protocol::{
     AppMessage, ClipboardContent, FileTransferMetadata, HistoryMetadata, DEFAULT_PORT,
 };
 use crate::retry::Backoff;
-use crate::settings::{default_peer_store_path, default_trust_store_path, Settings};
+use crate::settings::{
+    default_peer_store_path, default_settings_path, default_trust_store_path, Settings,
+    SettingsStore,
+};
 use crate::trust::{TrustRecord, TrustState, TrustStore};
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
@@ -841,6 +844,14 @@ impl Engine {
         self.shared.settings.lock().await.clone()
     }
 
+    fn persist_settings_snapshot(&self, settings: Settings) -> Result<Settings> {
+        let sanitized = settings.sanitize();
+        let mut store = SettingsStore::load(default_settings_path())?;
+        *store.get_mut() = sanitized.clone();
+        store.save()?;
+        Ok(sanitized)
+    }
+
     /// Apply a JSON merge-patch to the current settings.
     pub async fn patch_settings(&self, patch: String) -> Result<()> {
         let mut current = serde_json::to_value(&*self.shared.settings.lock().await)?;
@@ -849,7 +860,8 @@ impl Engine {
         json_merge_patch(&mut current, &patch_val);
         let new_settings: Settings = serde_json::from_value(current)
             .context("patch_settings: patched value is invalid Settings")?;
-        self.apply_settings(new_settings).await;
+        let persisted = self.persist_settings_snapshot(new_settings)?;
+        self.apply_settings(persisted).await;
         Ok(())
     }
 
@@ -911,7 +923,8 @@ impl Engine {
         if let Some(v) = p.ignore_patterns {
             s.ignore_patterns = v;
         }
-        self.apply_settings(s).await;
+        let persisted = self.persist_settings_snapshot(s)?;
+        self.apply_settings(persisted).await;
         Ok(())
     }
 
@@ -935,24 +948,28 @@ impl Engine {
         Ok(())
     }
 
-    pub async fn set_sync_enabled(&self, enabled: bool) {
-        self.shared.settings.lock().await.sync_enabled = enabled;
+    pub async fn set_sync_enabled(&self, enabled: bool) -> Result<()> {
+        let mut settings = self.shared.settings.lock().await.clone();
+        settings.sync_enabled = enabled;
+        let persisted = self.persist_settings_snapshot(settings)?;
+        self.apply_settings(persisted).await;
+        Ok(())
     }
 
-    pub async fn set_timeline_first_mode(&self, enabled: bool) {
-        self.shared
-            .apply_policy
-            .lock()
-            .await
-            .set_timeline_first(enabled);
+    pub async fn set_timeline_first_mode(&self, enabled: bool) -> Result<()> {
+        let mut settings = self.shared.settings.lock().await.clone();
+        settings.timeline_first_mode = enabled;
+        let persisted = self.persist_settings_snapshot(settings)?;
+        self.apply_settings(persisted).await;
+        Ok(())
     }
 
-    pub async fn set_auto_apply_clipboard(&self, enabled: bool) {
-        self.shared
-            .apply_policy
-            .lock()
-            .await
-            .set_auto_apply(enabled);
+    pub async fn set_auto_apply_clipboard(&self, enabled: bool) -> Result<()> {
+        let mut settings = self.shared.settings.lock().await.clone();
+        settings.auto_apply_remote_clipboard = enabled;
+        let persisted = self.persist_settings_snapshot(settings)?;
+        self.apply_settings(persisted).await;
+        Ok(())
     }
 
     // ── History ───────────────────────────────────────────────────────────────
@@ -4817,4 +4834,3 @@ fn ensure_parent(path: &Path) -> Result<()> {
     }
     Ok(())
 }
-

@@ -372,7 +372,7 @@ class DeskdropService : Service() {
 
         // NSD (Network Service Discovery) — mirrors the mDNS service type used by the Rust engine
         private const val NSD_SERVICE_TYPE       = "_deskdrop._tcp."
-        private const val DEFAULT_DESKDROP_PORT = 47823
+        internal const val DEFAULT_DESKDROP_PORT = 47823
 
         // Global activity feed — readable by UI without binding to the service
         @JvmField val activityFeed = ArrayDeque<ActivityEntry>()
@@ -2417,6 +2417,8 @@ class DeskdropService : Service() {
                 "accept" -> {
                     if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) ==
                         android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        // TODO: Migrate to TelecomManager.acceptRingingCall() via InCallService when minSdk >= 26
+                        @Suppress("DEPRECATION")
                         runCatching { 
                             tm.acceptRingingCall()
                         }
@@ -2430,6 +2432,8 @@ class DeskdropService : Service() {
                     if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) ==
                         android.content.pm.PackageManager.PERMISSION_GRANTED) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        // TODO: Migrate to TelecomManager.endCall() via InCallService when minSdk >= 26
+                        @Suppress("DEPRECATION")
                         runCatching { tm.endCall() }
                             .onSuccess { Log.i(TAG, "Remote decline: call ended") }
                             .onFailure { Log.w(TAG, "Remote decline failed", it) }

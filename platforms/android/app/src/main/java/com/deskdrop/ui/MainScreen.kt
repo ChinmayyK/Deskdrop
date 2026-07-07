@@ -284,7 +284,7 @@ fun EmptyStateGlassCard(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = title,
                 tint = CRTheme.textMedium(isDark).copy(alpha = 0.8f),
                 modifier = Modifier.fillMaxSize()
             )
@@ -384,7 +384,7 @@ fun HomeTab(
                             text = {
                                 Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
                                     val ip = getLocalIpAddress()
-                                    val uri = "deskdrop://$ip:47823"
+                                    val uri = "deskdrop://$ip:${DeskdropService.DEFAULT_DESKDROP_PORT}"
                                     val bitmap = remember(uri) {
                                         try {
                                             val writer = com.google.zxing.qrcode.QRCodeWriter()
@@ -542,7 +542,7 @@ fun EmptyStateEcosystem(isDark: Boolean, onReplayOnboarding: () -> Unit) {
     ) {
         Icon(
             imageVector = Icons.Default.Devices,
-            contentDescription = null,
+            contentDescription = "Devices",
             tint = CRTheme.brandElectric,
             modifier = Modifier.size(48.dp)
         )
@@ -986,7 +986,7 @@ fun TimelineActivityRow(
             if (isMediaFile) {
                 coil.compose.AsyncImage(
                     model = "file://${entry.destPath}",
-                    contentDescription = null,
+                    contentDescription = "File preview",
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
@@ -1002,7 +1002,7 @@ fun TimelineActivityRow(
                 ) {
                     Icon(
                         imageVector = icon,
-                        contentDescription = null,
+                        contentDescription = "Activity type",
                         tint = dotColor,
                         modifier = Modifier.size(20.dp)
                     )
@@ -1148,7 +1148,7 @@ fun DeviceCard(
                 ) {
                     Icon(
                         imageVector = if (isPhone) Icons.Default.Smartphone else Icons.Default.LaptopMac,
-                        contentDescription = null,
+                        contentDescription = "Device type",
                         tint = if (peer.trusted) CRTheme.blueSoft else CRTheme.textMedium(isDark),
                         modifier = Modifier.size(20.dp)
                     )
@@ -1215,7 +1215,7 @@ fun DeviceCard(
                 leadingIcon = {
                     Icon(
                         Icons.Default.Delete,
-                        contentDescription = null,
+                        contentDescription = "Remove",
                         tint = CRTheme.accentRed
                     )
                 }
@@ -1229,7 +1229,7 @@ fun DeviceCard(
                 leadingIcon = {
                     Icon(
                         Icons.Default.Block,
-                        contentDescription = null,
+                        contentDescription = "Revoke trust",
                         tint = CRTheme.accentRed
                     )
                 }
@@ -1451,7 +1451,7 @@ fun HotspotTipCard(isDark: Boolean) {
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Wifi,
-                    contentDescription = null,
+                    contentDescription = "Wi-Fi",
                     tint = CRTheme.brandCyan,
                     modifier = Modifier.size(18.dp)
                 )
@@ -1523,7 +1523,7 @@ fun PeerListCard(
     ) {
         Icon(
             imageVector = Icons.Default.Computer,
-            contentDescription = null,
+            contentDescription = "Peer device",
             tint = if (peer.trusted) CRTheme.brandElectric else CRTheme.textMedium(isDark),
             modifier = Modifier.size(32.dp)
         )
@@ -1673,7 +1673,7 @@ fun SettingsActionTile(
                 .background(color.copy(alpha = 0.15f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = label, tint = color, modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         Text(
@@ -1850,7 +1850,7 @@ fun DynamicIslandOverlay(
                                     .background(color.copy(alpha = 0.15f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                                Icon(imageVector = icon, contentDescription = "Transfer status", tint = color, modifier = Modifier.size(18.dp))
                             }
                             
                             Spacer(modifier = Modifier.width(12.dp))

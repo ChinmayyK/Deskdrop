@@ -9,15 +9,17 @@
 //!   Linux/macOS: `$XDG_DATA_HOME/deskdrop/identity.key`  (mode 0600)
 //!   Windows:     `%LOCALAPPDATA%\deskdrop\identity.key`
 //!
-//! On macOS and Windows we additionally try to store the key in the OS
-//! keychain / credential store (Keychain Services / DPAPI) for extra
-//! protection. The file path is used as a fallback.
+//! # ⚠ Known security gap: plain-file key storage
+//! The identity private key is currently stored as a plain file on disk.
+//! This is a known gap. For production hardening, keys should be stored
+//! in OS-backed secret stores:
+//!   macOS:   `Security.framework` — Keychain Services / Secure Enclave
+//!   Windows: `crypt32.dll`        — DPAPI (`CryptProtectData`)
+//!   Android: Android Keystore system
+//!   Linux:   `libsecret`          — via the `secret-service` crate
 //!
-//! # Future: keychain integration
-//! The `keychain` feature flag (not enabled in this build) links to:
-//!   macOS: `Security.framework` — `SecItemAdd` / `SecItemCopyMatching`
-//!   Windows: `crypt32.dll`     — `CryptProtectData` / `CryptUnprotectData`
-//!   Linux: `libsecret`         — via the `secret-service` crate
+//! The `keychain` feature flag (not yet enabled) is reserved for this
+//! migration. See SECURITY.md for the full threat model.
 //!
 //! # Key rotation
 //! `deskdrop-cli devices rotate-key` calls `IdentityStore::rotate()` which:

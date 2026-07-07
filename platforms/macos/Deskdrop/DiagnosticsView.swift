@@ -32,7 +32,7 @@ struct DiagnosticsView: View {
                         isOk: store.isRunning,
                         suggestion: store.isRunning ? nil : "Restart the app or check Activity Monitor for deskdrop-daemon.",
                         actionLabel: store.isRunning ? nil : "Restart Connection",
-                        onAction: { store.restartDaemon() }
+                        onAction: { store.reconnect() }
                     )
                     
                     DiagnosticItem(

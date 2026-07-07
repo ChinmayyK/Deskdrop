@@ -125,9 +125,8 @@ final class DeskdropStore: ObservableObject {
         watcher.stop()
     }
     
-    func restartDaemon() {
-        // macOS app wraps daemon lifecycle, we can just restart the background polling or tell the user to restart the app
-        // for now just stop and start
+    func reconnect() {
+        // Restart background polling — stop then re-start after a short delay
         stop()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.start()

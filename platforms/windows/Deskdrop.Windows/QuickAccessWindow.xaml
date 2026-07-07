@@ -98,10 +98,10 @@
                         
                         <!-- Actions -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Style="{StaticResource ModernButton}" Width="28" Height="28" Background="#0D000000" Foreground="{StaticResource InkSoft}" Padding="0" Cursor="Hand" ToolTip="Diagnostics">
+                            <Button Style="{StaticResource ModernButton}" Width="28" Height="28" Background="#0D000000" Foreground="{StaticResource InkSoft}" Padding="0" Cursor="Hand" ToolTip="Diagnostics" Click="BtnHeaderDiagnostics_Click" AutomationProperties.Name="Open Diagnostics">
                                 <iconPacks:PackIconLucide Kind="Info" Width="14" Height="14"/>
                             </Button>
-                            <Button Style="{StaticResource ModernButton}" Width="28" Height="28" Background="#0D000000" Foreground="{StaticResource InkSoft}" Padding="0" Cursor="Hand" Margin="8,0,0,0" ToolTip="Quit">
+                            <Button Style="{StaticResource ModernButton}" Width="28" Height="28" Background="#0D000000" Foreground="{StaticResource InkSoft}" Padding="0" Cursor="Hand" Margin="8,0,0,0" ToolTip="Quit" Click="BtnHeaderQuit_Click" AutomationProperties.Name="Quit Deskdrop">
                                 <iconPacks:PackIconLucide Kind="Power" Width="14" Height="14"/>
                             </Button>
                         </StackPanel>
@@ -140,7 +140,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Style="{StaticResource HoverCardStyle}" Background="#F2F2F7" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" CornerRadius="8" Padding="12,6" Margin="0,0,8,4" Cursor="Hand" MouseLeftButtonDown="DeviceTarget_Click">
+                                    <Border Style="{StaticResource HoverCardStyle}" Background="#F2F2F7" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" CornerRadius="8" Padding="12,6" Margin="0,0,8,4" Cursor="Hand" Focusable="True" MouseLeftButtonDown="DeviceTarget_Click" KeyDown="Border_KeyDown" AutomationProperties.Name="Send to device">
                                         <StackPanel Orientation="Horizontal">
                                             <iconPacks:PackIconLucide Kind="Smartphone" Width="12" Height="12"    Foreground="{StaticResource BrandElectric}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                             <TextBlock Text="{Binding friendly_name}" FontSize="12" FontWeight="Medium" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
@@ -156,7 +156,7 @@
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden">
                 <StackPanel>
                     <!-- JUST COPIED STRIP (Mac Parity) -->
-                    <Border x:Name="QuickSendStrip" Margin="12,12,12,4" Background="{StaticResource BrandElectric}" CornerRadius="12" Padding="12" Cursor="Hand" MouseLeftButtonDown="QuickSendStrip_Click">
+                    <Border x:Name="QuickSendStrip" Margin="12,12,12,4" Background="{StaticResource BrandElectric}" CornerRadius="12" Padding="12" Cursor="Hand" Focusable="True" MouseLeftButtonDown="QuickSendStrip_Click" KeyDown="Border_KeyDown" AutomationProperties.Name="Send copied clipboard content">
                         <!-- We use EventTrigger for a breathing effect in code-behind or XAML if needed, but for now just styling -->
                         <Border.Effect>
                             <DropShadowEffect Color="#007AFF" Opacity="0.3" BlurRadius="12" ShadowDepth="4"/>
@@ -186,7 +186,7 @@
                     <ItemsControl x:Name="TimelineList" Padding="8">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="12" Cursor="Hand" MouseLeftButtonDown="HistoryItem_Click">
+                                <Border Style="{StaticResource HoverCardStyle}" CornerRadius="8" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource Stroke}" BorderThickness="0.5" Margin="4,4,4,8" Padding="12" Cursor="Hand" Focusable="True" MouseLeftButtonDown="HistoryItem_Click" KeyDown="Border_KeyDown" AutomationProperties.Name="Clipboard history item">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>

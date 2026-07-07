@@ -39,9 +39,9 @@ use uuid::Uuid;
 pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chunks reduce
                                                // encrypt/serialize/frame overhead per byte.
 
-/// HIGH-03 FIX: Maximum transfer size (4 GB). Rejects announced transfers
-/// exceeding this limit to prevent disk-bomb attacks via pre-allocation.
-pub const MAX_TRANSFER_BYTES: u64 = 1024 * 1024 * 1024 * 1024; // 1 TB
+/// Maximum transfer size (4 GB). Rejects announced transfers exceeding this
+/// limit to prevent disk-bomb attacks via pre-allocation.
+pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
 
 pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 32; // ACK every 32 MB — keeps the pipeline full
                                              // on LAN while still bounding in-flight data.
@@ -537,9 +537,10 @@ impl InboundTransfer {
             actual
         );
 
-        // Flush and drop the file handle so the OS releases the lock before renaming.
+        // Flush and sync to durable storage before renaming.
         if let Some(mut file) = self.file_handle.take() {
-            let _ = file.flush();
+            file.flush()?;
+            file.get_ref().sync_all()?;
         }
 
         let tmp = self.tmp_path.as_ref().context("no temp path")?;
@@ -1098,7 +1099,7 @@ pub fn checksum_file(path: &Path) -> Result<String> {
         hasher.update(&buf[..read]);
     }
 
-    Ok(String::new())
+    Ok(hex::encode(hasher.finalize()))
 }
 
 #[cfg(test)]

@@ -186,7 +186,7 @@ impl Default for Settings {
             sync_images: true,
             sync_files: true,
             sync_mode: SyncMode::Auto,
-            max_payload_bytes: 0, // 0 = unlimited
+            max_payload_bytes: 10 * 1024 * 1024, // 10 MB default ceiling
             history_limit: 50,
             max_history_text_bytes: 64 * 1024,
             show_receive_notification: true,
@@ -200,11 +200,11 @@ impl Default for Settings {
             smart_sync_duplicate_window_ms: 1_500,
             smart_sync_debounce_ms: 150,
             timeline_first_mode: false,
-            auto_apply_remote_clipboard: true,
+            auto_apply_remote_clipboard: false, // require explicit opt-in
             auto_apply_allowed_devices: Vec::new(),
             auto_apply_debounce_ms: 500,
-            auto_accept_file_transfers: true,
-            auto_accept_max_bytes: 0, // 0 = unlimited
+            auto_accept_file_transfers: false, // require explicit opt-in
+            auto_accept_max_bytes: 50 * 1024 * 1024, // 50 MB default ceiling
             start_on_login: false,
             min_text_length: 0,
             sync_urls_only: false,
@@ -336,7 +336,8 @@ impl SettingsStore {
             }
         } else {
             Settings::default()
-        };
+        }
+        .sanitize();
         Ok(Self { settings, path })
     }
 
@@ -366,7 +367,7 @@ impl SettingsStore {
             }
         }
         let tmp = self.path.with_extension("tmp");
-        let bytes = serde_json::to_vec_pretty(&self.settings)?;
+        let bytes = serde_json::to_vec_pretty(&self.settings.sanitize())?;
         std::fs::write(&tmp, bytes).context("writing settings tmp")?;
         std::fs::rename(&tmp, &self.path).context("renaming settings")?;
         Ok(())
@@ -377,7 +378,7 @@ impl SettingsStore {
         let mut value = serde_json::to_value(&self.settings)?;
         let patch_value: serde_json::Value = serde_json::from_str(patch)?;
         json_merge(&mut value, &patch_value);
-        self.settings = serde_json::from_value(value)?;
+        self.settings = serde_json::from_value::<Settings>(value)?.sanitize();
         self.save()
     }
 
@@ -519,5 +520,36 @@ mod tests {
         };
         let clean = s.sanitize();
         assert_eq!(clean.ignore_patterns, vec!["foo"]);
+    }
+
+    #[test]
+    fn load_sanitizes_unsafe_values_from_disk() {
+        let tmp = NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"{
+                "clipboard_poll_ms": 0,
+                "history_limit": 999,
+                "ignore_patterns": ["", "token"]
+            }"#,
+        )
+        .unwrap();
+
+        let store = SettingsStore::load(tmp.path()).unwrap();
+        assert_eq!(store.get().clipboard_poll_ms, 10);
+        assert_eq!(store.get().history_limit, MAX_HISTORY_ENTRIES);
+        assert_eq!(store.get().ignore_patterns, vec!["token"]);
+    }
+
+    #[test]
+    fn patch_sanitizes_persisted_values() {
+        let tmp = NamedTempFile::new().unwrap();
+        let mut store = SettingsStore::load(tmp.path()).unwrap();
+        store
+            .patch(r#"{"clipboard_poll_ms": 0, "history_limit": 0}"#)
+            .unwrap();
+
+        assert_eq!(store.get().clipboard_poll_ms, 10);
+        assert_eq!(store.get().history_limit, MIN_HISTORY_ENTRIES);
     }
 }

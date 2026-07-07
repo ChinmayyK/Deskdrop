@@ -708,7 +708,8 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
         }
         IpcRequest::TrustPeerFromQr { device_id, token } => {
             let uuid = parse_uuid(&device_id)?;
-            state.engine.trust_peer(uuid).await?;
+            // SECURITY: Do NOT trust the peer here. Trust is granted only
+            // after the engine's AppMessage::QrAuth handler validates the token.
             let _ = state.engine.send_qr_auth(uuid, token).await;
             Ok(IpcResponse::ok_empty())
         }

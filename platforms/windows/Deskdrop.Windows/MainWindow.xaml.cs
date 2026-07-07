@@ -22,7 +22,6 @@ namespace Deskdrop.Windows
             _clipboardManager = clipboardManager;
             _clipboardManager.HistoryItemAdded += OnHistoryItemAdded;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
-            _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             _clipboardManager.SystemHealthUpdated += OnSystemHealthUpdated;
             LoadDevicesView();
             
@@ -349,6 +348,13 @@ namespace Deskdrop.Windows
         private void NavDiagnostics_Click(object sender, RoutedEventArgs e)
         {
             LoadDiagnosticsView();
+        }
+
+        private void NavScan_Click(object sender, RoutedEventArgs e)
+        {
+            // Trigger network rescan via the daemon
+            DaemonClient.Send(new { cmd = "rescan_peers" });
+            if (HeaderStatusText != null) HeaderStatusText.Text = "Scanning…";
         }
 
         private void LoadDiagnosticsView()
@@ -901,18 +907,28 @@ namespace Deskdrop.Windows
         }
 
 
-        public void ShowTofuPrompt(string deviceId, string deviceName, string fingerprint)
+        public async void ShowTofuPrompt(string deviceId, string deviceName, string fingerprint)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(async () =>
             {
-                var msg = $"Incoming connection from {deviceName}\nFingerprint: {FormatFingerprint(fingerprint)}";
-                NotificationHelper.ShowToastWithActions(
-                    "Trust Device?", 
-                    msg, 
-                    null,
-                    $"deskdrop://tofu?action=accept&device_id={System.Uri.EscapeDataString(deviceId)}",
-                    $"deskdrop://tofu?action=reject&device_id={System.Uri.EscapeDataString(deviceId)}"
-                );
+                try
+                {
+                    var dialog = new ContentDialog
+                    {
+                        Title = $"Trust Device: {deviceName}?",
+                        Content = $"Verify this fingerprint matches on both devices:\n\n{FormatFingerprint(fingerprint)}\n\nOnly trust devices you recognize.",
+                        PrimaryButtonText = "Trust",
+                        CloseButtonText = "Reject",
+                        DefaultButton = ContentDialogButton.Close,
+                        XamlRoot = this.Content.XamlRoot
+                    };
+                    var result = await dialog.ShowAsync();
+                    if (result == ContentDialogResult.Primary)
+                    {
+                        DaemonClient.Send(new { cmd = "trust_peer", device_id = deviceId });
+                    }
+                }
+                catch { /* dialog may fail if window is not ready */ }
             });
         }
 

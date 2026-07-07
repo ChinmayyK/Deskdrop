@@ -675,7 +675,9 @@ pub async fn handle_ipc_request(
         IpcRequest::TrustPeerFromQr { device_id, token } => {
             match crate::ipc::parse_uuid(&device_id) {
                 Ok(uuid) => {
-                    let _ = eng.trust_peer(uuid).await;
+                    // SECURITY: Do NOT trust the peer here. Trust is granted
+                    // only after the remote side validates the QR auth token
+                    // and the engine's AppMessage::QrAuth handler confirms it.
                     eng.send_qr_auth(uuid, token).await;
                     IpcResponse::ok_empty()
                 }
@@ -1119,17 +1121,21 @@ pub async fn handle_ipc_request(
             Ok(_) => IpcResponse::ok_empty(),
             Err(e) => IpcResponse::err(e.to_string()),
         },
-        IpcRequest::SetSyncEnabled { enabled } => {
-            eng.set_sync_enabled(enabled).await;
-            IpcResponse::ok_empty()
-        }
+        IpcRequest::SetSyncEnabled { enabled } => match eng.set_sync_enabled(enabled).await {
+            Ok(_) => IpcResponse::ok_empty(),
+            Err(e) => IpcResponse::err(e.to_string()),
+        },
         IpcRequest::SetTimelineFirstMode { enabled } => {
-            eng.set_timeline_first_mode(enabled).await;
-            IpcResponse::ok_empty()
+            match eng.set_timeline_first_mode(enabled).await {
+                Ok(_) => IpcResponse::ok_empty(),
+                Err(e) => IpcResponse::err(e.to_string()),
+            }
         }
         IpcRequest::SetAutoApplyClipboard { enabled } => {
-            eng.set_auto_apply_clipboard(enabled).await;
-            IpcResponse::ok_empty()
+            match eng.set_auto_apply_clipboard(enabled).await {
+                Ok(_) => IpcResponse::ok_empty(),
+                Err(e) => IpcResponse::err(e.to_string()),
+            }
         }
         IpcRequest::SaveSettings {
             port,
