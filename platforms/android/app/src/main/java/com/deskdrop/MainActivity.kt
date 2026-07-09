@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
         coil.Coil.setImageLoader(imageLoader)
 
         setContent {
-            val activeTransfers by DeskdropService.activeTransfersFlow.collectAsState()
+            val activeTransfers by TransferManager.activeTransfersFlow.collectAsState()
 
             AppTheme(useDarkTheme = isDarkMode.value) {
                 var showManualIpDialog by remember { mutableStateOf(false) }
@@ -274,7 +274,7 @@ class MainActivity : ComponentActivity() {
                         rebuildFeed()
                     },
                     onDeleteActivity = { entry ->
-                        DeskdropService.removeFromFeed(entry.id)
+                        ActivityFeedManager.removeFromFeed(entry.id)
                         rebuildFeed()
                     },
                     onTrustPeer = { peer ->
@@ -476,7 +476,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun rebuildFeed() {
-        feed.value = DeskdropService.getFeedSnapshot()
+        feed.value = ActivityFeedManager.getFeedSnapshot()
     }
 
     private fun showSnack(message: String) {

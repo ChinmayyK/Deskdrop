@@ -45,224 +45,11 @@ import java.util.UUID
 // The prebuilt .so exports Java_com_deskdrop_DeskdropJni_* symbols.
 // We keep this object name to match — only user-visible strings are renamed.
 
-object DeskdropJni {
-    init { System.loadLibrary("deskdrop_core") }
 
-    // ── Event type constants ──────────────────────────────────────────────────
-    const val CR_EVENT_NONE                  = 0
-    const val CR_EVENT_CLIPBOARD_TEXT        = 1   // auto-applied to local clipboard
-    const val CR_EVENT_CLIPBOARD_IMAGE       = 2   // auto-applied
-    const val CR_EVENT_CLIPBOARD_FILE        = 3   // auto-applied (legacy)
-    const val CR_EVENT_PAIRING_REQUESTED     = 4
-    const val CR_EVENT_PEER_CONNECTED        = 5
-    const val CR_EVENT_PEER_DISCONNECTED     = 6
-    const val CR_EVENT_PEER_DISCOVERED       = 27
-    const val CR_EVENT_WARNING               = 7
-    const val CR_EVENT_CLIPBOARD_SYNCED      = 8
-    // 9, 10 reserved
-    const val CR_EVENT_CLIPBOARD_AVAILABLE   = 11  // timeline-first: in feed, not yet applied
-    const val CR_EVENT_FILE_TRANSFER_INCOMING  = 12
-    const val CR_EVENT_FILE_TRANSFER_PROGRESS  = 13
-    const val CR_EVENT_FILE_TRANSFER_COMPLETE  = 14
-    const val CR_EVENT_FILE_TRANSFER_FAILED    = 15
-    const val CR_EVENT_FILE_TRANSFER_PAUSED    = 20
-    const val CR_EVENT_FILE_TRANSFER_RESUMED   = 21
-    const val CR_EVENT_ACTIVITY_UPDATED        = 16
-    const val CR_EVENT_CALL_STATE_CHANGED       = 17
-    const val CR_EVENT_CAMERA_FRAME          = 25
-    const val CR_EVENT_CALL_ACTION              = 18
-    const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
-    const val CR_EVENT_NETWORK_STATE_CHANGED    = 28
-    const val CR_EVENT_OUTGOING_PAIRING_WAITING = 29
-
-    // ── Core engine ───────────────────────────────────────────────────────────
-    @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
-    @JvmStatic external fun stop(handle: Long)
-
-    // ── Clipboard push ────────────────────────────────────────────────────────
-    @JvmStatic external fun pushText(handle: Long, text: String): Int
-    @JvmStatic external fun pushImage(handle: Long, mimeType: String, data: ByteArray): Int
-    @JvmStatic external fun pushFile(handle: Long, name: String, data: ByteArray): Int
-    @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
-    @JvmStatic external fun pushVideoFrame(handle: Long, data: ByteArray): Int
-    @JvmStatic external fun pushBatteryStatus(handle: Long, level: Int, charging: Boolean): Int
-
-
-    // ── Event poll ────────────────────────────────────────────────────────────
-    @JvmStatic external fun pollEvent(handle: Long): Long
-    @JvmStatic external fun eventType(event: Long): Int
-    @JvmStatic external fun freeEvent(event: Long)
-
-    // ── Common event accessors ────────────────────────────────────────────────
-    @JvmStatic external fun eventText(event: Long): String?
-    @JvmStatic external fun eventDeviceId(event: Long): String?
-    @JvmStatic external fun eventBinaryData(event: Long): ByteArray?
-    @JvmStatic external fun eventDeviceName(event: Long): String?
-    @JvmStatic external fun eventMimeType(event: Long): String?
-    @JvmStatic external fun eventFileName(event: Long): String?
-    @JvmStatic external fun eventFingerprint(event: Long): String?
-
-    // ── Timeline-first clipboard ──────────────────────────────────────────────
-    /** 1 if the ClipboardReceived event was auto-applied; 0 if timeline-first. */
-    @JvmStatic external fun eventAutoApplied(event: Long): Int
-    /** Activity feed entry ID (-1 if not applicable). */
-    @JvmStatic external fun eventActivityId(event: Long): Long
-    /** Apply a remote clipboard item to the local clipboard by its content hash. */
-    @JvmStatic external fun applyClipboardByHash(engineHandle: Long, hash: String): Int
-    /** Mark a peer as trusted after the user approves the pairing prompt. */
-    @JvmStatic external fun trustPeer(engineHandle: Long, deviceId: String): Int
-    /** Trust a peer via QR code and send the auth token. */
-    @JvmStatic external fun trustPeerFromQr(engineHandle: Long, deviceId: String, token: String): Int
-    /** Reject a peer after the user denies the pairing prompt. */
-    @JvmStatic external fun rejectPeer(engineHandle: Long, deviceId: String): Int
-    /** Forget a previously connected device. */
-    @JvmStatic external fun forgetPeer(engineHandle: Long, deviceId: String): Int
-    /** Send a pairing request to an untrusted device. */
-    @JvmStatic external fun sendPairingRequest(engineHandle: Long, deviceId: String): Int
-    /** Respond to an incoming pairing request. */
-    @JvmStatic external fun respondToPairing(engineHandle: Long, deviceId: String, accepted: Boolean): Int
-
-    // ── File transfer accessors ───────────────────────────────────────────────
-    @JvmStatic external fun eventTransferId(event: Long): String?
-    @JvmStatic external fun eventTransferFileName(event: Long): String?
-    @JvmStatic external fun eventTransferProgressPercent(event: Long): Int
-    @JvmStatic external fun eventTransferBytesReceived(event: Long): Long
-    @JvmStatic external fun eventTransferSpeedBps(event: Long): Long
-    @JvmStatic external fun eventTransferEtaSecs(event: Long): Long
-    @JvmStatic external fun eventTransferTotalBytes(event: Long): Long
-    @JvmStatic external fun eventTransferDestPath(event: Long): String?
-    /** Accept an incoming file transfer (identified by hex transfer ID). */
-    @JvmStatic external fun acceptFileTransfer(engineHandle: Long, transferIdHex: String): Int
-    /** Reject an incoming file transfer. */
-    @JvmStatic external fun rejectFileTransfer(engineHandle: Long, transferIdHex: String): Int
-    /** Cancel an active file transfer. */
-    @JvmStatic external fun cancelFileTransfer(engineHandle: Long, transferIdHex: String): Int
-    /** Pause an active file transfer. */
-    @JvmStatic external fun pauseFileTransfer(engineHandle: Long, transferIdHex: String): Int
-    /** Resume a paused file transfer. */
-    @JvmStatic external fun resumeFileTransfer(engineHandle: Long, transferIdHex: String): Int
-
-    @JvmStatic external fun stopCameraStream(engineHandle: Long): Int
-
-    /**
-     * Connect to a peer discovered via Android NSD.
-     * Returns 0 on success, -1 on error.
-     */
-    @JvmStatic external fun connectToPeer(handle: Long, ip: String, port: Int): Int
-    @JvmStatic external fun reportDiscoveredPeer(handle: Long, deviceId: String, deviceName: String, ip: String, port: Int): Int
-    @JvmStatic external fun initiatePairing(handle: Long, deviceId: String): Int
-    @JvmStatic external fun disconnectPeer(handle: Long, deviceId: String): Int
-    @JvmStatic external fun reconnectPeer(handle: Long, deviceId: String): Boolean
-
-    /**
-     * Returns this engine's stable device UUID as a hyphenated string
-     * (e.g. "550e8400-e29b-41d4-a716-446655440000"), or null on error.
-     * Used to filter self-connections during NSD resolution.
-     */
-    @JvmStatic external fun getDeviceId(handle: Long): String?
-    @JvmStatic external fun peersJson(handle: Long): String?
-    @JvmStatic external fun sendFilePath(
-        handle: Long,
-        path: String,
-        displayName: String,
-        mimeType: String,
-        targetDeviceId: String?
-    ): String?
-
-    /**
-     * Push updated sync settings to the running engine atomically.
-     * Avoids restarting the service just to update a toggle.
-     * Returns 0 on success, -1 if the handle is invalid.
-     */
-    @JvmStatic external fun applySyncSettings(
-        handle: Long,
-        syncEnabled: Boolean,
-        syncText: Boolean,
-        syncImages: Boolean,
-        syncFiles: Boolean,
-    ): Int
-
-    // ── Call continuity ───────────────────────────────────────────────────────
-    /** Push phone call state (ringing/offhook/idle) to all connected peers. */
-    @JvmStatic external fun pushCallState(
-        handle: Long, state: String, number: String, contactName: String
-    ): Int
-    /** Get the call state string from a CR_EVENT_CALL_STATE_CHANGED event. */
-    @JvmStatic external fun eventCallState(event: Long): String?
-    /** Get the phone number from a CR_EVENT_CALL_STATE_CHANGED event. */
-    @JvmStatic external fun eventCallNumber(event: Long): String?
-    /** Get the contact name from a CR_EVENT_CALL_STATE_CHANGED event. */
-    @JvmStatic external fun eventCallContactName(event: Long): String?
-    /** Get the action string ("accept"/"decline") from a CR_EVENT_CALL_ACTION event. */
-    @JvmStatic external fun eventCallAction(event: Long): String?
-    // ── Battery synchronization (F20) ─────────────────────────────────────────
-    // ── Network lifecycle ─────────────────────────────────────────────────────
-    /**
-     * Notify the Rust engine that Android's default network is available again
-     * (e.g., after Doze, Wi-Fi reconnect, airplane mode toggle).
-     * Triggers immediate reconnection to all known trusted peers.
-     */
-    @JvmStatic external fun notifyNetworkRestored(handle: Long): Int
-
-    /**
-     * Notify the Rust engine whether the Android device is sleeping (Doze mode / screen off).
-     * The engine uses this to relax heartbeat timeouts to zero-drain the battery.
-     */
-    @JvmStatic external fun notifySleepState(handle: Long, isAsleep: Boolean): Int
-}
 
 // ── Activity feed model ───────────────────────────────────────────────────────
 
-enum class ActivityKind {
-    CLIPBOARD_TEXT, CLIPBOARD_IMAGE, FILE_SENT, FILE_RECEIVED,
-    FILE_TRANSFER_INCOMING, FILE_TRANSFER_PROGRESS, FILE_TRANSFER_COMPLETE,
-    FILE_TRANSFER_FAILED, FILE_TRANSFER_PAUSED, FILE_TRANSFER_RESUMED,
-    PEER_CONNECTED, PEER_DISCONNECTED, WARNING;
-}
 
-data class ActivityEntry(
-    val id: Long = System.nanoTime(),
-    val timestamp: Long = System.currentTimeMillis(),
-    val deviceName: String,
-    val kind: ActivityKind,
-    val preview: String,
-    /** For clipboard items: the full text (may be empty for images). */
-    val contentHash: String = "",
-    /** True if this clipboard item has been applied to local clipboard. */
-    val appliedLocally: Boolean = false,
-    /** For file transfers: the transfer ID hex. */
-    val transferId: String = "",
-    /** For file transfers: total bytes. */
-    val fileTotalBytes: Long = 0L,
-    /** Transfer progress 0-100. */
-    val progressPercent: Int = 0,
-    /** Bytes written so far for an in-flight transfer. */
-    val transferBytesReceived: Long = 0L,
-    /** Bytes per second, or 0 if the engine has not estimated speed yet. */
-    val transferSpeedBps: Long = 0L,
-    /** Seconds remaining, or -1 if unknown. */
-    val transferEtaSecs: Long = -1L,
-    /** Final destination path (file transfers). */
-    val destPath: String = ""
-) {
-    fun formattedLine(): String = when (kind) {
-        ActivityKind.CLIPBOARD_TEXT  -> "[$deviceName] copied: $preview"
-        ActivityKind.CLIPBOARD_IMAGE -> "[$deviceName] copied image"
-        ActivityKind.FILE_SENT       -> "[$deviceName] sent file: $preview"
-        ActivityKind.FILE_RECEIVED   -> "[$deviceName] file ready: $preview"
-        ActivityKind.FILE_TRANSFER_INCOMING -> "[$deviceName] sending: $preview"
-        ActivityKind.FILE_TRANSFER_PROGRESS -> "[$deviceName] $progressPercent% — $preview"
-        ActivityKind.FILE_TRANSFER_PAUSED   -> "[$deviceName] paused — $preview"
-        ActivityKind.FILE_TRANSFER_RESUMED  -> "[$deviceName] resumed — $preview"
-        ActivityKind.FILE_TRANSFER_COMPLETE -> "[$deviceName] ✓ $preview"
-        ActivityKind.FILE_TRANSFER_FAILED   -> "[$deviceName] ✗ transfer failed: $preview"
-        ActivityKind.PEER_CONNECTED  -> "[$deviceName] Connected"
-        ActivityKind.PEER_DISCONNECTED -> "[$deviceName] Disconnected"
-        ActivityKind.WARNING         -> "$preview"
-    }
-    /** True if the user can tap "Apply" to write this to local clipboard. */
-    val isApplicable: Boolean get() = kind == ActivityKind.CLIPBOARD_TEXT && !appliedLocally
-}
 
 // ── Battery mode ──────────────────────────────────────────────────────────────
 
@@ -273,23 +60,7 @@ enum class BackgroundSyncMode {
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
-enum class TransferState {
-    INCOMING, PROGRESS, PAUSED, CANCELED, FAILED, COMPLETED
-}
 
-data class TransferProgress(
-    val id: String,
-    val fileName: String,
-    val percent: Int,
-    val bytesReceived: Long,
-    val totalBytes: Long = 0,
-    val speedBps: Long,
-    val etaSecs: Long,
-    var isPaused: Boolean = false,
-    val state: TransferState = TransferState.PROGRESS,
-    val peerName: String = "",
-    val isOutbound: Boolean = false
-)
 
 class DeskdropService : Service() {
 
@@ -300,8 +71,7 @@ class DeskdropService : Service() {
         // Expose engine handle for high-throughput zero-copy JNI calls (e.g. video frames)
         @Volatile var activeEngineHandle: Long = 0L
 
-        // Flow to expose active transfers to UI
-        val activeTransfersFlow = kotlinx.coroutines.flow.MutableStateFlow<List<TransferProgress>>(emptyList())
+
         val quickSendContextFlow = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
         // Notification channels
@@ -374,27 +144,7 @@ class DeskdropService : Service() {
         private const val NSD_SERVICE_TYPE       = "_deskdrop._tcp."
         internal const val DEFAULT_DESKDROP_PORT = 47823
 
-        // Global activity feed — readable by UI without binding to the service
-        @JvmField val activityFeed = ArrayDeque<ActivityEntry>()
-        @JvmField val feedLock     = Any()
-        @JvmField val pendingOutboundTransferIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
-        fun addToFeed(entry: ActivityEntry) {
-            synchronized(feedLock) {
-                activityFeed.addFirst(entry)
-                while (activityFeed.size > ACTIVITY_FEED_MAX) activityFeed.removeLast()
-            }
-        }
-        
-        fun removeFromFeed(id: Long) {
-            synchronized(feedLock) {
-                activityFeed.removeAll { it.id == id }
-            }
-        }
-
-        fun getFeedSnapshot(): List<ActivityEntry> = synchronized(feedLock) {
-            activityFeed.toList()
-        }
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -435,11 +185,7 @@ class DeskdropService : Service() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var pairingReceiverRegistered = false
 
-    private val activeTransfers = mutableMapOf<String, TransferProgress>()
 
-    private fun publishActiveTransfers() {
-        activeTransfersFlow.value = activeTransfers.values.toList()
-    }
 
     private var heartbeatHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -1095,11 +841,11 @@ class DeskdropService : Service() {
         val h = engineHandle
         if (h != 0L) {
             // Cancel all active transfers before disconnecting
-            activeTransfers.values.forEach { transfer ->
+            TransferManager.activeTransfers.values.forEach { transfer ->
                 DeskdropJni.cancelFileTransfer(h, transfer.id)
             }
-            activeTransfers.clear()
-            activeTransfersFlow.value = emptyList()
+            TransferManager.activeTransfers.clear()
+            TransferManager.activeTransfersFlow.value = emptyList()
 
             currentPeerSnapshots()
                 .filter { it.isConnected }
@@ -1254,10 +1000,10 @@ class DeskdropService : Service() {
                 val fileName  = DeskdropJni.eventTransferFileName(ev) ?: "file"
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev)
                 
-                val isOutboundFeed = synchronized(feedLock) { activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
+                val isOutboundFeed = synchronized(ActivityFeedManager.feedLock) { ActivityFeedManager.activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
                 
                 if (isOutboundFeed) {
-                    activeTransfers[tid] = TransferProgress(
+                    TransferManager.activeTransfers[tid] = TransferProgress(
                         id = tid,
                         fileName = fileName,
                         percent = 0,
@@ -1270,13 +1016,13 @@ class DeskdropService : Service() {
                         peerName = from,
                         isOutbound = true
                     )
-                    publishActiveTransfers()
+                    TransferManager.publishActiveTransfers()
                 } else {
                     addActivity(ActivityEntry(deviceName = from,
                         kind = ActivityKind.FILE_TRANSFER_INCOMING, preview = fileName,
                         transferId = tid, fileTotalBytes = totalBytes))
                     
-                    activeTransfers[tid] = TransferProgress(
+                    TransferManager.activeTransfers[tid] = TransferProgress(
                         id = tid,
                         fileName = fileName,
                         percent = 0,
@@ -1289,7 +1035,7 @@ class DeskdropService : Service() {
                         peerName = from,
                         isOutbound = false
                     )
-                    publishActiveTransfers()
+                    TransferManager.publishActiveTransfers()
 
                     val peer = currentPeerSnapshots().firstOrNull { it.id == DeskdropJni.eventDeviceId(ev) }
                     if (peer?.trusted == true && engineHandle != 0L) {
@@ -1321,21 +1067,21 @@ class DeskdropService : Service() {
                     etaSecs = etaSecs
                 )
                 
-                val existing = activeTransfers[tid]
+                val existing = TransferManager.activeTransfers[tid]
                 val isPaused = existing?.isPaused ?: false
                 // Use eventTransferTotalBytes to get the real total even for outbound transfers
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev).let { if (it > 0) it else (existing?.totalBytes ?: 0L) }
                 val peerName = existing?.peerName ?: from
-                val isOutboundFeed = synchronized(feedLock) { activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
-                val isOutbound = pendingOutboundTransferIds.contains(tid) || isOutboundFeed || (existing?.isOutbound ?: true)
+                val isOutboundFeed = synchronized(ActivityFeedManager.feedLock) { ActivityFeedManager.activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
+                val isOutbound = TransferManager.pendingOutboundTransferIds.contains(tid) || isOutboundFeed || (existing?.isOutbound ?: true)
                 
-                activeTransfers[tid] = TransferProgress(
+                TransferManager.activeTransfers[tid] = TransferProgress(
                     id = tid, fileName = name, percent = percent, bytesReceived = bytesReceived, 
                     totalBytes = totalBytes, speedBps = speedBps, etaSecs = etaSecs, 
                     isPaused = isPaused, state = TransferState.PROGRESS, peerName = peerName,
                     isOutbound = isOutbound
                 )
-                publishActiveTransfers()
+                TransferManager.publishActiveTransfers()
                 
                 updateFileTransferNotificationProgress(
                     tid = tid,
@@ -1363,8 +1109,8 @@ class DeskdropService : Service() {
                     // Outbound transfer completed!
                     updateActivityTransferComplete(tid, "")
                     cancelFileTransferNotification(tid)
-                    activeTransfers.remove(tid)
-                    publishActiveTransfers()
+                    TransferManager.activeTransfers.remove(tid)
+                    TransferManager.publishActiveTransfers()
                     
                     val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
                         .setSmallIcon(R.mipmap.ic_launcher)
@@ -1394,8 +1140,8 @@ class DeskdropService : Service() {
                 }
                 
                 // Immediately remove from active transfers so the UI progress bar disappears without getting stuck
-                activeTransfers.remove(tid)
-                publishActiveTransfers()
+                TransferManager.activeTransfers.remove(tid)
+                TransferManager.publishActiveTransfers()
             }
 
             // ── Dedicated file transfer: failed ───────────────────────────────
@@ -1407,17 +1153,17 @@ class DeskdropService : Service() {
                 )
                 updateActivityTransferFailed(tid)
                 cancelFileTransferNotification(tid)
-                activeTransfers.remove(tid)
-                publishActiveTransfers()
+                TransferManager.activeTransfers.remove(tid)
+                TransferManager.publishActiveTransfers()
             }
 
             DeskdropJni.CR_EVENT_FILE_TRANSFER_PAUSED -> {
                 val tid = DeskdropJni.eventTransferId(ev) ?: return
-                val state = activeTransfers[tid]
+                val state = TransferManager.activeTransfers[tid]
                 if (state != null) {
                     val newState = state.copy(isPaused = true, state = TransferState.PAUSED)
-                    activeTransfers[tid] = newState
-                    publishActiveTransfers()
+                    TransferManager.activeTransfers[tid] = newState
+                    TransferManager.publishActiveTransfers()
                     updateFileTransferNotificationProgress(
                         tid = tid,
                         fileName = newState.fileName,
@@ -1433,11 +1179,11 @@ class DeskdropService : Service() {
 
             DeskdropJni.CR_EVENT_FILE_TRANSFER_RESUMED -> {
                 val tid = DeskdropJni.eventTransferId(ev) ?: return
-                val state = activeTransfers[tid]
+                val state = TransferManager.activeTransfers[tid]
                 if (state != null) {
                     val newState = state.copy(isPaused = false, state = TransferState.PROGRESS)
-                    activeTransfers[tid] = newState
-                    publishActiveTransfers()
+                    TransferManager.activeTransfers[tid] = newState
+                    TransferManager.publishActiveTransfers()
                     updateFileTransferNotificationProgress(
                         tid = tid,
                         fileName = newState.fileName,
@@ -1564,9 +1310,9 @@ class DeskdropService : Service() {
     // ── Activity feed helpers ─────────────────────────────────────────────────
 
     private fun addActivity(entry: ActivityEntry) {
-        synchronized(feedLock) {
-            activityFeed.addFirst(entry)
-            while (activityFeed.size > ACTIVITY_FEED_MAX) activityFeed.removeLast()
+        synchronized(ActivityFeedManager.feedLock) {
+            ActivityFeedManager.activityFeed.addFirst(entry)
+            while (ActivityFeedManager.activityFeed.size > ACTIVITY_FEED_MAX) ActivityFeedManager.activityFeed.removeLast()
         }
         broadcastActivityUpdated()
     }
@@ -1578,10 +1324,10 @@ class DeskdropService : Service() {
         speedBps: Long,
         etaSecs: Long
     ) {
-        synchronized(feedLock) {
-            val idx = activityFeed.indexOfFirst { it.transferId == tid }
+        synchronized(ActivityFeedManager.feedLock) {
+            val idx = ActivityFeedManager.activityFeed.indexOfFirst { it.transferId == tid }
             if (idx >= 0) {
-                activityFeed[idx] = activityFeed[idx].copy(
+                ActivityFeedManager.activityFeed[idx] = ActivityFeedManager.activityFeed[idx].copy(
                     kind = ActivityKind.FILE_TRANSFER_PROGRESS,
                     progressPercent = percent,
                     transferBytesReceived = bytesReceived.coerceAtLeast(0L),
@@ -1596,10 +1342,10 @@ class DeskdropService : Service() {
     }
 
     private fun updateActivityTransferComplete(tid: String, destPath: String) {
-        synchronized(feedLock) {
-            val idx = activityFeed.indexOfFirst { it.transferId == tid }
+        synchronized(ActivityFeedManager.feedLock) {
+            val idx = ActivityFeedManager.activityFeed.indexOfFirst { it.transferId == tid }
             if (idx >= 0) {
-                activityFeed[idx] = activityFeed[idx].copy(
+                ActivityFeedManager.activityFeed[idx] = ActivityFeedManager.activityFeed[idx].copy(
                     kind = ActivityKind.FILE_TRANSFER_COMPLETE,
                     progressPercent = 100,
                     destPath = destPath
@@ -1612,10 +1358,10 @@ class DeskdropService : Service() {
     }
 
     private fun updateActivityTransferFailed(tid: String) {
-        synchronized(feedLock) {
-            val idx = activityFeed.indexOfFirst { it.transferId == tid }
+        synchronized(ActivityFeedManager.feedLock) {
+            val idx = ActivityFeedManager.activityFeed.indexOfFirst { it.transferId == tid }
             if (idx >= 0) {
-                activityFeed[idx] = activityFeed[idx].copy(kind = ActivityKind.FILE_TRANSFER_FAILED)
+                ActivityFeedManager.activityFeed[idx] = ActivityFeedManager.activityFeed[idx].copy(kind = ActivityKind.FILE_TRANSFER_FAILED)
             } else {
                 return
             }
@@ -1867,8 +1613,8 @@ class DeskdropService : Service() {
                         null
                     )
                     if (tid != null) {
-                        pendingOutboundTransferIds.add(tid)
-                        addToFeed(
+                        TransferManager.pendingOutboundTransferIds.add(tid)
+                        ActivityFeedManager.addToFeed(
                             ActivityEntry(
                                 deviceName = "All devices",
                                 kind = ActivityKind.FILE_SENT,
@@ -1931,7 +1677,7 @@ class DeskdropService : Service() {
                 targetDeviceId
             )
             if (tid != null) {
-                pendingOutboundTransferIds.add(tid)
+                TransferManager.pendingOutboundTransferIds.add(tid)
                 sentAny = true
                 Log.i(
                     TAG,
@@ -1944,7 +1690,7 @@ class DeskdropService : Service() {
                 } else {
                     "All devices"
                 }
-                addToFeed(
+                ActivityFeedManager.addToFeed(
                     ActivityEntry(
                         deviceName = targetName,
                         kind = ActivityKind.FILE_SENT,
@@ -1972,7 +1718,7 @@ class DeskdropService : Service() {
         )
 
         // Silently add to activity feed — zero notification
-        addToFeed(
+        ActivityFeedManager.addToFeed(
             ActivityEntry(
                 deviceName = from,
                 kind = ActivityKind.CLIPBOARD_TEXT,
@@ -2015,7 +1761,7 @@ class DeskdropService : Service() {
         } else {
             ActivityKind.FILE_RECEIVED
         }
-        addToFeed(ActivityEntry(deviceName = from, kind = kind, preview = finalFile.name))
+        ActivityFeedManager.addToFeed(ActivityEntry(deviceName = from, kind = kind, preview = finalFile.name))
         broadcastStatus()
 
         if (isFile) {
