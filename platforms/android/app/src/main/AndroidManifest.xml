@@ -144,6 +144,20 @@
             </intent-filter>
         </service>
 
+        <!-- ── Accessibility service (Clipboard fallback) ──────────────── -->
+        <service
+            android:name=".DeskdropAccessibilityService"
+            android:label="Deskdrop Clipboard Sync"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
         <!-- ── Quick Settings tile ───────────────────────────────────── -->
         <service
             android:name=".DeskdropTileService"
