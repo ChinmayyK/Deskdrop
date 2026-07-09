@@ -202,7 +202,7 @@ namespace Deskdrop.Windows
 
         private void BtnHeaderQuit_Click(object sender, RoutedEventArgs e)
         {
-            Application.Current.Shutdown();
+            System.Windows.Application.Current.Shutdown();
         }
     }
 }

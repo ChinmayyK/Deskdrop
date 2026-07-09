@@ -913,7 +913,7 @@ namespace Deskdrop.Windows
             {
                 try
                 {
-                    var result = MessageBox.Show(
+                    var result = System.Windows.MessageBox.Show(
                         $"Verify this fingerprint matches on both devices:\n\n{FormatFingerprint(fingerprint)}\n\nOnly trust devices you recognize.",
                         $"Trust Device: {deviceName}?",
                         MessageBoxButton.YesNo,
