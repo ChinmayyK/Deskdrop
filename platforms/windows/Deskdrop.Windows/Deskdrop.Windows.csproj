@@ -11,7 +11,7 @@
     <AssemblyName>Deskdrop</AssemblyName>
     <Company>Deskdrop</Company>
     <Product>Deskdrop</Product>
-    <Version>1.2.1</Version>
+    <Version>1.2.2</Version>
     <Description>Proximity-Based Shared Clipboard</Description>
   </PropertyGroup>
 

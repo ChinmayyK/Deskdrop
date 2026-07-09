@@ -1,6 +1,6 @@
 [package]
 name = "deskdrop-core"
-version = "1.2.2"
+version = "1.2.3"
 edition = "2021"
 authors = ["Deskdrop Contributors"]
 description = "Proximity-Based Shared Clipboard — core engine"
@@ -59,6 +59,7 @@ thiserror = "1"
 anyhow = "1"
 default-net = "0.22.0"
 lz4_flex = "0.13.1"
+dashmap = "5"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 mdns-sd = "0.10"
@@ -67,7 +68,7 @@ mdns-sd = "0.10"
 jni = "0.21"
 
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Memory"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Memory", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 bincode = "1"

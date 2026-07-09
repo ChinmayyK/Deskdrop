@@ -352,7 +352,7 @@ pub struct InboundTransfer {
     pub last_active_at: Instant,
     pub bytes_received: u64,
     /// Temp file path for streaming writes.
-    pub tmp_path: Option<PathBuf>,
+
     /// Persistent file handle to avoid re-opening on every chunk.
     pub file_handle: Option<BufWriter<std::fs::File>>,
     /// Final destination path.
@@ -377,7 +377,7 @@ impl InboundTransfer {
             started_at: None,
             last_active_at: Instant::now(),
             bytes_received: 0,
-            tmp_path: None,
+
             file_handle: None,
             dest_path: None,
             from_device,
@@ -389,31 +389,27 @@ impl InboundTransfer {
 
     /// Accept the transfer, setting up paths.
     pub fn accept(&mut self, save_dir: &Path) -> Result<()> {
-        // Strip any directory separators or traversal components from the
-        // sender-supplied file name to prevent a malicious peer from writing
-        // outside save_dir via "../../../etc/passwd" style names.
         let safe_name = sanitize_file_name(&self.meta.file_name);
         anyhow::ensure!(
             !safe_name.is_empty(),
             "file name is empty after sanitization"
         );
 
-        let uid = hex::encode(&self.transfer_id[..4]);
-        let tmp_name = format!(".deskdrop_tmp_{uid}_{safe_name}");
-        self.tmp_path = Some(save_dir.join(&tmp_name));
-        self.dest_path = Some(unique_dest_path(save_dir, &safe_name));
         std::fs::create_dir_all(save_dir).context("creating save dir")?;
-        if let Some(tmp) = &self.tmp_path {
-            let _ = std::fs::remove_file(tmp);
-            let file = OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(tmp)
-                .with_context(|| format!("creating temp file {}", tmp.display()))?;
-            // Wrap in BufWriter to coalesce writes
-            self.file_handle = Some(BufWriter::with_capacity(2 * 1024 * 1024, file));
+        
+        if let Some(free_bytes) = get_available_disk_space(save_dir) {
+            anyhow::ensure!(
+                free_bytes > self.meta.size_bytes + 50 * 1024 * 1024,
+                "insufficient disk space: need {} bytes, but only {} bytes are free",
+                self.meta.size_bytes, free_bytes
+            );
         }
+
+        let (dest, file) = create_unique_file(save_dir, &safe_name)
+            .with_context(|| "creating destination file atomically")?;
+        
+        self.dest_path = Some(dest);
+        self.file_handle = Some(BufWriter::with_capacity(2 * 1024 * 1024, file));
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
         Ok(())
@@ -548,28 +544,7 @@ impl InboundTransfer {
             file.get_ref().sync_all()?;
         }
 
-        let tmp = self.tmp_path.as_ref().context("no temp path")?;
-
-        // FIX: Recalculate unique_dest_path at the exact moment of rename
-        // to prevent Time-of-Check to Time-of-Use (TOCTOU) attacks where an
-        // attacker places a file/symlink at the pre-calculated dest_path
-        // during the long transfer window.
-        let save_dir = tmp.parent().unwrap_or(Path::new("."));
-        let safe_name = sanitize_file_name(&self.meta.file_name);
-        let dest = unique_dest_path(save_dir, &safe_name);
-
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent).context("creating save dir")?;
-        }
-        std::fs::rename(tmp, &dest).with_context(|| {
-            format!(
-                "moving completed transfer from {} to {}",
-                tmp.display(),
-                dest.display()
-            )
-        })?;
-        self.tmp_path = None;
-        self.dest_path = Some(dest.clone());
+        let dest = self.dest_path.as_ref().context("no dest path")?.clone();
         self.status = TransferStatus::Complete;
         Ok(dest)
     }
@@ -589,21 +564,8 @@ impl InboundTransfer {
             file.seek(std::io::SeekFrom::Start(offset))
                 .context("seeking to chunk offset")?;
 
-            // FIX: if the sender sends a short non-final chunk, the pre-allocated
-            // space will leave null bytes. We must hash the data AND the null gap
-            // up to FILE_CHUNK_SIZE so the checksum verifies the ACTUAL disk state.
-            let mut padding = 0;
-            if self.received_chunk_count < self.total_chunks - 1 && data.len() < FILE_CHUNK_SIZE {
-                padding = FILE_CHUNK_SIZE - data.len();
-            }
-
             file.write_all(data).context("writing chunk to temp file")?;
             self.hasher.update(data);
-
-            if padding > 0 {
-                let nulls = vec![0u8; padding];
-                self.hasher.update(&nulls);
-            }
         } else {
             anyhow::bail!("transfer has not been accepted or file handle is missing");
         }
@@ -797,8 +759,8 @@ impl FileTransferManager {
     pub fn reject_inbound(&mut self, tid: &TransferId) {
         if let Some(mut t) = self.inbound.remove(tid) {
             t.status = TransferStatus::Cancelled;
-            if let Some(tmp) = t.tmp_path.take() {
-                let _ = std::fs::remove_file(tmp);
+            if let Some(dest) = t.dest_path.take() {
+                let _ = std::fs::remove_file(dest);
             }
         }
     }
@@ -813,9 +775,8 @@ impl FileTransferManager {
 
     pub fn cancel_inbound(&mut self, tid: &TransferId, _reason: &str) {
         if let Some(t) = self.inbound.remove(tid) {
-            // Clean up tmp file.
-            if let Some(tmp) = t.tmp_path {
-                let _ = std::fs::remove_file(tmp);
+            if let Some(dest) = t.dest_path {
+                let _ = std::fs::remove_file(dest);
             }
         }
     }
@@ -1021,6 +982,76 @@ fn sanitize_file_name(name: &str) -> String {
 }
 
 /// Compute a non-colliding destination path (appends (1), (2), etc. if needed).
+
+fn get_available_disk_space(path: &Path) -> Option<u64> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let c_path = match std::ffi::CString::new(path.as_os_str().as_bytes()) {
+            Ok(c) => c,
+            Err(_) => return None,
+        };
+        let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+        if unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) } == 0 {
+            return Some((stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64));
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let mut path_u16: Vec<u16> = path.as_os_str().encode_wide().collect();
+        path_u16.push(0);
+        let mut free_bytes_available: u64 = 0;
+        let mut total_number_of_bytes: u64 = 0;
+        let mut total_number_of_free_bytes: u64 = 0;
+        let res = unsafe {
+            windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+                path_u16.as_ptr(),
+                &mut free_bytes_available,
+                &mut total_number_of_bytes,
+                &mut total_number_of_free_bytes,
+            )
+        };
+        if res != 0 {
+            return Some(free_bytes_available);
+        }
+    }
+    None
+}
+
+fn create_unique_file(dir: &Path, file_name: &str) -> Result<(PathBuf, File)> {
+    let stem = Path::new(file_name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(file_name);
+    let ext = Path::new(file_name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+        
+    for i in 0..=999 {
+        let name = if i == 0 {
+            file_name.to_string()
+        } else if ext.is_empty() {
+            format!("{} ({})", stem, i)
+        } else {
+            format!("{} ({}).{}", stem, i, ext)
+        };
+        let candidate = dir.join(&name);
+        
+        match OpenOptions::new().write(true).create_new(true).open(&candidate) {
+            Ok(file) => return Ok((candidate, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    
+    let fallback = dir.join(format!("{}_{}_{}", stem, now_unix(), ext));
+    let file = OpenOptions::new().write(true).create_new(true).open(&fallback)?;
+    Ok((fallback, file))
+}
+
+
 fn unique_dest_path(dir: &Path, file_name: &str) -> PathBuf {
     let base = dir.join(file_name);
     if !base.exists() {

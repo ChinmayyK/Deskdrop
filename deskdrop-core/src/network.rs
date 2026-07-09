@@ -231,16 +231,12 @@ async fn send_encrypted_no_flush(
     let len = (12 + buffer.len()) as u32;
     let len_bytes = len.to_le_bytes();
 
-    use bytes::Buf;
-    let mut chained = Buf::chain(
-        Buf::chain(
-            std::io::Cursor::new(len_bytes),
-            std::io::Cursor::new(nonce.to_vec()),
-        ),
-        std::io::Cursor::new(buffer),
-    );
+    let mut flat = Vec::with_capacity(4 + 12 + buffer.len());
+    flat.extend_from_slice(&len_bytes);
+    flat.extend_from_slice(&nonce);
+    flat.append(&mut buffer);
 
-    stream.write_all_buf(&mut chained).await?;
+    stream.write_all(&flat).await?;
     Ok(())
 }
 
@@ -249,12 +245,20 @@ async fn recv_encrypted(
     session: &mut SessionKey,
 ) -> Result<AppMessage> {
     let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await?;
+    tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut len_buf))
+        .await
+        .context("timeout waiting for encrypted frame length")?
+        .context("reading encrypted frame length")?;
+    
     let len = u32::from_le_bytes(len_buf);
     anyhow::ensure!(len <= MAX_FRAME_SIZE, "encrypted frame too large");
 
     let mut cipher_buffer = vec![0u8; len as usize];
-    stream.read_exact(&mut cipher_buffer).await?;
+    tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut cipher_buffer))
+        .await
+        .context("timeout waiting for encrypted frame body")?
+        .context("reading encrypted frame body")?;
+        
     session
         .decrypt_in_place(&mut cipher_buffer)
         .context("decrypting")?;

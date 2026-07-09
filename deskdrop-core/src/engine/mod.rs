@@ -2805,30 +2805,79 @@ async fn connect_once(
 ) -> Result<()> {
     let started = Instant::now();
     let mut tasks = tokio::task::JoinSet::new();
-    for &ep in &endpoints {
-        let timeout_dur = shared.config.connect_timeout;
-        tasks.spawn(async move {
-            tracing::warn!("connect_once: attempting to connect to {}", ep);
-            let res = timeout(timeout_dur, TcpStream::connect(ep)).await;
-            (ep, res)
-        });
-    }
+    let timeout_dur = shared.config.connect_timeout;
+    let delay_dur = std::time::Duration::from_millis(250);
 
     let mut connected_stream = None;
     let mut connected_endpoint = None;
     let mut last_err = None;
 
-    while let Some(res) = tasks.join_next().await {
-        if let Ok((ep, Ok(Ok(stream)))) = res {
-            connected_stream = Some(stream);
-            connected_endpoint = Some(ep);
-            break; // Dropping the JoinSet aborts all other connection attempts!
-        } else if let Ok((_, Err(err))) = res {
-            // Timeout
-            last_err = Some(anyhow::anyhow!("timeout: {}", err));
-        } else if let Ok((_, Ok(Err(err)))) = res {
-            // IO Error
-            last_err = Some(anyhow::anyhow!("io error: {}", err));
+    let mut ep_iter = endpoints.into_iter();
+
+    if let Some(first_ep) = ep_iter.next() {
+        tasks.spawn(async move {
+            tracing::warn!("connect_once: attempting to connect to {}", first_ep);
+            let res = timeout(timeout_dur, TcpStream::connect(first_ep)).await;
+            (first_ep, res)
+        });
+    }
+
+    loop {
+        if tasks.is_empty() && ep_iter.len() == 0 {
+            break;
+        }
+
+        let mut spawn_next = false;
+
+        if ep_iter.len() > 0 {
+            tokio::select! {
+                res = tasks.join_next(), if !tasks.is_empty() => {
+                    match res {
+                        Some(Ok((ep, Ok(Ok(stream))))) => {
+                            connected_stream = Some(stream);
+                            connected_endpoint = Some(ep);
+                            break;
+                        }
+                        Some(Ok((_, Err(err)))) => {
+                            last_err = Some(anyhow::anyhow!("timeout: {}", err));
+                            spawn_next = true;
+                        }
+                        Some(Ok((_, Ok(Err(err))))) => {
+                            last_err = Some(anyhow::anyhow!("io error: {}", err));
+                            spawn_next = true;
+                        }
+                        _ => { spawn_next = true; }
+                    }
+                }
+                _ = tokio::time::sleep(delay_dur) => {
+                    spawn_next = true;
+                }
+            }
+        } else {
+            match tasks.join_next().await {
+                Some(Ok((ep, Ok(Ok(stream))))) => {
+                    connected_stream = Some(stream);
+                    connected_endpoint = Some(ep);
+                    break;
+                }
+                Some(Ok((_, Err(err)))) => {
+                    last_err = Some(anyhow::anyhow!("timeout: {}", err));
+                }
+                Some(Ok((_, Ok(Err(err))))) => {
+                    last_err = Some(anyhow::anyhow!("io error: {}", err));
+                }
+                _ => {}
+            }
+        }
+
+        if spawn_next {
+            if let Some(next_ep) = ep_iter.next() {
+                tasks.spawn(async move {
+                    tracing::warn!("connect_once: attempting to connect to {}", next_ep);
+                    let res = timeout(timeout_dur, TcpStream::connect(next_ep)).await;
+                    (next_ep, res)
+                });
+            }
         }
     }
 

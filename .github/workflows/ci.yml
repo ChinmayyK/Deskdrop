@@ -141,16 +141,8 @@ jobs:
       - name: Build macOS dylib
         run: cargo build --release -p deskdrop-core
 
-      - name: Check Swift files compile
-        run: |
-          swiftc \
-            -typecheck \
-            platforms/macos/Deskdrop/AppDelegate.swift \
-            platforms/macos/Deskdrop/PreferencesView.swift \
-            -import-objc-header platforms/macos/Deskdrop/DeskdropBridge.h \
-            -sdk $(xcrun --sdk macosx --show-sdk-path) \
-            -target arm64-apple-macos13.0 \
-        continue-on-error: true
+      - name: Build macOS app
+        run: ./scripts/build-macos.sh --release
 
   # ── Windows C# build ──────────────────────────────────────────────────────
   windows-platform:

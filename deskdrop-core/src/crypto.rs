@@ -204,6 +204,15 @@ pub struct SessionKey {
     recv_counter: u64,
 }
 
+impl Drop for SessionKey {
+    fn drop(&mut self) {
+        // Zeroize the cipher state from memory when the session is dropped.
+        unsafe {
+            std::ptr::write_bytes(self as *mut Self, 0, 1);
+        }
+    }
+}
+
 impl SessionKey {
     /// Encrypt `plaintext`. Returns `nonce || ciphertext`.
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>> {

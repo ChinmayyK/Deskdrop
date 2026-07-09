@@ -117,7 +117,7 @@ macos:
 windows:
 	@echo -e "$(CYAN)Building Windows DLL + C# app...$(RESET)"
 	$(CARGO) build --release
-	cp deskdrop-core/target/release/deskdrop_core.dll \
+	cp target/release/deskdrop_core.dll \
 	   platforms/windows/Deskdrop.Windows/
 	dotnet build platforms/windows/Deskdrop.Windows/Deskdrop.Windows.csproj \
 		-c Release
@@ -141,14 +141,17 @@ linux:
 	@echo -e "$(CYAN)Building Linux binaries...$(RESET)"
 	$(CARGO) build --release \
 		--bin deskdrop-daemon \
-		--bin deskdrop-cli
+		--bin deskdrop-cli \
+		--bin deskdrop-gtk
 	@echo -e "$(GREEN)✓ Linux build complete.$(RESET)"
 	@echo "  Daemon: target/release/deskdrop-daemon"
 	@echo "  CLI:    target/release/deskdrop-cli"
+	@echo "  GTK:    target/release/deskdrop-gtk"
 	@echo ""
 	@echo "  Install:"
 	@echo "    sudo cp target/release/deskdrop-daemon /usr/local/bin/"
 	@echo "    sudo cp target/release/deskdrop-cli    /usr/local/bin/"
+	@echo "    sudo cp target/release/deskdrop-gtk    /usr/local/bin/"
 	@echo "    cp platforms/linux/deskdrop.service ~/.config/systemd/user/"
 	@echo "    systemctl --user enable --now deskdrop"
 
@@ -181,10 +184,12 @@ endif
 # ── Install locally (Linux/macOS) ─────────────────────────────────────────────
 
 install: build
-	install -Dm755 deskdrop-core/target/release/deskdrop-daemon \
+	install -Dm755 target/release/deskdrop-daemon \
 		$(DESTDIR)$(PREFIX)/bin/deskdrop-daemon
-	install -Dm755 deskdrop-core/target/release/deskdrop-cli \
+	install -Dm755 target/release/deskdrop-cli \
 		$(DESTDIR)$(PREFIX)/bin/deskdrop-cli
+	install -Dm755 target/release/deskdrop-gtk \
+		$(DESTDIR)$(PREFIX)/bin/deskdrop-gtk
 	@echo -e "$(GREEN)✓ Installed to $(DESTDIR)$(PREFIX)/bin/$(RESET)"
 
 PREFIX ?= /usr/local

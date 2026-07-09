@@ -29,7 +29,7 @@ fn runtime() -> &'static Runtime {
 
 pub struct DeskdropHandle {
     engine: Engine,
-    event_rx: std::sync::Mutex<mpsc::Receiver<EngineEvent>>,
+    event_rx: std::sync::Mutex<Option<mpsc::Receiver<EngineEvent>>>,
 }
 
 /// Allocate and start the engine. Returns NULL on failure.
@@ -81,7 +81,7 @@ pub unsafe extern "C" fn deskdrop_start(
             }
             Box::into_raw(Box::new(DeskdropHandle {
                 engine,
-                event_rx: std::sync::Mutex::new(event_rx),
+                event_rx: std::sync::Mutex::new(Some(event_rx)),
             }))
         }
         Err(e) => {
@@ -263,21 +263,21 @@ pub unsafe extern "C" fn deskdrop_poll_event(handle: *mut DeskdropHandle) -> *mu
         return std::ptr::null_mut();
     }
     let h = &*handle;
-    match h
-        .event_rx
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .try_recv()
-    {
-        Ok(event) => Box::into_raw(Box::new(PbEvent {
-            inner: event,
-            cached_str: None,
-            _cached_bytes: None,
-            cached_mime: None,
-            cached_name: None,
-            cached_path: None,
-        })),
-        Err(_) => std::ptr::null_mut(),
+    let mut lock = h.event_rx.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(rx) = lock.as_mut() {
+        match rx.try_recv() {
+            Ok(event) => Box::into_raw(Box::new(PbEvent {
+                inner: event,
+                cached_str: None,
+                _cached_bytes: None,
+                cached_mime: None,
+                cached_name: None,
+                cached_path: None,
+            })),
+            Err(_) => std::ptr::null_mut(),
+        }
+    } else {
+        std::ptr::null_mut()
     }
 }
 
@@ -893,4 +893,43 @@ pub unsafe extern "C" fn deskdrop_send_call_action(
     });
 
     0
+}
+
+
+pub type DeskdropEventCallback = extern "C" fn(event: *mut PbEvent, user_data: *mut std::ffi::c_void);
+
+
+/// Register a callback to be invoked on a background thread when events occur.
+/// This consumes the internal event receiver; `deskdrop_poll_event` will subsequently return NULL.
+/// The callback must be thread-safe (e.g. JNI AttachCurrentThread or dispatch_async).
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_register_event_callback(
+    handle: *mut DeskdropHandle,
+    callback: DeskdropEventCallback,
+    user_data: *mut std::ffi::c_void,
+) {
+    if handle.is_null() {
+        return;
+    }
+    let h = &mut *handle;
+    
+    let mut rx_opt = h.event_rx.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(mut rx) = rx_opt.take() {
+        let ud_addr = user_data as usize;
+        let cb_addr = callback as usize; // Cast fn ptr to usize to force Send
+        runtime().spawn(async move {
+            while let Some(event) = rx.recv().await {
+                let cb: DeskdropEventCallback = std::mem::transmute(cb_addr);
+                let pb_event = Box::into_raw(Box::new(PbEvent {
+                    inner: event,
+                    cached_str: None,
+                    _cached_bytes: None,
+                    cached_mime: None,
+                    cached_name: None,
+                    cached_path: None,
+                }));
+                cb(pb_event, ud_addr as *mut std::ffi::c_void);
+            }
+        });
+    }
 }
