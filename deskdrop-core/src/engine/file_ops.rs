@@ -33,18 +33,26 @@ pub(crate) async fn read_outbound_chunks(
 
     if instrs.is_empty() {
         if let Some((f, h)) = io_ctx {
-            if let Some(t) = shared.file_transfers.lock().await.get_outbound_mut(&transfer_id) {
+            if let Some(t) = shared
+                .file_transfers
+                .lock()
+                .await
+                .get_outbound_mut(&transfer_id)
+            {
                 t.restore_io_context(f, h);
             }
         }
         return None;
     }
 
-    type FileChunkResult = anyhow::Result<(Option<(Option<std::fs::File>, sha2::Sha256)>, Vec<(u32, Vec<u8>, bool)>)>;
+    type FileChunkResult = anyhow::Result<(
+        Option<(Option<std::fs::File>, sha2::Sha256)>,
+        Vec<(u32, Vec<u8>, bool)>,
+    )>;
     let res = tokio::task::spawn_blocking(move || -> FileChunkResult {
-        use std::io::{Read, Seek};
         use sha2::Digest;
-        
+        use std::io::{Read, Seek};
+
         let mut chunk_data = Vec::with_capacity(instrs.len());
         let (mut f, mut hasher) = io_ctx.unwrap_or((None, sha2::Sha256::new())); // Memory chunks might not have io_ctx, but we'll return it anyway
 
@@ -59,7 +67,12 @@ pub(crate) async fn read_outbound_chunks(
                         chunk_data.push((chunk_index, data, false));
                     }
                 }
-                crate::file_transfer::ChunkInstruction::File { chunk_index, path, offset, len } => {
+                crate::file_transfer::ChunkInstruction::File {
+                    chunk_index,
+                    path,
+                    offset,
+                    len,
+                } => {
                     if f.is_none() {
                         f = Some(std::fs::File::open(&path)?);
                     }
@@ -72,11 +85,17 @@ pub(crate) async fn read_outbound_chunks(
                         let mut read_bytes = 0;
                         while read_bytes < len {
                             let n = file.read(&mut buf[read_bytes..])?;
-                            if n == 0 { break; }
+                            if n == 0 {
+                                break;
+                            }
                             read_bytes += n;
                         }
                         if read_bytes < len {
-                            tracing::warn!("Outbound chunk truncated: read {} instead of {} bytes", read_bytes, len);
+                            tracing::warn!(
+                                "Outbound chunk truncated: read {} instead of {} bytes",
+                                read_bytes,
+                                len
+                            );
                             buf.truncate(read_bytes);
                         }
                         hasher.update(&buf);
@@ -110,33 +129,30 @@ pub(crate) async fn read_outbound_chunks(
 
     {
         let mut mgr = shared.file_transfers.lock().await;
-        if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-            if let Some((f, h)) = io_ctx {
-                t.restore_io_context(f, h);
-            }
-            let fname = t.meta.file_name.clone();
-            for (c_idx, data, compressed) in chunk_data {
-                let msg = t.process_chunk_data(c_idx, data, compressed);
-                if let crate::file_transfer::FileTransferMessage::Chunk {
+        let t = mgr.get_outbound_mut(&transfer_id)?;
+        if let Some((f, h)) = io_ctx {
+            t.restore_io_context(f, h);
+        }
+        let fname = t.meta.file_name.clone();
+        for (c_idx, data, compressed) in chunk_data {
+            let msg = t.process_chunk_data(c_idx, data, compressed);
+            if let crate::file_transfer::FileTransferMessage::Chunk {
+                transfer_id,
+                chunk_index,
+                total_chunks,
+                data,
+                compressed,
+            } = msg
+            {
+                msgs.push(AppMessage::FileChunk {
                     transfer_id,
                     chunk_index,
                     total_chunks,
                     data,
                     compressed,
-                } = msg
-                {
-                    msgs.push(AppMessage::FileChunk {
-                        transfer_id,
-                        chunk_index,
-                        total_chunks,
-                        data,
-                        compressed,
-                    });
-                    progs.push((t.progress(), fname.clone()));
-                }
+                });
+                progs.push((t.progress(), fname.clone()));
             }
-        } else {
-            return None;
         }
     }
 
@@ -146,4 +162,3 @@ pub(crate) async fn read_outbound_chunks(
         Some((msgs, progs))
     }
 }
-

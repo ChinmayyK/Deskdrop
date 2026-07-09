@@ -179,7 +179,7 @@ namespace Deskdrop.Windows
             }
         }
 
-        private void Border_KeyDown(object sender, KeyEventArgs e)
+        private void Border_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             if (e.Key == Key.Enter || e.Key == Key.Space)
             {

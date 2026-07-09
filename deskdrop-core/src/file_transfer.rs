@@ -37,7 +37,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chunks reduce
-                                               // encrypt/serialize/frame overhead per byte.
+                                                // encrypt/serialize/frame overhead per byte.
 
 /// Maximum transfer size (4 GB). Rejects announced transfers exceeding this
 /// limit to prevent disk-bomb attacks via pre-allocation.
@@ -257,7 +257,12 @@ impl OutboundTransfer {
         Ok(Some(instr))
     }
 
-    pub fn process_chunk_data(&mut self, chunk_index: u32, data: Vec<u8>, compressed: bool) -> FileTransferMessage {
+    pub fn process_chunk_data(
+        &mut self,
+        chunk_index: u32,
+        data: Vec<u8>,
+        compressed: bool,
+    ) -> FileTransferMessage {
         self.next_chunk = chunk_index + 1;
         FileTransferMessage::Chunk {
             transfer_id: self.transfer_id,

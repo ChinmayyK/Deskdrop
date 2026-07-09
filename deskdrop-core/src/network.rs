@@ -204,8 +204,11 @@ async fn send_encrypted(
 
     use bytes::Buf;
     let mut chained = Buf::chain(
-        Buf::chain(std::io::Cursor::new(len_bytes), std::io::Cursor::new(nonce.to_vec())),
-        std::io::Cursor::new(buffer)
+        Buf::chain(
+            std::io::Cursor::new(len_bytes),
+            std::io::Cursor::new(nonce.to_vec()),
+        ),
+        std::io::Cursor::new(buffer),
     );
 
     stream.write_all_buf(&mut chained).await?;
@@ -230,8 +233,11 @@ async fn send_encrypted_no_flush(
 
     use bytes::Buf;
     let mut chained = Buf::chain(
-        Buf::chain(std::io::Cursor::new(len_bytes), std::io::Cursor::new(nonce.to_vec())),
-        std::io::Cursor::new(buffer)
+        Buf::chain(
+            std::io::Cursor::new(len_bytes),
+            std::io::Cursor::new(nonce.to_vec()),
+        ),
+        std::io::Cursor::new(buffer),
     );
 
     stream.write_all_buf(&mut chained).await?;
@@ -326,7 +332,10 @@ pub async fn handshake_initiator(
     let hello = AppMessage::Hello {
         device_id: my_device_id,
         device_name: my_device_name.to_string(),
-        identity_pubkey: my_identity_key.read().unwrap_or_else(|e| e.into_inner()).public_bytes,
+        identity_pubkey: my_identity_key
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .public_bytes,
         identity_proof,
         metadata_json,
     };
@@ -480,7 +489,10 @@ where
     let ack = AppMessage::HelloAck {
         device_id: my_device_id,
         device_name: name_to_send,
-        identity_pubkey: my_identity_key.read().unwrap_or_else(|e| e.into_inner()).public_bytes,
+        identity_pubkey: my_identity_key
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .public_bytes,
         nonce_response,
         identity_proof,
         trusted: peer_is_trusted,
