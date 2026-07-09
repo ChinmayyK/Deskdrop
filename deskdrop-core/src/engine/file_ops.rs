@@ -13,21 +13,18 @@ pub(crate) async fn read_outbound_chunks(
 
     {
         let mut mgr = shared.file_transfers.lock().await;
-        if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-            io_ctx = t.take_io_context();
-            for _ in 0..batch_size {
-                match t.next_chunk_instruction() {
-                    Ok(Some(i)) => instrs.push(i),
-                    Ok(None) => break,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "failed to get next chunk instruction");
-                        mgr.cancel_outbound(&transfer_id);
-                        return None;
-                    }
+        let t = mgr.get_outbound_mut(&transfer_id)?;
+        io_ctx = t.take_io_context();
+        for _ in 0..batch_size {
+            match t.next_chunk_instruction() {
+                Ok(Some(i)) => instrs.push(i),
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to get next chunk instruction");
+                    mgr.cancel_outbound(&transfer_id);
+                    return None;
                 }
             }
-        } else {
-            return None;
         }
     }
 
