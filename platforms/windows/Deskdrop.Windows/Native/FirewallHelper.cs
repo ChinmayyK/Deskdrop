@@ -12,24 +12,61 @@ namespace Deskdrop.Windows
             ("Deskdrop mDNS",          5353,  "UDP"),
         };
 
-        /// Check for and add missing firewall rules. Runs silently — if the
-        /// user doesn't have admin privileges the netsh calls will fail and
-        /// we log a warning rather than crashing.
         public static void EnsureRules()
         {
             try
             {
+                bool needsElevation = false;
                 foreach (var (name, port, protocol) in RequiredRules)
                 {
                     if (!RuleExists(name))
                     {
-                        AddRule(name, port, protocol);
+                        needsElevation = true;
+                        break;
                     }
+                }
+
+                if (needsElevation)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Deskdrop] Missing firewall rules, attempting UAC elevation...");
+                    AddRulesElevated();
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Deskdrop] Firewall auto-config failed (non-fatal): {ex.Message}");
+            }
+        }
+
+        private static void AddRulesElevated()
+        {
+            try
+            {
+                string script = "";
+                foreach (var (name, port, protocol) in RequiredRules)
+                {
+                    script += $"netsh advfirewall firewall add rule name=\\\"{name}\\\" dir=in action=allow protocol={protocol} localport={port} profile=any; ";
+                }
+
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{script}\"",
+                    UseShellExecute = true,
+                    Verb = "runas", // Triggers UAC prompt
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+                };
+
+                using var proc = System.Diagnostics.Process.Start(psi);
+                proc?.WaitForExit();
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                System.Diagnostics.Debug.WriteLine("[Deskdrop] User declined UAC prompt for Firewall rules.");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Deskdrop] Elevated Firewall rule add failed: {ex.Message}");
             }
         }
 
@@ -54,37 +91,6 @@ namespace Deskdrop.Windows
                 return proc.ExitCode == 0 && output.Contains(ruleName);
             }
             catch { return false; }
-        }
-
-        private static void AddRule(string ruleName, int port, string protocol)
-        {
-            try
-            {
-                var psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "netsh",
-                    Arguments = $"advfirewall firewall add rule name=\"{ruleName}\" dir=in action=allow protocol={protocol} localport={port} profile=private,domain",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-                using var proc = System.Diagnostics.Process.Start(psi);
-                if (proc != null)
-                {
-                    proc.WaitForExit(5000);
-                    if (proc.ExitCode != 0)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Deskdrop] Could not add firewall rule '{ruleName}' (may need admin privileges)");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Deskdrop] Firewall rule '{ruleName}' add failed: {ex.Message}");
-            }
         }
     }
 }
