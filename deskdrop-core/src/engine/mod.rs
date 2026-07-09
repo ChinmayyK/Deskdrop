@@ -376,18 +376,18 @@ pub struct EngineStatus {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeNetworkState {
+pub(crate) struct RuntimeNetworkState {
     bind_addr: SocketAddr,
     active_interface: Option<NetworkInterfaceInfo>,
 }
 
 #[derive(Debug)]
-enum ListenerCommand {
+pub(crate) enum ListenerCommand {
     Rebind(SocketAddr),
 }
 
 #[derive(Debug)]
-enum DiscoveryCommand {
+pub(crate) enum DiscoveryCommand {
     Restart { bind_ip: IpAddr, port: u16 },
 }
 

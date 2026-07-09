@@ -909,21 +909,17 @@ namespace Deskdrop.Windows
 
         public async void ShowTofuPrompt(string deviceId, string deviceName, string fingerprint)
         {
-            Dispatcher.Invoke(async () =>
+            Dispatcher.Invoke(() =>
             {
                 try
                 {
-                    var dialog = new ContentDialog
-                    {
-                        Title = $"Trust Device: {deviceName}?",
-                        Content = $"Verify this fingerprint matches on both devices:\n\n{FormatFingerprint(fingerprint)}\n\nOnly trust devices you recognize.",
-                        PrimaryButtonText = "Trust",
-                        CloseButtonText = "Reject",
-                        DefaultButton = ContentDialogButton.Close,
-                        XamlRoot = this.Content.XamlRoot
-                    };
-                    var result = await dialog.ShowAsync();
-                    if (result == ContentDialogResult.Primary)
+                    var result = MessageBox.Show(
+                        $"Verify this fingerprint matches on both devices:\n\n{FormatFingerprint(fingerprint)}\n\nOnly trust devices you recognize.",
+                        $"Trust Device: {deviceName}?",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning
+                    );
+                    if (result == MessageBoxResult.Yes)
                     {
                         DaemonClient.Send(new { cmd = "trust_peer", device_id = deviceId });
                     }
