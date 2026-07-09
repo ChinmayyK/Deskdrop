@@ -34,7 +34,8 @@ fn paused_peer_never_receives_clipboard_push() {
         .unwrap();
     let (tx, _rx) = mpsc::channel(4);
     let (stop, _) = oneshot::channel();
-    mgr.replace_live_session(id, addr(10), tx.clone(), tx, stop).unwrap();
+    mgr.replace_live_session(id, addr(10), tx.clone(), tx, stop)
+        .unwrap();
 
     // Pause sync — peer must not appear in active_senders
     mgr.set_sync_enabled(id, false).unwrap();
@@ -153,7 +154,8 @@ fn all_connected_senders_includes_paused_peers() {
         .unwrap();
     let (tx, _) = mpsc::channel(4);
     let (stop, _) = oneshot::channel();
-    mgr.replace_live_session(id, addr(50), tx.clone(), tx, stop).unwrap();
+    mgr.replace_live_session(id, addr(50), tx.clone(), tx, stop)
+        .unwrap();
 
     mgr.set_sync_enabled(id, false).unwrap();
     assert_eq!(mgr.active_senders().len(), 0, "paused: no clipboard push");

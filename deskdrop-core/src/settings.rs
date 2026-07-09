@@ -350,7 +350,7 @@ impl SettingsStore {
     }
 
     /// Persist to disk atomically.
-    pub fn save(&self) -> Result<()> {
+    pub fn save(&mut self) -> Result<()> {
         if let Some(parent) = self.path.parent() {
             #[cfg(unix)]
             {
@@ -367,9 +367,11 @@ impl SettingsStore {
             }
         }
         let tmp = self.path.with_extension("tmp");
-        let bytes = serde_json::to_vec_pretty(&self.settings.sanitize())?;
+        let clean = self.settings.sanitize();
+        let bytes = serde_json::to_vec_pretty(&clean)?;
         std::fs::write(&tmp, bytes).context("writing settings tmp")?;
         std::fs::rename(&tmp, &self.path).context("renaming settings")?;
+        self.settings = clean;
         Ok(())
     }
 
@@ -548,6 +550,18 @@ mod tests {
         store
             .patch(r#"{"clipboard_poll_ms": 0, "history_limit": 0}"#)
             .unwrap();
+
+        assert_eq!(store.get().clipboard_poll_ms, 10);
+        assert_eq!(store.get().history_limit, MIN_HISTORY_ENTRIES);
+    }
+
+    #[test]
+    fn save_updates_in_memory_to_sanitized_values() {
+        let tmp = NamedTempFile::new().unwrap();
+        let mut store = SettingsStore::load(tmp.path()).unwrap();
+        store.get_mut().clipboard_poll_ms = 0;
+        store.get_mut().history_limit = 0;
+        store.save().unwrap();
 
         assert_eq!(store.get().clipboard_poll_ms, 10);
         assert_eq!(store.get().history_limit, MIN_HISTORY_ENTRIES);

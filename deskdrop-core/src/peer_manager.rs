@@ -318,11 +318,22 @@ impl PeerManager {
     }
 
     pub fn list(&self) -> Vec<PeerRecord> {
-        self.store.read().unwrap_or_else(|e| e.into_inner()).peers.values().cloned().collect()
+        self.store
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .peers
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub fn get(&self, device_id: Uuid) -> Option<PeerRecord> {
-        self.store.read().unwrap_or_else(|e| e.into_inner()).peers.get(&device_id).cloned()
+        self.store
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .peers
+            .get(&device_id)
+            .cloned()
     }
 
     pub fn upsert_peer(
@@ -345,9 +356,23 @@ impl PeerManager {
         discovery: DiscoverySource,
         platform: Option<String>,
     ) -> Result<PeerRecord> {
-        if self.store.read().unwrap_or_else(|e| e.into_inner()).peers.len() > 1000 {
+        if self
+            .store
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .peers
+            .len()
+            > 1000
+        {
             self.prune_stale_peers();
-            if self.store.read().unwrap_or_else(|e| e.into_inner()).peers.len() > 1000 {
+            if self
+                .store
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .peers
+                .len()
+                > 1000
+            {
                 return Err(anyhow::anyhow!("Peer limit reached"));
             }
         }
@@ -546,7 +571,10 @@ impl PeerManager {
     }
 
     pub fn mark_disconnected(&self, device_id: Uuid, reason: Option<String>) -> Result<()> {
-        self.live.write().unwrap_or_else(|e| e.into_inner()).remove(&device_id);
+        self.live
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&device_id);
         {
             let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
@@ -597,7 +625,10 @@ impl PeerManager {
             }
         }
 
-        self.live.write().unwrap_or_else(|e| e.into_inner()).remove(&device_id);
+        self.live
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&device_id);
         {
             let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
@@ -850,7 +881,10 @@ impl PeerManager {
     }
 
     pub fn is_connected(&self, device_id: Uuid) -> bool {
-        self.live.read().unwrap_or_else(|e| e.into_inner()).contains_key(&device_id)
+        self.live
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(&device_id)
     }
 
     pub fn live_endpoint(&self, device_id: Uuid) -> Option<SocketAddr> {
@@ -923,7 +957,11 @@ impl PeerManager {
     }
 
     pub fn shutdown_peer_session(&self, device_id: Uuid) -> Result<Option<ReplacedSession>> {
-        let removed = self.live.write().unwrap_or_else(|e| e.into_inner()).remove(&device_id);
+        let removed = self
+            .live
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&device_id);
         {
             let mut store = self.store.write().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = store.peers.get_mut(&device_id) {
@@ -1078,7 +1116,13 @@ mod tests {
         let (tx, _rx) = mpsc::channel(1);
         let (stop, _stop_rx) = oneshot::channel();
         manager
-            .replace_live_session(id, SocketAddr::from(([192, 168, 1, 10], 47823)), tx.clone(), tx, stop)
+            .replace_live_session(
+                id,
+                SocketAddr::from(([192, 168, 1, 10], 47823)),
+                tx.clone(),
+                tx,
+                stop,
+            )
             .unwrap();
         assert_eq!(manager.active_senders().len(), 1);
         manager.set_sync_enabled(id, false).unwrap();
@@ -1124,12 +1168,24 @@ mod tests {
         let (tx1, _rx1) = mpsc::channel(1);
         let (stop1, _stop1_rx) = oneshot::channel();
         let (first_session_id, _) = manager
-            .replace_live_session(id, SocketAddr::from(([192, 168, 1, 8], 47823)), tx1.clone(), tx1, stop1)
+            .replace_live_session(
+                id,
+                SocketAddr::from(([192, 168, 1, 8], 47823)),
+                tx1.clone(),
+                tx1,
+                stop1,
+            )
             .unwrap();
         let (tx2, _rx2) = mpsc::channel(1);
         let (stop2, _stop_rx2) = oneshot::channel();
         let (second_session_id, replaced) = manager
-            .replace_live_session(id, SocketAddr::from(([172, 20, 10, 4], 47823)), tx2.clone(), tx2, stop2)
+            .replace_live_session(
+                id,
+                SocketAddr::from(([172, 20, 10, 4], 47823)),
+                tx2.clone(),
+                tx2,
+                stop2,
+            )
             .unwrap();
         let replaced = replaced.unwrap();
         assert_eq!(replaced.session_id, first_session_id);
@@ -1184,7 +1240,13 @@ mod tests {
         let (tx, _rx) = mpsc::channel(1);
         let (stop, _stop_rx) = oneshot::channel();
         manager
-            .replace_live_session(id_a, SocketAddr::from(([192, 168, 1, 10], 47823)), tx.clone(), tx, stop)
+            .replace_live_session(
+                id_a,
+                SocketAddr::from(([192, 168, 1, 10], 47823)),
+                tx.clone(),
+                tx,
+                stop,
+            )
             .unwrap();
 
         assert_eq!(manager.connected_count(), 1);
