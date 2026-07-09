@@ -452,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "deskdrop-cli"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "anyhow",
  "deskdrop-core",
@@ -464,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "deskdrop-core"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "anyhow",
  "base64",
@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "deskdrop-linux"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "anyhow",
  "arboard",

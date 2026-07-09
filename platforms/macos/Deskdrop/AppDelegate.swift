@@ -23,14 +23,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var toastWindowManager:       DeskdropToastWindowManager?
     private var callBannerManager:         CallBannerWindowManager?
     private var cancellables = Set<AnyCancellable>()
-    private var daemonProcess: Process?
     private var dropCanvasWindow: NSPanel?
     private var activityToken: NSObjectProtocol?
     
-    // Screenshot observing
-    private var screenshotQuery: NSMetadataQuery?
-    private let observerStartDate = Date()
-    private var sentScreenshotPaths = Set<String>()
+    // Screenshot observing managed by ScreenshotObserver
+    private var screenshotObserver: ScreenshotObserver?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ensureSingleRunningInstance() else { return }
@@ -42,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         case "light":  NSApp.appearance = NSAppearance(named: .aqua)
         default:       NSApp.appearance = nil
         }
-        startDaemonIfNeeded()
+        DaemonManager.shared.startDaemonIfNeeded()
         setupMenuBar()
         setupWindows()
         bindStore()
@@ -96,89 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             activityToken = nil
         }
         store.stop()
-        daemonProcess?.terminate()
-    }
-
-    // MARK: - Daemon lifecycle
-
-    private func startDaemonIfNeeded() {
-        if isDaemonSocketPresent() {
-            ensureDaemonResponsive(forceRestartOnFailure: true)
-            return
-        }
-        launchDaemonProcess()
-    }
-
-    private func launchDaemonProcess() {
-        cleanupDaemonSocketIfNeeded()
-
-        let candidates = [
-            Bundle.main.resourceURL?.appendingPathComponent("deskdrop-daemon"),
-            Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("deskdrop-daemon"),
-            URL(fileURLWithPath: "/usr/local/bin/deskdrop-daemon"),
-            URL(fileURLWithPath: "/opt/homebrew/bin/deskdrop-daemon")
-        ].compactMap { $0 }
-
-        guard let daemonURL = candidates.first(where: {
-            FileManager.default.isExecutableFile(atPath: $0.path)
-        }) else {
-            NSLog("Deskdrop: deskdrop-daemon not found in bundle or PATH candidates")
-            return
-        }
-
-        let process = Process()
-        process.executableURL = daemonURL
-        process.environment = ProcessInfo.processInfo.environment.merging([
-            "DESKDROP_LOG": "info"
-        ]) { current, _ in current }
-
-        do {
-            try process.run()
-            daemonProcess = process
-            NSLog("Deskdrop: started daemon at \(daemonURL.path)")
-        } catch {
-            NSLog("Deskdrop: failed to start daemon: \(error.localizedDescription)")
-        }
+        DaemonManager.shared.terminate()
     }
 
     @objc private func ensureDaemonResponsiveFromStore() {
-        ensureDaemonResponsive(forceRestartOnFailure: true)
-    }
-
-    private func ensureDaemonResponsive(forceRestartOnFailure: Bool) {
-        Task { [weak self] in
-            do {
-                try await DeskdropIPCClient.shared.ping()
-            } catch {
-                guard forceRestartOnFailure else { return }
-                self?.daemonProcess?.terminate()
-                self?.daemonProcess = nil
-                self?.cleanupDaemonSocketIfNeeded()
-                self?.launchDaemonProcess()
-            }
-        }
-    }
-
-    private func isDaemonSocketPresent() -> Bool {
-        let path: String
-        if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
-            path = "\(runtime)/deskdrop.sock"
-        } else {
-            path = "/tmp/deskdrop-\(getuid())/deskdrop.sock"
-        }
-        return FileManager.default.fileExists(atPath: path)
-    }
-
-    private func cleanupDaemonSocketIfNeeded() {
-        let path: String
-        if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
-            path = "\(runtime)/deskdrop.sock"
-        } else {
-            path = "/tmp/deskdrop-\(getuid())/deskdrop.sock"
-        }
-        if FileManager.default.fileExists(atPath: path) {
-            try? FileManager.default.removeItem(atPath: path)
-        }
+        DaemonManager.shared.ensureDaemonResponsiveFromStore()
     }
 
     private func openDiagnostics() {
@@ -1134,47 +1053,20 @@ extension AppDelegate: MenuBarDropViewDelegate {
     // MARK: - Screenshot Sync
 
     private func startMacScreenshotObserver() {
-        screenshotQuery = NSMetadataQuery()
-        guard let query = screenshotQuery else { return }
-        
-        NotificationCenter.default.addObserver(
-            forName: .NSMetadataQueryDidUpdate,
-            object: query,
-            queue: .main
-        ) { [weak self] notification in
-            self?.handleScreenshotQueryUpdate(query: query)
-        }
-        
-        query.predicate = NSPredicate(format: "kMDItemIsScreenCapture == 1")
-        query.searchScopes = [NSMetadataQueryUserHomeScope]
-        query.start()
+        screenshotObserver = ScreenshotObserver(onScreenshot: { [weak self] url in
+            self?.handleNewScreenshot(url: url)
+        })
+        screenshotObserver?.start()
     }
     
-    private func handleScreenshotQueryUpdate(query: NSMetadataQuery) {
-        query.disableUpdates()
+    private func handleNewScreenshot(url: URL) {
+        let isEnabled = UserDefaults.standard.object(forKey: "autoForwardMacScreenshots") as? Bool ?? false
+        guard isEnabled else { return }
         
-        let results = query.results as? [NSMetadataItem] ?? []
-        for item in results {
-            guard let path = item.value(forAttribute: NSMetadataItemPathKey) as? String else { continue }
-            guard let creationDate = item.value(forAttribute: NSMetadataItemFSCreationDateKey) as? Date else { continue }
-            
-            // Only sync screenshots created after the app launched, and don't re-send the same file
-            if creationDate > observerStartDate, !sentScreenshotPaths.contains(path) {
-                // Check if user has enabled this in Preferences (defaults to false if missing)
-                let isEnabled = UserDefaults.standard.object(forKey: "autoForwardMacScreenshots") as? Bool ?? false
-                guard isEnabled else { continue }
-                
-                sentScreenshotPaths.insert(path)
-                let url = URL(fileURLWithPath: path)
-                
-                NSLog("Deskdrop: Auto-syncing Mac screenshot -> Android: \(path)")
-                Task { @MainActor in
-                    store.sendFile(url: url)
-                }
-            }
+        NSLog("Deskdrop: Auto-syncing Mac screenshot -> Android: \(url.path)")
+        Task { @MainActor in
+            store.sendFile(url: url)
         }
-        
-        query.enableUpdates()
     }
 }
 
