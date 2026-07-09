@@ -14,8 +14,6 @@
 use deskdrop_core::{
     engine::{Engine, EngineConfig, EngineEvent},
     protocol::ClipboardContent,
-    settings::{default_settings_path, SettingsStore},
-    Settings,
 };
 #[cfg(target_os = "linux")]
 use std::{
@@ -73,18 +71,7 @@ fn main() {
 
     let rt = Arc::new(tokio::runtime::Runtime::new().expect("Tokio runtime"));
     let (event_tx, event_rx) = mpsc::channel(256);
-    let initial_settings = SettingsStore::load(default_settings_path())
-        .map(|store| store.get().clone())
-        .unwrap_or_else(|err| {
-            tracing::warn!("Failed to load settings on startup: {err:#}");
-            Settings::default()
-        });
-    let config = EngineConfig {
-        device_name: initial_settings.resolved_device_name(),
-        port: initial_settings.port,
-        history_limit: Some(initial_settings.effective_history_limit()),
-        ..EngineConfig::default()
-    };
+    let config = EngineConfig::default();
 
     let engine = Arc::new(
         rt.block_on(Engine::start(config, event_tx))

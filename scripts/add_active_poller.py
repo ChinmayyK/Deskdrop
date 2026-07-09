@@ -11,3 +11,4 @@ content = content.replace(
 
 with open("deskdrop-core/src/engine.rs", "w") as f:
     f.write(content)
+

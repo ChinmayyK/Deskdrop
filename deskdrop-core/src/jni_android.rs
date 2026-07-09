@@ -94,11 +94,9 @@ fn config_with_android_paths(
     let mut updated = config;
 
     if let Some(data_root) = data_root.filter(|path| !path.as_os_str().is_empty()) {
-        updated.settings_path = data_root.join("settings.json");
         updated.trust_store_path = data_root.join("trust.json");
         updated.peer_store_path = data_root.join("peers.json");
         updated.identity_path = data_root.join("identity.key");
-        updated.data_dir = data_root;
     }
 
     if let Some(file_save_root) = file_save_root.filter(|path| !path.as_os_str().is_empty()) {

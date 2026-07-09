@@ -338,4 +338,3 @@ If you fix only one cluster next, fix the first-run and repair surfaces:
 - Windows dashboard state wiring
 
 Those are the places where current functionality issues are most likely to block users outright.
-

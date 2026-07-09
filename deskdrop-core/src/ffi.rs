@@ -263,12 +263,7 @@ pub unsafe extern "C" fn deskdrop_poll_event(handle: *mut DeskdropHandle) -> *mu
         return std::ptr::null_mut();
     }
     let h = &*handle;
-    match h
-        .event_rx
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .try_recv()
-    {
+    match h.event_rx.lock().unwrap_or_else(|e| e.into_inner()).try_recv() {
         Ok(event) => Box::into_raw(Box::new(PbEvent {
             inner: event,
             cached_str: None,

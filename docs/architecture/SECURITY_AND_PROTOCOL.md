@@ -39,4 +39,3 @@ To mitigate active Man-in-the-Middle (MITM) attacks where an attacker intercepts
 1. Both devices independently compute: `PIN = HKDF-SHA256(shared_secret, "deskdrop-pin") mod 10^6`
 2. The PIN is displayed as a 6-digit number, split for readability (e.g., `048 291`).
 3. Since both sides compute the exact same mathematical PIN derived from the shared secret, the user simply verifies the numbers match on both screens. If an attacker intercepts the handshake, their independent ECDH keys will result in drastically different PINs, exposing the MITM attack.
-

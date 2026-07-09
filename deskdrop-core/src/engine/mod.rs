@@ -34,9 +34,9 @@ use tokio::time::timeout;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+pub(crate) mod telemetry;
 pub(crate) mod clipboard;
 pub(crate) mod file_ops;
-pub(crate) mod telemetry;
 pub(crate) use file_ops::*;
 
 /// RFC 7396 JSON merge-patch: recursively overwrite `target` with non-null
@@ -309,7 +309,6 @@ pub struct EngineConfig {
     pub device_id: Uuid,
     pub device_name: String,
     pub port: u16,
-    pub settings_path: PathBuf,
     pub trust_store_path: PathBuf,
     pub peer_store_path: PathBuf,
     pub identity_path: PathBuf,
@@ -349,7 +348,6 @@ impl Default for EngineConfig {
             device_id: Uuid::nil(),
             device_name: default_device_name(),
             port: DEFAULT_PORT,
-            settings_path: default_settings_path(),
             trust_store_path: default_trust_store_path(),
             peer_store_path: default_peer_store_path(),
             identity_path: IdentityStore::default_path(),
@@ -364,7 +362,7 @@ impl Default for EngineConfig {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from(".")),
             file_save_dir: None,
-            history_limit: None,
+            history_limit: Some(500),
         }
     }
 }
@@ -378,18 +376,18 @@ pub struct EngineStatus {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RuntimeNetworkState {
+struct RuntimeNetworkState {
     bind_addr: SocketAddr,
     active_interface: Option<NetworkInterfaceInfo>,
 }
 
 #[derive(Debug)]
-pub(crate) enum ListenerCommand {
+enum ListenerCommand {
     Rebind(SocketAddr),
 }
 
 #[derive(Debug)]
-pub(crate) enum DiscoveryCommand {
+enum DiscoveryCommand {
     Restart { bind_ip: IpAddr, port: u16 },
 }
 
@@ -489,16 +487,9 @@ pub struct Engine {
 impl Engine {
     pub async fn start(config: EngineConfig, event_tx: mpsc::Sender<EngineEvent>) -> Result<Self> {
         let mut config = config;
-        ensure_parent(&config.settings_path)?;
         ensure_parent(&config.trust_store_path)?;
         ensure_parent(&config.peer_store_path)?;
         ensure_parent(&config.identity_path)?;
-        let initial_settings = SettingsStore::load(&config.settings_path)
-            .context("loading settings store")?
-            .get()
-            .clone();
-        let mut initial_policy = ClipboardApplyPolicy::default();
-        initial_policy.update_from_settings(&initial_settings);
 
         let identity = IdentityStore::new(&config.identity_path)
             .load_or_create()
@@ -545,16 +536,14 @@ impl Engine {
                     .clone()
                     .unwrap_or_else(default_save_dir),
             ))),
-            apply_policy: Arc::new(Mutex::new(initial_policy)),
-            settings: Arc::new(Mutex::new(initial_settings.clone())),
+            apply_policy: Arc::new(Mutex::new(ClipboardApplyPolicy::default())),
+            settings: Arc::new(Mutex::new(Settings::default())),
             quality_probes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             clipboard_store: Arc::new(Mutex::new(crate::engine_support::ClipboardStore::default())),
             local_clipboard: Arc::new(Mutex::new(crate::engine_support::LocalClipboard::new())),
             history: Arc::new(Mutex::new({
                 let history_path = config.data_dir.join("history.json");
-                let limit = config
-                    .history_limit
-                    .unwrap_or_else(|| initial_settings.effective_history_limit());
+                let limit = config.history_limit.unwrap_or(500);
                 crate::history::History::load_with_limit(&history_path, limit).unwrap_or_else(
                     |_| {
                         // If the history file is missing or corrupt, start fresh
@@ -607,11 +596,7 @@ impl Engine {
                 .map(|i| i.ip)
                 .unwrap_or(initial_bind.ip())
         };
-        let _identity_pubkey = shared
-            .identity_key
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .public_bytes;
+        let _identity_pubkey = shared.identity_key.read().unwrap_or_else(|e| e.into_inner()).public_bytes;
 
         if let Some(discovery_tx) = &engine.shared.discovery_tx {
             let _ = discovery_tx
@@ -654,9 +639,7 @@ impl Engine {
             // Format: DESKDROP_BEACON:<uuid>:<tcp_port>:<protocol_version>
             let payload = format!(
                 "DESKDROP_BEACON:{}:{}:{}",
-                shared.config.device_id,
-                shared.config.port,
-                crate::protocol::PROTOCOL_VERSION
+                shared.config.device_id, shared.config.port, crate::protocol::PROTOCOL_VERSION
             )
             .into_bytes();
 
@@ -687,7 +670,10 @@ impl Engine {
                         }
                         if let if_addrs::IfAddr::V4(v4) = &iface.addr {
                             if let Some(bcast) = v4.broadcast {
-                                let dest = SocketAddr::new(std::net::IpAddr::V4(bcast), 47824);
+                                let dest = SocketAddr::new(
+                                    std::net::IpAddr::V4(bcast),
+                                    47824,
+                                );
                                 if dest != broadcast_addr {
                                     let _ = socket.send_to(&payload, dest).await;
                                 }
@@ -782,7 +768,9 @@ impl Engine {
                             {
                                 continue;
                             }
-                            if shared.peer_manager.live_endpoint(peer_id) == Some(peer_addr) {
+                            if shared.peer_manager.live_endpoint(peer_id)
+                                == Some(peer_addr)
+                            {
                                 continue;
                             }
                             if matches!(
@@ -823,9 +811,25 @@ impl Engine {
 
     // ── Call Continuity ───────────────────────────────────────────────────────
 
+
+
+
     // ── F20: Battery synchronization ──────────────────────────────────────────
 
+
+
+
+
+
+
+
+
+
     // ── Activity Feed ─────────────────────────────────────────────────────────
+
+
+
+
 
     // ── Settings ──────────────────────────────────────────────────────────────
 
@@ -842,7 +846,7 @@ impl Engine {
 
     fn persist_settings_snapshot(&self, settings: Settings) -> Result<Settings> {
         let sanitized = settings.sanitize();
-        let mut store = SettingsStore::load(&self.shared.config.settings_path)?;
+        let mut store = SettingsStore::load(default_settings_path())?;
         *store.get_mut() = sanitized.clone();
         store.save()?;
         Ok(sanitized)
@@ -926,11 +930,7 @@ impl Engine {
 
     pub async fn rotate_identity_key(&self) -> Result<()> {
         let new_key = {
-            let mut key_lock = self
-                .shared
-                .identity_key
-                .write()
-                .unwrap_or_else(|e| e.into_inner());
+            let mut key_lock = self.shared.identity_key.write().unwrap_or_else(|e| e.into_inner());
             let store = crate::identity::IdentityStore::new(&self.shared.config.identity_path);
             *key_lock = store.rotate()?;
             key_lock.public_bytes
@@ -974,6 +974,18 @@ impl Engine {
 
     // ── History ───────────────────────────────────────────────────────────────
 
+
+
+
+
+
+
+
+
+
+
+
+
     /// Record a local text entry in history without syncing it to peers.
     pub async fn remember_text(&self, text: String) -> Result<()> {
         let device_name = self.shared.config.device_name.clone();
@@ -1005,6 +1017,10 @@ impl Engine {
     }
 
     // ── Templates ─────────────────────────────────────────────────────────────
+
+
+
+
 
     // ── Per-peer settings ─────────────────────────────────────────────────────
 
@@ -1315,11 +1331,7 @@ impl Engine {
             // If we are the sender, we need to restart the chunking loop!
             // `tx` is the `session_outbox_tx` for this peer.
             if was_outbound && target_device.map(|td| td == peer_id).unwrap_or(true) {
-                let bg_outbox = self
-                    .shared
-                    .peer_manager
-                    .file_sender(peer_id)
-                    .unwrap_or(tx.clone());
+                let bg_outbox = self.shared.peer_manager.file_sender(peer_id).unwrap_or(tx.clone());
                 let bg_shared = self.shared.clone();
                 let bg_event_tx = self.shared.event_tx.clone();
                 let bg_transfer_id = transfer_id;
@@ -1428,6 +1440,7 @@ impl Engine {
             .await;
         Ok(())
     }
+
 
     /// Returns this engine's stable device UUID.
     /// Used by the Android JNI bridge to filter out self-connections during NSD.
@@ -3462,10 +3475,7 @@ fn register_session(
                                     transfer.resume_from(resume_from_chunk);
                                 }
                             }
-                            let bg_outbox = shared
-                                .peer_manager
-                                .file_sender(peer_id)
-                                .unwrap_or(session_outbox_tx.clone());
+                            let bg_outbox = shared.peer_manager.file_sender(peer_id).unwrap_or(session_outbox_tx.clone());
                             let bg_shared = shared.clone();
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_transfer_id = transfer_id;
@@ -3548,7 +3558,7 @@ fn register_session(
                         {
                             continue;
                         }
-
+                        
                         let data = if compressed {
                             match lz4_flex::decompress_size_prepended(&payload) {
                                 Ok(d) => d,
@@ -3591,12 +3601,7 @@ fn register_session(
                                 if is_duplicate {
                                     let mut mgr = shared.file_transfers.lock().await;
                                     if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                        Some((
-                                            t.progress_snapshot(),
-                                            t.should_ack(),
-                                            t.meta.file_name.clone(),
-                                            t.last_confirmed_chunk,
-                                        ))
+                                        Some((t.progress_snapshot(), t.should_ack(), t.meta.file_name.clone(), t.last_confirmed_chunk))
                                     } else {
                                         None
                                     }
@@ -3605,8 +3610,7 @@ fn register_session(
                                     let res = tokio::task::spawn_blocking(move || {
                                         use sha2::Digest;
                                         use std::io::{Seek, SeekFrom, Write};
-                                        let current_pos =
-                                            file.stream_position().unwrap_or(u64::MAX);
+                                        let current_pos = file.stream_position().unwrap_or(u64::MAX);
                                         if current_pos != offset {
                                             if let Err(e) = file.seek(SeekFrom::Start(offset)) {
                                                 return Err(anyhow::anyhow!("seek error: {}", e));
@@ -3630,12 +3634,7 @@ fn register_session(
                                             if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
                                                 t.restore_io_context(file, hasher);
                                                 let prog = t.commit_chunk(chunk_index, data_len);
-                                                Some((
-                                                    prog,
-                                                    t.should_ack(),
-                                                    t.meta.file_name.clone(),
-                                                    t.last_confirmed_chunk,
-                                                ))
+                                                Some((prog, t.should_ack(), t.meta.file_name.clone(), t.last_confirmed_chunk))
                                             } else {
                                                 None
                                             }
@@ -3656,9 +3655,7 @@ fn register_session(
                             }
                         };
 
-                        if let Some((prog, should_ack, file_name, last_confirmed)) =
-                            progress_and_ack
-                        {
+                        if let Some((prog, should_ack, file_name, last_confirmed)) = progress_and_ack {
                             let _ = shared
                                 .event_tx
                                 .send(EngineEvent::FileTransferProgress {
@@ -3672,7 +3669,7 @@ fn register_session(
                                     eta_secs: prog.eta_secs,
                                 })
                                 .await;
-
+                            
                             if should_ack {
                                 let _ = rx_session_outbox_tx
                                     .send(AppMessage::FileChunkAck {
@@ -3966,21 +3963,19 @@ fn register_session(
                                         Some((batch, progs)) => (batch, progs),
                                         None => break 'outer,
                                     };
-
+                                    
                                     // Send progress updates
                                     for (prog, fname) in progs {
-                                        let _ = bg_event_tx
-                                            .send(EngineEvent::FileTransferProgress {
-                                                transfer_id: bg_transfer_id,
-                                                from_device: bg_peer_id,
-                                                file_name: fname,
-                                                percent: prog.percent,
-                                                bytes_received: prog.bytes_received,
-                                                total_bytes: prog.total_bytes,
-                                                speed_bps: prog.speed_bps,
-                                                eta_secs: prog.eta_secs,
-                                            })
-                                            .await;
+                                        let _ = bg_event_tx.send(EngineEvent::FileTransferProgress {
+                                            transfer_id: bg_transfer_id,
+                                            from_device: bg_peer_id,
+                                            file_name: fname,
+                                            percent: prog.percent,
+                                            bytes_received: prog.bytes_received,
+                                            total_bytes: prog.total_bytes,
+                                            speed_bps: prog.speed_bps,
+                                            eta_secs: prog.eta_secs,
+                                        }).await;
                                     }
 
                                     if batch.is_empty() {
@@ -4045,8 +4040,7 @@ fn register_session(
                         // and prevent their local 15s grace period from expiring before our next tick.
                         if !is_asleep {
                             let ping = probe::make_ping();
-                            *rx_ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) =
-                                Some(std::time::Instant::now());
+                            *rx_ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
                             let _ = rx_session_outbox_tx.send(ping).await;
                         }
                     }
@@ -4277,10 +4271,7 @@ fn register_session(
                         // using the Instant captured at send time, which is
                         // far more accurate than round-tripping wall-clock ms
                         // over the network (HIGH-03).
-                        let maybe_sent_at = rx_ping_sent_at
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .take();
+                        let maybe_sent_at = rx_ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()).take();
                         if let Some(sent_at) = maybe_sent_at {
                             let rtt_us = probe::measure_rtt_us(sent_at);
                             let result = ProbeResult::from_samples(vec![rtt_us]);
@@ -4842,49 +4833,4 @@ fn ensure_parent(path: &Path) -> Result<()> {
         std::fs::create_dir_all(parent).with_context(|| format!("creating {:?}", parent))?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-    use tokio::sync::mpsc;
-
-    #[tokio::test]
-    async fn engine_starts_with_persisted_settings_snapshot() {
-        let tmp = TempDir::new().unwrap();
-        let settings_path = tmp.path().join("settings.json");
-        std::fs::write(
-            &settings_path,
-            r#"{
-                "sync_enabled": false,
-                "timeline_first_mode": true,
-                "history_limit": 77,
-                "ignore_patterns": ["secret"]
-            }"#,
-        )
-        .unwrap();
-
-        let config = EngineConfig {
-            port: 0,
-            bind_ip: Some(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)),
-            enable_discovery: false,
-            settings_path,
-            trust_store_path: tmp.path().join("trust.json"),
-            peer_store_path: tmp.path().join("peers.json"),
-            identity_path: tmp.path().join("identity.key"),
-            data_dir: tmp.path().to_path_buf(),
-            history_limit: None,
-            ..EngineConfig::default()
-        };
-
-        let (tx, _rx) = mpsc::channel(8);
-        let engine = Engine::start(config, tx).await.unwrap();
-        let settings = engine.current_settings().await;
-
-        assert!(!settings.sync_enabled);
-        assert!(settings.timeline_first_mode);
-        assert_eq!(settings.history_limit, 77);
-        assert_eq!(settings.ignore_patterns, vec!["secret"]);
-    }
 }
