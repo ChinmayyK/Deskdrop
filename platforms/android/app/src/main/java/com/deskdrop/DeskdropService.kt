@@ -1245,8 +1245,6 @@ class DeskdropService : Service() {
                 )
                 Log.i(TAG, "Peer connected: $name (id=$deviceId)")
                 connectedPeerIds[deviceId] = name
-                addActivity(ActivityEntry(deviceName = name,
-                    kind = ActivityKind.PEER_CONNECTED, preview = "Connected"))
                 persistStatus()
                 updateForegroundNotification()
                 // Connection established — cancel any pending retry scans and
@@ -1264,8 +1262,6 @@ class DeskdropService : Service() {
                 )
                 Log.i(TAG, "Peer disconnected: $name (id=$deviceId)")
                 if (deviceId != null) connectedPeerIds.remove(deviceId)
-                addActivity(ActivityEntry(deviceName = name,
-                    kind = ActivityKind.PEER_DISCONNECTED, preview = "Disconnected"))
                 persistStatus()
                 updateForegroundNotification()
                 // If we're now peerless, schedule a retry scan so we reconnect
@@ -1282,8 +1278,6 @@ class DeskdropService : Service() {
                 if (msg == "Pairing request was declined." || msg == "Pairing request was accepted.") {
                     sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
                 }
-                addActivity(ActivityEntry(deviceName = "System",
-                    kind = ActivityKind.WARNING, preview = msg.take(80)))
                 if (isCriticalFailure(msg)) showFailureNotification(msg)
                 updateForegroundNotification()
             }

@@ -59,7 +59,22 @@ object ActivityFeedManager {
     @JvmField val activityFeed = ArrayDeque<ActivityEntry>()
     @JvmField val feedLock = Any()
 
+    fun isUserFacingActivity(kind: ActivityKind): Boolean = when (kind) {
+        ActivityKind.FILE_RECEIVED,
+        ActivityKind.FILE_SENT,
+        ActivityKind.FILE_TRANSFER_INCOMING,
+        ActivityKind.FILE_TRANSFER_PROGRESS,
+        ActivityKind.FILE_TRANSFER_COMPLETE,
+        ActivityKind.FILE_TRANSFER_FAILED,
+        ActivityKind.FILE_TRANSFER_PAUSED,
+        ActivityKind.FILE_TRANSFER_RESUMED,
+        ActivityKind.CLIPBOARD_TEXT,
+        ActivityKind.CLIPBOARD_IMAGE -> true
+        else -> false
+    }
+
     fun addToFeed(entry: ActivityEntry) {
+        if (!isUserFacingActivity(entry.kind)) return
         synchronized(feedLock) {
             activityFeed.addFirst(entry)
             while (activityFeed.size > ACTIVITY_FEED_MAX) activityFeed.removeLast()
@@ -73,6 +88,7 @@ object ActivityFeedManager {
     }
 
     fun getFeedSnapshot(): List<ActivityEntry> = synchronized(feedLock) {
-        activityFeed.toList()
+        activityFeed.filter { isUserFacingActivity(it.kind) }
     }
 }
+
