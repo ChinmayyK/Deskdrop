@@ -174,7 +174,8 @@ fun MainScreen(
                             AppTab.Activity -> ActivityTab(
                                 isDark = isDark,
                                 feed = feed,
-                                onApplyClipboard = onApplyClipboard
+                                onApplyClipboard = onApplyClipboard,
+                                onDeleteActivity = onDeleteActivity
                             )
                             AppTab.Devices -> DevicesTab(
                                 isDark = isDark,

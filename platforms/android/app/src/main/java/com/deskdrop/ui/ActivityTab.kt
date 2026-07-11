@@ -86,7 +86,8 @@ import com.deskdrop.ui.theme.crPressScale
 fun ActivityTab(
     isDark: Boolean,
     feed: List<ActivityEntry>,
-    onApplyClipboard: (ActivityEntry) -> Unit
+    onApplyClipboard: (ActivityEntry) -> Unit,
+    onDeleteActivity: (ActivityEntry) -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -118,7 +119,8 @@ fun ActivityTab(
                             if (entry.kind == ActivityKind.CLIPBOARD_TEXT || entry.kind == ActivityKind.CLIPBOARD_IMAGE) {
                                 onApplyClipboard(entry)
                             }
-                        }
+                        },
+                        onDelete = { onDeleteActivity(entry) }
                     )
                 }
             }
@@ -130,7 +132,8 @@ fun ActivityTab(
 fun ActivityFeedCardNew(
     isDark: Boolean,
     entry: ActivityEntry,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val tagColor = when (entry.kind) {
@@ -179,13 +182,33 @@ fun ActivityFeedCardNew(
                 )
             }
             Spacer(modifier = Modifier.height(6.dp))
+            val isLink = entry.preview.startsWith("http")
+            val previewText = when {
+                entry.kind == ActivityKind.CLIPBOARD_TEXT && !isLink ->
+                    "Copied text (${entry.preview.length} chars) • Protected"
+                entry.kind == ActivityKind.CLIPBOARD_TEXT && isLink ->
+                    "Link • ${entry.preview.take(45)}"
+                else -> entry.preview.replace("\n", " ")
+            }
             Text(
-                text = entry.preview.replace("\n", " "),
+                text = previewText,
                 style = CRTypography.bodyMedium,
                 color = CRTheme.textMedium(isDark),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = FontFamily.Monospace
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        IconButton(
+            onClick = onDelete,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Delete item",
+                tint = CRTheme.textMedium(isDark).copy(alpha = 0.7f),
+                modifier = Modifier.size(18.dp)
             )
         }
     }

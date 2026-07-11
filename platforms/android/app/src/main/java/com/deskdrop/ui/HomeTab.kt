@@ -666,10 +666,14 @@ fun TimelineActivityRow(
         else -> entry.preview.take(20)
     }
     
-    val subtitle = if (entry.preview.isNotEmpty() && entry.kind != ActivityKind.WARNING && entry.kind != ActivityKind.PEER_CONNECTED && entry.kind != ActivityKind.PEER_DISCONNECTED) {
-        entry.preview
-    } else {
-        "Just now"
+    val subtitle = when {
+        entry.kind == ActivityKind.CLIPBOARD_TEXT && !isLink ->
+            "Copied text (${entry.preview.length} chars) • Protected"
+        entry.kind == ActivityKind.CLIPBOARD_TEXT && isLink ->
+            "Link • ${entry.preview.take(45)}"
+        entry.preview.isNotEmpty() && entry.kind != ActivityKind.WARNING && entry.kind != ActivityKind.PEER_CONNECTED && entry.kind != ActivityKind.PEER_DISCONNECTED ->
+            entry.preview
+        else -> "Just now"
     }
     
     val icon = when(entry.kind) {
@@ -790,6 +794,17 @@ fun TimelineActivityRow(
                 Text(text = subtitle, style = CRTypography.caption, color = CRTheme.textMedium(isDark), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             
+            IconButton(
+                onClick = { onDelete(entry) },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete history item",
+                    tint = CRTheme.textMedium(isDark).copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
             IconButton(
                 onClick = { showMenu = true },
                 modifier = Modifier.size(24.dp)
