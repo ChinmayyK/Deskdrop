@@ -603,12 +603,51 @@ impl Engine {
             .public_bytes;
 
         if let Some(discovery_tx) = &engine.shared.discovery_tx {
-            let _ = discovery_tx
-                .send(DiscoveryCommand::Restart {
-                    bind_ip: discovery_ip,
-                    port: engine.shared.config.port,
-                })
-                .await;
+            if discovery_ip.is_unspecified() {
+                // Network interface not ready yet at startup — spawn a background
+                // task that retries until a real IP is available, then kicks mDNS.
+                // Without this, discovery silently never starts and the user has
+                // to manually click "Scan" to trigger it.
+                let retry_shared = engine.shared.clone();
+                let retry_tx = discovery_tx.clone();
+                tokio::spawn(async move {
+                    for attempt in 1..=20 {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        let ip = {
+                            let state = retry_shared.network_state.lock().await;
+                            state
+                                .active_interface
+                                .as_ref()
+                                .map(|i| i.ip)
+                                .unwrap_or(state.bind_addr.ip())
+                        };
+                        if !ip.is_unspecified() {
+                            tracing::info!(
+                                "discovery retry #{}: network ready at {}, starting mDNS",
+                                attempt, ip
+                            );
+                            let _ = retry_tx
+                                .send(DiscoveryCommand::Restart {
+                                    bind_ip: ip,
+                                    port: retry_shared.config.port,
+                                })
+                                .await;
+                            break;
+                        }
+                        tracing::debug!(
+                            "discovery retry #{}: network still not ready, waiting...",
+                            attempt
+                        );
+                    }
+                });
+            } else {
+                let _ = discovery_tx
+                    .send(DiscoveryCommand::Restart {
+                        bind_ip: discovery_ip,
+                        port: engine.shared.config.port,
+                    })
+                    .await;
+            }
         }
 
         engine.spawn_network_monitor().await?;
@@ -698,11 +737,58 @@ impl Engine {
                     return;
                 }
             };
+            let socket = Arc::new(socket);
             let mut buf = vec![0u8; 1024];
             loop {
                 match socket.recv_from(&mut buf).await {
                     Ok((len, addr)) => {
                         let text = String::from_utf8_lossy(&buf[..len]);
+
+                        // ── Handle CONNECTBACK requests ──────────────────────
+                        // A peer whose outbound TCP failed is asking US to
+                        // initiate the connection to THEM instead.
+                        if text.starts_with("DESKDROP_CONNECTBACK:") {
+                            let parts: Vec<&str> = text.splitn(4, ':').collect();
+                            if parts.len() < 3 { continue; }
+                            let peer_id = match uuid::Uuid::parse_str(parts[1]) {
+                                Ok(id) => id,
+                                Err(_) => continue,
+                            };
+                            if peer_id == shared.config.device_id { continue; }
+                            let peer_port = match parts[2].parse::<u16>() {
+                                Ok(p) => p,
+                                Err(_) => continue,
+                            };
+                            let peer_addr = SocketAddr::new(addr.ip(), peer_port);
+
+                            // Skip if already connected to this peer.
+                            if shared.peer_manager.is_connected(peer_id) {
+                                continue;
+                            }
+
+                            tracing::info!(
+                                "UDP CONNECTBACK: peer {} at {} is asking us to connect to them",
+                                peer_id, peer_addr
+                            );
+                            let shared_clone = shared.clone();
+                            tokio::spawn(async move {
+                                if let Err(err) = connect_once(
+                                    shared_clone,
+                                    vec![peer_addr],
+                                    Some(peer_id),
+                                    DiscoverySource::UdpBeacon,
+                                    false,
+                                ).await {
+                                    tracing::warn!(
+                                        peer_id = %peer_id,
+                                        error = %err,
+                                        "CONNECTBACK connection attempt failed"
+                                    );
+                                }
+                            });
+                            continue;
+                        }
+
                         if !text.starts_with("DESKDROP_BEACON:") {
                             continue;
                         }
@@ -786,10 +872,34 @@ impl Engine {
                                 peer_id,
                                 peer_addr
                             );
+
+                            // ── Fast Connect-Back ────────────────────────────
+                            // Send UDP CONNECTBACK immediately so the remote peer
+                            // can connect to us concurrently with our outbound
+                            // TCP connect attempt. This eliminates delay when
+                            // asymmetric routing / AP isolation blocks outbound TCP.
+                            if !shared.peer_manager.is_connected(peer_id) {
+                                let connectback = format!(
+                                    "DESKDROP_CONNECTBACK:{}:{}",
+                                    shared.config.device_id,
+                                    shared.config.port,
+                                );
+                                let target = SocketAddr::new(
+                                    addr.ip(),
+                                    47824, // UDP beacon port
+                                );
+                                let _ = socket.send_to(
+                                    connectback.as_bytes(),
+                                    target,
+                                ).await;
+                            }
+
                             let shared_clone = shared.clone();
+                            let socket_clone = socket.clone();
+                            let beacon_source_addr = addr;
                             tokio::spawn(async move {
                                 if let Err(err) = connect_loop(
-                                    shared_clone,
+                                    shared_clone.clone(),
                                     vec![peer_addr],
                                     Some(peer_id),
                                     DiscoverySource::UdpBeacon,
@@ -797,6 +907,22 @@ impl Engine {
                                 .await
                                 {
                                     tracing::warn!(peer_id = %peer_id, error = %err, "UDP beacon peer connection failed");
+
+                                    if !shared_clone.peer_manager.is_connected(peer_id) {
+                                        let connectback = format!(
+                                            "DESKDROP_CONNECTBACK:{}:{}",
+                                            shared_clone.config.device_id,
+                                            shared_clone.config.port,
+                                        );
+                                        let target = SocketAddr::new(
+                                            beacon_source_addr.ip(),
+                                            47824,
+                                        );
+                                        let _ = socket_clone.send_to(
+                                            connectback.as_bytes(),
+                                            target,
+                                        ).await;
+                                    }
                                 }
                             });
                         }
@@ -2787,6 +2913,11 @@ async fn connect_loop(
                         let message =
                             format!("connection to multiple endpoints failed after retries: {err}");
                         let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
+                        if let Some(device_id) = expected_device_id {
+                            let _ = shared
+                                .peer_manager
+                                .mark_disconnected(device_id, Some(err.to_string()));
+                        }
                         return Err(err);
                     }
                 }
@@ -4853,10 +4984,12 @@ async fn should_initiate_session(
         | DiscoverySource::UdpBeacon
         | DiscoverySource::UdpMulticast
         | DiscoverySource::HotspotProbe => {
-            // Eager Connection Strategy: Establish a TCP session immediately even if untrusted.
-            // Untrusted peers are safe because sensitive incoming requests are gated by the Engine,
-            // but forming the TCP+TLS/Noise session eagerly means zero-latency when the user clicks 'Pair'.
-            shared.config.device_id.as_bytes() < peer_id.as_bytes()
+            // Both sides attempt connection eagerly. If both succeed, the
+            // lower-ID peer's session wins via replace_live_session (the
+            // existing dedup logic). This is critical for asymmetric routing
+            // (e.g. Android hotspot AP isolation) where only one direction
+            // may be routable.
+            true
         }
     }
 }

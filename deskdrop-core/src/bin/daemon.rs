@@ -603,6 +603,8 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "peers":                 snapshot.peers,
                 "pending_clipboard_count": pending_count,
                 "local_fingerprint":     fingerprint,
+                "local_device_id":       state.engine.local_device_id().to_string(),
+                "local_device_name":     state.engine.local_device_name(),
                 "active_call":           active_call,
                 "active_transfers":      active_transfers,
                 "peer_batteries":        peer_batteries,

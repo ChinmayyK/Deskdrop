@@ -176,6 +176,7 @@ async fn ipc(req: &IpcRequest) -> Result<IpcResponse> {
 
 async fn cmd_status() -> Result<()> {
     if let Some(IpcResponse::Ok { data: Some(data) }) = try_ipc(&IpcRequest::Status).await {
+        println!("{}", serde_json::to_string_pretty(&data).unwrap());
         let uptime = data["uptime_secs"].as_u64().unwrap_or(0);
         println!("Deskdrop — Live Status\n{}", "═".repeat(40));
         println!(

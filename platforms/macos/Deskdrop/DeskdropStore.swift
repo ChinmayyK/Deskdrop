@@ -90,7 +90,7 @@ final class DeskdropStore: ObservableObject {
 
     var connectionBanner: String { statusLine }
     var devices: [ManagedDevice] { peers.map(ManagedDevice.init) }
-    var connectedDevices: [ManagedDevice] { devices.filter(\.isConnected) }
+    var connectedDevices: [ManagedDevice] { devices.filter { $0.isConnected && $0.trustState == .trusted } }
     var status: StatusSnapshot? { dashboardStatus }
 
     var defaultTargetDevice: ManagedDevice? {
@@ -117,6 +117,11 @@ final class DeskdropStore: ObservableObject {
     func start() {
         startPolling()
         startWatchingClipboard()
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await refresh()
+            scanForDevices()
+        }
     }
 
     func stop() {
@@ -231,7 +236,7 @@ final class DeskdropStore: ObservableObject {
             default: return false
             }
         }
-        let interval: TimeInterval = hasActiveTransfers ? 0.25 : (connectedCount > 0 ? 1.5 : 3.0)
+        let interval: TimeInterval = hasActiveTransfers ? 0.25 : (connectedCount > 0 ? 1.5 : 1.0)
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.refresh()

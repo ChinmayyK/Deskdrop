@@ -240,7 +240,7 @@ struct ManagedDevice: Identifiable {
     let outgoingPairingWaiting: Bool
     let pairingPin: String?
     let ip: String?
-    var isConnected: Bool { connectionState == .connected && trustState == .trusted }
+    var isConnected: Bool { connectionState == .connected }
     var canReconnect: Bool { trustState == .trusted && remembered && autoConnect && connectionState != .connected }
 
     init(peer: PeerViewModel) {

@@ -54,10 +54,24 @@ final class DaemonManager {
 
     private func ensureDaemonResponsive(forceRestartOnFailure: Bool) {
         Task {
-            do {
-                try await DeskdropIPCClient.shared.ping()
-            } catch {
-                guard forceRestartOnFailure else { return }
+            let responded = await withTaskGroup(of: Bool.self) { group in
+                group.addTask {
+                    do {
+                        try await DeskdropIPCClient.shared.ping()
+                        return true
+                    } catch {
+                        return false
+                    }
+                }
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    return false
+                }
+                let result = await group.next() ?? false
+                group.cancelAll()
+                return result
+            }
+            if !responded && forceRestartOnFailure {
                 self.daemonProcess?.terminate()
                 self.daemonProcess = nil
                 self.cleanupDaemonSocketIfNeeded()

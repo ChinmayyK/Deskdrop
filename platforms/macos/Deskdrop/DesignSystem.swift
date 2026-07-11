@@ -99,6 +99,11 @@ enum CRTheme {
     static var sidebarTop_light:   Color           { surfaceStrong }
     static var sidebarBottom:      Color           { surfaceStrong }
     static var sidebarGradient:    LinearGradient  { sidebarOverlay }
+
+    // ── Corner Radii ────────────────────────────────────────────────────────
+    static let radiusSmall: CGFloat = 8
+    static let radiusMedium: CGFloat = 12
+    static let radiusLarge: CGFloat = 16
 }
 
 typealias PBTheme = CRTheme
@@ -868,5 +873,44 @@ struct CRHoverScaleModifier: ViewModifier {
 extension View {
     func crHoverScale(scale: CGFloat = 1.02) -> some View {
         modifier(CRHoverScaleModifier(scale: scale))
+    }
+}
+
+// MARK: - Hover Scale ButtonStyle
+
+public struct HoverScaleStyle: ButtonStyle {
+    public var scale: CGFloat = 1.02
+    @State private var isHovered = false
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : (isHovered ? scale : 1.0))
+            .animation(.crSpring, value: isHovered)
+            .animation(.crFast, value: configuration.isPressed)
+            .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Typography (Dynamic Type)
+
+struct CRFontModifier: ViewModifier {
+    @ScaledMetric var size: CGFloat
+    var weight: Font.Weight
+    var design: Font.Design
+
+    init(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) {
+        self._size = ScaledMetric(wrappedValue: size)
+        self.weight = weight
+        self.design = design
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight, design: design))
+    }
+}
+
+extension View {
+    func crFont(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> some View {
+        modifier(CRFontModifier(size: size, weight: weight, design: design))
     }
 }

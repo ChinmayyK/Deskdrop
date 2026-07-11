@@ -226,7 +226,7 @@ struct DeviceCard: View {
             }
             .padding(.horizontal, 14).padding(.vertical, 9)
         }
-        .crCard(cornerRadius: 8, highlighted: isHovered, accent: accent)
+        .crCard(cornerRadius: CRTheme.radiusSmall, highlighted: isHovered, accent: accent)
         .onHover { isHovered = $0 }
         .animation(.crFast, value: isHovered)
     }
@@ -253,7 +253,7 @@ struct ManualConnectCard: View {
             }
         }
         .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.brandElectric)
+        .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: hovered, accent: CRTheme.brandElectric)
         .onHover { hovered = $0 }.animation(.crFast, value: hovered)
     }
 }
@@ -288,7 +288,7 @@ struct FileShareCard: View {
             }
         }
         .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.brandElectric)
+        .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: hovered, accent: CRTheme.brandElectric)
         .onHover { hovered = $0 }.animation(.crFast, value: hovered)
     }
 }
@@ -388,9 +388,10 @@ struct DeviceCentricDashboardView: View {
                     .padding(.bottom, 30)
                 }
 
-                if !store.devices.isEmpty {
+                let trustedDevices = store.devices.filter { $0.trustState == .trusted }
+                if !trustedDevices.isEmpty {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
-                        ForEach(store.devices, id: \.id) { device in
+                        ForEach(trustedDevices, id: \.id) { device in
                             CompactDeviceCard(device: device, store: store) {
                                 pendingFileTarget = device
                                 showingFilePicker = true
@@ -398,7 +399,7 @@ struct DeviceCentricDashboardView: View {
                         }
                     }
                     .padding(.horizontal, 40)
-                } else {
+                } else if attention.isEmpty {
                     CompactEmptyState(store: store)
                         .padding(.horizontal, 40)
                 }
@@ -443,7 +444,7 @@ struct CompactEmptyState: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
         .background(CRTheme.surfaceElevated.opacity(0.5))
-        .crCard(cornerRadius: 16)
+        .crCard(cornerRadius: CRTheme.radiusLarge)
     }
 }
 
@@ -571,9 +572,9 @@ struct CompactDeviceCard: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .background(CRTheme.surfaceElevated)
-        .crCard(cornerRadius: 16)
+        .crCard(cornerRadius: CRTheme.radiusLarge)
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: CRTheme.radiusLarge, style: .continuous)
                 .strokeBorder(CRTheme.brandElectric.opacity(isHovered ? 0.3 : 0.0), lineWidth: 1)
         }
         .onHover { isHovered = $0 }
@@ -589,6 +590,7 @@ struct UntrustedDeviceCard: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var isHovered = false
     @State private var pulse = false
+    @Environment(\.scenePhase) var scenePhase
 
     var body: some View {
         HStack(spacing: 20) {
@@ -599,15 +601,19 @@ struct UntrustedDeviceCard: View {
                     .frame(width: 56, height: 56)
                     .scaleEffect(pulse ? 1.15 : 1.0)
                     .opacity(pulse ? 0.8 : 1.0)
-                    .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: pulse)
+                    .animation(pulse ? .easeInOut(duration: 1.5).repeatForever(autoreverses: true) : .default, value: pulse)
                 
                 Image(systemName: "exclamationmark.shield.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(CRTheme.accentOrange)
             }
-            .onAppear { pulse = true }
             
-            // Text Content
+            .onAppear {
+                if scenePhase == .active { pulse = true }
+            }
+            .onChange(of: scenePhase) { phase in
+                pulse = phase == .active
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Text(device.name)
                     .font(.system(size: 16, weight: .bold, design: .rounded))
@@ -623,7 +629,7 @@ struct UntrustedDeviceCard: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(CRTheme.inkSoft)
                     } else {
-                        Text(device.isConnected ? "Connected, but untrusted" : "Previously paired device")
+                        Text("Ready to pair")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(CRTheme.inkSoft)
                     }
@@ -693,10 +699,10 @@ struct UntrustedDeviceCard: View {
         }
         .padding(20)
         .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: CRTheme.radiusLarge, style: .continuous)
                 .fill(CRTheme.surfaceElevated)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: CRTheme.radiusLarge, style: .continuous)
                         .strokeBorder(
                             isHovered ? CRTheme.accentOrange.opacity(0.5) : CRTheme.stroke,
                             lineWidth: isHovered ? 1.5 : 1.0
@@ -805,10 +811,10 @@ struct MagicLinkPairingCard: View {
             }
         }
         .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .crCard(cornerRadius: 11, highlighted: hovered, accent: CRTheme.brandElectric)
+        .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: hovered, accent: CRTheme.brandElectric)
         .onHover { hovered = $0 }.animation(.crFast, value: hovered)
         .sheet(isPresented: $showingQR) {
-            QRCodePairingSheet(store: store)
+            QRCodeSheetView(store: store)
         }
     }
 }
@@ -1047,11 +1053,11 @@ struct DeviceIdentityCard: View {
                     ForEach(0..<3) { i in
                         Capsule()
                             .fill(platformBrand.opacity(0.4))
-                            .frame(width: 2, height: CGFloat.random(in: 4...12))
+                            .frame(width: 2, height: isHovered ? CGFloat.random(in: 4...12) : 4)
                     }
                 }
                 .padding(.leading, 8)
-                .animation(.easeInOut(duration: 0.5).repeatForever(), value: isHovered)
+                .animation(isHovered ? .easeInOut(duration: 0.5).repeatForever() : .default, value: isHovered)
             }
         }
         .padding(12)
@@ -1101,7 +1107,7 @@ struct PushClipboardFeaturedCard: View {
                                 .frame(width: 48, height: 48)
                                 .scaleEffect(1.5)
                                 .opacity(0.0)
-                                .animation(.easeOut(duration: 1.0).repeatForever(autoreverses: false), value: isHovered)
+                                .animation(isHovered ? .easeOut(duration: 1.0).repeatForever(autoreverses: false) : .default, value: isHovered)
                         }
                     }
                 }
@@ -1156,7 +1162,7 @@ struct PushClipboardFeaturedCard: View {
                                     .frame(width: 2, height: isHovered ? CGFloat.random(in: 4...12) : 4)
                             }
                         }
-                        .animation(.easeInOut(duration: 0.3).repeatForever(), value: isHovered)
+                        .animation(isHovered ? .easeInOut(duration: 0.3).repeatForever() : .default, value: isHovered)
                         
                         Text("Live now")
                             .font(.system(size: 11, weight: .semibold))
@@ -1307,6 +1313,7 @@ struct DeviceListRow: View {
 
 struct FloatingContinuityOrb: View {
     @State private var isAnimating = false
+    @Environment(\.scenePhase) var scenePhase
     var activeCount: Int
     
     var body: some View {
@@ -1317,7 +1324,7 @@ struct FloatingContinuityOrb: View {
                 .frame(width: 60, height: 60)
                 .blur(radius: 8)
                 .scaleEffect(isAnimating ? 1.1 : 1.0)
-                .animation(.easeInOut(duration: 4.0).repeatForever(autoreverses: true), value: isAnimating)
+                .animation(isAnimating ? .easeInOut(duration: 4.0).repeatForever(autoreverses: true) : .default, value: isAnimating)
             
             Circle()
                 .stroke(CRTheme.brandCyan.opacity(0.4), lineWidth: 1)
@@ -1336,12 +1343,15 @@ struct FloatingContinuityOrb: View {
                         .offset(x: 40)
                         .rotationEffect(.degrees(Double(i) * (360.0 / Double(activeCount))))
                         .rotationEffect(.degrees(isAnimating ? 360 : 0))
-                        .animation(.linear(duration: 8).repeatForever(autoreverses: false), value: isAnimating)
+                        .animation(isAnimating ? .linear(duration: 8).repeatForever(autoreverses: false) : .default, value: isAnimating)
                 }
             }
         }
         .onAppear {
-            isAnimating = true
+            if scenePhase == .active { isAnimating = true }
+        }
+        .onChange(of: scenePhase) { phase in
+            isAnimating = phase == .active
         }
     }
 }
@@ -1401,13 +1411,27 @@ struct QRCodeSheetView: View {
         .task {
             await loadQR()
         }
+        .onChange(of: store.devices.count) { _ in
+            for dev in store.devices {
+                if dev.isConnected && dev.trustState != .trusted {
+                    store.trust(dev)
+                }
+            }
+            if !store.connectedDevices.isEmpty {
+                dismiss()
+            }
+        }
     }
     
     private func loadQR() async {
         do {
+            await store.refresh()
             let token = try await store.generateQrToken()
             let id = store.localDeviceId ?? ""
-            let name = store.localDeviceName ?? ""
+            let name = store.localDeviceName ?? Host.current().localizedName ?? "Mac"
+            let ip = getLocalIPAddress() ?? "127.0.0.1"
+            let port = "\(store.settings?.port ?? 47823)"
+            let fp = store.localFingerprint ?? ""
             
             var components = URLComponents()
             components.scheme = "deskdrop"
@@ -1415,7 +1439,10 @@ struct QRCodeSheetView: View {
             components.queryItems = [
                 URLQueryItem(name: "id", value: id),
                 URLQueryItem(name: "name", value: name),
-                URLQueryItem(name: "token", value: token)
+                URLQueryItem(name: "token", value: token),
+                URLQueryItem(name: "ip", value: ip),
+                URLQueryItem(name: "port", value: port),
+                URLQueryItem(name: "fingerprint", value: fp)
             ]
             
             guard let urlString = components.url?.absoluteString else {

@@ -593,11 +593,17 @@ class MainActivity : ComponentActivity() {
             } ?: "Mac"
 
             if (id != null && token != null) {
+                val ip = uri.getQueryParameter("ip")
+                val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 47823
                 ContextCompat.startForegroundService(ctx,
                     Intent(ctx, DeskdropService::class.java).apply {
                         action = DeskdropService.ACTION_TRUST_PEER_FROM_QR
                         putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, id)
                         putExtra(DeskdropService.EXTRA_TOKEN, token)
+                        if (ip != null) {
+                            putExtra("ip", ip)
+                            putExtra("port", port)
+                        }
                     }
                 )
                 showSnack("Connecting securely to $peerName...")

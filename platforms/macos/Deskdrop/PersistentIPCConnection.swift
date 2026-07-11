@@ -3,12 +3,52 @@ import Network
 
 
 
+private final class ResumeGuard: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hasResumed = false
+
+    func tryResume() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if hasResumed { return false }
+        hasResumed = true
+        return true
+    }
+
+    func revert() {
+        lock.lock()
+        hasResumed = false
+        lock.unlock()
+    }
+}
+
 actor PersistentIPCConnection {
     private var connection: NWConnection?
     private let socketPath: String
+    private var requestQueue: [CheckedContinuation<Void, Never>] = []
+    private var isExecutingRequest = false
     
     init(socketPath: String) {
         self.socketPath = socketPath
+    }
+    
+    private func acquireLock() async {
+        if !isExecutingRequest {
+            isExecutingRequest = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            requestQueue.append(continuation)
+        }
+    }
+
+    private func releaseLock() {
+        if !requestQueue.isEmpty {
+            let next = requestQueue.removeFirst()
+            next.resume()
+        } else {
+            isExecutingRequest = false
+        }
     }
     
     private func ensureConnection() async throws -> NWConnection {
@@ -16,27 +56,22 @@ actor PersistentIPCConnection {
             return conn
         }
         
-        // Close old connection if any
         connection?.cancel()
         
         let endpoint = NWEndpoint.unix(path: socketPath)
         let parameters = NWParameters.tcp
-        
         let newConnection = NWConnection(to: endpoint, using: parameters)
         
         return try await withCheckedThrowingContinuation { continuation in
-            let lock = NSLock()
-            var hasResumed = false
+            let guardObj = ResumeGuard()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+                if guardObj.tryResume() {
+                    newConnection.cancel()
+                    continuation.resume(throwing: DeskdropIPCError.connectionFailed)
+                }
+            }
             newConnection.stateUpdateHandler = { state in
-                let shouldResume: Bool = {
-                    lock.lock()
-                    defer { lock.unlock() }
-                    if hasResumed { return false }
-                    hasResumed = true
-                    return true
-                }()
-                
-                guard shouldResume else { return }
+                guard guardObj.tryResume() else { return }
                 
                 switch state {
                 case .ready:
@@ -46,9 +81,7 @@ actor PersistentIPCConnection {
                 case .cancelled:
                     continuation.resume(throwing: DeskdropIPCError.disconnected)
                 default:
-                    lock.lock()
-                    hasResumed = false // revert if it was a spurious non-terminal state we didn't handle
-                    lock.unlock()
+                    guardObj.revert()
                 }
             }
             newConnection.start(queue: .global())
@@ -57,22 +90,29 @@ actor PersistentIPCConnection {
     }
     
     func send(cmd: [String: Any]) async throws -> Data {
-        let conn = try await ensureConnection()
-        let payload = try JSONSerialization.data(withJSONObject: cmd) + Data("\n".utf8)
+        await acquireLock()
+        defer { releaseLock() }
         
-        // Send
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            conn.send(content: payload, completion: .contentProcessed { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            })
+        do {
+            let conn = try await ensureConnection()
+            let payload = try JSONSerialization.data(withJSONObject: cmd) + Data("\n".utf8)
+            
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                conn.send(content: payload, completion: .contentProcessed { error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume()
+                    }
+                })
+            }
+            
+            return try await receiveLine(from: conn)
+        } catch {
+            connection?.cancel()
+            connection = nil
+            throw error
         }
-        
-        // Receive line
-        return try await receiveLine(from: conn)
     }
     
     private func receiveLine(from conn: NWConnection) async throws -> Data {

@@ -175,31 +175,7 @@ struct DetailContent: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @ViewBuilder private var toolbarActions: some View {
-        switch store.selectedSection {
-        case .devices, .clipboard, .transfers, .remoteControl, .settings:
-            // Density toggle
-            HStack(spacing: 4) {
-                Button {
-                    withAnimation(.crFast) { density = .comfortable }
-                } label: {
-                    Image(systemName: density == .comfortable ? "rectangle.grid.1x2.fill" : "rectangle.grid.1x2")
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(density == .comfortable ? CRTheme.brandElectric : CRTheme.inkSoft)
 
-                Button {
-                    withAnimation(.crFast) { density = .compact }
-                } label: {
-                    Image(systemName: density == .compact ? "list.bullet.fill" : "list.bullet")
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(density == .compact ? CRTheme.brandElectric : CRTheme.inkSoft)
-            }
-        }
-    }
 }
 
 // MARK: - App Chrome (Top Bar)
@@ -226,11 +202,25 @@ struct ContinuityHeaderView: View {
             HStack(spacing: 16) {
                 // Network Status
                 HStack(spacing: 6) {
-                    StatusDot(isOnline: store.connectedCount > 0, size: 8)
-                    Text(store.connectedCount > 0 ? "Active · \(store.connectedCount) device\(store.connectedCount == 1 ? "" : "s")" : "Offline")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(CRTheme.inkSoft)
-                        .fixedSize()
+                    if store.connectedCount > 0 {
+                        StatusDot(isOnline: true, size: 8)
+                        Text("Active · \(store.connectedCount) device\(store.connectedCount == 1 ? "" : "s")")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .fixedSize()
+                    } else if store.devices.contains(where: { $0.trustState != .trusted }) {
+                        Circle().fill(CRTheme.accentOrange).frame(width: 8, height: 8)
+                        Text("Ready to pair")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .fixedSize()
+                    } else {
+                        StatusDot(isOnline: false, size: 8)
+                        Text("Looking for devices")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .fixedSize()
+                    }
                 }
                 
                 // Quick Actions Pill
@@ -316,6 +306,7 @@ struct CompanionDeviceCard: View {
     let device: ManagedDevice
     let connectedPeers: Int
     @State private var isPulsing = false
+    @Environment(\.scenePhase) var scenePhase
 
     var body: some View {
         HStack(spacing: 16) {
@@ -378,10 +369,12 @@ struct CompanionDeviceCard: View {
                 }
                 .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
         }
+        .animation(isPulsing ? .easeOut(duration: 2.0).repeatForever(autoreverses: false) : .default, value: isPulsing)
         .onAppear {
-            withAnimation(.easeOut(duration: 2.0).repeatForever(autoreverses: false)) {
-                isPulsing = true
-            }
+            if scenePhase == .active { isPulsing = true }
+        }
+        .onChange(of: scenePhase) { phase in
+            isPulsing = phase == .active
         }
     }
 }
@@ -499,7 +492,8 @@ struct ContinuityStagingDrawer: View {
                         }
                     }
                     .onEnded { gesture in
-                        if gesture.translation.width > 100 {
+                        let predictedOffset = gesture.translation.width + (gesture.velocity.width * 0.2)
+                        if predictedOffset > 100 {
                             withAnimation(.easeOut(duration: 0.2)) {
                                 offset = 300
                                 isDismissed = true

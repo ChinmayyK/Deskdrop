@@ -5,6 +5,8 @@ import SwiftUI
 import UserNotifications
 import Darwin
 
+import Network
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private let store = DeskdropStore()
@@ -25,12 +27,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var cancellables = Set<AnyCancellable>()
     private var dropCanvasWindow: NSPanel?
     private var activityToken: NSObjectProtocol?
+    private var dummyBrowser: NWBrowser?
     
     // Screenshot observing managed by ScreenshotObserver
     private var screenshotObserver: ScreenshotObserver?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ensureSingleRunningInstance() else { return }
+        triggerLocalNetworkPrivacyPrompt()
         NSApp.setActivationPolicy(.accessory)
         // Restore user's theme preference (defaults to system)
         let savedTheme = UserDefaults.standard.string(forKey: "cr_app_theme") ?? "light"
@@ -121,6 +125,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     // MARK: - Single instance guard
+
+    private func triggerLocalNetworkPrivacyPrompt() {
+        let params = NWParameters()
+        params.includePeerToPeer = true
+        dummyBrowser = NWBrowser(for: .bonjour(type: "_deskdrop._tcp", domain: "local."), using: params)
+        dummyBrowser?.stateUpdateHandler = { _ in }
+        dummyBrowser?.start(queue: .main)
+        // We do not cancel the dummy browser immediately because macOS
+        // sometimes drops the prompt if the browser is cancelled too quickly.
+    }
 
     private func ensureSingleRunningInstance() -> Bool {
         guard let bundleId = Bundle.main.bundleIdentifier else { return true }
@@ -268,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // ── Instant "device connected" notification ──────────────────────────
         store.$peers
             .receive(on: RunLoop.main)
-            .map { $0.map(ManagedDevice.init).filter(\.isConnected) }
+            .map { $0.map(ManagedDevice.init).filter { $0.isConnected && $0.trustState == .trusted } }
             .sink { [weak self] (devices: [ManagedDevice]) in
                 guard let self else { return }
                 let count = devices.count

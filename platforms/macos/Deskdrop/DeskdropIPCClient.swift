@@ -176,14 +176,18 @@ final class DeskdropIPCClient {
         ])
         
         struct TokenResponse: Decodable {
-            let data: TokenData
+            let data: TokenData?
+            let token: String?
         }
         struct TokenData: Decodable {
             let token: String
         }
         
         let parsed = try JSONDecoder().decode(TokenResponse.self, from: resp)
-        return parsed.data.token
+        if let token = parsed.data?.token ?? parsed.token {
+            return token
+        }
+        throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "No token found in response"))
     }
     
     func trustPeerFromQr(deviceId: String, token: String) async throws {

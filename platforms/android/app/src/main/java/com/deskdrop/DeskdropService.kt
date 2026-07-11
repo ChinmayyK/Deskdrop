@@ -2073,6 +2073,11 @@ class DeskdropService : Service() {
         val token = intent.getStringExtra(EXTRA_TOKEN) ?: return
         val h = engineHandle
         if (h != 0L) {
+            val ip = intent.getStringExtra("ip")
+            val port = intent.getIntExtra("port", 47823)
+            if (ip != null && ip.isNotBlank()) {
+                DeskdropJni.connectToPeer(h, ip, port)
+            }
             val result = DeskdropJni.trustPeerFromQr(h, deviceId, token)
             Log.i(TAG, "QR trust request for $deviceId: result=$result")
             persistStatus()
@@ -2727,9 +2732,7 @@ class DeskdropService : Service() {
             ?.takeIf { it.isNotEmpty() }
 
     private fun shouldInitiateDiscoveredSession(myId: String, peerId: String): Boolean {
-        val normalizedMine = normalizeUuidForCompare(myId) ?: return true
-        val normalizedPeer = normalizeUuidForCompare(peerId) ?: return true
-        return normalizedMine < normalizedPeer
+        return true
     }
 
     private fun normalizeUuidForCompare(raw: String): String? =
