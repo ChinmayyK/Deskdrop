@@ -2936,6 +2936,13 @@ async fn connect_once(
     discovery: DiscoverySource,
     is_manual_reconnect: bool,
 ) -> Result<()> {
+    if !is_manual_reconnect {
+        if let Some(device_id) = expected_device_id {
+            if shared.peer_manager.is_connected(device_id) {
+                return Ok(());
+            }
+        }
+    }
     let started = Instant::now();
     let mut tasks = tokio::task::JoinSet::new();
     let timeout_dur = shared.config.connect_timeout;
@@ -3177,7 +3184,7 @@ fn register_session(
         if let Some(old_shutdown) = replaced.shutdown_tx {
             let _ = old_shutdown.send(SessionShutdown {
                 reason: format!("session migrated to {}", endpoint),
-                send_bye: true,
+                send_bye: false,
                 explicit_disconnect: false,
             });
         }
@@ -4977,6 +4984,9 @@ async fn should_initiate_session(
     discovery: DiscoverySource,
 ) -> bool {
     if shared.peer_manager.is_explicitly_disconnected(peer_id) {
+        return false;
+    }
+    if shared.peer_manager.is_connected(peer_id) && discovery != DiscoverySource::Manual {
         return false;
     }
     match discovery {
