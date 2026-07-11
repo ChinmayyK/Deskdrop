@@ -103,6 +103,7 @@ fun HomeTab(
     onForgetPeer: (PeerSnapshot) -> Unit,
     onRejectPeer: (PeerSnapshot) -> Unit,
     onTrustPeer: (PeerSnapshot) -> Unit,
+    onConnectPeer: (PeerSnapshot) -> Unit,
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit,
     onResendActivity: (ActivityEntry) -> Unit,
@@ -253,6 +254,7 @@ fun HomeTab(
                         onSendFiles = { onActionSendFiles(peer.id) },
                         onDropFiles = { uris -> onDropFiles(peer.id, uris) },
                         onPair = { onSendPairingRequest(peer) },
+                        onConnect = { onConnectPeer(peer) },
                         onForget = { onForgetPeer(peer) },
                         onReject = { onRejectPeer(peer) },
                         modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp)

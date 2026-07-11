@@ -468,7 +468,8 @@ class DeskdropService : Service() {
                 val targetId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID)
                 if (!targetId.isNullOrBlank() && engineHandle != 0L) {
                     DeskdropJni.reconnectPeer(engineHandle, targetId)
-                    Log.i(TAG, "Reconnecting to peer $targetId")
+                    restartDiscoveryNow()
+                    Log.i(TAG, "Reconnecting to peer $targetId & restarted discovery")
                 } else {
                     Log.e(TAG, "Failed to reconnect: targetId=$targetId, engineHandle=$engineHandle")
                 }

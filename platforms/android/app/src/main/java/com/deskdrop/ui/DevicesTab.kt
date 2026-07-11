@@ -90,6 +90,7 @@ fun DeviceCard(
     onSendFiles: () -> Unit,
     onDropFiles: (List<android.net.Uri>) -> Unit = {},
     onPair: () -> Unit,
+    onConnect: () -> Unit = {},
     onForget: () -> Unit,
     onReject: () -> Unit,
     modifier: Modifier = Modifier.width(170.dp)
@@ -229,6 +230,18 @@ fun DeviceCard(
                 androidx.compose.material3.DropdownMenuItem(
                     text = { Text("Send Files", color = CRTheme.textHigh(isDark)) },
                     onClick = { showMenu = false; onSendFiles() }
+                )
+            } else if (peer.trusted) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Connect to Device", color = CRTheme.brandElectric) },
+                    onClick = { showMenu = false; onConnect() },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.SettingsInputAntenna,
+                            contentDescription = "Connect",
+                            tint = CRTheme.brandElectric
+                        )
+                    }
                 )
             }
             androidx.compose.material3.DropdownMenuItem(

@@ -165,6 +165,7 @@ fun MainScreen(
                                 onForgetPeer = onForgetPeer,
                                 onRejectPeer = onRejectPeer,
                                 onTrustPeer = onTrustPeer,
+                                onConnectPeer = onConnectPeer,
                                 onSendPairingRequest = onSendPairingRequest,
                                 onDeleteActivity = onDeleteActivity,
                                 onResendActivity = onResendActivity,

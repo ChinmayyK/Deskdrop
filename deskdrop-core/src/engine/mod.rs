@@ -1667,7 +1667,8 @@ impl Engine {
 
         let endpoints = peer.socket_addrs();
         if endpoints.is_empty() {
-            return Err(anyhow::anyhow!("no known endpoints for peer {}", device_id));
+            tracing::warn!("reconnect_peer_by_id: no endpoints known yet for {}, cleared explicit_disconnect for auto-discovery", device_id);
+            return Ok(());
         }
 
         let shared = self.shared.clone();
@@ -2791,8 +2792,9 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
 
     tracing::Span::current().record("device_id", tracing::field::display(hs.peer_device_id));
 
-    if hs.is_manual_reconnect {
-        tracing::debug!("Peer manually initiated reconnect; clearing explicit disconnect");
+    let is_trusted_peer = shared.trust.lock().await.is_trusted(hs.peer_device_id);
+    if hs.is_manual_reconnect || is_trusted_peer {
+        tracing::debug!("Trusted peer or manual reconnect initiated; clearing explicit disconnect");
         let _ = shared
             .peer_manager
             .set_explicit_disconnect(hs.peer_device_id, false);
