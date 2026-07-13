@@ -1423,17 +1423,17 @@ class DeskdropService : Service() {
     ) {
         val sizeStr = formatBytes(totalBytes)
 
-        val acceptIntent = Intent(ACTION_ACCEPT_FILE_TRANSFER).apply {
-            `package` = packageName
+        val acceptIntent = Intent(this, DeskdropService::class.java).apply {
+            action = ACTION_ACCEPT_FILE_TRANSFER
             putExtra(EXTRA_TRANSFER_ID, tid)
         }
-        val rejectIntent = Intent(ACTION_REJECT_FILE_TRANSFER).apply {
-            `package` = packageName
+        val rejectIntent = Intent(this, DeskdropService::class.java).apply {
+            action = ACTION_REJECT_FILE_TRANSFER
             putExtra(EXTRA_TRANSFER_ID, tid)
         }
-        val acceptPi = PendingIntent.getBroadcast(this, tid.hashCode(),
+        val acceptPi = PendingIntent.getService(this, tid.hashCode(),
             acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val rejectPi = PendingIntent.getBroadcast(this, tid.hashCode() + 1,
+        val rejectPi = PendingIntent.getService(this, tid.hashCode() + 1,
             rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
@@ -2649,15 +2649,7 @@ class DeskdropService : Service() {
 
             override fun onCapabilitiesChanged(network: Network, networkCapabilities: android.net.NetworkCapabilities) {
                 super.onCapabilitiesChanged(network, networkCapabilities)
-                val type = if (networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) "wifi"
-                           else if (networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)) "cellular"
-                           else "unknown"
-                val h = engineHandle
-                if (h != 0L) {
-                    Thread {
-                        DeskdropJni.notifyNetworkRestored(h)
-                    }.start()
-                }
+                // Network restoration and NSD restart are handled debounced in onAvailable.
             }
 
             override fun onLost(network: Network) {
@@ -2707,8 +2699,6 @@ class DeskdropService : Service() {
                 Log.i(TAG, "NSD retry: restarting discovery")
                 stopNsdDiscovery()
                 startNsdDiscovery()
-                // Keep retrying until we connect or network is restored.
-                if (connectedPeerIds.isEmpty()) scheduleNsdRetry()
             }
         }
         nsdRetryRunnable = r

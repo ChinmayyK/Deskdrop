@@ -113,9 +113,14 @@ impl TrustStore {
                 std::fs::create_dir_all(parent).context("creating trust dir")?;
             }
         }
+        use std::io::Write;
         let tmp = self.path.with_extension("tmp");
         let bytes = serde_json::to_vec_pretty(&self.data)?;
-        std::fs::write(&tmp, &bytes).context("writing trust store")?;
+        {
+            let mut file = std::fs::File::create(&tmp).context("creating trust temp file")?;
+            file.write_all(&bytes).context("writing trust store")?;
+            let _ = file.sync_all();
+        }
         std::fs::rename(&tmp, &self.path).context("renaming trust store")?;
         Ok(())
     }

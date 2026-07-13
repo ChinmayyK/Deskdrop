@@ -811,6 +811,15 @@ impl FileTransferManager {
         }
     }
 
+    pub fn pause_all_for_device(&mut self, peer_id: Uuid) {
+        for t in self.inbound.values_mut() {
+            if t.from_device == peer_id {
+                t.status = TransferStatus::Pending;
+                t.file_handle = None;
+            }
+        }
+    }
+
     pub fn prune_stale_transfers(&mut self) {
         let now = Instant::now();
         let timeout = std::time::Duration::from_secs(300); // 5 minutes

@@ -4301,9 +4301,10 @@ fn register_session(
                         let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
 
                         // Re-emit PairingRequested with the REAL name and PIN so the UI updates
-                        let pin = req_pin
+                        let pin = rx_session_pin
+                            .clone()
                             .or_else(|| shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin))
-                            .or_else(|| rx_session_pin.clone())
+                            .or(req_pin)
                             .unwrap_or_else(|| "------".to_string());
                         let _ = shared.peer_manager.set_pairing_pin(peer_id, Some(pin.clone()));
                         let _ = shared
@@ -4890,7 +4891,7 @@ fn register_session(
                     .file_transfers
                     .lock()
                     .await
-                    .cancel_all_for_device(peer_id);
+                    .pause_all_for_device(peer_id);
                 shared.camera_frames.lock().await.remove(&peer_id);
 
                 // FIX: Phantom Pairing Prompts. Clear pairing state if connection drops.

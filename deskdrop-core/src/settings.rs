@@ -366,9 +366,14 @@ impl SettingsStore {
                 std::fs::create_dir_all(parent).context("creating config dir")?;
             }
         }
+        use std::io::Write;
         let tmp = self.path.with_extension("tmp");
         let bytes = serde_json::to_vec_pretty(&self.settings.sanitize())?;
-        std::fs::write(&tmp, bytes).context("writing settings tmp")?;
+        {
+            let mut file = std::fs::File::create(&tmp).context("creating settings tmp")?;
+            file.write_all(&bytes).context("writing settings tmp")?;
+            let _ = file.sync_all();
+        }
         std::fs::rename(&tmp, &self.path).context("renaming settings")?;
         Ok(())
     }

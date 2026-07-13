@@ -62,6 +62,9 @@ fn main() {
 
 #[cfg(target_os = "linux")]
 fn main() {
+    unsafe {
+        libc::umask(0o077);
+    }
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_env("DESKDROP_LOG")
@@ -163,6 +166,8 @@ fn main() {
     rt.block_on(async move {
         let mut rx = event_rx;
         let mut last = Instant::now() - Duration::from_secs(10);
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to register SIGTERM handler");
 
         loop {
             tokio::select! {
@@ -173,8 +178,16 @@ fn main() {
                     tracing::info!("Shutting down on SIGINT.");
                     break;
                 }
+                _ = sigterm.recv() => {
+                    tracing::info!("Shutting down on SIGTERM.");
+                    break;
+                }
             }
         }
+
+        tracing::info!("Cleaning up resources...");
+        let _ = engine_ev.stop().await;
+        let _ = std::fs::remove_file(deskdrop_core::ipc::socket_path());
     });
 }
 

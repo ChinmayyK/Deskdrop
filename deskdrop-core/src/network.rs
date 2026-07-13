@@ -251,7 +251,7 @@ async fn recv_encrypted(
         .context("reading encrypted frame length")?;
     
     let len = u32::from_le_bytes(len_buf);
-    anyhow::ensure!(len <= MAX_FRAME_SIZE, "encrypted frame too large");
+    anyhow::ensure!((16..=MAX_FRAME_SIZE).contains(&len), "encrypted frame length invalid: {len}");
 
     let mut cipher_buffer = vec![0u8; len as usize];
     tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut cipher_buffer))

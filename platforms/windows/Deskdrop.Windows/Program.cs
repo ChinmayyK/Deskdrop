@@ -162,24 +162,11 @@ namespace Deskdrop.Windows
                 try
                 {
                     var uri = new Uri(args[0]);
-                    if (uri.Host == "tofu")
+                    if (uri.Host == "tofu" || uri.Host == "pair")
                     {
-                        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-                        var action = query["action"];
-                        var deviceId = query["device_id"];
-                        if (action == "accept" && !string.IsNullOrEmpty(deviceId))
-                        {
-                            app.RespondToTrustExternal(deviceId, true);
-                        }
-                        else if (action == "reject" && !string.IsNullOrEmpty(deviceId))
-                        {
-                            app.RespondToTrustExternal(deviceId, false);
-                        }
-                    }
-                    else if (uri.Host == "pair")
-                    {
+                        // SECURITY FIX: Never accept trust automatically via command line or URL handler.
+                        // Open dashboard so user interactively reviews pending pairing requests.
                         System.Windows.Application.Current.Dispatcher.Invoke(() => app.OpenDashboard());
-                        // Trigger pairing logic if necessary
                     }
                 }
                 catch (Exception ex)
