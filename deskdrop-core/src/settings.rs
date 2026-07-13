@@ -215,8 +215,8 @@ impl Default for Settings {
             auto_apply_remote_clipboard: false, // require explicit opt-in
             auto_apply_allowed_devices: Vec::new(),
             auto_apply_debounce_ms: 500,
-            auto_accept_file_transfers: false, // require explicit opt-in
-            auto_accept_max_bytes: 50 * 1024 * 1024, // 50 MB default ceiling
+            auto_accept_file_transfers: true, // auto-accept from trusted/paired peers without approval
+            auto_accept_max_bytes: 0, // 0 = unlimited size by default
             start_on_login: false,
             min_text_length: 0,
             sync_urls_only: false,

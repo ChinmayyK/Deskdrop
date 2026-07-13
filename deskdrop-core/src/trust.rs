@@ -23,6 +23,69 @@ pub enum TrustState {
     Revoked,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct CapabilityProfile {
+    /// Allow auto-syncing plain text clipboard items from this device
+    pub allow_text: bool,
+    /// Allow auto-syncing images from this device
+    pub allow_images: bool,
+    /// Allow receiving file transfers from this device
+    pub allow_files: bool,
+    /// Optional per-device maximum payload size in bytes (overrides global setting if smaller)
+    pub max_payload_bytes: Option<usize>,
+}
+
+impl Default for CapabilityProfile {
+    fn default() -> Self {
+        Self {
+            allow_text: true,
+            allow_images: true,
+            allow_files: true,
+            max_payload_bytes: None,
+        }
+    }
+}
+
+impl CapabilityProfile {
+    pub fn text_only() -> Self {
+        Self {
+            allow_text: true,
+            allow_images: false,
+            allow_files: false,
+            max_payload_bytes: Some(1024 * 1024),
+        }
+    }
+
+    pub fn read_only() -> Self {
+        Self {
+            allow_text: false,
+            allow_images: false,
+            allow_files: false,
+            max_payload_bytes: Some(0),
+        }
+    }
+
+    /// Check whether a payload of a given content type and size is allowed by this profile.
+    pub fn allows_payload(&self, is_text: bool, is_image: bool, is_file: bool, payload_size: usize) -> Result<(), &'static str> {
+        if let Some(limit) = self.max_payload_bytes {
+            if payload_size > limit {
+                return Err("payload exceeds peer capability size limit");
+            }
+        }
+        if is_text && !self.allow_text {
+            return Err("text sync disabled for this peer");
+        }
+        if is_image && !self.allow_images {
+            return Err("image sync disabled for this peer");
+        }
+        if is_file && !self.allow_files {
+            return Err("file transfer disabled for this peer");
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TrustRecord {
@@ -36,6 +99,7 @@ pub struct TrustRecord {
     pub first_seen: u64,
     pub trusted_since: Option<u64>,
     pub last_seen: u64,
+    pub capability_profile: CapabilityProfile,
 }
 
 impl Default for TrustRecord {
@@ -50,6 +114,7 @@ impl Default for TrustRecord {
             first_seen: 0,
             trusted_since: None,
             last_seen: 0,
+            capability_profile: CapabilityProfile::default(),
         }
     }
 }
@@ -154,6 +219,7 @@ impl TrustStore {
                 first_seen: now,
                 trusted_since: None,
                 last_seen: now,
+                capability_profile: CapabilityProfile::default(),
             });
 
         if record.key_fingerprint != [0; 32] && record.key_fingerprint != fingerprint {
@@ -291,6 +357,26 @@ impl TrustStore {
         }
         Ok(changed)
     }
+
+    pub fn set_capability_profile(
+        &mut self,
+        device_id: Uuid,
+        profile: CapabilityProfile,
+    ) -> Result<Option<TrustRecord>> {
+        let snapshot = self.data.devices.get_mut(&device_id).map(|record| {
+            record.capability_profile = profile;
+            record.clone()
+        });
+        if snapshot.is_some() {
+            self.save()?;
+        }
+        Ok(snapshot)
+    }
+
+    pub fn capability_profile(&self, device_id: Uuid) -> Option<CapabilityProfile> {
+        self.data.devices.get(&device_id).map(|record| record.capability_profile)
+    }
+
 
     pub fn get(&self, device_id: Uuid) -> Option<&TrustRecord> {
         self.data.devices.get(&device_id)
@@ -555,5 +641,30 @@ mod tests {
         let summary = store.export_summary();
         assert!(summary.contains("MyPhone"), "summary: {}", summary);
         assert!(summary.contains("Trusted"), "summary: {}", summary);
+    }
+
+    #[test]
+    fn capability_profile_check() {
+        let text_only = CapabilityProfile::text_only();
+        assert!(text_only.allows_payload(true, false, false, 100).is_ok());
+        assert!(text_only.allows_payload(false, true, false, 100).is_err());
+        assert!(text_only.allows_payload(false, false, true, 100).is_err());
+        assert!(text_only.allows_payload(true, false, false, 2 * 1024 * 1024).is_err());
+    }
+
+    #[test]
+    fn store_capability_profile_persistence() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        store.observe_peer(id, "iPad".into(), &[8u8; 32]).unwrap();
+
+        let updated = store.set_capability_profile(id, CapabilityProfile::text_only()).unwrap();
+        assert!(updated.is_some());
+        assert_eq!(store.capability_profile(id), Some(CapabilityProfile::text_only()));
+
+        // Verify persistence across reload
+        let store2 = TrustStore::load(file.path()).unwrap();
+        assert_eq!(store2.capability_profile(id), Some(CapabilityProfile::text_only()));
     }
 }

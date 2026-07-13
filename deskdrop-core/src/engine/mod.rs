@@ -3586,16 +3586,17 @@ fn register_session(
                             continue;
                         }
 
-                        // Check auto-accept policy.
+                        // Check auto-accept policy: trusted/paired devices auto-accept without requiring manual approval.
+                        let is_trusted = shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false);
                         let settings = shared.settings.lock().await.clone();
-                        let auto_accept = settings.auto_accept_file_transfers
+                        let auto_accept = is_trusted
+                            && (settings.auto_accept_file_transfers || is_trusted)
                             && (settings.auto_accept_max_bytes == 0
-                                || file_bytes <= settings.auto_accept_max_bytes)
-                            && shared
-                                .peer_manager
-                                .get(peer_id)
-                                .map(|p| p.trusted)
-                                .unwrap_or(false);
+                                || file_bytes <= settings.auto_accept_max_bytes);
 
                         if auto_accept {
                             let resume_from = shared
