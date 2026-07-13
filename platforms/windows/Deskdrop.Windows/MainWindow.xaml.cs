@@ -15,6 +15,7 @@ namespace Deskdrop.Windows
         private bool _isBroadcasting;
         private bool _hasCompletedOnboarding = false;
         private string _activeCallDeviceId = "";
+        private System.ComponentModel.PropertyChangedEventHandler? _storePropertyChangedHandler;
 
         public MainWindow(ClipboardManager clipboardManager)
         {
@@ -29,7 +30,7 @@ namespace Deskdrop.Windows
             if (ActiveTransfersList != null) ActiveTransfersList.ItemsSource = DeskdropStore.Shared.ActiveTransfers;
             if (DevicesList != null) DevicesList.ItemsSource = DeskdropStore.Shared.Peers;
             
-            DeskdropStore.Shared.PropertyChanged += (s, e) => {
+            _storePropertyChangedHandler = (s, e) => {
                 if (e.PropertyName == nameof(DeskdropStore.IsDaemonRunning) || e.PropertyName == nameof(DeskdropStore.Peers))
                 {
                     Dispatcher.Invoke(() => {
@@ -38,6 +39,23 @@ namespace Deskdrop.Windows
                     });
                 }
             };
+            DeskdropStore.Shared.PropertyChanged += _storePropertyChangedHandler;
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            if (_storePropertyChangedHandler != null)
+            {
+                DeskdropStore.Shared.PropertyChanged -= _storePropertyChangedHandler;
+                _storePropertyChangedHandler = null;
+            }
+            if (_clipboardManager != null)
+            {
+                _clipboardManager.HistoryItemAdded -= OnHistoryItemAdded;
+                _clipboardManager.QuickContextUpdated -= OnQuickContextUpdated;
+                _clipboardManager.SystemHealthUpdated -= OnSystemHealthUpdated;
+            }
+            base.OnClosed(e);
         }
 
         [System.Runtime.InteropServices.DllImport("dwmapi.dll")]

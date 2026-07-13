@@ -81,6 +81,7 @@ fun SettingsScreen(
     onDarkModeChange: (Boolean) -> Unit,
     onRenameClicked: () -> Unit,
     onBatterySettingsClicked: () -> Unit,
+    onNotificationSettingsClicked: () -> Unit,
     onForgetDevice: (String) -> Unit,
     onBack: () -> Unit
 ) {
@@ -437,6 +438,49 @@ fun SettingsScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text("OPEN BATTERY SETTINGS", style = CRTypography.label, color = CRTheme.bg(isDarkMode))
+                            }
+                        }
+                    }
+                }
+
+                // Status Bar Notification Hiding Section
+                item {
+                    SettingsSection(
+                        isDark = isDarkMode,
+                        title = "Status Bar Notification",
+                        accentColor = CRTheme.blueSoft,
+                        icon = Icons.Rounded.NotificationsOff
+                    ) {
+                        Column(modifier = Modifier.padding(24.dp)) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                Box(
+                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.blueSoft.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Rounded.NotificationsOff, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = "Deskdrop runs an ultra-efficient background service so clips sync instantly. You can minimize or hide the top status bar icon in system notification settings without affecting sync.",
+                                    style = CRTypography.bodyMedium,
+                                    color = CRTheme.textMedium(isDarkMode),
+                                    lineHeight = 22.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(CRTheme.textHigh(isDarkMode))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onNotificationSettingsClicked()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("HIDE STATUS BAR ICON", style = CRTypography.label, color = CRTheme.bg(isDarkMode))
                             }
                         }
                     }

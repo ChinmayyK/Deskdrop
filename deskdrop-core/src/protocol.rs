@@ -260,6 +260,8 @@ pub enum AppMessage {
     PairingRequest {
         origin_device: Uuid,
         origin_device_name: String,
+        #[serde(default)]
+        pin: Option<String>,
     },
     /// Response to a pairing request (accepted or declined).
     PairingResponse {

@@ -106,6 +106,7 @@ class SettingsActivity : ComponentActivity() {
                     },
                     onRenameClicked = { showRenameDialog() },
                     onBatterySettingsClicked = { openBatterySettings() },
+                    onNotificationSettingsClicked = { openNotificationSettings() },
                     onForgetDevice = { deviceId -> 
                         ContextCompat.startForegroundService(this,
                             Intent(this, DeskdropService::class.java).apply {
@@ -192,6 +193,29 @@ class SettingsActivity : ComponentActivity() {
                 Toast.makeText(this,
                     "Open Settings -> Battery -> Deskdrop -> disable optimisation",
                     Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun openNotificationSettings() {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startActivity(Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                    putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, "cr_service")
+                })
+            } else {
+                startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                })
+            }
+        }.onFailure {
+            runCatching {
+                startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                })
+            }.onFailure {
+                Toast.makeText(this, "Long-press Deskdrop notification -> Settings -> Minimize", Toast.LENGTH_LONG).show()
             }
         }
     }

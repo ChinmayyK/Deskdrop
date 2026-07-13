@@ -200,7 +200,9 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
                     ),
                     Err(e) => {
                         tracing::warn!("Failed to apply clipboard: {e}");
-                        SUPPRESS_COUNT.fetch_sub(1, Ordering::SeqCst);
+                        SUPPRESS_COUNT.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
+                            Some(v.saturating_sub(1))
+                        }).ok();
                     }
                 }
             } else {
@@ -328,7 +330,8 @@ fn notify(summary: &str, body: &str) {
     let _ = std::process::Command::new("notify-send")
         .args([
             "--app-name=Deskdrop",
-            "--icon=edit-paste",
+            // "--icon=edit-paste", // Original backup for rollback
+            "--icon=computer",
             "--urgency=normal",
             "--expire-time=3000",
             summary,

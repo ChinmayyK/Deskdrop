@@ -348,15 +348,45 @@ namespace Deskdrop.Windows
             _quickAccessWindow.Activate();
         }
 
-        private static ImageSource BuildTrayIcon(bool connected)
+        // MARK: - Tray Icon (Original Backup for Rollback)
+        private static ImageSource BuildTrayIconOriginal(bool connected)
         {
-            // Placeholder: For WPF, we would typically load a resource or pack URI here.
-            // But since this replaces GDI+ System.Drawing, let's use a basic pack URI if available, 
-            // or simply fallback to the main window icon.
             try {
                 return new BitmapImage(new Uri("pack://application:,,,/Assets/logo.png"));
             } catch {
-                return null;
+                return null!;
+            }
+        }
+
+        private static ImageSource BuildTrayIcon(bool connected)
+        {
+            try
+            {
+                // Experimental: Connected Devices icon (Laptop + Smartphone vector glyph matching macOS)
+                int size = 16;
+                var visual = new DrawingVisual();
+                using (var dc = visual.RenderOpen())
+                {
+                    var brush = connected ? Brushes.DodgerBlue : Brushes.White;
+                    var pen = new Pen(brush, 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+
+                    // Laptop monitor (left side)
+                    dc.DrawRoundedRectangle(null, pen, new Rect(1, 3, 9, 7), 1, 1);
+                    // Laptop keyboard base
+                    dc.DrawLine(pen, new Point(0, 11), new Point(11, 11));
+
+                    // Smartphone (overlapping on right side)
+                    dc.DrawRoundedRectangle(brush, pen, new Rect(10, 5, 4, 7), 1, 1);
+                }
+
+                var rtb = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+                rtb.Render(visual);
+                rtb.Freeze();
+                return rtb;
+            }
+            catch
+            {
+                return BuildTrayIconOriginal(connected);
             }
         }
 

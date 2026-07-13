@@ -1929,9 +1929,16 @@ impl Engine {
             .peer_manager
             .set_outgoing_pairing_waiting(target_device, true);
 
+        let pin_opt = self
+            .shared
+            .peer_manager
+            .get(target_device)
+            .and_then(|p| p.pairing_pin.clone());
+
         let msg = AppMessage::PairingRequest {
             origin_device: self.shared.config.device_id,
             origin_device_name: self.shared.config.device_name.clone(),
+            pin: pin_opt,
         };
 
         let peers = self.shared.peer_manager.all_connected_senders();
@@ -2855,6 +2862,7 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         hs.session,
         trusted,
         DiscoverySource::Mdns,
+        Some(hs.pin.display()),
     )
 }
 
@@ -3107,6 +3115,7 @@ async fn connect_once(
         hs.session,
         trusted,
         discovery,
+        Some(hs.pin.display()),
     )
 }
 
@@ -3154,6 +3163,7 @@ fn register_session(
     session: crate::crypto::SessionKey,
     trusted: bool,
     discovery: DiscoverySource,
+    session_pin: Option<String>,
 ) -> Result<()> {
     // 64 capacity * 1 MB chunk size = ~64 MB max queued memory.
     // If the network is slower than disk I/O, this applies backpressure to the
@@ -3286,6 +3296,7 @@ fn register_session(
         let rx_peer_name = peer_name.clone();
         let rx_session_outbox_tx = session_outbox_tx.clone();
         let rx_peer_id = peer_id;
+        let rx_session_pin = session_pin.clone();
 
         let mut rx_task = tokio::spawn(async move {
             let touch_last_seen = || {
@@ -4264,6 +4275,7 @@ fn register_session(
                     Ok(AppMessage::PairingRequest {
                         origin_device,
                         origin_device_name,
+                        pin: req_pin,
                     }) => {
                         touch_last_seen();
 
@@ -4289,11 +4301,11 @@ fn register_session(
                         let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
 
                         // Re-emit PairingRequested with the REAL name and PIN so the UI updates
-                        let pin = shared
-                            .peer_manager
-                            .get(peer_id)
-                            .and_then(|p| p.pairing_pin)
-                            .unwrap_or_else(|| "0000".to_string());
+                        let pin = req_pin
+                            .or_else(|| shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin))
+                            .or_else(|| rx_session_pin.clone())
+                            .unwrap_or_else(|| "------".to_string());
+                        let _ = shared.peer_manager.set_pairing_pin(peer_id, Some(pin.clone()));
                         let _ = shared
                             .event_tx
                             .send(EngineEvent::PairingRequested {
@@ -4339,7 +4351,7 @@ fn register_session(
                         let we_requested_pairing = shared
                             .peer_manager
                             .get(peer_id)
-                            .map(|p| p.pairing_requested || p.outgoing_pairing_waiting)
+                            .map(|p| p.outgoing_pairing_waiting)
                             .unwrap_or(false);
                         let we_already_trust_them = shared
                             .peer_manager

@@ -729,10 +729,9 @@ class DeskdropService : Service() {
         cancelNsdRetry()
         releaseMulticastLock()
         releaseWifiLock()
-        handler.removeCallbacksAndMessages(null)
-        
         isRunning = false
         eventDrainThread?.join(1000)
+        handler.removeCallbacksAndMessages(null)
 
         engineLock.writeLock().lock()
         try {

@@ -759,6 +759,7 @@ impl FileTransferManager {
     pub fn reject_inbound(&mut self, tid: &TransferId) {
         if let Some(mut t) = self.inbound.remove(tid) {
             t.status = TransferStatus::Cancelled;
+            t.file_handle = None;
             if let Some(dest) = t.dest_path.take() {
                 let _ = std::fs::remove_file(dest);
             }
@@ -774,7 +775,8 @@ impl FileTransferManager {
     }
 
     pub fn cancel_inbound(&mut self, tid: &TransferId, _reason: &str) {
-        if let Some(t) = self.inbound.remove(tid) {
+        if let Some(mut t) = self.inbound.remove(tid) {
+            t.file_handle = None;
             if let Some(dest) = t.dest_path {
                 let _ = std::fs::remove_file(dest);
             }

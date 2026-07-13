@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     
     // Screenshot observing managed by ScreenshotObserver
     private var screenshotObserver: ScreenshotObserver?
+    private var keyboardShortcutMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ensureSingleRunningInstance() else { return }
@@ -44,8 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         default:       NSApp.appearance = nil
         }
         DaemonManager.shared.startDaemonIfNeeded()
+        setupMainMenu()
         setupMenuBar()
         setupWindows()
+        setupKeyboardShortcutMonitor()
         bindStore()
         toastWindowManager = DeskdropToastWindowManager(store: store)
         callBannerManager = CallBannerWindowManager(store: store)
@@ -207,19 +210,132 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
-    private func statusBarImage() -> NSImage? {
+    // MARK: - Main Menu & Keyboard Shortcuts
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        // 1. App Menu
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenuItem.submenu = appMenu
+        appMenu.addItem(withTitle: "About Deskdrop", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Preferences...", action: #selector(openPreferencesFromMenu), keyEquivalent: ",")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Hide Deskdrop", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Quit Deskdrop", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        // 2. File Menu
+        let fileMenuItem = NSMenuItem()
+        mainMenu.addItem(fileMenuItem)
+        let fileMenu = NSMenu(title: "File")
+        fileMenuItem.submenu = fileMenu
+        fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+
+        // 3. Edit Menu (Enables standard Cmd+C/V/X/A/Z in text controls)
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenuItem.submenu = editMenu
+        editMenu.addItem(withTitle: "Undo", action: NSSelectorFromString("undo:"), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: NSSelectorFromString("redo:"), keyEquivalent: "Z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+
+        // 4. Window Menu
+        let windowMenuItem = NSMenuItem()
+        mainMenu.addItem(windowMenuItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowMenuItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+
+        NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func openPreferencesFromMenu() {
+        showPanel(dashboardController)
+    }
+
+    private func setupKeyboardShortcutMonitor() {
+        keyboardShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard flags.contains(.command), !flags.contains(.control), !flags.contains(.option) else {
+                return event
+            }
+            guard let char = event.charactersIgnoringModifiers?.lowercased() else {
+                return event
+            }
+            switch char {
+            case "w":
+                if let win = NSApp.keyWindow {
+                    win.performClose(nil)
+                    if win.isVisible { win.close() }
+                    return nil
+                }
+            case "m":
+                if let win = NSApp.keyWindow {
+                    win.performMiniaturize(nil)
+                    if !win.isMiniaturized { win.miniaturize(nil) }
+                    return nil
+                }
+            case "q":
+                NSApp.terminate(nil)
+                return nil
+            default:
+                break
+            }
+            return event
+        }
+    }
+
+    // MARK: - Menu Bar Icon (Original Backup for Rollback)
+    private func statusBarImageOriginal() -> NSImage? {
         let size = NSSize(width: 16, height: 16)
         let image = NSImage(size: size)
         
         guard let symbol = NSImage(systemSymbolName: "arrow.down.doc.fill", accessibilityDescription: "Deskdrop") else { return nil }
         
-        // Use standard menu bar icon point size
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
         let configuredSymbol = symbol.withSymbolConfiguration(config) ?? symbol
         
         image.lockFocus()
         
-        // Calculate centered rect
+        let symbolSize = configuredSymbol.size
+        let x = (size.width - symbolSize.width) / 2.0
+        let y = (size.height - symbolSize.height) / 2.0
+        let rect = NSRect(x: x, y: y, width: symbolSize.width, height: symbolSize.height)
+        
+        configuredSymbol.draw(in: rect)
+        image.unlockFocus()
+        
+        image.isTemplate = true
+        return image
+    }
+
+    private func statusBarImage() -> NSImage? {
+        // Experimental: Connected Devices icon (Mac + iPhone)
+        let size = NSSize(width: 18, height: 16)
+        let image = NSImage(size: size)
+        
+        guard let symbol = NSImage(systemSymbolName: "laptopcomputer.and.iphone", accessibilityDescription: "Deskdrop") else {
+            return statusBarImageOriginal()
+        }
+        
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        let configuredSymbol = symbol.withSymbolConfiguration(config) ?? symbol
+        
+        image.lockFocus()
+        
         let symbolSize = configuredSymbol.size
         let x = (size.width - symbolSize.width) / 2.0
         let y = (size.height - symbolSize.height) / 2.0
@@ -966,7 +1082,20 @@ extension AppDelegate: MenuBarDropViewDelegate {
             
             let panelWidth: CGFloat = 320
             let panelHeight: CGFloat = 350
-            let x = screenRect.midX - (panelWidth / 2)
+            var x = screenRect.midX - (panelWidth / 2)
+            
+            // Keep panel fully on-screen (prevent overflowing off right or left edge)
+            let screen = window.screen ?? NSScreen.main
+            if let visibleFrame = screen?.visibleFrame {
+                let padding: CGFloat = 12
+                if x + panelWidth > visibleFrame.maxX - padding {
+                    x = visibleFrame.maxX - panelWidth - padding
+                }
+                if x < visibleFrame.minX + padding {
+                    x = visibleFrame.minX + padding
+                }
+            }
+            
             // Anchor it flush with the bottom of the menu bar
             let y = screenRect.minY - panelHeight - 2
             
@@ -1040,7 +1169,19 @@ extension AppDelegate: MenuBarDropViewDelegate {
         
         let panelWidth: CGFloat = 320
         let panelHeight: CGFloat = 180
-        let x = buttonScreenRect.midX - (panelWidth / 2)
+        var x = buttonScreenRect.midX - (panelWidth / 2)
+        
+        let screen = window.screen ?? NSScreen.main
+        if let visibleFrame = screen?.visibleFrame {
+            let padding: CGFloat = 12
+            if x + panelWidth > visibleFrame.maxX - padding {
+                x = visibleFrame.maxX - panelWidth - padding
+            }
+            if x < visibleFrame.minX + padding {
+                x = visibleFrame.minX + padding
+            }
+        }
+        
         let y = buttonScreenRect.minY - panelHeight - 8
         
         dropCanvasWindow?.setFrame(NSRect(x: x, y: y, width: panelWidth, height: panelHeight), display: true)

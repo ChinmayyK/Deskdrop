@@ -117,11 +117,14 @@ struct CanvasDropDelegate: DropDelegate {
         
         let providers = info.itemProviders(for: [.fileURL])
         let group = DispatchGroup()
+        let lock = NSLock()
         var urls: [URL] = []
         
         for provider in providers {
             group.enter()
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { (item, error) in
+                lock.lock()
+                defer { lock.unlock() }
                 if let data = item as? Data,
                    let url = URL(dataRepresentation: data, relativeTo: nil) {
                     urls.append(url)
