@@ -992,8 +992,7 @@ fn sanitize_file_name(name: &str) -> String {
     }
 }
 
-/// Compute a non-colliding destination path (appends (1), (2), etc. if needed).
-
+/// Query available disk space in bytes for a given path.
 fn get_available_disk_space(path: &Path) -> Option<u64> {
     #[cfg(unix)]
     {
@@ -1004,7 +1003,7 @@ fn get_available_disk_space(path: &Path) -> Option<u64> {
         };
         let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
         if unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) } == 0 {
-            return Some((stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64));
+            return Some((stat.f_bavail as u64).saturating_mul(stat.f_frsize));
         }
     }
     #[cfg(windows)]

@@ -3593,8 +3593,7 @@ fn register_session(
                             .map(|p| p.trusted)
                             .unwrap_or(false);
                         let settings = shared.settings.lock().await.clone();
-                        let auto_accept = is_trusted
-                            && (settings.auto_accept_file_transfers || is_trusted)
+                        let auto_accept = (is_trusted || settings.auto_accept_file_transfers)
                             && (settings.auto_accept_max_bytes == 0
                                 || file_bytes <= settings.auto_accept_max_bytes);
 
