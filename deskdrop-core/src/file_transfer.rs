@@ -1063,6 +1063,7 @@ fn create_unique_file(dir: &Path, file_name: &str) -> Result<(PathBuf, File)> {
 }
 
 
+#[allow(dead_code)]
 fn unique_dest_path(dir: &Path, file_name: &str) -> PathBuf {
     let base = dir.join(file_name);
     if !base.exists() {

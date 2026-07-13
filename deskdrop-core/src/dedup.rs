@@ -59,6 +59,9 @@ impl PeerWindow {
         if self.hashes.contains_key(&hash) {
             return true;
         }
+        if self.hashes.len() >= 256 {
+            self.hashes.clear();
+        }
         self.hashes.insert(hash, now);
         false
     }
@@ -136,6 +139,10 @@ impl Deduplicator {
         for h in stale {
             self.sent_hashes.remove(&h);
             self.sent_at.remove(&h);
+        }
+        if self.sent_hashes.len() >= 1024 {
+            self.sent_hashes.clear();
+            self.sent_at.clear();
         }
     }
 

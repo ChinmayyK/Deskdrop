@@ -185,6 +185,15 @@ namespace Deskdrop.Windows
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
                 _statusItem.Header = msg.Length > 63 ? msg[..60] + "…" : msg;
+                RefreshTrayState();
+            });
+        }
+
+        public void RefreshTrayState()
+        {
+            if (_tray == null) return;
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
                 bool connected = _mgr.IsConnected();
                 _tray.IconSource = BuildTrayIcon(connected);
                 _tray.ToolTipText = connected ? "Deskdrop — syncing" : "Deskdrop — idle";

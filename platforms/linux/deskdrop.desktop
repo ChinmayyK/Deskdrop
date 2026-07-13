@@ -9,7 +9,7 @@ Type=Application
 Name=Deskdrop
 GenericName=Clipboard Sync
 Comment=Proximity-Based Shared Clipboard — sync text, images and files across your devices on LAN
-Exec=/usr/local/bin/deskdrop-gtk %u
+Exec=/usr/local/bin/deskdrop-gtk %U
 # Icon=edit-paste  # Original backup for rollback
 Icon=computer
 Categories=Utility;Network;
@@ -19,6 +19,7 @@ StartupNotify=false
 # Run in background — no window, tray icon only.
 NoDisplay=false
 Terminal=false
+Actions=SendClipboard;OpenHistory;Preferences;Quit;
 
 # ── Desktop Actions ────────────────────────────────────────────────────────────
 # Right-click actions in GNOME / KDE launchers.

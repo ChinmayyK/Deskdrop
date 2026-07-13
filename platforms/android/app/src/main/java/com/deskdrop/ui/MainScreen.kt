@@ -40,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -122,7 +123,7 @@ fun MainScreen(
     onResendActivity: (ActivityEntry) -> Unit = {},
     onReplayOnboarding: () -> Unit = {}
 ) {
-    var currentTab by remember { mutableStateOf(AppTab.Home) }
+    var currentTab by rememberSaveable { mutableStateOf(AppTab.Home) }
     val hasConnectedDevices = peers.any { it.isConnected }
 
     CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices) {

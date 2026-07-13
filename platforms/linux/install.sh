@@ -108,6 +108,7 @@ else
 fi
 
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+xdg-mime default deskdrop.desktop x-scheme-handler/deskdrop 2>/dev/null || true
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
