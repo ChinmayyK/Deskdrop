@@ -57,6 +57,10 @@ pub struct Settings {
     /// Maximum text bytes stored per history entry for re-paste.
     pub max_history_text_bytes: usize,
 
+    /// Automatic history expiration retention period in days (0 = never purge by age).
+    /// Unpinned items older than this are automatically pruned from disk.
+    pub history_retention_days: u64,
+
     // ── Privacy ──────────────────────────────────────────────────────────────
     /// If true, show a native notification on every clipboard receive.
     pub show_receive_notification: bool,
@@ -136,6 +140,13 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub clipboard_templates: Vec<ClipboardTemplate>,
 
+    // ── Network Binding Override ──────────────────────────────────────────────
+    /// Optional LAN interface IP address or CIDR prefix to bind discovery to
+    /// (e.g. "192.168.1.0/24" or "192.168.1.50").
+    /// None = listen/broadcast on default interfaces.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bind_interface: Option<String>,
+
     // ── Per-peer overrides ────────────────────────────────────────────────────
     /// Per-device overrides keyed by UUID string.
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
@@ -189,6 +200,7 @@ impl Default for Settings {
             max_payload_bytes: 10 * 1024 * 1024, // 10 MB default ceiling
             history_limit: 50,
             max_history_text_bytes: 64 * 1024,
+            history_retention_days: 7,
             show_receive_notification: true,
             require_tofu_confirmation: true,
             blocked_device_ids: Vec::new(),
@@ -209,6 +221,7 @@ impl Default for Settings {
             min_text_length: 0,
             sync_urls_only: false,
             clipboard_templates: Vec::new(),
+            bind_interface: None,
             per_peer: std::collections::HashMap::new(),
         }
     }

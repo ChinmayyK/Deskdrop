@@ -366,6 +366,10 @@ impl History {
         &self.entries
     }
 
+    pub fn entries_mut(&mut self) -> &mut VecDeque<HistoryEntry> {
+        &mut self.entries
+    }
+
     pub fn recent(&self, n: usize) -> impl Iterator<Item = &HistoryEntry> {
         self.entries.iter().rev().take(n)
     }
@@ -609,6 +613,28 @@ impl History {
         let before = self.entries.len();
         self.entries
             .retain(|entry| !entry.is_sensitive_expired(now));
+        let removed = before.saturating_sub(self.entries.len());
+        if removed > 0 {
+            self.persist()?;
+        }
+        Ok(removed)
+    }
+
+    /// Purges unpinned entries older than `retention_days` from disk.
+    /// Returns the number of entries pruned.
+    /// If `retention_days` is 0, no age-based pruning occurs.
+    pub fn purge_expired_retention(&mut self, retention_days: u64) -> Result<usize> {
+        self.purge_expired_retention_with_now(retention_days, now_secs())
+    }
+
+    fn purge_expired_retention_with_now(&mut self, retention_days: u64, now: u64) -> Result<usize> {
+        if retention_days == 0 {
+            return Ok(0);
+        }
+        let cutoff_secs = now.saturating_sub(retention_days.saturating_mul(86400));
+        let before = self.entries.len();
+        self.entries
+            .retain(|entry| entry.pinned || entry.timestamp >= cutoff_secs);
         let removed = before.saturating_sub(self.entries.len());
         if removed > 0 {
             self.persist()?;
@@ -1310,5 +1336,32 @@ mod tests {
             .unwrap();
         assert_eq!(removed, 1);
         assert!(history.entries().is_empty());
+    }
+
+    #[test]
+    fn purge_expired_retention_prunes_old_unpinned() {
+        let tmp = NamedTempFile::new().unwrap();
+        let mut history = History::load_with_limit(tmp.path(), 50).unwrap();
+        let old_content = ClipboardContent::Text("Old regular note".into());
+        let _ = history.push_with_options(&old_content, "MacBook".into(), 1024).unwrap();
+
+        // Simulate item created 10 days ago (864000 seconds ago)
+        let now = 1_700_000_000u64;
+        history.entries_mut().back_mut().unwrap().timestamp = now - 10 * 86400;
+
+        // With retention_days = 7, the 10-day old item should be pruned
+        let removed = history.purge_expired_retention_with_now(7, now).unwrap();
+        assert_eq!(removed, 1);
+        assert!(history.entries().is_empty());
+
+        // If pinned, it should survive age pruning
+        let _ = history.push_with_options(&old_content, "MacBook".into(), 1024).unwrap();
+        let pin_id = history.entries().back().unwrap().id;
+        history.entries_mut().back_mut().unwrap().timestamp = now - 10 * 86400;
+        let _ = history.set_pinned(pin_id, true).unwrap();
+
+        let removed = history.purge_expired_retention_with_now(7, now).unwrap();
+        assert_eq!(removed, 0);
+        assert_eq!(history.entries().len(), 1);
     }
 }

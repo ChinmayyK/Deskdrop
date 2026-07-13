@@ -104,6 +104,8 @@ pub struct UdpBeaconConfig {
     pub identity_fingerprint_prefix: [u8; 8],
     /// Only accept peers with this protocol version. If `None`, accept any.
     pub required_protocol_version: Option<u16>,
+    /// Optional local IP address or interface name to bind discovery sockets to.
+    pub bind_interface: Option<String>,
 }
 
 impl Default for UdpBeaconConfig {
@@ -117,6 +119,7 @@ impl Default for UdpBeaconConfig {
             device_id: Uuid::nil(),
             identity_fingerprint_prefix: [0u8; 8],
             required_protocol_version: Some(PROTOCOL_VERSION),
+            bind_interface: None,
         }
     }
 }
@@ -276,7 +279,8 @@ pub async fn spawn_broadcast_beacon(
         PROTOCOL_VERSION,
     );
 
-    let socket = create_broadcast_send_socket(config.broadcast_port)?;
+    let bind_ip = resolve_bind_ipv4(config.bind_interface.as_deref());
+    let socket = create_broadcast_send_socket(bind_ip, config.broadcast_port)?;
 
     let broadcast_dest = SocketAddr::new(IpAddr::V4(Ipv4Addr::BROADCAST), config.broadcast_port);
 
@@ -347,7 +351,8 @@ pub async fn spawn_broadcast_listener(
     input_handle: DiscoveryInputHandle,
     cancel: CancellationToken,
 ) -> Result<(), anyhow::Error> {
-    let socket = create_broadcast_recv_socket(config.broadcast_port)?;
+    let bind_ip = resolve_bind_ipv4(config.bind_interface.as_deref());
+    let socket = create_broadcast_recv_socket(bind_ip, config.broadcast_port)?;
 
     info!(
         "udp broadcast listener: bound to 0.0.0.0:{}",
@@ -444,7 +449,7 @@ pub async fn spawn_multicast_beacon(
                 let mut active_sockets = Vec::new();
                 if let Ok(ifaces) = if_addrs::get_if_addrs() {
                     for iface in ifaces {
-                        if iface.is_loopback() { continue; }
+                        if !should_bind_interface(&iface, config.bind_interface.as_deref()) { continue; }
                         if let IpAddr::V4(ipv4) = iface.ip() {
                             let sock = cached_sockets.entry(ipv4).or_insert_with(|| {
                                 match create_multicast_send_socket(ipv4) {
@@ -487,7 +492,7 @@ pub async fn spawn_multicast_listener(
     cancel: CancellationToken,
 ) -> Result<(), anyhow::Error> {
     let multicast_addr = config.multicast_addr;
-    let socket = create_multicast_recv_socket(multicast_addr, config.multicast_port)?;
+    let socket = create_multicast_recv_socket(multicast_addr, config.multicast_port, config.bind_interface.as_deref())?;
 
     info!(
         "udp multicast listener: joined {}:{} on all interfaces",
@@ -565,8 +570,26 @@ async fn handle_received_beacon(
 
 // ── Socket creation helpers ───────────────────────────────────────────────────
 
+/// Resolve optional interface string (e.g. "192.168.1.50") into `Ipv4Addr`.
+pub fn resolve_bind_ipv4(bind_interface: Option<&str>) -> Option<Ipv4Addr> {
+    bind_interface?.parse::<Ipv4Addr>().ok()
+}
+
+/// Check if a network interface matches an optional interface filter string.
+pub fn should_bind_interface(iface: &if_addrs::Interface, bind_interface: Option<&str>) -> bool {
+    if iface.is_loopback() {
+        return false;
+    }
+    match bind_interface {
+        Some(target) => {
+            iface.name.eq_ignore_ascii_case(target) || iface.ip().to_string() == target
+        }
+        None => true,
+    }
+}
+
 /// Create a UDP socket suitable for sending broadcast packets.
-fn create_broadcast_send_socket(_port: u16) -> Result<UdpSocket, anyhow::Error> {
+fn create_broadcast_send_socket(bind_ip: Option<Ipv4Addr>, _port: u16) -> Result<UdpSocket, anyhow::Error> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
 
     // Allow sending to broadcast addresses.
@@ -585,9 +608,9 @@ fn create_broadcast_send_socket(_port: u16) -> Result<UdpSocket, anyhow::Error> 
     ))]
     socket.set_reuse_port(true)?;
 
-    // Bind to any local address. Port 0 lets the OS pick an ephemeral port
+    // Bind to specified address or any local address. Port 0 lets the OS pick an ephemeral port
     // since the sender doesn't need to listen on the broadcast port.
-    let bind_addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0);
+    let bind_addr = SocketAddrV4::new(bind_ip.unwrap_or(Ipv4Addr::UNSPECIFIED), 0);
     socket.bind(&SockAddr::from(bind_addr))?;
     socket.set_nonblocking(true)?;
 
@@ -596,7 +619,7 @@ fn create_broadcast_send_socket(_port: u16) -> Result<UdpSocket, anyhow::Error> 
 }
 
 /// Create a UDP socket suitable for receiving broadcast packets.
-fn create_broadcast_recv_socket(port: u16) -> Result<UdpSocket, anyhow::Error> {
+fn create_broadcast_recv_socket(bind_ip: Option<Ipv4Addr>, port: u16) -> Result<UdpSocket, anyhow::Error> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
 
     socket.set_broadcast(true)?;
@@ -611,8 +634,8 @@ fn create_broadcast_recv_socket(port: u16) -> Result<UdpSocket, anyhow::Error> {
     ))]
     socket.set_reuse_port(true)?;
 
-    // Bind to 0.0.0.0:<port> to receive broadcast packets.
-    let bind_addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
+    // Bind to <bind_ip>:<port> to receive broadcast packets.
+    let bind_addr = SocketAddrV4::new(bind_ip.unwrap_or(Ipv4Addr::UNSPECIFIED), port);
     socket.bind(&SockAddr::from(bind_addr))?;
     socket.set_nonblocking(true)?;
 
@@ -662,6 +685,7 @@ fn create_multicast_send_socket(interface_ipv4: Ipv4Addr) -> Result<UdpSocket, a
 fn create_multicast_recv_socket(
     multicast_addr: Ipv4Addr,
     port: u16,
+    bind_interface: Option<&str>,
 ) -> Result<UdpSocket, anyhow::Error> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
 
@@ -680,12 +704,12 @@ fn create_multicast_recv_socket(
     let bind_addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
     socket.bind(&SockAddr::from(bind_addr))?;
 
-    // Join the multicast group on all non-loopback IPv4 interfaces.
+    // Join the multicast group on matching IPv4 interfaces.
     let mut joined_any = false;
     match if_addrs::get_if_addrs() {
         Ok(ifaces) => {
             for iface in &ifaces {
-                if iface.is_loopback() {
+                if !should_bind_interface(iface, bind_interface) {
                     continue;
                 }
                 if let IpAddr::V4(ipv4) = iface.ip() {

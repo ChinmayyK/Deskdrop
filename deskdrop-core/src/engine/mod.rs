@@ -2177,13 +2177,21 @@ impl Engine {
 
     fn spawn_sensitive_history_pruner(&self) {
         let history = self.shared.history.clone();
+        let settings = self.shared.settings.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(5));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 interval.tick().await;
-                if let Err(err) = history.lock().await.purge_expired_sensitive_entries() {
+                let mut hist = history.lock().await;
+                if let Err(err) = hist.purge_expired_sensitive_entries() {
                     warn!(error = %err, "sensitive history pruning failed");
+                }
+                let retention_days = settings.lock().await.history_retention_days;
+                if retention_days > 0 {
+                    if let Err(err) = hist.purge_expired_retention(retention_days) {
+                        warn!(error = %err, "retention history pruning failed");
+                    }
                 }
             }
         });
