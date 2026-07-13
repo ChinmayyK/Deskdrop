@@ -151,6 +151,87 @@ impl Throttle {
         b.refill();
         b.tokens as u64
     }
+
+    /// Current sustained rate limit in bytes/sec.
+    pub async fn rate_bps(&self) -> u64 {
+        self.bucket.lock().await.rate as u64
+    }
+}
+
+// ── Adaptive Congestion Controller (AIMD) ─────────────────────────────────────
+
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+
+/// AIMD (Additive Increase, Multiplicative Decrease) dynamic rate controller.
+/// Automatically adjusts `Throttle` bandwidth limits based on transmission success,
+/// latency, or packet/frame drops.
+#[derive(Debug, Clone)]
+pub struct AdaptiveCongestionController {
+    min_rate_bps: u64,
+    max_rate_bps: u64,
+    step_increase_bps: u64,
+    current_rate_bps: Arc<AtomicU64>,
+    consecutive_successes: Arc<AtomicU32>,
+}
+
+impl AdaptiveCongestionController {
+    /// Create a new AIMD congestion controller with specified min/max bounds and additive step.
+    pub fn new(min_rate_bps: u64, max_rate_bps: u64, step_increase_bps: u64) -> Self {
+        Self {
+            min_rate_bps,
+            max_rate_bps,
+            step_increase_bps,
+            current_rate_bps: Arc::new(AtomicU64::new(DEFAULT_RATE_BPS.clamp(min_rate_bps, max_rate_bps))),
+            consecutive_successes: Arc::new(AtomicU32::new(0)),
+        }
+    }
+
+    /// Default configuration: min 512 KB/s, max 32 MB/s, step +512 KB/s.
+    pub fn default_config() -> Self {
+        Self::new(512 * 1024, 32 * 1024 * 1024, 512 * 1024)
+    }
+
+    /// Return the currently targeted sustained rate in bytes/sec.
+    pub fn current_rate(&self) -> u64 {
+        self.current_rate_bps.load(Ordering::Relaxed)
+    }
+
+    /// Report a successful transfer chunk/window.
+    /// Performs Additive Increase (+step_increase_bps) after 2 consecutive successes.
+    pub async fn on_success(&self, throttle: &Throttle) -> u64 {
+        let count = self.consecutive_successes.fetch_add(1, Ordering::Relaxed) + 1;
+        if count >= 2 {
+            self.consecutive_successes.store(0, Ordering::Relaxed);
+            let current = self.current_rate_bps.load(Ordering::Relaxed);
+            let new_rate = current.saturating_add(self.step_increase_bps).min(self.max_rate_bps);
+            if new_rate != current {
+                self.current_rate_bps.store(new_rate, Ordering::Relaxed);
+                throttle.set_rate(new_rate, (new_rate * 2).max(1)).await;
+                debug!("[aimd] additive increase -> {} B/s", new_rate);
+            }
+            new_rate
+        } else {
+            self.current_rate_bps.load(Ordering::Relaxed)
+        }
+    }
+
+    /// Report network congestion, timeout, packet drop, or high latency.
+    /// Performs Multiplicative Decrease (halves rate limit down to min_rate_bps).
+    pub async fn on_congestion(&self, throttle: &Throttle) -> u64 {
+        self.consecutive_successes.store(0, Ordering::Relaxed);
+        let current = self.current_rate_bps.load(Ordering::Relaxed);
+        let halved = (current / 2).max(self.min_rate_bps);
+        self.current_rate_bps.store(halved, Ordering::Relaxed);
+        throttle.set_rate(halved, (halved * 2).max(1)).await;
+        debug!("[aimd] multiplicative decrease -> {} B/s", halved);
+        halved
+    }
+}
+
+impl Default for AdaptiveCongestionController {
+    fn default() -> Self {
+        Self::default_config()
+    }
 }
 
 // ── Throughput estimator ──────────────────────────────────────────────────────
@@ -265,5 +346,27 @@ mod tests {
         est.record(1_000_000);
         let bps = est.bps();
         assert!(bps > 0.0, "bps = {}", bps);
+    }
+
+    #[tokio::test]
+    async fn aimd_additive_increase_and_multiplicative_decrease() {
+        let t = Throttle::new(4 * 1024 * 1024, 8 * 1024 * 1024);
+        let aimd = AdaptiveCongestionController::new(1024 * 1024, 10 * 1024 * 1024, 512 * 1024);
+        assert_eq!(aimd.current_rate(), 4 * 1024 * 1024);
+
+        // 1st success does not increase yet (requires 2 consecutive)
+        aimd.on_success(&t).await;
+        assert_eq!(aimd.current_rate(), 4 * 1024 * 1024);
+
+        // 2nd success triggers Additive Increase (+512 KB/s)
+        aimd.on_success(&t).await;
+        assert_eq!(aimd.current_rate(), 4 * 1024 * 1024 + 512 * 1024);
+        assert_eq!(t.rate_bps().await, 4 * 1024 * 1024 + 512 * 1024);
+
+        // Congestion event triggers Multiplicative Decrease (halves rate)
+        aimd.on_congestion(&t).await;
+        let halved = (4 * 1024 * 1024 + 512 * 1024) / 2;
+        assert_eq!(aimd.current_rate(), halved);
+        assert_eq!(t.rate_bps().await, halved);
     }
 }
