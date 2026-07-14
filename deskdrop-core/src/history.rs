@@ -27,6 +27,13 @@ fn clamp_entries(limit: usize) -> usize {
     limit.clamp(MIN_ENTRIES, MAX_ENTRIES)
 }
 
+/// A search result entry with its relevance score.
+#[derive(Debug, Clone)]
+pub struct ScoredHistoryEntry<'a> {
+    pub score: u32,
+    pub entry: &'a HistoryEntry,
+}
+
 /// Aggregated statistics over the full history buffer.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HistoryStats {
@@ -673,6 +680,87 @@ impl History {
             }
             false
         })
+    }
+
+    /// Scored fuzzy full-text search through stored history.
+    ///
+    /// Scores entries by exact substring match (+100), token matches (+30),
+    /// token prefix matches (+20), and recency bonus. Returns up to `limit`
+    /// entries sorted highest score first.
+    pub fn search_fuzzy<'a>(&'a self, query: &str, limit: usize) -> Vec<ScoredHistoryEntry<'a>> {
+        let q = query.trim().to_lowercase();
+        if q.is_empty() {
+            return self
+                .entries
+                .iter()
+                .rev()
+                .take(limit)
+                .map(|e| ScoredHistoryEntry { score: 1, entry: e })
+                .collect();
+        }
+
+        let tokens: Vec<&str> = q.split_whitespace().collect();
+        let len = self.entries.len();
+        let mut scored = Vec::new();
+
+        for (idx, entry) in self.entries.iter().enumerate() {
+            let mut text_corpus = format!(
+                "{} {} {}",
+                entry.source_device,
+                entry.kind(),
+                entry.summary()
+            );
+            if let HistoryPayload::Text {
+                full_text: Some(ref t),
+                ..
+            } = entry.payload
+            {
+                text_corpus.push(' ');
+                text_corpus.push_str(t);
+            }
+            if let HistoryPayload::File { ref name, .. } = entry.payload {
+                text_corpus.push(' ');
+                text_corpus.push_str(name);
+            }
+            let lower = text_corpus.to_lowercase();
+
+            let mut score = 0u32;
+            if lower.contains(&q) {
+                score += 100;
+                if lower.starts_with(&q) {
+                    score += 50;
+                }
+            }
+
+            let mut all_tokens_match = true;
+            for token in &tokens {
+                if lower.contains(token) {
+                    score += 30;
+                    if lower.split_whitespace().any(|w| w.starts_with(token)) {
+                        score += 20;
+                    }
+                } else {
+                    all_tokens_match = false;
+                }
+            }
+
+            if all_tokens_match && tokens.len() > 1 {
+                score += 40;
+            }
+
+            if score > 0 {
+                // Recency tiebreaker bonus (max +20)
+                let recency_bonus = ((idx + 1) as u32 * 20) / (len.max(1) as u32);
+                scored.push(ScoredHistoryEntry {
+                    score: score + recency_bonus,
+                    entry,
+                });
+            }
+        }
+
+        scored.sort_by(|a, b| b.score.cmp(&a.score));
+        scored.truncate(limit);
+        scored
     }
 
     /// Return entries newer than `since_id` (exclusive), most-recent first.
@@ -1363,5 +1451,31 @@ mod tests {
         let removed = history.purge_expired_retention_with_now(7, now).unwrap();
         assert_eq!(removed, 0);
         assert_eq!(history.entries().len(), 1);
+    }
+
+    #[test]
+    fn fuzzy_search_ranks_exact_matches_higher() {
+        let tmp = NamedTempFile::new().unwrap();
+        let mut history = History::load_with_limit(tmp.path(), 100).unwrap();
+        let _ = history.push_with_options(
+            &ClipboardContent::Text("Apple Pie Recipe".into()),
+            "Mac".into(),
+            1024,
+        );
+        let _ = history.push_with_options(
+            &ClipboardContent::Text("Pineapple Juice".into()),
+            "Phone".into(),
+            1024,
+        );
+        let _ = history.push_with_options(
+            &ClipboardContent::Text("Apple iPhone 15 Pro Max specs".into()),
+            "iPad".into(),
+            1024,
+        );
+
+        let results = history.search_fuzzy("Apple", 10);
+        assert!(!results.is_empty());
+        // Exact prefix token match on Apple should score higher than inner substring Pineapple
+        assert_eq!(results[0].entry.summary(), "Apple iPhone 15 Pro Max specs");
     }
 }

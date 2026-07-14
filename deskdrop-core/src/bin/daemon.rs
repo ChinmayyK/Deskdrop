@@ -810,6 +810,15 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                     .collect::<Vec<_>>(),
             ))
         }
+        IpcRequest::HistorySearchFuzzy { query, limit } => {
+            let history = state.history.lock().await;
+            let scored = history.search_fuzzy(&query, limit);
+            let json_items: Vec<_> = scored
+                .into_iter()
+                .map(|item| json!({ "score": item.score, "entry": item.entry }))
+                .collect();
+            Ok(IpcResponse::ok(json_items))
+        }
         IpcRequest::HistoryPin { id, pinned } => {
             let mut history = state.history.lock().await;
             let entry = history

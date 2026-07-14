@@ -3327,7 +3327,7 @@ fn register_session(
                 match result {
                     Ok(AppMessage::ClipboardPush {
                         seq,
-                        content,
+                        mut content,
                         origin_device,
                         origin_device_name,
                         relay_path,
@@ -3345,6 +3345,10 @@ fn register_session(
                             } else {
                                 origin_device_name.clone()
                             };
+
+                            // Run smart clipboard transformers (URL UTM parameter stripping, whitespace cleaning)
+                            crate::transformer::TransformerPipeline::default_pipeline()
+                                .transform(std::sync::Arc::make_mut(&mut content));
 
                             // --- Clipboard Security & Throttling ---
                             let payload_size = match &*content {

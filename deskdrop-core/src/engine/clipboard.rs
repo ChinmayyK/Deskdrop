@@ -307,6 +307,26 @@ impl crate::engine::Engine {
             .collect()
     }
 
+    pub async fn history_search_fuzzy(
+        &self,
+        query: String,
+        limit: usize,
+    ) -> Vec<serde_json::Value> {
+        self.shared
+            .history
+            .lock()
+            .await
+            .search_fuzzy(&query, limit)
+            .into_iter()
+            .map(|scored| {
+                serde_json::json!({
+                    "score": scored.score,
+                    "entry": scored.entry,
+                })
+            })
+            .collect()
+    }
+
     pub async fn history_repush(&self, id: u64, target: SyncTarget) -> Result<()> {
         let entry = self
             .shared

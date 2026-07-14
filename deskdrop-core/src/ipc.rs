@@ -119,6 +119,8 @@ pub enum IpcRequest {
     History { last: usize },
     /// Search history.
     HistorySearch { query: String, limit: usize },
+    /// Scored fuzzy search across history (powers Cmd+Shift+V command palette).
+    HistorySearchFuzzy { query: String, limit: usize },
     /// Re-push a history item, optionally to one peer.
     HistoryRepush { id: u64, target: Option<String> },
     /// Pin or unpin a history item.
@@ -777,6 +779,9 @@ pub async fn handle_ipc_request(
         IpcRequest::History { last } => IpcResponse::ok(eng.history_recent(last).await),
         IpcRequest::HistorySearch { query, limit } => {
             IpcResponse::ok(eng.history_search(query, limit).await)
+        }
+        IpcRequest::HistorySearchFuzzy { query, limit } => {
+            IpcResponse::ok(eng.history_search_fuzzy(query, limit).await)
         }
         IpcRequest::HistoryRepush { id, target } => {
             let tgt = match target {
