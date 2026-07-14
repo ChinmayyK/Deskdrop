@@ -525,6 +525,7 @@ class DeskdropService : Service() {
                     val result = DeskdropJni.respondToPairing(h, deviceId, accepted)
                     Log.i(TAG, "Pairing response for $deviceId accepted=$accepted result=$result")
                     persistStatus()
+                    notificationManager.cancel(NOTIF_ID_TOFU)
                 }
                 return START_STICKY
             }
@@ -1203,14 +1204,20 @@ class DeskdropService : Service() {
                 val name = resolvePeerDisplayName(deviceId, DeskdropJni.eventDeviceName(ev))
                 val pin  = DeskdropJni.eventFingerprint(ev) ?: "" // JNI returns pin via eventFingerprint for now
                 
-                // Launch PairingActivity with the PIN
-                val intent = Intent(this@DeskdropService, PairingActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    putExtra("device_id", deviceId)
-                    putExtra("device_name", name)
-                    putExtra("pin", pin)
+                // Always post high-priority heads-up/full-screen notification (required on Android 10+ when app is closed/backgrounded)
+                showPairingRequestNotification(deviceId, name, pin)
+                
+                // Also attempt direct launch in case activity is already in foreground
+                runCatching {
+                    val intent = Intent(this@DeskdropService, PairingActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
+                        putExtra(PairingActivity.EXTRA_DEVICE_NAME, name)
+                        putExtra(PairingActivity.EXTRA_PIN, pin)
+                        putExtra(PairingActivity.EXTRA_FINGERPRINT, pin)
+                    }
+                    startActivity(intent)
                 }
-                startActivity(intent)
             }
 
             DeskdropJni.CR_EVENT_OUTGOING_PAIRING_WAITING -> {
@@ -1445,6 +1452,52 @@ class DeskdropService : Service() {
             .setOngoing(true)
             .build()
         notificationManager.notify(transferNotifId(tid), notif)
+    }
+
+    private fun showPairingRequestNotification(
+        deviceId: String, name: String, pin: String
+    ) {
+        val pairingIntent = Intent(this, PairingActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
+            putExtra(PairingActivity.EXTRA_DEVICE_NAME, name)
+            putExtra(PairingActivity.EXTRA_PIN, pin)
+            putExtra(PairingActivity.EXTRA_FINGERPRINT, pin)
+        }
+        val fullScreenPi = PendingIntent.getActivity(
+            this, deviceId.hashCode(), pairingIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val acceptIntent = Intent(this, DeskdropService::class.java).apply {
+            action = ACTION_RESPOND_TO_PAIRING
+            putExtra(EXTRA_TARGET_DEVICE_ID, deviceId)
+            putExtra(PairingActivity.EXTRA_APPROVED, true)
+        }
+        val rejectIntent = Intent(this, DeskdropService::class.java).apply {
+            action = ACTION_RESPOND_TO_PAIRING
+            putExtra(EXTRA_TARGET_DEVICE_ID, deviceId)
+            putExtra(PairingActivity.EXTRA_APPROVED, false)
+        }
+        val acceptPi = PendingIntent.getService(this, deviceId.hashCode() + 10,
+            acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val rejectPi = PendingIntent.getService(this, deviceId.hashCode() + 11,
+            rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Pairing Request from $name")
+            .setContentText(if (pin.isNotEmpty()) "PIN code: $pin — Tap to review or approve" else "Tap to review pairing request")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setAutoCancel(true)
+            .setContentIntent(fullScreenPi)
+            .setFullScreenIntent(fullScreenPi, true)
+            .addAction(0, "Accept (${if (pin.isNotEmpty()) pin else "Approve"})", acceptPi)
+            .addAction(0, "Reject", rejectPi)
+            .setOngoing(true)
+            .build()
+        notificationManager.notify(NOTIF_ID_TOFU, notif)
     }
 
     private fun updateFileTransferNotificationProgress(

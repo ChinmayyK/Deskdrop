@@ -1125,7 +1125,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
     private func ensureDropCanvasWindow() {
         if dropCanvasWindow == nil {
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 212),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -1149,7 +1149,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
         guard let screen = NSScreen.main else { return }
         
         let panelWidth: CGFloat = 320
-        let panelHeight: CGFloat = 180
+        let panelHeight: CGFloat = 212
         let x = screen.frame.midX - (panelWidth / 2)
         // Lower middle of screen
         let y = screen.visibleFrame.minY + 80
@@ -1168,7 +1168,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
         let buttonScreenRect = window.convertToScreen(buttonRect)
         
         let panelWidth: CGFloat = 320
-        let panelHeight: CGFloat = 180
+        let panelHeight: CGFloat = 212
         var x = buttonScreenRect.midX - (panelWidth / 2)
         
         let screen = window.screen ?? NSScreen.main

@@ -23,6 +23,7 @@ namespace Deskdrop.Windows
 
         private MainWindow? _mainWindow;
         private QuickAccessWindow? _quickAccessWindow;
+        private DropZoneWindow? _dropZoneWindow;
         private bool _syncEnabled = true;
         private DateTime _lastBalloonAt = DateTime.MinValue;
 
@@ -118,11 +119,9 @@ namespace Deskdrop.Windows
                     });
                 });
 
-                GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, System.Windows.Input.Key.D, () => {
+                GlobalHotKeyManager.Shared.Register(System.Windows.Input.ModifierKeys.Control, System.Windows.Input.Key.D, () => {
                     System.Windows.Application.Current?.Dispatcher.Invoke(() => {
-                        var dropZone = new DropZoneWindow(_mgr);
-                        dropZone.Show();
-                        dropZone.Activate();
+                        ToggleDropCanvas();
                     });
                 });
 
@@ -423,6 +422,24 @@ namespace Deskdrop.Windows
                     deviceName: string.IsNullOrWhiteSpace(s.DeviceName) ? Environment.MachineName : s.DeviceName,
                     port: s.Port);
             });
+        }
+
+        private void ToggleDropCanvas()
+        {
+            if (_dropZoneWindow != null && _dropZoneWindow.IsLoaded && _dropZoneWindow.IsVisible)
+            {
+                _dropZoneWindow.Close();
+                _dropZoneWindow = null;
+                return;
+            }
+            if (_dropZoneWindow != null)
+            {
+                try { _dropZoneWindow.Close(); } catch { }
+            }
+            _dropZoneWindow = new DropZoneWindow(_mgr);
+            _dropZoneWindow.Closed += (s, e) => { _dropZoneWindow = null; };
+            _dropZoneWindow.Show();
+            _dropZoneWindow.Activate();
         }
 
         public static void CompleteOnboarding()

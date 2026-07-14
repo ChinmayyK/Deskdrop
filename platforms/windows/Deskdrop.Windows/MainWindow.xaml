@@ -372,7 +372,7 @@
                             <Border Background="{StaticResource SurfaceStrong}" CornerRadius="12" Padding="24" Margin="0,0,0,24">
                                 <StackPanel>
                                     <TextBlock Text="Global Hotkeys" FontWeight="SemiBold" Foreground="{StaticResource Ink}" Margin="0,0,0,16"/>
-                                    <CheckBox x:Name="ChkEnableHotkeys" Content="Enable global keyboard shortcuts (Ctrl+Shift+D, etc.)" Margin="0,0,0,16"/>
+                                    <CheckBox x:Name="ChkEnableHotkeys" Content="Enable global keyboard shortcuts (Ctrl+D, etc.)" Margin="0,0,0,16"/>
                                 </StackPanel>
                             </Border>
 

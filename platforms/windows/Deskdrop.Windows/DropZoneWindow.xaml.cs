@@ -25,12 +25,13 @@ namespace Deskdrop.Windows
             double scaleX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
             double scaleY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
 
+            double winWidth = 320;
+            double winHeight = 212;
             WindowState = WindowState.Normal;
-            Left = workArea.Left / scaleX;
-            Top = workArea.Top / scaleY;
-            Width = workArea.Width / scaleX;
-            Height = workArea.Height / scaleY;
-            WindowState = WindowState.Maximized;
+            Width = winWidth;
+            Height = winHeight;
+            Left = (workArea.Left / scaleX) + ((workArea.Width / scaleX) - winWidth) / 2.0;
+            Top = (workArea.Bottom / scaleY) - winHeight - 80;
         }
 
         private void Window_DragEnter(object sender, System.Windows.DragEventArgs e)
@@ -107,6 +108,11 @@ namespace Deskdrop.Windows
         }
 
         private void Window_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            Close();
+        }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             Close();
         }
