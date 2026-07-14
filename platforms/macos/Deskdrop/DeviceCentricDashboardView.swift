@@ -193,8 +193,8 @@ struct DeviceCard: View {
             HStack(spacing: 8) {
                 if device.isConnected {
                     ModernDeviceCardButton(icon: "wifi.slash", color: CRTheme.accentOrange, help: "Disconnect") { store.disconnect(device) }
-                } else if device.canReconnect {
-                    ModernDeviceCardButton(icon: "arrow.triangle.2.circlepath", color: CRTheme.brandElectric, help: "Reconnect") { store.scanForDevices() }
+                } else if device.trustState == .trusted {
+                    ModernDeviceCardButton(icon: "antenna.radiowaves.left.and.right", color: CRTheme.brandElectric, help: "Connect") { store.connect(device) }
                 }
                 
                 if device.trustState != .trusted {

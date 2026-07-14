@@ -12,6 +12,7 @@ data class PeerSnapshot(
     val trusted: Boolean,
     val remembered: Boolean,
     val autoConnect: Boolean,
+    val explicitDisconnect: Boolean,
     val lastSeenSecs: Long?,
     val lastSyncSecs: Long?,
     val lastError: String?,
@@ -22,7 +23,7 @@ data class PeerSnapshot(
 ) {
     val isConnected: Boolean get() = status == "connected" && trusted
     val isConnecting: Boolean get() = status == "connecting"
-    val isReconnectable: Boolean get() = trusted && remembered && autoConnect
+    val isReconnectable: Boolean get() = trusted && remembered && autoConnect && !isConnected && !explicitDisconnect
     val needsAttention: Boolean get() = status == "failed"
     val needsTrust: Boolean get() = !trusted && (needsAttention || status == "disconnected")
     val isRejected: Boolean get() = lastError?.contains("rejected", ignoreCase = true) == true ||
@@ -48,6 +49,7 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             trusted = obj.optBoolean("trusted", false),
             remembered = obj.optBoolean("remembered", true),
             autoConnect = obj.optBoolean("auto_connect", true),
+            explicitDisconnect = obj.optBoolean("explicit_disconnect", false),
             lastSeenSecs = obj.takeIf { !it.isNull("last_seen") }?.optLong("last_seen"),
             lastSyncSecs = obj.takeIf { !it.isNull("last_sync") }?.optLong("last_sync"),
             lastError = obj.takeIf { !it.isNull("last_error") }?.optString("last_error"),

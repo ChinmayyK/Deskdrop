@@ -23,6 +23,7 @@ struct IpcPeerRecord: Codable {
     let pairing_requested: Bool?
     let outgoing_pairing_waiting: Bool?
     let pairing_pin: String?
+    let explicit_disconnect: Bool?
 }
 
 struct IpcStatusResponse: Codable {

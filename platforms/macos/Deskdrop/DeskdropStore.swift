@@ -1061,6 +1061,7 @@ final class DeskdropStore: ObservableObject {
             pairingRequested: raw.pairing_requested ?? false,
             outgoingPairingWaiting: raw.outgoing_pairing_waiting ?? false,
             pairingPin: raw.pairing_pin,
+            explicitDisconnect: raw.explicit_disconnect ?? false,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             ip:          raw.ip

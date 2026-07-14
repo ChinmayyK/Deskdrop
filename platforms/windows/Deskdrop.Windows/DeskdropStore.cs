@@ -62,19 +62,23 @@ namespace Deskdrop.Windows
         private string _friendly_name = "";
         public string friendly_name { get => _friendly_name; set => SetProperty(ref _friendly_name, value); }
         private string _status = "";
-        public string status { get => _status; set { if(SetProperty(ref _status, value)) { OnPropertyChanged(nameof(StatusIcon)); OnPropertyChanged(nameof(ConnectionText)); OnPropertyChanged(nameof(ConnectionColor)); OnPropertyChanged(nameof(IsConnected)); OnPropertyChanged(nameof(ShowVerifyButton)); OnPropertyChanged(nameof(ShowDisconnectButton)); OnPropertyChanged(nameof(ShowConnectButton)); } } }
+        public string status { get => _status; set { if(SetProperty(ref _status, value)) { OnPropertyChanged(nameof(StatusIcon)); OnPropertyChanged(nameof(ConnectionText)); OnPropertyChanged(nameof(ConnectionColor)); OnPropertyChanged(nameof(IsConnected)); OnPropertyChanged(nameof(ShowVerifyButton)); OnPropertyChanged(nameof(ShowDisconnectButton)); OnPropertyChanged(nameof(ShowConnectButton)); OnPropertyChanged(nameof(ShowForgetButton)); } } }
         private bool _is_trusted;
         [System.Text.Json.Serialization.JsonPropertyName("trusted")]
-        public bool is_trusted { get => _is_trusted; set { if(SetProperty(ref _is_trusted, value)) { OnPropertyChanged(nameof(ShowVerifyButton)); OnPropertyChanged(nameof(ShowDisconnectButton)); OnPropertyChanged(nameof(ShowConnectButton)); } } }
+        public bool is_trusted { get => _is_trusted; set { if(SetProperty(ref _is_trusted, value)) { OnPropertyChanged(nameof(ShowVerifyButton)); OnPropertyChanged(nameof(ShowDisconnectButton)); OnPropertyChanged(nameof(ShowConnectButton)); OnPropertyChanged(nameof(ShowForgetButton)); } } }
+        private bool _explicit_disconnect;
+        [System.Text.Json.Serialization.JsonPropertyName("explicit_disconnect")]
+        public bool explicit_disconnect { get => _explicit_disconnect; set { if(SetProperty(ref _explicit_disconnect, value)) { OnPropertyChanged(nameof(ConnectionText)); OnPropertyChanged(nameof(ShowDisconnectButton)); OnPropertyChanged(nameof(ShowConnectButton)); } } }
         
         public string StatusIcon => status == "connected" ? "CheckCircle" : "Circle";
-        public string ConnectionText => status == "connected" ? "Connected" : "Offline";
+        public string ConnectionText => status == "connected" ? "Connected" : (explicit_disconnect ? "Disconnected" : "Offline");
         public string ConnectionColor => status == "connected" ? "#34C759" : "#8E8E93";
         public bool IsConnected => status == "connected";
         
         public bool ShowVerifyButton => status == "connected" && !is_trusted;
-        public bool ShowDisconnectButton => true;
-        public bool ShowConnectButton => status != "connected" && !is_trusted;
+        public bool ShowDisconnectButton => status == "connected";
+        public bool ShowConnectButton => status != "connected" && is_trusted;
+        public bool ShowForgetButton => true;
 
         private string? _pairingPin;
         [System.Text.Json.Serialization.JsonPropertyName("pairing_pin")]

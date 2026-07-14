@@ -29,6 +29,7 @@ struct PeerViewModel: Identifiable, Equatable {
     let pairingRequested: Bool
     let outgoingPairingWaiting: Bool
     let pairingPin: String?
+    let explicitDisconnect: Bool
 
     // ── Timing ────────────────────────────────────────────────────────────────
     let lastSeen: Date?
@@ -45,6 +46,7 @@ struct PeerViewModel: Identifiable, Equatable {
         }
         if connected && !syncEnabled { return "Connected · Sync paused" }
         if connected { return "Connected · Syncing" }
+        if explicitDisconnect { return "Disconnected" }
         if trusted && remembered && autoConnect { return "Ready to reconnect" }
         if !syncEnabled { return "Connected · Sync paused" }
         return "Offline"

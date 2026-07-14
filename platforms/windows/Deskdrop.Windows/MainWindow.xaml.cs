@@ -625,6 +625,18 @@ namespace Deskdrop.Windows
             }
         }
 
+        private void BtnDisconnect_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    DaemonClient.Send(new { cmd = "disconnect_peer", device_id = deviceId });
+                    RefreshDevicesListUI();
+                });
+            }
+        }
+
         private void BtnPingDevice_Click(object sender, RoutedEventArgs e)
         {
             if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
@@ -667,8 +679,15 @@ namespace Deskdrop.Windows
 
         private void BtnConnectDevice_Click(object sender, RoutedEventArgs e)
         {
-            // The engine handles reconnects automatically, just refresh UI for now
-            RefreshDevicesListUI();
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    DaemonClient.Send(new { cmd = "set_auto_connect", device_id = deviceId, enabled = true });
+                    DaemonClient.Send(new { cmd = "reconnect_peer", device_id = deviceId });
+                    RefreshDevicesListUI();
+                });
+            }
         }
 
         private void BtnAcceptCall_Click(object sender, RoutedEventArgs e)

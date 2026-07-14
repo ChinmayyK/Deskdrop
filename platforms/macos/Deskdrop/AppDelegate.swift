@@ -788,6 +788,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             connectionStatus: "disconnected",
             syncEnabled: true, autoConnect: false, lastError: nil,
             pairingRequested: false, outgoingPairingWaiting: false, pairingPin: nil,
+            explicitDisconnect: false,
             lastSeen: detail.lastSeen, lastSync: nil, ip: nil
         ))
 

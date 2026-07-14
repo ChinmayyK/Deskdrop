@@ -240,8 +240,9 @@ struct ManagedDevice: Identifiable {
     let outgoingPairingWaiting: Bool
     let pairingPin: String?
     let ip: String?
+    let explicitDisconnect: Bool
     var isConnected: Bool { connectionState == .connected }
-    var canReconnect: Bool { trustState == .trusted && remembered && autoConnect && connectionState != .connected }
+    var canReconnect: Bool { trustState == .trusted && remembered && autoConnect && connectionState != .connected && !explicitDisconnect }
 
     init(peer: PeerViewModel) {
         self.id              = peer.id
@@ -249,6 +250,7 @@ struct ManagedDevice: Identifiable {
         self.rawName         = peer.displayName
         self.endpoint        = nil
         self.ip              = peer.ip
+        self.explicitDisconnect = peer.explicitDisconnect
         self.connectionState = if peer.connectionStatus == "connecting" {
             .connecting
         } else if peer.connectionStatus == "failed" {
@@ -257,6 +259,8 @@ struct ManagedDevice: Identifiable {
             .connected
         } else if peer.pairingRequested {
             .attention
+        } else if peer.explicitDisconnect {
+            .disconnected
         } else if peer.trusted && peer.remembered && peer.autoConnect {
             .reconnectable
         } else {

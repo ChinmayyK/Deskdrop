@@ -751,17 +751,7 @@ impl PeerManager {
     pub fn is_explicitly_disconnected(&self, device_id: Uuid) -> bool {
         self.store
             .get(&device_id)
-            .map(|entry| {
-                if !entry.explicit_disconnect {
-                    return false;
-                }
-                let now = now_secs();
-                if let Some(disc_time) = entry.last_disconnect_at {
-                    now.saturating_sub(disc_time) < 15
-                } else {
-                    false
-                }
-            })
+            .map(|entry| entry.explicit_disconnect)
             .unwrap_or(false)
     }
 

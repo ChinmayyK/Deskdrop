@@ -315,7 +315,27 @@
                                                             </DataTemplate>
                                                         </Button.ContentTemplate>
                                                     </Button>
-                                                    <Button Style="{StaticResource ModernButton}" Content="Forget" Visibility="{Binding ShowDisconnectButton, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#E6FFF0F0" Foreground="{StaticResource BrandRed}" BorderThickness="0" Padding="12,6" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click">
+                                                    <Button Style="{StaticResource ModernButton}" Content="Disconnect" Visibility="{Binding ShowDisconnectButton, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#E6FFF0F0" Foreground="{StaticResource BrandRed}" BorderThickness="0" Padding="12,6" Tag="{Binding device_id}" Click="BtnDisconnect_Click">
+                                                        <Button.ContentTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <iconPacks:PackIconLucide Kind="WifiOff" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </Button.ContentTemplate>
+                                                    </Button>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Connect" Visibility="{Binding ShowConnectButton, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#E5F0FA" Foreground="{StaticResource BrandBlue}" BorderThickness="0" Padding="12,6" Tag="{Binding device_id}" Click="BtnConnectDevice_Click">
+                                                        <Button.ContentTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <iconPacks:PackIconLucide Kind="Radio" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </Button.ContentTemplate>
+                                                    </Button>
+                                                    <Button Style="{StaticResource ModernButton}" Content="Forget" Visibility="{Binding ShowForgetButton, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#E6FFF0F0" Foreground="{StaticResource BrandRed}" BorderThickness="0" Padding="12,6" Tag="{Binding device_id}" Click="BtnDisconnectDevice_Click">
                                                         <Button.ContentTemplate>
                                                             <DataTemplate>
                                                                 <StackPanel Orientation="Horizontal">
