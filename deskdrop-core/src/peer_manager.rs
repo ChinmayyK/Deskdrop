@@ -531,7 +531,6 @@ impl PeerManager {
             entry.last_seen = Some(now_secs());
             entry.status = PeerConnectionState::Connected;
             entry.last_error = None;
-            entry.explicit_disconnect = false;
         }
 
         let replaced = self.live.insert(

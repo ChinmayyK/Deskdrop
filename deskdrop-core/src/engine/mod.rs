@@ -2580,7 +2580,7 @@ async fn reconnect_known_peers(shared: EngineShared) {
             continue;
         }
 
-        if !peer.should_auto_reconnect() && peer.discovery != DiscoverySource::Manual {
+        if !peer.should_auto_reconnect() {
             continue;
         }
 
@@ -2960,6 +2960,13 @@ async fn connect_once(
             if shared.peer_manager.is_connected(device_id) {
                 return Ok(());
             }
+            if shared.peer_manager.is_explicitly_disconnected(device_id) {
+                tracing::debug!(
+                    peer_id = %device_id,
+                    "aborting outbound connect — peer is explicitly disconnected"
+                );
+                return Ok(());
+            }
         }
     }
     let started = Instant::now();
@@ -3192,7 +3199,6 @@ fn register_session(
             return Err(e);
         }
     }
-    let _ = shared.peer_manager.set_explicit_disconnect(peer_id, false);
     let (session_id, replaced) = shared.peer_manager.replace_live_session(
         peer_id,
         endpoint,
@@ -4931,7 +4937,7 @@ fn register_session(
                 if shared
                     .peer_manager
                     .get(peer_id)
-                    .map(|peer| peer.trusted || peer.discovery == DiscoverySource::Manual)
+                    .map(|peer| peer.should_auto_reconnect())
                     .unwrap_or(false)
                 {
                     // ── AirDrop-style immediate reconnect ────────────────────

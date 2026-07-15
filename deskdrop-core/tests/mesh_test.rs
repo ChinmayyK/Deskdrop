@@ -277,3 +277,46 @@ fn peer_platform_metadata_stored() {
     assert_eq!(record.friendly_name, "Chinmay's Pixel 8");
     assert_eq!(record.platform.as_deref(), Some("Android"));
 }
+
+// ── Test: Explicit disconnect prevents auto-reconnect and immediate recovery ──
+
+#[test]
+fn explicit_disconnect_prevents_immediate_session_cleanup_reconnect() {
+    let (mgr, _f) = make_manager();
+    let id = Uuid::new_v4();
+    mgr.upsert_peer(
+        id,
+        "Chinmay's MacBook".into(),
+        peer_addr(80),
+        true,
+        DiscoverySource::Manual,
+    )
+    .unwrap();
+
+    let record = mgr.get(id).unwrap();
+    assert!(record.should_auto_reconnect(), "default: trusted + manual = auto reconnect");
+
+    // Explicitly disconnect
+    mgr.set_explicit_disconnect(id, true).unwrap();
+    let record = mgr.get(id).unwrap();
+    assert!(
+        !record.should_auto_reconnect(),
+        "explicit disconnect must disable should_auto_reconnect even for DiscoverySource::Manual"
+    );
+    assert!(
+        mgr.is_explicitly_disconnected(id),
+        "is_explicitly_disconnected must return true"
+    );
+
+    // Simulate replace_live_session being called (e.g., if another session was migrating or connecting)
+    let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
+    let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
+    let (stx, _srx) = tokio::sync::oneshot::channel();
+    let _ = mgr.replace_live_session(id, peer_addr(80), tx1, tx2, stx).unwrap();
+
+    // Verify explicit_disconnect is NOT wiped by replace_live_session
+    assert!(
+        mgr.is_explicitly_disconnected(id),
+        "explicit_disconnect must be preserved when replace_live_session runs"
+    );
+}
