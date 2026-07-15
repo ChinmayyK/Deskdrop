@@ -78,6 +78,7 @@ class DeskdropService : Service() {
         private const val CHAN_SERVICE = "cr_service"   // IMPORTANCE_MIN — silent persistent
         private const val CHAN_ALERTS  = "cr_alerts"    // IMPORTANCE_DEFAULT — trust/file/failure
         private const val CHAN_CALLS   = "cr_calls"     // IMPORTANCE_HIGH — incoming call banner
+        private const val CHAN_PAIRING = "cr_pairing_v2"// IMPORTANCE_HIGH — dedicated pairing request
 
         // Notification IDs
         private const val NOTIF_ID_SERVICE           = 1001
@@ -526,6 +527,15 @@ class DeskdropService : Service() {
                     Log.i(TAG, "Pairing response for $deviceId accepted=$accepted result=$result")
                     persistStatus()
                     notificationManager.cancel(NOTIF_ID_TOFU)
+                    sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
+                    if (accepted) {
+                        runCatching {
+                            val toDashboard = Intent(this@DeskdropService, MainActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            }
+                            startActivity(toDashboard)
+                        }
+                    }
                 }
                 return START_STICKY
             }
@@ -764,7 +774,7 @@ class DeskdropService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // Survive task removal (user swipes app away)
+    // Survive task removal (user swipes app away from recents)
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Re-schedule restart via AlarmManager for maximum reliability on OEM ROMs
         val pending = PendingIntent.getService(
@@ -1204,6 +1214,17 @@ class DeskdropService : Service() {
                 val name = resolvePeerDisplayName(deviceId, DeskdropJni.eventDeviceName(ev))
                 val pin  = DeskdropJni.eventFingerprint(ev) ?: "" // JNI returns pin via eventFingerprint for now
                 
+                // Acquire brief WakeLock so CPU doesn't sleep mid-notification and wakes up
+                runCatching {
+                    val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                    pm?.newWakeLock(
+                        android.os.PowerManager.PARTIAL_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                        "Deskdrop:PairingWakeLock"
+                    )?.apply {
+                        acquire(5000L)
+                    }
+                }
+                
                 // Always post high-priority heads-up/full-screen notification (required on Android 10+ when app is closed/backgrounded)
                 showPairingRequestNotification(deviceId, name, pin)
                 
@@ -1254,6 +1275,7 @@ class DeskdropService : Service() {
                 connectedPeerIds[deviceId] = name
                 persistStatus()
                 updateForegroundNotification()
+                sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
                 // Connection established — cancel any pending retry scans and
                 // reset backoff so the next disconnect starts fresh.
                 cancelNsdRetry()
@@ -1464,9 +1486,17 @@ class DeskdropService : Service() {
             putExtra(PairingActivity.EXTRA_PIN, pin)
             putExtra(PairingActivity.EXTRA_FINGERPRINT, pin)
         }
+        val optionsBundle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            android.app.ActivityOptions.makeBasic().apply {
+                pendingIntentBackgroundActivityStartMode = android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }.toBundle()
+        } else {
+            null
+        }
         val fullScreenPi = PendingIntent.getActivity(
             this, deviceId.hashCode(), pairingIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            optionsBundle
         )
 
         val acceptIntent = Intent(this, DeskdropService::class.java).apply {
@@ -1484,7 +1514,7 @@ class DeskdropService : Service() {
         val rejectPi = PendingIntent.getService(this, deviceId.hashCode() + 11,
             rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val notif = NotificationCompat.Builder(this, CHAN_PAIRING)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Pairing Request from $name")
             .setContentText(if (pin.isNotEmpty()) "PIN code: $pin — Tap to review or approve" else "Tap to review pairing request")
@@ -2869,6 +2899,22 @@ class DeskdropService : Service() {
             enableVibration(true)
             enableLights(true)
             setBypassDnd(true)  // show even in Do Not Disturb
+        })
+
+        // Channel D: dedicated pairing requests — full heads-up priority
+        nm.createNotificationChannel(NotificationChannel(
+            CHAN_PAIRING,
+            "Deskdrop Pairing Requests",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Pairing requests from your computer and devices"
+            setShowBadge(true)
+            enableVibration(true)
+            enableLights(true)
+            setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI, android.media.AudioAttributes.Builder()
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .build())
         })
     }
 

@@ -27,7 +27,7 @@ struct DashboardRootView: View {
                 .padding(.bottom, 32)
                 .zIndex(50)
         }
-        .background(CRTheme.surfaceElevated.ignoresSafeArea())
+        .background(CRTheme.surfaceStrong.ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
         .overlay(alignment: .bottomTrailing) {
             if !pendingContinuityItems.isEmpty {
@@ -79,7 +79,7 @@ struct FloatingNavBar: View {
             }
         }
         .padding(6)
-        .background(CRTheme.surfaceElevated.opacity(0.7))
+        .background(CRTheme.surfaceStrong.opacity(0.85))
         .background(.ultraThinMaterial)
         .clipShape(Capsule())
         .overlay(
@@ -187,89 +187,105 @@ struct ContinuityHeaderView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // Left Context (Window controls clearance)
-            Spacer().frame(width: 72)
+            // Left Context (Window controls clearance + Status Badge)
+            HStack(spacing: 12) {
+                Spacer().frame(width: 72)
+                
+                // Status Pill
+                if store.connectedCount > 0 {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.green).frame(width: 7, height: 7)
+                            .crGlow(Color.green.opacity(0.8), radius: 6)
+                        Text("\(store.connectedCount) Connected")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(CRTheme.ink)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Color.green.opacity(0.12), in: Capsule())
+                    .overlay(Capsule().stroke(Color.green.opacity(0.3), lineWidth: 0.5))
+                } else if store.devices.contains(where: { $0.trustState != .trusted }) {
+                    HStack(spacing: 6) {
+                        Circle().fill(CRTheme.accentOrange).frame(width: 7, height: 7)
+                            .crGlow(CRTheme.accentOrange.opacity(0.8), radius: 6)
+                        Text("Ready to pair")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(CRTheme.ink)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(CRTheme.accentOrange.opacity(0.12), in: Capsule())
+                    .overlay(Capsule().stroke(CRTheme.accentOrange.opacity(0.3), lineWidth: 0.5))
+                } else {
+                    HStack(spacing: 6) {
+                        StatusDot(isOnline: false, size: 7)
+                        Text("Looking for devices")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(CRTheme.surfaceStrong, in: Capsule())
+                    .overlay(Capsule().stroke(CRTheme.stroke.opacity(0.5), lineWidth: 0.5))
+                }
+            }
             
             Spacer(minLength: 0)
             
             // Command Layer Search (Centered)
-            CRSearchField(placeholder: "Search devices, clipboard, files...", text: $searchText)
-                .frame(maxWidth: 420)
-                
-            Spacer(minLength: 16)
+            CRSearchField(
+                placeholder: store.selectedSection == .clipboard ? "Search clipboard & transfers..." : "Search devices, clipboard, files...",
+                text: $searchText,
+                shortcut: "⌘K"
+            )
+            .frame(width: 380)
             
-            // Right Side: Status + Quick Actions
-            HStack(spacing: 16) {
-                // Network Status
-                HStack(spacing: 6) {
-                    if store.connectedCount > 0 {
-                        StatusDot(isOnline: true, size: 8)
-                        Text("Active · \(store.connectedCount) device\(store.connectedCount == 1 ? "" : "s")")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(CRTheme.inkSoft)
-                            .fixedSize()
-                    } else if store.devices.contains(where: { $0.trustState != .trusted }) {
-                        Circle().fill(CRTheme.accentOrange).frame(width: 8, height: 8)
-                        Text("Ready to pair")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(CRTheme.inkSoft)
-                            .fixedSize()
-                    } else {
-                        StatusDot(isOnline: false, size: 8)
-                        Text("Looking for devices")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(CRTheme.inkSoft)
-                            .fixedSize()
-                    }
+            Spacer(minLength: 0)
+            
+            // Right Side: Quick Actions Floating Dock Pill
+            HStack(spacing: 3) {
+                HeaderActionButton(icon: "antenna.radiowaves.left.and.right", tooltip: "Scan Network") {
+                    store.scanForDevices()
+                }
+                HeaderActionButton(icon: "paperplane.fill", tooltip: "Send File") {
+                    // Triggers file picker
+                }
+                HeaderActionButton(icon: "qrcode", tooltip: "Show QR Code") {
+                    store.showQrCodeSheet = true
                 }
                 
-                // Quick Actions Pill
-                HStack(spacing: 4) {
-                    HeaderActionButton(icon: "antenna.radiowaves.left.and.right", tooltip: "Scan Network") {
-                        store.scanForDevices()
-                    }
-                    HeaderActionButton(icon: "paperplane.fill", tooltip: "Send File") {
-                        // Triggers file picker
-                    }
-                    
-                    HeaderActionButton(icon: "qrcode", tooltip: "Show QR Code") {
-                        store.showQrCodeSheet = true
-                    }
-                    
-                    Divider()
-                        .frame(height: 16)
-                        .padding(.horizontal, 4)
-                    
-                    HeaderActionButton(icon: "gearshape.fill", tooltip: "Settings") {
-                        store.selectedSection = .settings
-                    }
+                Rectangle()
+                    .fill(CRTheme.stroke.opacity(0.6))
+                    .frame(width: 1, height: 16)
+                    .padding(.horizontal, 4)
+                
+                HeaderActionButton(icon: "gearshape.fill", tooltip: "Settings") {
+                    withAnimation(.crSpring) { store.selectedSection = .settings }
                 }
-                .padding(4)
-                .background(Color.black.opacity(0.04), in: Capsule())
-                .overlay(Capsule().stroke(CRTheme.stroke.opacity(0.3), lineWidth: 1))
             }
-            .layoutPriority(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background {
+                Capsule()
+                    .fill(CRTheme.surfaceStrong.opacity(0.95))
+                    .background(Capsule().fill(.ultraThinMaterial))
+                    .overlay(Capsule().stroke(CRTheme.stroke.opacity(0.6), lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
+            }
         }
-        .padding(.top, 16)
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
         .padding(.bottom, 12)
         .background {
             ZStack {
-                CRVisualEffect(material: .headerView, blendingMode: .withinWindow)
+                scheme == .dark ? CRTheme.surfaceStrong : CRTheme.surfaceElevated
                 
                 // Subtle bottom border
                 VStack {
                     Spacer()
                     Rectangle()
-                        .fill(CRTheme.stroke.opacity(0.5))
+                        .fill(CRTheme.stroke.opacity(scheme == .dark ? 0.6 : 0.3))
                         .frame(height: 1)
-                }
-                
-                // Ambient top glow
-                VStack {
-                    Rectangle()
-                        .fill(LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.05 : 0.4), .clear], startPoint: .top, endPoint: .bottom))
-                        .frame(height: 12)
-                    Spacer()
                 }
             }
         }
@@ -285,16 +301,20 @@ struct HeaderActionButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(isHovered ? CRTheme.brandElectric : CRTheme.inkSoft)
-                .frame(width: 32, height: 32)
-                .background(
-                    Circle().fill(isHovered ? CRTheme.brandElectric.opacity(0.1) : Color.clear)
-                )
+                .frame(width: 28, height: 28)
+                .background {
+                    if isHovered {
+                        Circle()
+                            .fill(CRTheme.brandElectric.opacity(0.12))
+                    }
+                }
         }
         .buttonStyle(.plain)
         .help(tooltip)
-        .crHoverScale(scale: 1.1)
+        .scaleEffect(isHovered ? 1.08 : 1.0)
+        .animation(.crSpring, value: isHovered)
         .onHover { isHovered = $0 }
     }
 }

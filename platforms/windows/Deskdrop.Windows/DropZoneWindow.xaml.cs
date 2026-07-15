@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Windows;
+using System.Windows.Media;
 using System.IO.Compression;
 
 namespace Deskdrop.Windows
@@ -13,6 +15,43 @@ namespace Deskdrop.Windows
         {
             InitializeComponent();
             _clipboardManager = clipboardManager;
+            UpdateStatus();
+        }
+
+        private void UpdateStatus(bool isTargeted = false)
+        {
+            var connected = DeskdropStore.Shared.Peers.Where(p => p.IsConnected).ToList();
+            if (StatusPillCircle != null && StatusPillText != null)
+            {
+                if (connected.Count > 0)
+                {
+                    StatusPillCircle.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#34C759"));
+                    StatusPillText.Text = $"{connected.Count} Device{(connected.Count == 1 ? "" : "s")} Ready";
+                }
+                else
+                {
+                    StatusPillCircle.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF9500"));
+                    StatusPillText.Text = "Searching Peers...";
+                }
+            }
+
+            if (DropTitleText != null && DropSubText != null)
+            {
+                if (isTargeted)
+                {
+                    DropTitleText.Text = "Release to Broadcast ✨";
+                    DropSubText.Text = connected.Count > 0
+                        ? $"Sending to {string.Join(", ", connected.Select(c => c.friendly_name))}"
+                        : "Broadcasting to active mesh";
+                }
+                else
+                {
+                    DropTitleText.Text = "Drop to Broadcast";
+                    DropSubText.Text = connected.Count > 0
+                        ? $"Instant transfer to {(connected.Count == 1 ? connected[0].friendly_name : $"{connected.Count} connected devices")}"
+                        : "Wireless transfer to nearby devices";
+                }
+            }
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -26,12 +65,13 @@ namespace Deskdrop.Windows
             double scaleY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
 
             double winWidth = 320;
-            double winHeight = 212;
+            double winHeight = 216;
             WindowState = WindowState.Normal;
             Width = winWidth;
             Height = winHeight;
             Left = (workArea.Left / scaleX) + ((workArea.Width / scaleX) - winWidth) / 2.0;
             Top = (workArea.Bottom / scaleY) - winHeight - 80;
+            UpdateStatus(false);
         }
 
         private void Window_DragEnter(object sender, System.Windows.DragEventArgs e)
@@ -40,6 +80,7 @@ namespace Deskdrop.Windows
             {
                 e.Effects = System.Windows.DragDropEffects.Copy;
                 DropGrid.Opacity = 1.0;
+                UpdateStatus(true);
             }
             else
             {
@@ -49,7 +90,8 @@ namespace Deskdrop.Windows
 
         private void Window_DragLeave(object sender, System.Windows.DragEventArgs e)
         {
-            DropGrid.Opacity = 0.5;
+            DropGrid.Opacity = 0.95;
+            UpdateStatus(false);
         }
 
         private void Window_Drop(object sender, System.Windows.DragEventArgs e)

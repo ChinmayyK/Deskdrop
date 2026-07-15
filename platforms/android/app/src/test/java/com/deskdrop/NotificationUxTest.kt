@@ -15,12 +15,12 @@ class NotificationUxTest {
 
     @Test
     fun `activity feed bounded to ACTIVITY_FEED_MAX entries`() {
-        synchronized(DeskdropService.feedLock) {
-            DeskdropService.activityFeed.clear()
+        synchronized(ActivityFeedManager.feedLock) {
+            ActivityFeedManager.activityFeed.clear()
         }
 
         repeat(120) { i ->
-            DeskdropService.addToFeed(
+            ActivityFeedManager.addToFeed(
                 ActivityEntry(
                     deviceName = "Phone",
                     kind = ActivityKind.CLIPBOARD_TEXT,
@@ -29,39 +29,39 @@ class NotificationUxTest {
             )
         }
 
-        val size = DeskdropService.getFeedSnapshot().size
+        val size = ActivityFeedManager.getFeedSnapshot().size
         assertTrue("Feed must be bounded (got $size)", size <= 100)
     }
 
     @Test
     fun `activity feed snapshot returns newest first`() {
-        synchronized(DeskdropService.feedLock) {
-            DeskdropService.activityFeed.clear()
+        synchronized(ActivityFeedManager.feedLock) {
+            ActivityFeedManager.activityFeed.clear()
         }
 
-        DeskdropService.addToFeed(
+        ActivityFeedManager.addToFeed(
             ActivityEntry(deviceName = "A", kind = ActivityKind.CLIPBOARD_TEXT, preview = "first")
         )
         Thread.sleep(2)
-        DeskdropService.addToFeed(
+        ActivityFeedManager.addToFeed(
             ActivityEntry(deviceName = "B", kind = ActivityKind.CLIPBOARD_TEXT, preview = "second")
         )
 
-        val snapshot = DeskdropService.getFeedSnapshot()
+        val snapshot = ActivityFeedManager.getFeedSnapshot()
         assertEquals("second", snapshot.first().preview)
         assertEquals("first",  snapshot.last().preview)
     }
 
     @Test
     fun `activity feed is thread-safe for concurrent writes`() {
-        synchronized(DeskdropService.feedLock) {
-            DeskdropService.activityFeed.clear()
+        synchronized(ActivityFeedManager.feedLock) {
+            ActivityFeedManager.activityFeed.clear()
         }
 
         val threads = (0..9).map { i ->
             Thread {
                 repeat(10) { j ->
-                    DeskdropService.addToFeed(
+                    ActivityFeedManager.addToFeed(
                         ActivityEntry(
                             deviceName = "Dev$i",
                             kind = ActivityKind.CLIPBOARD_TEXT,
@@ -74,7 +74,7 @@ class NotificationUxTest {
         threads.forEach { it.start() }
         threads.forEach { it.join() }
 
-        val size = DeskdropService.getFeedSnapshot().size
+        val size = ActivityFeedManager.getFeedSnapshot().size
         assertTrue("Feed size must be bounded after concurrent writes (got $size)", size <= 100)
     }
 
@@ -131,8 +131,12 @@ class NotificationUxTest {
         // Verify via reflection that the channel IDs differ
         val serviceField = DeskdropService::class.java.getDeclaredField("CHAN_SERVICE")
         val alertsField  = DeskdropService::class.java.getDeclaredField("CHAN_ALERTS")
+        val pairingField = DeskdropService::class.java.getDeclaredField("CHAN_PAIRING")
         serviceField.isAccessible = true
         alertsField.isAccessible  = true
+        pairingField.isAccessible = true
+        assertNotEquals(serviceField.name, alertsField.name)
+        assertNotEquals(alertsField.name, pairingField.name)
         val companion = DeskdropService::class.java.getDeclaredField("Companion")
         // Just verify the constants exist and differ by checking them in companion
         // (actual values are private const — we test via the behaviour in service)

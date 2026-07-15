@@ -24,6 +24,7 @@ namespace Deskdrop.Windows
         private MainWindow? _mainWindow;
         private QuickAccessWindow? _quickAccessWindow;
         private DropZoneWindow? _dropZoneWindow;
+        private UI.EdgeDropWindow? _edgeDropWindow;
         private bool _syncEnabled = true;
         private DateTime _lastBalloonAt = DateTime.MinValue;
 
@@ -54,6 +55,7 @@ namespace Deskdrop.Windows
 
             var quitItem = new MenuItem { Header = "Quit Deskdrop" };
             quitItem.Click += (_, _) => { 
+                if (_edgeDropWindow != null) { try { _edgeDropWindow.Close(); } catch { } }
                 _mgr.Stop(); 
                 System.Windows.Application.Current?.Shutdown();
             };
@@ -176,6 +178,17 @@ namespace Deskdrop.Windows
             _mgr.Start(
                 deviceName: string.IsNullOrWhiteSpace(s.DeviceName) ? Environment.MachineName : s.DeviceName,
                 port: s.Port);
+
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+                try {
+                    if (_edgeDropWindow == null)
+                    {
+                        _edgeDropWindow = new UI.EdgeDropWindow(_mgr);
+                        _edgeDropWindow.Closed += (s, e) => { _edgeDropWindow = null; };
+                        _edgeDropWindow.Show();
+                    }
+                } catch { }
+            });
         }
 
         private void OnStatusChanged(string msg)

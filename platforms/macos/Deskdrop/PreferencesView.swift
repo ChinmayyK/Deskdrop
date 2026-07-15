@@ -36,7 +36,7 @@ struct PreferencesView: View {
                 Spacer()
             }
             .frame(width: 220)
-            .background(CRTheme.surfaceStrong)
+            .background(CRTheme.surfaceElevated)
 
             Rectangle().fill(CRTheme.stroke).frame(width: 0.5)
 
@@ -89,7 +89,7 @@ struct PreferencesView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 600)
-        .background(CRTheme.surfaceElevated.ignoresSafeArea())
+        .background(CRTheme.surfaceStrong.ignoresSafeArea())
         .onAppear {
             if let s = store.settings { copy = s; portString = "\(s.port)" }
         }
@@ -99,7 +99,7 @@ struct PreferencesView: View {
         switch tab {
         case .general:  GeneralPane(copy: $copy, virtualCamera: virtualCamera)
         case .sync:     SyncPane(copy: $copy, patternDraft: $patternDraft)
-        case .network:  NetworkPane(copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
+        case .network:  NetworkPane(store: store, copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
                             .onChange(of: portString) { v in
                                 if let p = UInt16(v), p > 1024 { copy.port = p; portIsInvalid = false; isDirty = true }
                                 else { portIsInvalid = true }
@@ -435,11 +435,36 @@ private struct SyncPane: View {
 // MARK: - Network Pane
 
 private struct NetworkPane: View {
+    @ObservedObject var store: DeskdropStore
     @Binding var copy: DeskdropSettingsSnapshot
     @Binding var portString: String
     @Binding var portIsInvalid: Bool
 
     var body: some View {
+        PrefsSection(title: "Direct Connection", icon: "network", tint: CRTheme.brandElectric) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Connect directly to a peer on a non-local network or custom VLAN using an IP address and port.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(CRTheme.inkSoft)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                HStack(spacing: 10) {
+                    TextField("IP Address:Port (e.g. 192.168.1.50:47823)", text: $store.manualConnectAddress)
+                        .crInput()
+                        .onSubmit { store.connectManual() }
+                    
+                    Button("Connect") {
+                        store.connectManual()
+                    }
+                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                    .disabled(store.manualConnectAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+
         PrefsSection(title: "Listener", icon: "antenna.radiowaves.left.and.right", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "number.circle.fill", label: "Port",
                      description: "TCP port the daemon binds to. Changes take effect on restart.") {

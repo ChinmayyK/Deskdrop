@@ -19,7 +19,6 @@ struct DevicesSectionView: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
                     MagicLinkPairingCard(store: store)
                     FileShareCard(store: store) { pendingFileTarget = $0; showingFileImporter = true }
-                    ManualConnectCard(store: store)
                 }
                 .padding(.top, 18)
 
@@ -232,64 +231,49 @@ struct DeviceCard: View {
     }
 }
 
-// MARK: - Manual Connect Card
-
-struct ManualConnectCard: View {
-    @ObservedObject var store: DeskdropStore
-    @State private var hovered = false
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                CRIconChip(systemName: "network", tint: CRTheme.brandElectric, size: 28)
-                Spacer()
-                Button("Connect") { store.connectManual() }
-                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Manual Connect").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
-                TextField("IP Address:Port", text: $store.manualConnectAddress)
-                    .crInput()
-                    .font(.system(size: 11.5))
-            }
-        }
-        .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: hovered, accent: CRTheme.brandElectric)
-        .onHover { hovered = $0 }.animation(.crFast, value: hovered)
-    }
-}
-
 // MARK: - File Share Card
 
 struct FileShareCard: View {
     @ObservedObject var store: DeskdropStore
     let chooseTarget: (ManagedDevice?) -> Void
     @State private var hovered = false
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                CRIconChip(systemName: "arrow.up.doc.fill", tint: CRTheme.brandElectric, size: 28)
+                ZStack {
+                    Circle().fill(CRTheme.brandElectric.opacity(0.12)).frame(width: 44, height: 44)
+                    Image(systemName: "arrow.up.doc.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(CRTheme.brandElectric)
+                }
                 Spacer()
-                Button("Send") { chooseTarget(nil) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Send a File").font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink)
                 if !store.connectedDevices.isEmpty {
-                    Menu("Choose target…") {
+                    Menu("Send to…") {
                         ForEach(store.connectedDevices) { d in Button(d.name) { chooseTarget(d) } }
                     }
-                    .buttonStyle(CRSecondaryButtonStyle())
+                    .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                 } else {
-                    Text("Push documents to peers")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(CRTheme.inkSoft)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Send File") { chooseTarget(nil) }
+                        .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                 }
             }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Quick File Transfer")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(CRTheme.ink)
+                Text("Push documents, images, and clipboard content directly across your encrypted local network without cloud limits.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(CRTheme.inkSoft)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CRTheme.surfaceStrong)
         .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: hovered, accent: CRTheme.brandElectric)
-        .onHover { hovered = $0 }.animation(.crFast, value: hovered)
+        .onHover { hovered = $0 }
+        .animation(.crFast, value: hovered)
     }
 }
 
@@ -388,30 +372,46 @@ struct DeviceCentricDashboardView: View {
                     .padding(.bottom, 30)
                 }
 
-                let trustedDevices = store.devices.filter { $0.trustState == .trusted }
-                if !trustedDevices.isEmpty {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
-                        ForEach(trustedDevices, id: \.id) { device in
-                            CompactDeviceCard(device: device, store: store) {
-                                pendingFileTarget = device
-                                showingFilePicker = true
-                            }
-                        }
+                // Trusted & Connected Devices Section
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.shield.fill").foregroundStyle(CRTheme.brandElectric)
+                        Text("Remembered Devices").font(.system(size: 14, weight: .semibold)).foregroundStyle(CRTheme.ink)
                     }
                     .padding(.horizontal, 40)
-                } else if attention.isEmpty {
-                    CompactEmptyState(store: store)
+                    
+                    let trustedDevices = store.devices.filter { $0.trustState == .trusted }
+                    if !trustedDevices.isEmpty {
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
+                            ForEach(trustedDevices, id: \.id) { device in
+                                CompactDeviceCard(device: device, store: store) {
+                                    pendingFileTarget = device
+                                    showingFilePicker = true
+                                }
+                            }
+                        }
                         .padding(.horizontal, 40)
+                    } else {
+                        CompactEmptyState(store: store)
+                            .padding(.horizontal, 40)
+                    }
                 }
+                .padding(.bottom, 32)
                 
                 // Quick Actions Grid
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
-                    MagicLinkPairingCard(store: store)
-                    FileShareCard(store: store) { pendingFileTarget = $0; showingFilePicker = true }
-                    ManualConnectCard(store: store)
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "wand.and.stars").foregroundStyle(CRTheme.brandElectric)
+                        Text("Discovery & Quick Tools").font(.system(size: 14, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                    }
+                    .padding(.horizontal, 40)
+                    
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
+                        MagicLinkPairingCard(store: store)
+                        FileShareCard(store: store) { pendingFileTarget = $0; showingFilePicker = true }
+                    }
+                    .padding(.horizontal, 40)
                 }
-                .padding(.horizontal, 40)
-                .padding(.top, 32)
                 .padding(.bottom, 40)
             }
         }
@@ -432,19 +432,39 @@ struct CompactEmptyState: View {
     @ObservedObject var store: DeskdropStore
 
     var body: some View {
-        VStack(spacing: 16) {
+        HStack(spacing: 18) {
             ZStack {
-                Circle().fill(CRTheme.brandElectric.opacity(0.1)).frame(width: 48, height: 48)
-                Image(systemName: "macbook.and.iphone").foregroundStyle(CRTheme.brandElectric).font(.system(size: 24))
+                Circle().fill(CRTheme.brandElectric.opacity(0.12)).frame(width: 52, height: 52)
+                Image(systemName: "macbook.and.iphone").foregroundStyle(CRTheme.brandElectric).font(.system(size: 24, weight: .light))
             }
-            Text("No devices connected")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(CRTheme.ink)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("No remembered devices yet")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(CRTheme.ink)
+                Text("Once you pair a device above or scan your local network, it will stay remembered here for instant clipboard and file sharing.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(CRTheme.inkSoft)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer(minLength: 12)
+            
+            Button {
+                store.scanForDevices()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                    Text("Scan Nearby")
+                }
+            }
+            .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-        .background(CRTheme.surfaceElevated.opacity(0.5))
-        .crCard(cornerRadius: CRTheme.radiusLarge)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CRTheme.surfaceStrong)
+        .crCard(cornerRadius: CRTheme.radiusMedium)
     }
 }
 
@@ -793,26 +813,41 @@ struct MagicLinkPairingCard: View {
     @State private var showingQR = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                CRIconChip(systemName: "qrcode", tint: CRTheme.brandElectric, size: 28)
+                ZStack {
+                    Circle().fill(CRTheme.brandElectric.opacity(0.12)).frame(width: 44, height: 44)
+                    Image(systemName: "qrcode.viewfinder").font(.system(size: 18, weight: .semibold)).foregroundStyle(CRTheme.brandElectric)
+                }
                 Spacer()
-                Button("Show") { showingQR = true }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                Button {
+                    showingQR = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "qrcode")
+                        Text("Show QR")
+                    }
+                }
+                .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
             }
+            
             VStack(alignment: .leading, spacing: 4) {
-                Text("Magic Link pairing")
-                    .font(.system(size: 13, weight: .semibold))
+                Text("Magic Link Pairing")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(CRTheme.ink)
-                Text("Pair instantly via QR")
-                    .font(.system(size: 11.5))
+                Text("Scan QR code with your phone camera or Deskdrop mobile app to pair securely without typing IPs.")
+                    .font(.system(size: 12.5))
                     .foregroundStyle(CRTheme.inkSoft)
-                    .lineLimit(2)
+                    .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CRTheme.surfaceStrong)
         .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: hovered, accent: CRTheme.brandElectric)
-        .onHover { hovered = $0 }.animation(.crFast, value: hovered)
+        .onHover { hovered = $0 }
+        .animation(.crFast, value: hovered)
         .sheet(isPresented: $showingQR) {
             QRCodeSheetView(store: store)
         }

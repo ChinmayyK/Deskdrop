@@ -2,13 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
-        Title="Drop Files Here" Height="212" Width="320"
+        Title="Drop Files Here" Height="216" Width="320"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" WindowState="Normal" SizeToContent="Manual" ResizeMode="NoResize"
         AllowDrop="True" Drop="Window_Drop" DragEnter="Window_DragEnter" DragLeave="Window_DragLeave"
         MouseLeftButtonDown="Window_MouseLeftButtonDown" Loaded="Window_Loaded">
-    <Grid Width="320" Height="212">
-        <Border x:Name="DropGrid" HorizontalAlignment="Center" VerticalAlignment="Center" Width="320" Height="212" 
+    <Grid Width="320" Height="216">
+        <Border x:Name="DropGrid" HorizontalAlignment="Center" VerticalAlignment="Center" Width="320" Height="216" 
                 Background="#CC1E1E24" CornerRadius="16" BorderBrush="#26FFFFFF" BorderThickness="1.5"
                 Opacity="0.95" RenderTransformOrigin="0.5,0.5">
             <Border.RenderTransform>
@@ -92,8 +92,8 @@
                     <!-- Status Pill -->
                     <Border HorizontalAlignment="Left" CornerRadius="12" Background="#991A1A1A" BorderBrush="#1AFFFFFF" BorderThickness="1" Padding="10,4">
                         <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="6" Height="6" Fill="#34C759" Margin="0,0,6,0"/>
-                            <TextBlock Text="Devices Ready" Foreground="#8CFFFFFF" FontSize="11" FontWeight="SemiBold"/>
+                            <Ellipse x:Name="StatusPillCircle" Width="6" Height="6" Fill="#34C759" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="StatusPillText" Text="Devices Ready" Foreground="#8CFFFFFF" FontSize="11" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Border>
 
@@ -132,8 +132,8 @@
                         </iconPacks:PackIconLucide>
                     </Grid>
                     
-                    <TextBlock Text="Drop to Broadcast" Foreground="White" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Wireless transfer to nearby devices" Foreground="#8CFFFFFF" FontSize="11.5" FontWeight="Medium" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    <TextBlock x:Name="DropTitleText" Text="Drop to Broadcast" Foreground="White" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="DropSubText" Text="Wireless transfer to nearby devices" Foreground="#8CFFFFFF" FontSize="11.5" FontWeight="Medium" HorizontalAlignment="Center" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" MaxWidth="280"/>
                 </StackPanel>
             </Grid>
         </Border>

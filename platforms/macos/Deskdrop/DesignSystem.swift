@@ -71,9 +71,9 @@ enum CRTheme {
     static var strokeSoft: Color { Color(light: Color(hex: 0x000000, opacity: 0.05), dark: Color(hex: 0xFFFFFF, opacity: 0.05)) }
 
     // ── Legacy Mappings (Redirect to strict surfaces) ─────────────────────────
-    static var sidebarBase: Color { surfaceStrong }
-    static var sidebarMid:  Color { surfaceStrong }
-    static var sidebarTop:  Color { surfaceStrong }
+    static var sidebarBase: Color { surfaceElevated }
+    static var sidebarMid:  Color { surfaceElevated }
+    static var sidebarTop:  Color { surfaceElevated }
     static var sidebarInk: Color { ink }
     static var sidebarInkSoft: Color { inkSoft }
     static var sidebarInkSubtle: Color { inkSubtle }
@@ -91,13 +91,13 @@ enum CRTheme {
     static var brandGradient: LinearGradient { LinearGradient(colors: [brandElectric, brandElectric], startPoint: .top, endPoint: .bottom) }
     static var cardGradient: LinearGradient { LinearGradient(colors: [surfaceElevated, surfaceElevated], startPoint: .top, endPoint: .bottom) }
     static var canvasGradient: LinearGradient { LinearGradient(colors: [surface, surface], startPoint: .top, endPoint: .bottom) }
-    static var sidebarOverlay: LinearGradient { LinearGradient(colors: [surfaceStrong, surfaceStrong], startPoint: .top, endPoint: .bottom) }
+    static var sidebarOverlay: LinearGradient { LinearGradient(colors: [surfaceElevated, surfaceElevated], startPoint: .top, endPoint: .bottom) }
 
     static var backgroundGradient: LinearGradient { canvasGradient }
     static var backgroundTop:      Color           { surface }
     static var backgroundBottom:   Color           { surface }
-    static var sidebarTop_light:   Color           { surfaceStrong }
-    static var sidebarBottom:      Color           { surfaceStrong }
+    static var sidebarTop_light:   Color           { surfaceElevated }
+    static var sidebarBottom:      Color           { surfaceElevated }
     static var sidebarGradient:    LinearGradient  { sidebarOverlay }
 
     // ── Corner Radii ────────────────────────────────────────────────────────
@@ -229,21 +229,38 @@ extension View {
 struct CRSearchField: View {
     var placeholder: String
     @Binding var text: String
+    var shortcut: String? = "⌘F"
+    var onClear: (() -> Void)? = nil
     @FocusState private var isFocused: Bool
     @State private var hovered: Bool = false
-    var onClear: (() -> Void)? = nil
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(CRTheme.inkSoft)
-                .frame(width: 14)
+                .font(.system(size: 13, weight: isFocused ? .bold : .semibold))
+                .foregroundStyle(isFocused ? CRTheme.brandElectric : (hovered ? CRTheme.ink : CRTheme.inkSoft))
+                .scaleEffect(isFocused ? 1.08 : 1.0)
+                .frame(width: 16)
+                .animation(.crSpring, value: isFocused)
 
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(CRTheme.ink)
+                .focused($isFocused)
+
+            if text.isEmpty && !isFocused, let shortcut = shortcut, !shortcut.isEmpty {
+                HStack(spacing: 2) {
+                    Text(shortcut)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(CRTheme.inkSubtle)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(CRTheme.surfaceElevated.opacity(0.8), in: Capsule())
+                .overlay(Capsule().stroke(CRTheme.stroke.opacity(0.4), lineWidth: 0.5))
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
 
             if !text.isEmpty {
                 Button {
@@ -251,26 +268,27 @@ struct CRSearchField: View {
                     onClear?()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(CRTheme.inkSoft)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(hovered ? CRTheme.ink : CRTheme.inkSoft)
                 }
                 .buttonStyle(.plain)
                 .transition(.scale(scale: 0.75).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
         .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.ultraThinMaterial)
+            Capsule()
+                .fill(CRTheme.surfaceStrong)
+                .background(Capsule().fill(.ultraThinMaterial))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.black.opacity(0.08)) // Subtle tint
+                    Capsule()
+                        .strokeBorder(
+                            isFocused ? CRTheme.brandElectric : CRTheme.stroke.opacity(0.5),
+                            lineWidth: isFocused ? 1.5 : 1.0
+                        )
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(isFocused ? CRTheme.brandElectric.opacity(0.8) : Color.white.opacity(0.1), lineWidth: 1.0)
-                )
+                .shadow(color: isFocused ? CRTheme.brandElectric.opacity(0.2) : .black.opacity(0.05), radius: isFocused ? 5 : 2, y: 1)
         }
         .onHover { hovered = $0 }
         .animation(.crFast, value: isFocused)

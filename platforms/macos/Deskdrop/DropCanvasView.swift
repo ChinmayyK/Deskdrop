@@ -6,6 +6,10 @@ struct DropCanvasView: View {
     @State private var isTargeted = false
     @State private var pulse = false
 
+    private var connectedDevices: [ManagedDevice] {
+        store.devices.filter { $0.isConnected }
+    }
+
     var body: some View {
         ZStack {
             // Base layer: Native macOS Frosted Glass
@@ -15,7 +19,7 @@ struct DropCanvasView: View {
             // Pulse glow when targeted
             if isTargeted {
                 LinearGradient(
-                    colors: [CRTheme.brandElectric.opacity(0.20), CRTheme.brandViolet.opacity(0.15), CRTheme.brandCyan.opacity(0.15)],
+                    colors: [CRTheme.brandElectric.opacity(0.25), CRTheme.brandViolet.opacity(0.20), CRTheme.brandCyan.opacity(0.20)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -62,35 +66,35 @@ struct DropCanvasView: View {
                     // Background shape
                     ZStack {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(CRTheme.surfaceElevated.opacity(isTargeted ? 0.6 : 0.4))
+                            .fill(CRTheme.surfaceElevated.opacity(isTargeted ? 0.7 : 0.45))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                                     .strokeBorder(
                                         isTargeted ? CRTheme.brandElectric : CRTheme.stroke,
                                         lineWidth: isTargeted ? 2 : 1
                                     )
-                                    .shadow(color: isTargeted ? CRTheme.brandElectric.opacity(0.45) : .clear, radius: 10, x: 0, y: 0)
+                                    .shadow(color: isTargeted ? CRTheme.brandElectric.opacity(0.5) : .clear, radius: 12, x: 0, y: 0)
                             )
                         
                         if isTargeted {
                             // Animated radar rings
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .stroke(CRTheme.brandElectric, lineWidth: 2)
-                                .scaleEffect(pulse ? 1.04 : 1.0)
-                                .opacity(pulse ? 0 : 0.8)
+                                .scaleEffect(pulse ? 1.05 : 1.0)
+                                .opacity(pulse ? 0 : 0.85)
                             
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(CRTheme.brandCyan, lineWidth: 1)
-                                .scaleEffect(pulse ? 1.08 : 1.0)
-                                .opacity(pulse ? 0 : 0.4)
+                                .stroke(CRTheme.brandCyan, lineWidth: 1.5)
+                                .scaleEffect(pulse ? 1.09 : 1.0)
+                                .opacity(pulse ? 0 : 0.45)
                         }
                     }
 
                     VStack(spacing: 10) {
                         ZStack {
                             Circle()
-                                .fill(isTargeted ? CRTheme.brandElectric.opacity(0.18) : CRTheme.strokeSoft)
-                                .frame(width: 58, height: 58)
+                                .fill(isTargeted ? CRTheme.brandElectric.opacity(0.20) : CRTheme.strokeSoft)
+                                .frame(width: 54, height: 54)
                                 .overlay(
                                     Circle()
                                         .strokeBorder(
@@ -100,7 +104,7 @@ struct DropCanvasView: View {
                                 )
                             
                             Image(systemName: isTargeted ? "arrow.down.app.fill" : "arrow.down.doc.fill")
-                                .font(.system(size: 24, weight: .medium))
+                                .font(.system(size: 22, weight: .medium))
                                 .foregroundStyle(isTargeted ? CRTheme.brandElectric : CRTheme.inkSoft)
                                 .offset(y: isTargeted ? 2 : -2)
                                 .shadow(color: isTargeted ? CRTheme.brandElectric.opacity(0.5) : .clear, radius: 8)
@@ -108,16 +112,27 @@ struct DropCanvasView: View {
                         .scaleEffect(isTargeted ? 1.12 : 1.0)
                         .animation(.spring(response: 0.3, dampingFraction: 0.65), value: isTargeted)
 
-                        VStack(spacing: 3) {
+                        VStack(spacing: 4) {
                             Text(isTargeted ? "Release to Broadcast ✨" : "Drop to Broadcast")
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                                 .foregroundStyle(isTargeted ? CRTheme.brandElectric : CRTheme.ink)
                                 .contentTransition(.interpolate)
 
-                            Text(isTargeted ? "Sending to all connected devices instantly" : "Wireless transfer to nearby devices")
-                                .font(.system(size: 11.5, weight: .medium))
-                                .foregroundStyle(CRTheme.inkSubtle)
-                                .contentTransition(.interpolate)
+                            if !connectedDevices.isEmpty {
+                                Text(isTargeted
+                                     ? "Sending to \(connectedDevices.map(\.name).joined(separator: ", "))"
+                                     : "Instant transfer to \(connectedDevices.count == 1 ? connectedDevices[0].name : "\(connectedDevices.count) connected devices")")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundStyle(isTargeted ? CRTheme.ink : CRTheme.inkSubtle)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .contentTransition(.interpolate)
+                            } else {
+                                Text(isTargeted ? "Broadcasting to active mesh" : "Wireless transfer to nearby devices")
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .foregroundStyle(CRTheme.inkSubtle)
+                                    .contentTransition(.interpolate)
+                            }
                         }
                     }
                 }
@@ -126,7 +141,7 @@ struct DropCanvasView: View {
                 .padding(.bottom, 16)
             }
         }
-        .frame(width: 320, height: 212)
+        .frame(width: 320, height: 216)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onDrop(of: [.fileURL], delegate: CanvasDropDelegate(store: store, isTargeted: $isTargeted))
         .onChange(of: isTargeted) { targeted in
@@ -153,8 +168,8 @@ struct CanvasDropDelegate: DropDelegate {
 
     func dropExited(info: DropInfo) {
         withAnimation(.crFast) { isTargeted = false }
-        // Close the popover when dragging exits the canvas
-        NotificationCenter.default.post(name: .init("closeDropCanvas"), object: nil)
+        // Do NOT close the popover on accidental drag exit over the window border;
+        // let the user either drop or explicitly dismiss using Esc / X button.
     }
 
     func performDrop(info: DropInfo) -> Bool {

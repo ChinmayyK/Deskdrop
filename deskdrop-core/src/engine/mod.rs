@@ -2810,7 +2810,7 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
 
     tracing::Span::current().record("device_id", tracing::field::display(hs.peer_device_id));
 
-    let is_trusted_peer = shared.trust.lock().await.is_trusted(hs.peer_device_id);
+    let _is_trusted_peer = shared.trust.lock().await.is_trusted(hs.peer_device_id);
     if hs.is_manual_reconnect {
         tracing::debug!("Manual reconnect initiated; clearing explicit disconnect");
         let _ = shared

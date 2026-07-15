@@ -29,6 +29,10 @@ class PairingActivity : ComponentActivity() {
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             if (intent?.action == "com.deskdrop.CLOSE_PAIRING_UI") {
+                val toDashboard = Intent(this@PairingActivity, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                startActivity(toDashboard)
                 finish()
             }
         }
@@ -93,6 +97,10 @@ class PairingActivity : ComponentActivity() {
             putExtra(EXTRA_APPROVED, approved)
         }
         sendBroadcast(intent)
+        val toDashboard = Intent(this@PairingActivity, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        startActivity(toDashboard)
         finish()
     }
 

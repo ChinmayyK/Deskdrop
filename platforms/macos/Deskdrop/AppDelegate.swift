@@ -366,6 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             size:  NSSize(width: 520, height: 400),
             rootView: CommandPaletteView(store: store)
         )
+        EdgeDropWindowManager.shared.setup(with: store)
     }
 
     // MARK: - Store bindings
@@ -1126,7 +1127,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
     private func ensureDropCanvasWindow() {
         if dropCanvasWindow == nil {
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 320, height: 212),
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 216),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -1150,7 +1151,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
         guard let screen = NSScreen.main else { return }
         
         let panelWidth: CGFloat = 320
-        let panelHeight: CGFloat = 212
+        let panelHeight: CGFloat = 216
         let x = screen.frame.midX - (panelWidth / 2)
         // Lower middle of screen
         let y = screen.visibleFrame.minY + 80
@@ -1169,7 +1170,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
         let buttonScreenRect = window.convertToScreen(buttonRect)
         
         let panelWidth: CGFloat = 320
-        let panelHeight: CGFloat = 212
+        let panelHeight: CGFloat = 216
         var x = buttonScreenRect.midX - (panelWidth / 2)
         
         let screen = window.screen ?? NSScreen.main

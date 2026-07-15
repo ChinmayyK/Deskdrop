@@ -38,12 +38,12 @@ struct TimelineSectionView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Search + filter bar (below sticky toolbar, scrolls with content on small windows)
-            VStack(alignment: .leading, spacing: 9) {
-                CRSearchField(placeholder: "Search timeline…", text: $search)
+            VStack(alignment: .leading, spacing: 12) {
+                CRSearchField(placeholder: "Search copied text, links, files, and images across devices...", text: $search, shortcut: "⌘F")
                 filterRow
             }
-            .padding(.horizontal, 20).padding(.vertical, 12)
-            .background(CRTheme.surfaceElevated.opacity(0.7))
+            .padding(.horizontal, 24).padding(.vertical, 14)
+            .background(CRTheme.surfaceElevated)
 
             CRDivider()
 
@@ -127,31 +127,44 @@ struct TimelineSectionView: View {
     }
 
     private var filterRow: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             ForEach(filters, id: \.0) { key, label in
-                Button(label) { withAnimation(.crFast) { filterKind = key } }
-                    .font(.system(size: 12, weight: filterKind == key ? .semibold : .regular))
-                    .foregroundStyle(filterKind == key ? CRTheme.brandElectric : CRTheme.inkSoft)
-                    .padding(.horizontal, 9).padding(.vertical, 4)
-                    .background {
-                        Capsule()
-                            .fill(filterKind == key ? CRTheme.brandElectric.opacity(0.09) : CRTheme.surface)
-                            .overlay {
-                                Capsule().strokeBorder(
-                                    filterKind == key ? CRTheme.brandElectric.opacity(0.20) : CRTheme.stroke.opacity(0.55),
-                                    lineWidth: 0.5)
-                            }
-                    }
-                    .buttonStyle(.plain).animation(.crFast, value: filterKind)
+                Button(action: { withAnimation(.crSpring) { filterKind = key } }) {
+                    Text(label)
+                        .font(.system(size: 12, weight: filterKind == key ? .bold : .medium, design: .rounded))
+                        .foregroundStyle(filterKind == key ? Color.white : CRTheme.inkSoft)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background {
+                            Capsule()
+                                .fill(filterKind == key ? CRTheme.brandElectric : CRTheme.surfaceStrong.opacity(0.6))
+                                .overlay {
+                                    Capsule().strokeBorder(
+                                        filterKind == key ? Color.white.opacity(0.3) : CRTheme.stroke.opacity(0.6),
+                                        lineWidth: filterKind == key ? 1.0 : 0.5
+                                    )
+                                }
+                                .shadow(color: filterKind == key ? CRTheme.brandElectric.opacity(0.4) : .clear, radius: 6, y: 2)
+                        }
+                }
+                .buttonStyle(.plain)
+                .animation(.crSpring, value: filterKind)
             }
             Spacer()
             if !search.isEmpty || filterKind != "all" {
-                Text("\(filteredItems.count) result\(filteredItems.count == 1 ? "" : "s")")
-                    .font(.system(size: 11)).foregroundStyle(CRTheme.inkSubtle)
-                    .transition(.opacity)
+                HStack(spacing: 5) {
+                    Circle().fill(CRTheme.brandElectric).frame(width: 6, height: 6)
+                    Text("\(filteredItems.count) result\(filteredItems.count == 1 ? "" : "s")")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CRTheme.inkSoft)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(CRTheme.surfaceStrong.opacity(0.8), in: Capsule())
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
         }
-        .animation(.crFast, value: search.isEmpty && filterKind == "all")
+        .animation(.crSpring, value: search.isEmpty && filterKind == "all")
     }
 
     @ViewBuilder private func groupLabel(_ text: String, icon: String, tint: Color) -> some View {
