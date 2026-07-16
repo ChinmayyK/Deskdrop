@@ -200,6 +200,20 @@ pub enum EngineEvent {
     FileTransferResumed {
         transfer_id: [u8; 16],
     },
+    
+    // ── Speed Test Events ────────────────────────────────────────────────────
+    
+    SpeedTestProgress {
+        test_id: Uuid,
+        peer_id: Uuid,
+        direction: String, // "upload" or "download"
+        bytes_transferred: u64,
+        duration_secs: u32,
+    },
+    SpeedTestComplete {
+        test_id: Uuid,
+        peer_id: Uuid,
+    },
     /// Activity feed snapshot (full or incremental). Used to update the UI.
     ActivityFeedUpdated {
         entries: Vec<crate::activity::ActivityEntry>,
@@ -258,6 +272,42 @@ pub enum EngineEvent {
     /// A raw video frame was received for the virtual camera stream.
     CameraFrameReceived {
         from_device: Uuid,
+    },
+    RemoteFilesQueryReceived {
+        request_id: Uuid,
+        from_device: Uuid,
+        summary_only: bool,
+        category: Option<crate::protocol::RemoteFileCategory>,
+        source: Option<crate::protocol::RemoteFileSource>,
+        search_query: Option<String>,
+        offset: u32,
+        limit: u32,
+    },
+    RemoteFilesResponseReceived {
+        request_id: Uuid,
+        from_device: Uuid,
+        summary: Option<crate::protocol::RemoteFilesSummary>,
+        files: Vec<crate::protocol::RemoteFileEntry>,
+        total_matching: u32,
+        error: Option<String>,
+    },
+    RemoteThumbnailRequestReceived {
+        request_id: Uuid,
+        from_device: Uuid,
+        file_id: u64,
+        size_px: u32,
+    },
+    RemoteThumbnailResponseReceived {
+        request_id: Uuid,
+        from_device: Uuid,
+        file_id: u64,
+        data: Vec<u8>,
+        error: Option<String>,
+    },
+    RemoteFilePullRequestReceived {
+        request_id: Uuid,
+        from_device: Uuid,
+        file_id: u64,
     },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
@@ -421,6 +471,23 @@ pub struct PeerNetworkState {
     pub network_type: String,
 }
 
+/// Result of a remote files query (`query_remote_files_sync`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RemoteFilesResult {
+    pub summary: Option<crate::protocol::RemoteFilesSummary>,
+    pub files: Vec<crate::protocol::RemoteFileEntry>,
+    pub total_matching: u32,
+    pub error: Option<String>,
+}
+
+/// Result of a remote thumbnail request (`request_remote_thumbnail_sync`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RemoteThumbnailResult {
+    pub file_id: u64,
+    pub data: Vec<u8>,
+    pub error: Option<String>,
+}
+
 #[derive(Clone)]
 pub(crate) struct EngineShared {
     pub(crate) config: EngineConfig,
@@ -439,6 +506,8 @@ pub(crate) struct EngineShared {
     pub(crate) activity: Arc<Mutex<ActivityFeed>>,
     /// File transfer manager.
     pub(crate) file_transfers: Arc<Mutex<FileTransferManager>>,
+    /// Speed tests manager.
+    pub(crate) speed_tests: Arc<Mutex<std::collections::HashMap<uuid::Uuid, crate::speed_test::SpeedTestState>>>,
     /// Clipboard apply policy (timeline-first vs auto-apply).
     pub(crate) apply_policy: Arc<Mutex<ClipboardApplyPolicy>>,
     /// Settings snapshot for policy decisions (updated lazily).
@@ -478,6 +547,10 @@ pub(crate) struct EngineShared {
     pub dedup: Arc<Mutex<crate::dedup::Deduplicator>>,
     /// Active QR authentication token (short-lived)
     pub qr_auth_token: Arc<Mutex<Option<String>>>,
+    /// Waiters for remote files queries (`query_remote_files_sync`). Keyed by `request_id`.
+    pub(crate) remote_file_waiters: Arc<Mutex<std::collections::HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<RemoteFilesResult>>>>,
+    /// Waiters for remote thumbnail requests (`request_remote_thumbnail_sync`). Keyed by `request_id`.
+    pub(crate) remote_thumb_waiters: Arc<Mutex<std::collections::HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<RemoteThumbnailResult>>>>,
 }
 
 #[derive(Clone)]
@@ -538,6 +611,7 @@ impl Engine {
                     .clone()
                     .unwrap_or_else(default_save_dir),
             ))),
+            speed_tests: Arc::new(Mutex::new(std::collections::HashMap::new())),
             apply_policy: Arc::new(Mutex::new(ClipboardApplyPolicy::default())),
             settings: Arc::new(Mutex::new(Settings::default())),
             quality_probes: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -574,6 +648,8 @@ impl Engine {
             congestion_controller: crate::throttle::AdaptiveCongestionController::default(),
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
+            remote_file_waiters: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_thumb_waiters: Arc::new(Mutex::new(std::collections::HashMap::new())),
         };
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
@@ -1159,6 +1235,31 @@ impl Engine {
         serde_json::to_value(record).ok()
     }
 
+    // ── Speed Test ────────────────────────────────────────────────────────────
+
+    pub async fn start_speed_test(&self, device_id: Uuid, duration_secs: u32) -> Result<()> {
+        let test_id = Uuid::new_v4();
+        if let Some(tx) = self.shared.peer_manager.file_sender(device_id) {
+            {
+                let mut tests = self.shared.speed_tests.lock().await;
+                let entry = tests.entry(device_id).or_insert_with(|| crate::speed_test::SpeedTestState::new(tx.clone()));
+                // We'll mark it as Idle but store the test_id and duration so the response matches
+                entry.test_id = Some(test_id);
+                entry.duration_secs = duration_secs;
+            }
+            let req = AppMessage::SpeedTestRequest {
+                test_id,
+                duration_secs,
+            };
+            tx.send(req)
+                .await
+                .map_err(|_| anyhow::anyhow!("Failed to send speed test request"))?;
+            Ok(())
+        } else {
+            anyhow::bail!("Peer not connected");
+        }
+    }
+
     // ── Feedback ──────────────────────────────────────────────────────────────
 
     pub fn set_pairing_requested(&self, device_id: Uuid, requested: bool) -> Result<()> {
@@ -1443,8 +1544,23 @@ impl Engine {
                 let bg_transfer_id = transfer_id;
                 let bg_peer_id = peer_id;
                 tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 16;
+                    const BATCH_SIZE: usize = 4;
                     'outer: loop {
+                        let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
+                            let mut mgr = bg_shared.file_transfers.lock().await;
+                            if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
+                                (t.next_chunk, t.last_acked_chunk, t.total_chunks)
+                            } else {
+                                break 'outer;
+                            }
+                        };
+                        if next_chunk >= total_chunks {
+                            break 'outer;
+                        }
+                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 16u32 {
+                            tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                            continue;
+                        }
                         let (batch, progs) = match read_outbound_chunks(
                             bg_shared.clone(),
                             bg_transfer_id,
@@ -1783,6 +1899,183 @@ impl Engine {
         let token = hex::encode(bytes);
         *self.shared.qr_auth_token.lock().await = Some(token.clone());
         token
+    }
+
+    pub async fn send_remote_files_query(
+        &self,
+        target_device: Uuid,
+        request_id: Uuid,
+        summary_only: bool,
+        category: Option<crate::protocol::RemoteFileCategory>,
+        source: Option<crate::protocol::RemoteFileSource>,
+        search_query: Option<String>,
+        offset: u32,
+        limit: u32,
+    ) {
+        let msg = AppMessage::RemoteFilesQuery {
+            request_id,
+            origin_device: self.shared.config.device_id,
+            summary_only,
+            category,
+            source,
+            search_query,
+            offset,
+            limit,
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    pub async fn send_remote_files_response(
+        &self,
+        target_device: Uuid,
+        request_id: Uuid,
+        summary: Option<crate::protocol::RemoteFilesSummary>,
+        files: Vec<crate::protocol::RemoteFileEntry>,
+        total_matching: u32,
+        error: Option<String>,
+    ) {
+        let msg = AppMessage::RemoteFilesResponse {
+            request_id,
+            summary,
+            files,
+            total_matching,
+            error,
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    pub async fn send_remote_thumbnail_request(
+        &self,
+        target_device: Uuid,
+        request_id: Uuid,
+        file_id: u64,
+        size_px: u32,
+    ) {
+        let msg = AppMessage::RemoteThumbnailRequest {
+            request_id,
+            origin_device: self.shared.config.device_id,
+            file_id,
+            size_px,
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    pub async fn send_remote_thumbnail_response(
+        &self,
+        target_device: Uuid,
+        request_id: Uuid,
+        file_id: u64,
+        data: Vec<u8>,
+        error: Option<String>,
+    ) {
+        let msg = AppMessage::RemoteThumbnailResponse {
+            request_id,
+            file_id,
+            data,
+            error,
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    pub async fn send_remote_file_pull_request(
+        &self,
+        target_device: Uuid,
+        request_id: Uuid,
+        file_id: u64,
+    ) {
+        let msg = AppMessage::RemoteFilePullRequest {
+            request_id,
+            origin_device: self.shared.config.device_id,
+            file_id,
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    pub async fn query_remote_files_sync(
+        &self,
+        target_device: Uuid,
+        summary_only: bool,
+        category: Option<crate::protocol::RemoteFileCategory>,
+        source: Option<crate::protocol::RemoteFileSource>,
+        search_query: Option<String>,
+        offset: u32,
+        limit: u32,
+        timeout_secs: u64,
+    ) -> Result<RemoteFilesResult> {
+        let request_id = Uuid::new_v4();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.shared.remote_file_waiters.lock().await.insert(request_id, tx);
+        self.send_remote_files_query(target_device, request_id, summary_only, category, source, search_query, offset, limit).await;
+        match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), rx).await {
+            Ok(Ok(res)) => Ok(res),
+            Ok(Err(_)) => {
+                self.shared.remote_file_waiters.lock().await.remove(&request_id);
+                anyhow::bail!("Remote files query channel closed unexpectedly")
+            }
+            Err(_) => {
+                self.shared.remote_file_waiters.lock().await.remove(&request_id);
+                anyhow::bail!("Remote files query timed out after {}s", timeout_secs)
+            }
+        }
+    }
+
+    pub async fn request_remote_thumbnail_sync(
+        &self,
+        target_device: Uuid,
+        file_id: u64,
+        size_px: u32,
+        timeout_secs: u64,
+    ) -> Result<RemoteThumbnailResult> {
+        let request_id = Uuid::new_v4();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.shared.remote_thumb_waiters.lock().await.insert(request_id, tx);
+        self.send_remote_thumbnail_request(target_device, request_id, file_id, size_px).await;
+        match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), rx).await {
+            Ok(Ok(res)) => Ok(res),
+            Ok(Err(_)) => {
+                self.shared.remote_thumb_waiters.lock().await.remove(&request_id);
+                anyhow::bail!("Remote thumbnail request channel closed unexpectedly")
+            }
+            Err(_) => {
+                self.shared.remote_thumb_waiters.lock().await.remove(&request_id);
+                anyhow::bail!("Remote thumbnail request timed out after {}s", timeout_secs)
+            }
+        }
     }
 
     pub async fn send_qr_auth(&self, target_device: Uuid, token: String) {
@@ -2140,6 +2433,23 @@ impl Engine {
 
     pub async fn active_transfers(&self) -> Vec<serde_json::Value> {
         self.shared.file_transfers.lock().await.active_transfers()
+    }
+
+    pub async fn active_speed_tests(&self) -> Vec<serde_json::Value> {
+        let tests = self.shared.speed_tests.lock().await;
+        tests.iter().map(|(peer_id, s)| {
+            serde_json::json!({
+                "test_id": s.test_id.map(|u| u.to_string()),
+                "peer_id": peer_id.to_string(),
+                "phase": match s.phase {
+                    crate::speed_test::SpeedTestPhase::Idle => "Idle",
+                    crate::speed_test::SpeedTestPhase::Sending => "Sending",
+                    crate::speed_test::SpeedTestPhase::Receiving => "Receiving",
+                },
+                "bytes_transferred": s.bytes_transferred.load(std::sync::atomic::Ordering::Relaxed),
+                "duration_secs": s.duration_secs,
+            })
+        }).collect()
     }
 
     pub async fn camera_frames(
@@ -3683,10 +3993,23 @@ fn register_session(
                             let bg_transfer_id = transfer_id;
                             let bg_peer_id = peer_id;
                             tokio::spawn(async move {
-                                // Batch multiple chunk reads per mutex lock to reduce contention.
-                                // With 1 MB chunks, reading 8 at a time = 8 MB per lock cycle.
-                                const BATCH_SIZE: usize = 16;
+                                const BATCH_SIZE: usize = 8;
                                 'outer: loop {
+                                    let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
+                                        let mut mgr = bg_shared.file_transfers.lock().await;
+                                        if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
+                                            (t.next_chunk, t.last_acked_chunk, t.total_chunks)
+                                        } else {
+                                            break 'outer;
+                                        }
+                                    };
+                                    if next_chunk >= total_chunks {
+                                        break 'outer;
+                                    }
+                                    if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 64u32 {
+                                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                                        continue;
+                                    }
                                     let (batch, progs) = match read_outbound_chunks(
                                         bg_shared.clone(),
                                         bg_transfer_id,
@@ -4166,8 +4489,23 @@ fn register_session(
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_peer_id = peer_id;
                             tokio::spawn(async move {
-                                const BATCH_SIZE: usize = 16;
+                                const BATCH_SIZE: usize = 8;
                                 'outer: loop {
+                                    let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
+                                        let mut mgr = bg_shared.file_transfers.lock().await;
+                                        if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
+                                            (t.next_chunk, t.last_acked_chunk, t.total_chunks)
+                                        } else {
+                                            break 'outer;
+                                        }
+                                    };
+                                    if next_chunk >= total_chunks {
+                                        break 'outer;
+                                    }
+                                    if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 64u32 {
+                                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                                        continue;
+                                    }
                                     let (batch, progs) = match read_outbound_chunks(
                                         bg_shared.clone(),
                                         bg_transfer_id,
@@ -4227,6 +4565,127 @@ fn register_session(
                                 }
                             });
                         }
+                    }
+                    Ok(AppMessage::SpeedTestRequest { test_id, duration_secs }) => {
+                        touch_last_seen();
+                        if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                            continue;
+                        }
+                        
+                        let mut can_accept = false;
+                        {
+                            let mut tests = shared.speed_tests.lock().await;
+                            // Accept if we aren't already running a test with this peer
+                            let entry = tests.entry(peer_id).or_insert_with(|| crate::speed_test::SpeedTestState::new(session_outbox_tx.clone()));
+                            if entry.phase == crate::speed_test::SpeedTestPhase::Idle {
+                                entry.start_receiving(test_id, duration_secs);
+                                can_accept = true;
+                            }
+                        }
+                        
+                        let _ = session_outbox_tx.send(AppMessage::SpeedTestResponse {
+                            test_id,
+                            accepted: can_accept,
+                            reason: if can_accept { None } else { Some("Busy".into()) },
+                        }).await;
+                    }
+                    Ok(AppMessage::SpeedTestResponse { test_id, accepted, reason: _ }) => {
+                        touch_last_seen();
+                        if accepted {
+                            let mut tests = shared.speed_tests.lock().await;
+                            if let Some(state) = tests.get_mut(&peer_id) {
+                                if state.test_id == Some(test_id) {
+                                    state.start_sending(test_id, state.duration_secs);
+                                }
+                            }
+                        } else {
+                            let mut tests = shared.speed_tests.lock().await;
+                            if let Some(state) = tests.get_mut(&peer_id) {
+                                if state.test_id == Some(test_id) {
+                                    state.reset();
+                                }
+                            }
+                            let _ = shared.event_tx.send(EngineEvent::SpeedTestComplete { test_id, peer_id }).await;
+                        }
+                    }
+                    Ok(AppMessage::SpeedTestData { test_id, seq: _, data }) => {
+                        touch_last_seen();
+                        let send_stats = {
+                            let mut tests = shared.speed_tests.lock().await;
+                            if let Some(state) = tests.get_mut(&peer_id) {
+                                if state.test_id == Some(test_id) && state.phase == crate::speed_test::SpeedTestPhase::Receiving {
+                                    state.handle_chunk(data.len());
+                                    
+                                    // Should we emit stats back to sender?
+                                    if let Some(last_tick) = state.last_tick_time {
+                                        if last_tick.elapsed().as_millis() >= 500 {
+                                            state.last_tick_time = Some(std::time::Instant::now());
+                                            Some(state.bytes_transferred.load(std::sync::atomic::Ordering::Relaxed))
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        };
+                        
+                        if let Some(bytes) = send_stats {
+                            let _ = session_outbox_tx.send(AppMessage::SpeedTestStats {
+                                test_id,
+                                received_bytes: bytes,
+                            }).await;
+
+                            let duration_secs = {
+                                let tests = shared.speed_tests.lock().await;
+                                tests.get(&peer_id).map(|s| s.duration_secs)
+                            };
+                            if let Some(dur) = duration_secs {
+                                let _ = shared.event_tx.send(EngineEvent::SpeedTestProgress {
+                                    test_id,
+                                    peer_id,
+                                    direction: "download".to_string(),
+                                    bytes_transferred: bytes,
+                                    duration_secs: dur,
+                                }).await;
+                            }
+                        }
+                    }
+                    Ok(AppMessage::SpeedTestStats { test_id, received_bytes }) => {
+                        touch_last_seen();
+                        let duration_secs = {
+                            let tests = shared.speed_tests.lock().await;
+                            if let Some(state) = tests.get(&peer_id) {
+                                if state.test_id == Some(test_id) {
+                                    Some(state.duration_secs)
+                                } else { None }
+                            } else { None }
+                        };
+                        
+                        if let Some(dur) = duration_secs {
+                            let _ = shared.event_tx.send(EngineEvent::SpeedTestProgress {
+                                test_id,
+                                peer_id,
+                                direction: "upload".to_string(),
+                                bytes_transferred: received_bytes,
+                                duration_secs: dur,
+                            }).await;
+                        }
+                    }
+                    Ok(AppMessage::SpeedTestComplete { test_id }) => {
+                        touch_last_seen();
+                        let mut tests = shared.speed_tests.lock().await;
+                        if let Some(state) = tests.get_mut(&peer_id) {
+                            if state.test_id == Some(test_id) {
+                                state.reset();
+                            }
+                        }
+                        let _ = shared.event_tx.send(EngineEvent::SpeedTestComplete { test_id, peer_id }).await;
                     }
                     Ok(AppMessage::HistoryMetadata { entry }) => {
                         touch_last_seen();
@@ -4778,6 +5237,140 @@ fn register_session(
                             })
                             .await;
                     }
+                    Ok(AppMessage::RemoteFilesQuery {
+                        request_id,
+                        origin_device,
+                        summary_only,
+                        category,
+                        source,
+                        search_query,
+                        offset,
+                        limit,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::RemoteFilesQueryReceived {
+                                request_id,
+                                from_device: origin_device,
+                                summary_only,
+                                category,
+                                source,
+                                search_query,
+                                offset,
+                                limit,
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::RemoteFilesResponse {
+                        request_id,
+                        summary,
+                        files,
+                        total_matching,
+                        error,
+                    }) => {
+                        touch_last_seen();
+                        if let Some(tx) = shared.remote_file_waiters.lock().await.remove(&request_id) {
+                            let _ = tx.send(RemoteFilesResult {
+                                summary: summary.clone(),
+                                files: files.clone(),
+                                total_matching,
+                                error: error.clone(),
+                            });
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::RemoteFilesResponseReceived {
+                                request_id,
+                                from_device: peer_id,
+                                summary,
+                                files,
+                                total_matching,
+                                error,
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::RemoteThumbnailRequest {
+                        request_id,
+                        origin_device,
+                        file_id,
+                        size_px,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::RemoteThumbnailRequestReceived {
+                                request_id,
+                                from_device: origin_device,
+                                file_id,
+                                size_px,
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::RemoteThumbnailResponse {
+                        request_id,
+                        file_id,
+                        data,
+                        error,
+                    }) => {
+                        touch_last_seen();
+                        if let Some(tx) = shared.remote_thumb_waiters.lock().await.remove(&request_id) {
+                            let _ = tx.send(RemoteThumbnailResult {
+                                file_id,
+                                data: data.clone(),
+                                error: error.clone(),
+                            });
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::RemoteThumbnailResponseReceived {
+                                request_id,
+                                from_device: peer_id,
+                                file_id,
+                                data,
+                                error,
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::RemoteFilePullRequest {
+                        request_id,
+                        origin_device,
+                        file_id,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::RemoteFilePullRequestReceived {
+                                request_id,
+                                from_device: origin_device,
+                                file_id,
+                            })
+                            .await;
+                    }
                     Ok(AppMessage::Hello { .. }) | Ok(AppMessage::HelloAck { .. }) => {
                         // Ignored in session loop
                     }
@@ -4876,6 +5469,19 @@ fn register_session(
                 Some(msg) = file_outbox_rx.recv() => {
                     if let Err(err) = sess_tx.send_no_flush(&msg).await {
                         break format!("send failed: {err}");
+                    }
+                    for _ in 0..7 {
+                        match file_outbox_rx.try_recv() {
+                            Ok(next_msg) => {
+                                if let Err(_err) = sess_tx.send_no_flush(&next_msg).await {
+                                    break;
+                                }
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                    if let Err(err) = sess_tx.flush().await {
+                        break format!("flush failed: {err}");
                     }
                 }
                 rx_res = &mut rx_task => {

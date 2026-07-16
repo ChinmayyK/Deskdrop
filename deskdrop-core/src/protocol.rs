@@ -202,6 +202,66 @@ pub struct FileTransferMetadata {
     pub mime_type: String,
 }
 
+// ── Remote File & Media Explorer definitions ──────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RemoteFileCategory {
+    All,
+    Images,
+    Videos,
+    Audio,
+    Documents,
+    Apks,
+    Archives,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RemoteFileSource {
+    All,
+    WhatsApp,
+    Downloads,
+    Camera,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteFileEntry {
+    pub file_id: u64,           // MediaStore _ID
+    pub display_name: String,   // _DISPLAY_NAME
+    pub size_bytes: u64,        // _SIZE
+    pub mime_type: String,      // MIME_TYPE
+    pub date_modified: u64,     // DATE_MODIFIED (epoch seconds)
+    pub category: RemoteFileCategory,
+    pub source: RemoteFileSource,
+    pub content_uri: String,    // Content URI (e.g. "content://media/external/file/1234")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RemoteFileCategoryCounts {
+    pub images: u32,
+    pub videos: u32,
+    pub audio: u32,
+    pub documents: u32,
+    pub apks: u32,
+    pub archives: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RemoteFileSourceCounts {
+    pub whatsapp: u32,
+    pub downloads: u32,
+    pub camera: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RemoteFilesSummary {
+    pub type_counts: RemoteFileCategoryCounts,
+    pub source_counts: RemoteFileSourceCounts,
+}
+
 // ── Wire messages ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -315,9 +375,37 @@ pub enum AppMessage {
     FileTransferPause {
         transfer_id: [u8; 16],
     },
-    /// Either side resumes a paused transfer.
     FileTransferResume {
         transfer_id: [u8; 16],
+    },
+    
+    // ── Speed Test Messages ──────────────────────────────────────────────────
+    
+    /// Request to begin a speed test.
+    SpeedTestRequest {
+        test_id: Uuid,
+        duration_secs: u32,
+    },
+    /// Response to a speed test request.
+    SpeedTestResponse {
+        test_id: Uuid,
+        accepted: bool,
+        reason: Option<String>,
+    },
+    /// A chunk of raw dummy data for the speed test.
+    SpeedTestData {
+        test_id: Uuid,
+        seq: u32,
+        data: Vec<u8>,
+    },
+    /// Periodic stats sent from receiver back to the sender.
+    SpeedTestStats {
+        test_id: Uuid,
+        received_bytes: u64,
+    },
+    /// Finalize the speed test (or transition to upload phase).
+    SpeedTestComplete {
+        test_id: Uuid,
     },
     /// Phone call state propagated from an Android device to connected peers.
     /// Enables call continuity: ringing/offhook/idle states are relayed so
@@ -395,6 +483,45 @@ pub enum AppMessage {
     CameraFrame {
         origin_device: Uuid,
         data: Vec<u8>,
+    },
+    /// Desktop -> Android: Query summary counts (`Type` + `Sources`) or paginated file lists.
+    RemoteFilesQuery {
+        request_id: Uuid,
+        origin_device: Uuid,
+        summary_only: bool,
+        category: Option<RemoteFileCategory>,
+        source: Option<RemoteFileSource>,
+        search_query: Option<String>,
+        offset: u32,
+        limit: u32,
+    },
+    /// Android -> Desktop: Response containing summary counts or paginated file entries.
+    RemoteFilesResponse {
+        request_id: Uuid,
+        summary: Option<RemoteFilesSummary>,
+        files: Vec<RemoteFileEntry>,
+        total_matching: u32,
+        error: Option<String>,
+    },
+    /// Desktop -> Android: Request thumbnail bytes for a MediaStore file ID.
+    RemoteThumbnailRequest {
+        request_id: Uuid,
+        origin_device: Uuid,
+        file_id: u64,
+        size_px: u32,
+    },
+    /// Android -> Desktop: Response containing compressed thumbnail bytes (JPEG).
+    RemoteThumbnailResponse {
+        request_id: Uuid,
+        file_id: u64,
+        data: Vec<u8>,
+        error: Option<String>,
+    },
+    /// Desktop -> Android: Request to pull/download a full file.
+    RemoteFilePullRequest {
+        request_id: Uuid,
+        origin_device: Uuid,
+        file_id: u64,
     },
     Bye,
 }

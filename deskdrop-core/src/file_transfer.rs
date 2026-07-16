@@ -43,8 +43,7 @@ pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chu
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 32; // ACK every 32 MB — keeps the pipeline full
-                                             // on LAN while still bounding in-flight data.
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 4; // ACK every 4 MB — balances responsive progress updates with minimal TCP/locking overhead
 
 pub type TransferId = [u8; 16];
 
@@ -282,19 +281,37 @@ impl OutboundTransfer {
     }
 
     pub fn progress(&self) -> TransferProgress {
+        let bytes_sent = if self.status == TransferStatus::Complete {
+            self.meta.size_bytes
+        } else {
+            let sent = ((self.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
+            if sent >= self.meta.size_bytes && self.meta.size_bytes > 0 && self.last_acked_chunk + 1 < self.total_chunks {
+                self.meta.size_bytes.saturating_sub(1)
+            } else {
+                sent
+            }
+        };
         let percent = if self.total_chunks == 0 {
             100
+        } else if self.meta.size_bytes > 0 {
+            if bytes_sent == self.meta.size_bytes {
+                100
+            } else {
+                ((bytes_sent as f64 / self.meta.size_bytes as f64) * 100.0).min(99.0) as u8
+            }
         } else {
-            ((self.next_chunk as f64 / self.total_chunks as f64) * 100.0) as u8
+            0
         };
-        let bytes_sent = (self.next_chunk as u64) * (FILE_CHUNK_SIZE as u64);
-        let bytes_sent = bytes_sent.min(self.meta.size_bytes);
 
         let elapsed = self.created_at.elapsed();
-        let speed_bps = bytes_sent.checked_div(elapsed.as_secs());
+        let speed_bps = bytes_sent.checked_div(elapsed.as_secs().max(1));
         let eta_secs = speed_bps.and_then(|spd| {
-            let remaining = self.meta.size_bytes.saturating_sub(bytes_sent);
-            remaining.checked_div(spd)
+            if spd > 0 {
+                let remaining = self.meta.size_bytes.saturating_sub(bytes_sent);
+                Some(remaining / spd)
+            } else {
+                None
+            }
         });
 
         TransferProgress {
@@ -914,9 +931,24 @@ impl FileTransferManager {
             }));
         }
         for t in self.outbound.values() {
-            let bytes_sent = (t.next_chunk as u64) * (FILE_CHUNK_SIZE as u64);
-            let percent = if t.meta.size_bytes > 0 {
-                (bytes_sent.min(t.meta.size_bytes) as f64 / t.meta.size_bytes as f64 * 100.0) as u8
+            let bytes_sent = if t.status == TransferStatus::Complete {
+                t.meta.size_bytes
+            } else {
+                let sent = ((t.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(t.meta.size_bytes);
+                if sent >= t.meta.size_bytes && t.meta.size_bytes > 0 && t.last_acked_chunk + 1 < t.total_chunks {
+                    t.meta.size_bytes.saturating_sub(1)
+                } else {
+                    sent
+                }
+            };
+            let percent = if t.total_chunks == 0 {
+                100
+            } else if t.meta.size_bytes > 0 {
+                if bytes_sent == t.meta.size_bytes {
+                    100
+                } else {
+                    ((bytes_sent as f64 / t.meta.size_bytes as f64) * 100.0).min(99.0) as u8
+                }
             } else {
                 0
             };
@@ -1003,7 +1035,7 @@ fn get_available_disk_space(path: &Path) -> Option<u64> {
         };
         let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
         if unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) } == 0 {
-            return Some((stat.f_bavail as u64).saturating_mul(stat.f_frsize));
+            return Some((stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64));
         }
     }
     #[cfg(windows)]

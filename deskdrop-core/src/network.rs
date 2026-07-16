@@ -569,6 +569,10 @@ impl PeerSession {
         send_encrypted_no_flush(&mut self.stream, &mut self.session, msg).await
     }
 
+    pub async fn flush(&mut self) -> Result<()> {
+        self.stream.flush().await.context("flushing stream")
+    }
+
     pub async fn recv(&mut self) -> Result<AppMessage> {
         recv_encrypted(&mut self.stream, &mut self.session).await
     }
@@ -581,6 +585,10 @@ impl PeerSessionTx {
 
     pub async fn send_no_flush(&mut self, msg: &AppMessage) -> Result<()> {
         send_encrypted_no_flush(&mut self.stream, &mut self.session, msg).await
+    }
+
+    pub async fn flush(&mut self) -> Result<()> {
+        self.stream.flush().await.context("flushing stream")
     }
 }
 

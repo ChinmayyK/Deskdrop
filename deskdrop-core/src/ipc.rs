@@ -78,6 +78,33 @@ pub struct PartialSettings {
     pub ignore_patterns: Option<Vec<String>>,
 }
 
+fn default_remote_files_limit() -> u32 { 50 }
+fn default_thumbnail_size() -> u32 { 256 }
+
+pub fn parse_remote_file_category(s: &str) -> Option<crate::protocol::RemoteFileCategory> {
+    match s {
+        "Images" | "images" | "image" => Some(crate::protocol::RemoteFileCategory::Images),
+        "Videos" | "videos" | "video" => Some(crate::protocol::RemoteFileCategory::Videos),
+        "Audio" | "audio" => Some(crate::protocol::RemoteFileCategory::Audio),
+        "Documents" | "documents" | "document" => Some(crate::protocol::RemoteFileCategory::Documents),
+        "Apks" | "apks" | "APKs" | "apk" => Some(crate::protocol::RemoteFileCategory::Apks),
+        "Archives" | "archives" | "archive" => Some(crate::protocol::RemoteFileCategory::Archives),
+        "Other" | "other" => Some(crate::protocol::RemoteFileCategory::Other),
+        _ => None,
+    }
+}
+
+pub fn parse_remote_file_source(s: &str) -> Option<crate::protocol::RemoteFileSource> {
+    match s {
+        "All" | "all" => Some(crate::protocol::RemoteFileSource::All),
+        "WhatsApp" | "whatsapp" => Some(crate::protocol::RemoteFileSource::WhatsApp),
+        "Downloads" | "downloads" => Some(crate::protocol::RemoteFileSource::Downloads),
+        "Camera" | "camera" => Some(crate::protocol::RemoteFileSource::Camera),
+        "Other" | "other" => Some(crate::protocol::RemoteFileSource::Other),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum IpcRequest {
@@ -181,6 +208,11 @@ pub enum IpcRequest {
     PauseFileTransfer { transfer_id: String },
     /// Resume a paused file transfer.
     ResumeFileTransfer { transfer_id: String },
+    /// Start a network speed test with a peer.
+    StartSpeedTest {
+        device_id: String,
+        duration_secs: u32,
+    },
     /// Update timeline-first clipboard mode.
     SetTimelineFirstMode { enabled: bool },
     /// Update auto-apply remote clipboard setting.
@@ -344,6 +376,32 @@ pub enum IpcRequest {
         level: u8,
         /// Whether the device is charging
         charging: bool,
+    },
+    // ── Remote File Explorer (Phase 3) ────────────────────────────────────────
+    /// Query remote files or summary from a connected Android peer.
+    RemoteFilesQuery {
+        target_device: String,
+        #[serde(default)]
+        summary_only: bool,
+        category: Option<String>,
+        source: Option<String>,
+        search_query: Option<String>,
+        #[serde(default)]
+        offset: u32,
+        #[serde(default = "default_remote_files_limit")]
+        limit: u32,
+    },
+    /// Request a base64 thumbnail for a remote media file.
+    RemoteThumbnailRequest {
+        target_device: String,
+        file_id: u64,
+        #[serde(default = "default_thumbnail_size")]
+        size_px: u32,
+    },
+    /// Request the remote peer to send a file to us over normal file transfer.
+    RemoteFilePullRequest {
+        target_device: String,
+        file_id: u64,
     },
 }
 
@@ -631,6 +689,7 @@ pub async fn handle_ipc_request(
                 "active_call": active_call,
                 "peer_batteries": peer_batteries,
                 "active_transfers": active_transfers,
+                "active_speed_tests": eng.active_speed_tests().await,
                 "bind_ip": snap.bind_address.ip().to_string(),
                 "bind_port": snap.bind_address.port(),
             }))
@@ -1120,6 +1179,15 @@ pub async fn handle_ipc_request(
                 Err(_) => IpcResponse::err("invalid transfer id"),
             }
         }
+        IpcRequest::StartSpeedTest { device_id, duration_secs } => {
+            match crate::ipc::parse_uuid(&device_id) {
+                Ok(id) => match eng.start_speed_test(id, duration_secs).await {
+                    Ok(_) => IpcResponse::ok_empty(),
+                    Err(e) => IpcResponse::err(e.to_string()),
+                },
+                Err(_) => IpcResponse::err("invalid device id"),
+            }
+        }
         // ── Settings ───────────────────────────────────────────────────────
         IpcRequest::GetSettings => IpcResponse::ok(eng.current_settings().await),
         IpcRequest::PatchSettings { patch } => match eng.patch_settings(patch).await {
@@ -1227,6 +1295,61 @@ pub async fn handle_ipc_request(
         },
         // ── Feedback ───────────────────────────────────────────────────────
         IpcRequest::Feedback { last } => IpcResponse::ok(eng.feedback_recent(last).await),
+        // ── Remote Explorer ────────────────────────────────────────────────
+        IpcRequest::RemoteFilesQuery {
+            target_device,
+            summary_only,
+            category,
+            source,
+            search_query,
+            offset,
+            limit,
+        } => {
+            let target_uuid = match uuid::Uuid::parse_str(&target_device) {
+                Ok(u) => u,
+                Err(e) => return IpcResponse::err(format!("invalid target_device uuid: {e}")),
+            };
+            let cat = category.as_deref().and_then(parse_remote_file_category);
+            let src = source.as_deref().and_then(parse_remote_file_source);
+            match eng
+                .query_remote_files_sync(target_uuid, summary_only, cat, src, search_query, offset, limit, 12)
+                .await
+            {
+                Ok(res) => IpcResponse::ok(res),
+                Err(e) => IpcResponse::err(e.to_string()),
+            }
+        }
+        IpcRequest::RemoteThumbnailRequest {
+            target_device,
+            file_id,
+            size_px,
+        } => {
+            let target_uuid = match uuid::Uuid::parse_str(&target_device) {
+                Ok(u) => u,
+                Err(e) => return IpcResponse::err(format!("invalid target_device uuid: {e}")),
+            };
+            match eng.request_remote_thumbnail_sync(target_uuid, file_id, size_px, 10).await {
+                Ok(res) => {
+                    use base64::Engine as _;
+                    let base64_str = base64::engine::general_purpose::STANDARD.encode(&res.data);
+                    IpcResponse::ok(serde_json::json!({
+                        "file_id": res.file_id,
+                        "data_base64": base64_str,
+                        "error": res.error,
+                    }))
+                }
+                Err(e) => IpcResponse::err(e.to_string()),
+            }
+        }
+        IpcRequest::RemoteFilePullRequest { target_device, file_id } => {
+            let target_uuid = match uuid::Uuid::parse_str(&target_device) {
+                Ok(u) => u,
+                Err(e) => return IpcResponse::err(format!("invalid target_device uuid: {e}")),
+            };
+            let request_id = uuid::Uuid::new_v4();
+            eng.send_remote_file_pull_request(target_uuid, request_id, file_id).await;
+            IpcResponse::ok_empty()
+        }
     }
 }
 

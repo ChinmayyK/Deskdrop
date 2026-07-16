@@ -1319,6 +1319,53 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state.engine.push_battery_status(level, charging).await;
             Ok(IpcResponse::ok_empty())
         }
+        IpcRequest::RemoteFilesQuery {
+            target_device,
+            summary_only,
+            category,
+            source,
+            search_query,
+            offset,
+            limit,
+        } => {
+            let target_uuid = parse_uuid(&target_device)?;
+            let cat = category.as_deref().and_then(deskdrop_core::ipc::parse_remote_file_category);
+            let src = source.as_deref().and_then(deskdrop_core::ipc::parse_remote_file_source);
+            let res = state
+                .engine
+                .query_remote_files_sync(target_uuid, summary_only, cat, src, search_query, offset, limit, 12)
+                .await?;
+            Ok(IpcResponse::ok(res))
+        }
+        IpcRequest::RemoteThumbnailRequest {
+            target_device,
+            file_id,
+            size_px,
+        } => {
+            let target_uuid = parse_uuid(&target_device)?;
+            let res = state
+                .engine
+                .request_remote_thumbnail_sync(target_uuid, file_id, size_px, 10)
+                .await?;
+            use base64::Engine as _;
+            let base64_str = base64::engine::general_purpose::STANDARD.encode(&res.data);
+            Ok(IpcResponse::ok(serde_json::json!({
+                "file_id": res.file_id,
+                "data_base64": base64_str,
+                "error": res.error,
+            })))
+        }
+        IpcRequest::RemoteFilePullRequest { target_device, file_id } => {
+            let target_uuid = parse_uuid(&target_device)?;
+            let request_id = uuid::Uuid::new_v4();
+            state.engine.send_remote_file_pull_request(target_uuid, request_id, file_id).await;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::StartSpeedTest { device_id, duration_secs } => {
+            let target_uuid = parse_uuid(&device_id)?;
+            state.engine.start_speed_test(target_uuid, duration_secs).await?;
+            Ok(IpcResponse::ok_empty())
+        }
 
         IpcRequest::Shutdown => {
             state.shutdown.notify_waiters();

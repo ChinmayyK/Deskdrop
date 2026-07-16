@@ -11,6 +11,7 @@
 
 use crate::engine::{Engine, EngineConfig, EngineEvent};
 use crate::protocol::ClipboardContent;
+use serde_json::json;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::sync::OnceLock;
@@ -240,6 +241,13 @@ pub const PB_EVENT_SYSTEM_HEALTH_UPDATED: c_int = 26;
 pub const PB_EVENT_PEER_DISCOVERED: c_int = 27;
 pub const PB_EVENT_NETWORK_STATE_CHANGED: c_int = 28;
 pub const PB_EVENT_OUTGOING_PAIRING_WAITING: c_int = 29;
+pub const PB_EVENT_REMOTE_FILES_QUERY: c_int = 30;
+pub const PB_EVENT_REMOTE_THUMBNAIL_REQUEST: c_int = 31;
+pub const PB_EVENT_REMOTE_FILE_PULL_REQUEST: c_int = 32;
+pub const PB_EVENT_REMOTE_FILES_RESPONSE: c_int = 33;
+pub const PB_EVENT_REMOTE_THUMBNAIL_RESPONSE: c_int = 34;
+pub const PB_EVENT_SPEED_TEST_PROGRESS: c_int = 35;
+pub const PB_EVENT_SPEED_TEST_COMPLETE: c_int = 36;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -334,6 +342,13 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CameraFrameReceived { .. } => PB_EVENT_CAMERA_FRAME,
         EngineEvent::PeerDiscovered { .. } => PB_EVENT_PEER_DISCOVERED,
         EngineEvent::OutgoingPairingWaiting { .. } => PB_EVENT_OUTGOING_PAIRING_WAITING,
+        EngineEvent::RemoteFilesQueryReceived { .. } => PB_EVENT_REMOTE_FILES_QUERY,
+        EngineEvent::RemoteThumbnailRequestReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_REQUEST,
+        EngineEvent::RemoteFilePullRequestReceived { .. } => PB_EVENT_REMOTE_FILE_PULL_REQUEST,
+        EngineEvent::RemoteFilesResponseReceived { .. } => PB_EVENT_REMOTE_FILES_RESPONSE,
+        EngineEvent::RemoteThumbnailResponseReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_RESPONSE,
+        EngineEvent::SpeedTestProgress { .. } => PB_EVENT_SPEED_TEST_PROGRESS,
+        EngineEvent::SpeedTestComplete { .. } => PB_EVENT_SPEED_TEST_COMPLETE,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
     }
 }
@@ -355,6 +370,23 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
         EngineEvent::NetworkStateChanged { network_type, .. } => Some(network_type.clone()),
         EngineEvent::ActivityFeedUpdated { entries, .. } => serde_json::to_string(entries).ok(),
+        EngineEvent::RemoteFilesResponseReceived { summary, files, total_matching, error, .. } => {
+            serde_json::to_string(&json!({
+                "summary": summary,
+                "files": files,
+                "total_matching": total_matching,
+                "error": error,
+            })).ok()
+        }
+        EngineEvent::RemoteThumbnailResponseReceived { file_id, data, error, .. } => {
+            use base64::Engine as _;
+            let base64_str = base64::engine::general_purpose::STANDARD.encode(data);
+            serde_json::to_string(&json!({
+                "file_id": file_id,
+                "data_base64": base64_str,
+                "error": error,
+            })).ok()
+        }
         _ => None,
     };
 
@@ -555,9 +587,64 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
         EngineEvent::CallStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::BatteryStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::NetworkStateChanged { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::RemoteFilesQueryReceived { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::RemoteThumbnailRequestReceived { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::RemoteFilePullRequestReceived { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::RemoteFilesResponseReceived { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::RemoteThumbnailResponseReceived { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::SpeedTestProgress { peer_id, .. } => Some(peer_id.to_string()),
+        EngineEvent::SpeedTestComplete { peer_id, .. } => Some(peer_id.to_string()),
         _ => None,
     };
     if let Some(s) = id_str {
+        let cs = CString::new(s).unwrap_or_default();
+        e.cached_str = Some(cs);
+        e.cached_str.as_ref().unwrap().as_ptr()
+    } else {
+        std::ptr::null()
+    }
+}
+
+/// Get bytes transferred for SpeedTestProgress events; -1 otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_speed_test_bytes(event: *const PbEvent) -> i64 {
+    if event.is_null() {
+        return -1;
+    }
+    if let EngineEvent::SpeedTestProgress { bytes_transferred, .. } = &(*event).inner {
+        *bytes_transferred as i64
+    } else {
+        -1
+    }
+}
+
+/// Get duration for SpeedTestProgress events; -1 otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_speed_test_duration(event: *const PbEvent) -> c_int {
+    if event.is_null() {
+        return -1;
+    }
+    if let EngineEvent::SpeedTestProgress { duration_secs, .. } = &(*event).inner {
+        *duration_secs as c_int
+    } else {
+        -1
+    }
+}
+
+/// Get phase for SpeedTestProgress events.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_speed_test_phase(event: *mut PbEvent) -> *const c_char {
+    if event.is_null() {
+        return std::ptr::null();
+    }
+    let e = &mut *event;
+    let phase_str = match &e.inner {
+        EngineEvent::SpeedTestProgress { direction, .. } => {
+            Some(direction.as_str())
+        }
+        _ => None,
+    };
+    if let Some(s) = phase_str {
         let cs = CString::new(s).unwrap_or_default();
         e.cached_str = Some(cs);
         e.cached_str.as_ref().unwrap().as_ptr()
@@ -931,5 +1018,269 @@ pub unsafe extern "C" fn deskdrop_register_event_callback(
                 cb(pb_event, ud_addr as *mut std::ffi::c_void);
             }
         });
+    }
+}
+
+// ── Remote Explorer C API ─────────────────────────────────────────────────────
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_send_remote_files_query(
+    handle: *mut DeskdropHandle,
+    target_device_id: *const c_char,
+    request_id: *const c_char,
+    summary_only: c_int,
+    category: *const c_char,
+    source: *const c_char,
+    search_query: *const c_char,
+    offset: u32,
+    limit: u32,
+) -> c_int {
+    if handle.is_null() || target_device_id.is_null() || request_id.is_null() {
+        return 0;
+    }
+    let h = &*handle;
+    let target_raw = match CStr::from_ptr(target_device_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let target_uuid = match uuid::Uuid::parse_str(target_raw) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+    let req_raw = match CStr::from_ptr(request_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let req_uuid = match uuid::Uuid::parse_str(req_raw) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+
+    let cat_opt = if category.is_null() {
+        None
+    } else {
+        match CStr::from_ptr(category).to_str() {
+            Ok("Images") | Ok("images") | Ok("image") => Some(crate::protocol::RemoteFileCategory::Images),
+            Ok("Videos") | Ok("videos") | Ok("video") => Some(crate::protocol::RemoteFileCategory::Videos),
+            Ok("Audio") | Ok("audio") => Some(crate::protocol::RemoteFileCategory::Audio),
+            Ok("Documents") | Ok("documents") | Ok("document") => Some(crate::protocol::RemoteFileCategory::Documents),
+            Ok("APKs") | Ok("Apks") | Ok("apks") | Ok("apk") => Some(crate::protocol::RemoteFileCategory::Apks),
+            Ok("Archives") | Ok("archives") | Ok("archive") => Some(crate::protocol::RemoteFileCategory::Archives),
+            Ok("Other") | Ok("other") => Some(crate::protocol::RemoteFileCategory::Other),
+            _ => None,
+        }
+    };
+
+    let src_opt = if source.is_null() {
+        None
+    } else {
+        match CStr::from_ptr(source).to_str() {
+            Ok("WhatsApp") | Ok("whatsapp") => Some(crate::protocol::RemoteFileSource::WhatsApp),
+            Ok("Downloads") | Ok("downloads") => Some(crate::protocol::RemoteFileSource::Downloads),
+            Ok("Camera") | Ok("camera") => Some(crate::protocol::RemoteFileSource::Camera),
+            Ok("Other") | Ok("other") => Some(crate::protocol::RemoteFileSource::Other),
+            _ => None,
+        }
+    };
+
+    let query_opt = if search_query.is_null() {
+        None
+    } else {
+        CStr::from_ptr(search_query).to_str().ok().map(|s| s.to_string())
+    };
+
+    runtime().block_on(h.engine.send_remote_files_query(
+        target_uuid,
+        req_uuid,
+        summary_only != 0,
+        cat_opt,
+        src_opt,
+        query_opt,
+        offset,
+        limit,
+    ));
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_send_remote_thumbnail_request(
+    handle: *mut DeskdropHandle,
+    target_device_id: *const c_char,
+    request_id: *const c_char,
+    file_id: u64,
+    size_px: u32,
+) -> c_int {
+    if handle.is_null() || target_device_id.is_null() || request_id.is_null() {
+        return 0;
+    }
+    let h = &*handle;
+    let target_raw = match CStr::from_ptr(target_device_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let target_uuid = match uuid::Uuid::parse_str(target_raw) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+    let req_raw = match CStr::from_ptr(request_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let req_uuid = match uuid::Uuid::parse_str(req_raw) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+
+    runtime().block_on(h.engine.send_remote_thumbnail_request(
+        target_uuid,
+        req_uuid,
+        file_id,
+        size_px,
+    ));
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_send_remote_file_pull_request(
+    handle: *mut DeskdropHandle,
+    target_device_id: *const c_char,
+    request_id: *const c_char,
+    file_id: u64,
+) -> c_int {
+    if handle.is_null() || target_device_id.is_null() || request_id.is_null() {
+        return 0;
+    }
+    let h = &*handle;
+    let target_raw = match CStr::from_ptr(target_device_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let target_uuid = match uuid::Uuid::parse_str(target_raw) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+    let req_raw = match CStr::from_ptr(request_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let req_uuid = match uuid::Uuid::parse_str(req_raw) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+
+    runtime().block_on(h.engine.send_remote_file_pull_request(
+        target_uuid,
+        req_uuid,
+        file_id,
+    ));
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_remote_request_id(event: *mut PbEvent) -> *const c_char {
+    let e = &mut *event;
+    let s = match &e.inner {
+        EngineEvent::RemoteFilesQueryReceived { request_id, .. } => Some(request_id.to_string()),
+        EngineEvent::RemoteFilesResponseReceived { request_id, .. } => Some(request_id.to_string()),
+        EngineEvent::RemoteThumbnailRequestReceived { request_id, .. } => Some(request_id.to_string()),
+        EngineEvent::RemoteThumbnailResponseReceived { request_id, .. } => Some(request_id.to_string()),
+        EngineEvent::RemoteFilePullRequestReceived { request_id, .. } => Some(request_id.to_string()),
+        _ => None,
+    };
+    if let Some(str_val) = s {
+        let cs = CString::new(str_val).unwrap_or_default();
+        e.cached_str = Some(cs);
+        e.cached_str.as_ref().unwrap().as_ptr()
+    } else {
+        std::ptr::null()
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_remote_summary_json(event: *mut PbEvent) -> *const c_char {
+    let e = &mut *event;
+    if let EngineEvent::RemoteFilesResponseReceived { summary: Some(s), .. } = &e.inner {
+        if let Ok(json) = serde_json::to_string(s) {
+            let cs = CString::new(json).unwrap_or_default();
+            e.cached_str = Some(cs);
+            return e.cached_str.as_ref().unwrap().as_ptr();
+        }
+    }
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_remote_files_json(event: *mut PbEvent) -> *const c_char {
+    let e = &mut *event;
+    if let EngineEvent::RemoteFilesResponseReceived { files, .. } = &e.inner {
+        if let Ok(json) = serde_json::to_string(files) {
+            let cs = CString::new(json).unwrap_or_default();
+            e.cached_str = Some(cs);
+            return e.cached_str.as_ref().unwrap().as_ptr();
+        }
+    }
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_remote_total_matching(event: *const PbEvent) -> u32 {
+    if event.is_null() {
+        return 0;
+    }
+    match &(*event).inner {
+        EngineEvent::RemoteFilesResponseReceived { total_matching, .. } => *total_matching,
+        _ => 0,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_remote_file_id(event: *const PbEvent) -> u64 {
+    if event.is_null() {
+        return 0;
+    }
+    match &(*event).inner {
+        EngineEvent::RemoteThumbnailRequestReceived { file_id, .. } => *file_id,
+        EngineEvent::RemoteThumbnailResponseReceived { file_id, .. } => *file_id,
+        EngineEvent::RemoteFilePullRequestReceived { file_id, .. } => *file_id,
+        _ => 0,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_remote_thumbnail_data(event: *mut PbEvent) -> *const u8 {
+    let e = &mut *event;
+    if let EngineEvent::RemoteThumbnailResponseReceived { data, .. } = &e.inner {
+        if !data.is_empty() {
+            return data.as_ptr();
+        }
+    }
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_remote_thumbnail_len(event: *const PbEvent) -> usize {
+    if event.is_null() {
+        return 0;
+    }
+    if let EngineEvent::RemoteThumbnailResponseReceived { data, .. } = &(*event).inner {
+        return data.len();
+    }
+    0
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_remote_error(event: *mut PbEvent) -> *const c_char {
+    let e = &mut *event;
+    let err_opt = match &e.inner {
+        EngineEvent::RemoteFilesResponseReceived { error, .. } => error.clone(),
+        EngineEvent::RemoteThumbnailResponseReceived { error, .. } => error.clone(),
+        _ => None,
+    };
+    if let Some(s) = err_opt {
+        let cs = CString::new(s).unwrap_or_default();
+        e.cached_str = Some(cs);
+        e.cached_str.as_ref().unwrap().as_ptr()
+    } else {
+        std::ptr::null()
     }
 }

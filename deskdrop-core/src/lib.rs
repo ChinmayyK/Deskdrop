@@ -56,6 +56,7 @@ pub mod protocol;
 pub mod retry;
 pub mod settings;
 pub mod sim;
+pub mod speed_test;
 pub mod sync_controller;
 pub mod throttle;
 pub mod transformer;

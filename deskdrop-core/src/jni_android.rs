@@ -383,6 +383,13 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         PairingRequest { .. } => 7,
         PairingResponse { .. } => 7,
         PeerDiscovered { .. } => 5,
+        RemoteFilesQueryReceived { .. } => 30,
+        RemoteThumbnailRequestReceived { .. } => 31,
+        RemoteFilePullRequestReceived { .. } => 32,
+        RemoteFilesResponseReceived { .. } => 33,
+        RemoteThumbnailResponseReceived { .. } => 34,
+        SpeedTestProgress { .. } => 35,
+        SpeedTestComplete { .. } => 36,
         Warning(_) => 7,
     }
 }
@@ -516,6 +523,11 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         FileTransferProgress { from_device, .. } => Some(*from_device),
         FileTransferComplete { from_device, .. } => Some(*from_device),
         FileTransferFailed { from_device, .. } => Some(*from_device),
+        RemoteFilesQueryReceived { from_device, .. } => Some(*from_device),
+        RemoteThumbnailRequestReceived { from_device, .. } => Some(*from_device),
+        RemoteFilePullRequestReceived { from_device, .. } => Some(*from_device),
+        RemoteFilesResponseReceived { from_device, .. } => Some(*from_device),
+        RemoteThumbnailResponseReceived { from_device, .. } => Some(*from_device),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
@@ -730,6 +742,50 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferProgressPercen
     }
 }
 
+
+// ── eventSpeedTest ───────────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSpeedTestBytes(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jlong {
+    if event == 0 { return -1; }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    if let crate::engine::EngineEvent::SpeedTestProgress { bytes_transferred, .. } = ev {
+        *bytes_transferred as jlong
+    } else { -1 }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSpeedTestDuration(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jint {
+    if event == 0 { return -1; }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    if let crate::engine::EngineEvent::SpeedTestProgress { duration_secs, .. } = ev {
+        *duration_secs as jint
+    } else { -1 }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSpeedTestPhase(
+    env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jstring {
+    if event == 0 { return std::ptr::null_mut(); }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    let phase_str = match ev {
+        crate::engine::EngineEvent::SpeedTestProgress { direction, .. } => direction.as_str(),
+        _ => return std::ptr::null_mut(),
+    };
+    env.new_string(phase_str).unwrap_or_else(|_| env.new_string("").unwrap()).into_raw()
+}
+
 // ── eventTransferBytesReceived ───────────────────────────────────────────────
 
 #[no_mangle]
@@ -854,6 +910,37 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_applyClipboardByHash(
     match rt().block_on(h.engine.apply_clipboard_by_hash(hash)) {
         Ok(true) => 1,
         _ => 0,
+    }
+}
+
+// ── startSpeedTest ───────────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_startSpeedTest(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    device_id_jstr: JString,
+    duration_secs: jint,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let device_id_str: String = {
+        match env.get_string(&device_id_jstr) {
+            Ok(s) => s.into(),
+            Err(_) => return 0,
+        }
+    };
+    let target_uuid = match uuid::Uuid::parse_str(&device_id_str) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+    
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    match rt().block_on(h.engine.start_speed_test(target_uuid, duration_secs as u32)) {
+        Ok(_) => 1,
+        Err(_) => 0,
     }
 }
 
@@ -1618,5 +1705,315 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifySleepState(
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
     rt().block_on(h.engine.notify_sleep_state(is_asleep != 0));
+    0
+}
+
+// ── Remote Explorer JNI Accessors & Response Senders ──────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventRequestId(
+    env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jstring {
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    let req_id = match ev {
+        RemoteFilesQueryReceived { request_id, .. } => Some(request_id.to_string()),
+        RemoteFilesResponseReceived { request_id, .. } => Some(request_id.to_string()),
+        RemoteThumbnailRequestReceived { request_id, .. } => Some(request_id.to_string()),
+        RemoteThumbnailResponseReceived { request_id, .. } => Some(request_id.to_string()),
+        RemoteFilePullRequestReceived { request_id, .. } => Some(request_id.to_string()),
+        _ => None,
+    };
+    req_id
+        .and_then(|s| env.new_string(s).ok())
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSummaryOnly(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jboolean {
+    if event == 0 {
+        return 0;
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    match ev {
+        RemoteFilesQueryReceived { summary_only, .. } => if *summary_only { 1 } else { 0 },
+        _ => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFileId(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jlong {
+    if event == 0 {
+        return 0;
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    match ev {
+        RemoteThumbnailRequestReceived { file_id, .. } => *file_id as jlong,
+        RemoteThumbnailResponseReceived { file_id, .. } => *file_id as jlong,
+        RemoteFilePullRequestReceived { file_id, .. } => *file_id as jlong,
+        _ => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventThumbnailSizePx(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jint {
+    if event == 0 {
+        return 0;
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    match ev {
+        RemoteThumbnailRequestReceived { size_px, .. } => *size_px as jint,
+        _ => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventOffset(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jint {
+    if event == 0 {
+        return 0;
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    match ev {
+        RemoteFilesQueryReceived { offset, .. } => *offset as jint,
+        _ => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventLimit(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jint {
+    if event == 0 {
+        return 0;
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    match ev {
+        RemoteFilesQueryReceived { limit, .. } => *limit as jint,
+        _ => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFileCategory(
+    env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jstring {
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    let cat = match ev {
+        RemoteFilesQueryReceived { category, .. } => match category {
+            Some(crate::protocol::RemoteFileCategory::Images) => Some("Images"),
+            Some(crate::protocol::RemoteFileCategory::Videos) => Some("Videos"),
+            Some(crate::protocol::RemoteFileCategory::Audio) => Some("Audio"),
+            Some(crate::protocol::RemoteFileCategory::Documents) => Some("Documents"),
+            Some(crate::protocol::RemoteFileCategory::Apks) => Some("Apks"),
+            Some(crate::protocol::RemoteFileCategory::Archives) => Some("Archives"),
+            _ => Some("All"),
+        },
+        _ => None,
+    };
+    cat.and_then(|s| env.new_string(s).ok())
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFileSource(
+    env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jstring {
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    let src = match ev {
+        RemoteFilesQueryReceived { source, .. } => match source {
+            Some(crate::protocol::RemoteFileSource::WhatsApp) => Some("WhatsApp"),
+            Some(crate::protocol::RemoteFileSource::Downloads) => Some("Downloads"),
+            Some(crate::protocol::RemoteFileSource::Camera) => Some("Camera"),
+            _ => Some("All"),
+        },
+        _ => None,
+    };
+    src.and_then(|s| env.new_string(s).ok())
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSearchQuery(
+    env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jstring {
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    let q = match ev {
+        RemoteFilesQueryReceived { search_query, .. } => search_query.as_deref(),
+        _ => None,
+    };
+    q.and_then(|s| env.new_string(s).ok())
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendRemoteFilesResponse(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    request_id: JString,
+    target_device_id: JString,
+    summary_json: JString,
+    files_json: JString,
+    total_matching: jint,
+    error: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let req_raw: String = match env.get_string(&request_id) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let req_id = match uuid::Uuid::parse_str(&req_raw) {
+        Ok(u) => u,
+        Err(_) => return -1,
+    };
+    let tgt_raw: String = match env.get_string(&target_device_id) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let target_device = match uuid::Uuid::parse_str(&tgt_raw) {
+        Ok(u) => u,
+        Err(_) => return -1,
+    };
+
+    let summary: Option<crate::protocol::RemoteFilesSummary> = if summary_json.is_null() {
+        None
+    } else {
+        match env.get_string(&summary_json) {
+            Ok(s) => serde_json::from_str(&String::from(s)).ok(),
+            Err(_) => None,
+        }
+    };
+
+    let files: Vec<crate::protocol::RemoteFileEntry> = if files_json.is_null() {
+        Vec::new()
+    } else {
+        match env.get_string(&files_json) {
+            Ok(s) => serde_json::from_str(&String::from(s)).unwrap_or_default(),
+            Err(_) => Vec::new(),
+        }
+    };
+
+    let err_str = if error.is_null() {
+        None
+    } else {
+        env.get_string(&error).ok().map(|s| s.into())
+    };
+
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.send_remote_files_response(
+        target_device,
+        req_id,
+        summary,
+        files,
+        total_matching as u32,
+        err_str,
+    ));
+    0
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendRemoteThumbnailResponse(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    request_id: JString,
+    target_device_id: JString,
+    file_id: jlong,
+    data: jbyteArray,
+    error: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let req_raw: String = match env.get_string(&request_id) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let req_id = match uuid::Uuid::parse_str(&req_raw) {
+        Ok(u) => u,
+        Err(_) => return -1,
+    };
+    let tgt_raw: String = match env.get_string(&target_device_id) {
+        Ok(s) => s.into(),
+        Err(_) => return -1,
+    };
+    let target_device = match uuid::Uuid::parse_str(&tgt_raw) {
+        Ok(u) => u,
+        Err(_) => return -1,
+    };
+
+    let bytes = if data.is_null() {
+        Vec::new()
+    } else {
+        let jarr = unsafe { JByteArray::from_raw(data) };
+        env.convert_byte_array(&jarr).unwrap_or_default()
+    };
+
+    let err_str = if error.is_null() {
+        None
+    } else {
+        env.get_string(&error).ok().map(|s| s.into())
+    };
+
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.send_remote_thumbnail_response(
+        target_device,
+        req_id,
+        file_id as u64,
+        bytes,
+        err_str,
+    ));
     0
 }
