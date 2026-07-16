@@ -53,6 +53,24 @@ struct TransfersDashboardView: View {
                     }
                 }
                 
+                // MARK: - Active Speed Tests
+                if !store.activeSpeedTests.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("ACTIVE SPEED TESTS")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(CRTheme.inkSoft.opacity(0.6))
+                            .kerning(1.2)
+                            .padding(.horizontal, 40)
+                        
+                        VStack(spacing: 12) {
+                            ForEach(store.activeSpeedTests) { test in
+                                ActiveSpeedTestCard(test: test, store: store)
+                            }
+                        }
+                        .padding(.horizontal, 40)
+                    }
+                }
+                
                 // MARK: - Recent History
                 VStack(alignment: .leading, spacing: 16) {
                     Text("RECENT HISTORY")
@@ -185,9 +203,9 @@ struct ActiveTransferCard: View {
                 } else if case .failed = transfer.status {
                     // No progress bar for failed
                 } else {
-                    let prog = transfer.totalBytes > 0 ? Double(transfer.bytesReceived) / Double(transfer.totalBytes) : 1.0
+                    let prog = transfer.exactRatio
                     StopwatchProgressView(progress: prog, tint: progressColor)
-                        .animation(.linear(duration: 0.25), value: prog)
+                        .animation(.linear(duration: 0.15), value: prog)
                         .padding(.top, 4)
                 }
             }
@@ -308,5 +326,56 @@ private struct TransferHistoryRow: View {
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Active Speed Test Card
+
+struct ActiveSpeedTestCard: View {
+    let test: SpeedTestState
+    @ObservedObject var store: DeskdropStore
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Icon
+            ZStack {
+                Circle().fill(CRTheme.brandCyan.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: test.phase == "Receiving" ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(CRTheme.brandCyan)
+            }
+            
+            // Details
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("Speed Test (\(test.phase))")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CRTheme.ink)
+                    
+                    if let peer = store.peers.first(where: { $0.id == test.id }) {
+                        CRTag(text: peer.displayName, tint: CRTheme.brandViolet)
+                    }
+                }
+                
+                Text("\(test.speedMbpsString)")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundStyle(CRTheme.brandCyan)
+            }
+            
+            Spacer()
+            
+            // Progress / Status
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("\(test.durationSecs)s")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(CRTheme.inkFaint)
+            }
+        }
+        .padding(16)
+        .background(CRTheme.surfaceStrong)
+        .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: isHovered, accent: CRTheme.brandCyan)
+        .onHover { isHovered = $0 }
     }
 }

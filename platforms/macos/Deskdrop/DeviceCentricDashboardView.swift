@@ -106,6 +106,7 @@ struct DeviceCard: View {
     let rename: (ManagedDevice) -> Void
     var emphasizeTrust: Bool = false
     @State private var isHovered = false
+    @State private var showingRemoteExplorer = false
     @Environment(\.colorScheme) var colorScheme
     private var isDark: Bool { colorScheme == .dark }
 
@@ -191,6 +192,8 @@ struct DeviceCard: View {
             CRDivider()
             HStack(spacing: 8) {
                 if device.isConnected {
+                    ModernDeviceCardButton(icon: "internaldrive.fill", color: CRTheme.brandViolet, help: "Remote File Explorer") { showingRemoteExplorer = true }
+                    ModernDeviceCardButton(icon: "gauge.with.dots.needle.bottom.50percent", color: CRTheme.brandCyan, help: "Speed Test") { store.startSpeedTest(deviceId: device.id) }
                     ModernDeviceCardButton(icon: "wifi.slash", color: CRTheme.accentOrange, help: "Disconnect") { store.disconnect(device) }
                 } else if device.trustState == .trusted {
                     ModernDeviceCardButton(icon: "antenna.radiowaves.left.and.right", color: CRTheme.brandElectric, help: "Connect") { store.connect(device) }
@@ -228,6 +231,9 @@ struct DeviceCard: View {
         .crCard(cornerRadius: CRTheme.radiusSmall, highlighted: isHovered, accent: accent)
         .onHover { isHovered = $0 }
         .animation(.crFast, value: isHovered)
+        .sheet(isPresented: $showingRemoteExplorer) {
+            RemoteExplorerView(store: store, device: device)
+        }
     }
 }
 
@@ -496,6 +502,7 @@ struct CompactDeviceCard: View {
     let onSendFiles: () -> Void
     @Environment(\.colorScheme) var colorScheme
     @State private var isHovered = false
+    @State private var showingRemoteExplorer = false
 
     var body: some View {
         HStack(spacing: 16) {
@@ -572,6 +579,20 @@ struct CompactDeviceCard: View {
                             )
                             
                             ModernDeviceCardButton(
+                                icon: "internaldrive.fill",
+                                color: CRTheme.brandViolet,
+                                help: "Remote File Explorer",
+                                action: { showingRemoteExplorer = true }
+                            )
+                            
+                            ModernDeviceCardButton(
+                                icon: "gauge.with.dots.needle.bottom.50percent",
+                                color: CRTheme.brandCyan,
+                                help: "Speed Test",
+                                action: { store.startSpeedTest(deviceId: device.id) }
+                            )
+                            
+                            ModernDeviceCardButton(
                                 icon: "xmark",
                                 color: CRTheme.accentRed,
                                 help: "Disconnect",
@@ -599,6 +620,9 @@ struct CompactDeviceCard: View {
         }
         .onHover { isHovered = $0 }
         .animation(.crSpring, value: isHovered)
+        .sheet(isPresented: $showingRemoteExplorer) {
+            RemoteExplorerView(store: store, device: device)
+        }
     }
 }
 

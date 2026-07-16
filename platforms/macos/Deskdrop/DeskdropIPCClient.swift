@@ -40,6 +40,15 @@ struct IpcStatusResponse: Codable {
     let peer_batteries: [IpcPeerBatteryState]?
     let peer_networks: [IpcPeerNetworkState]?
     let active_transfers: [IpcFileTransferState]?
+    let active_speed_tests: [IpcSpeedTestState]?
+}
+
+struct IpcSpeedTestState: Codable {
+    let test_id: String?
+    let peer_id: String
+    let phase: String
+    let bytes_transferred: Int64
+    let duration_secs: Int
 }
 
 struct IpcFileTransferState: Codable {
@@ -74,6 +83,54 @@ struct IpcPeerNetworkState: Codable {
     let device_id: String
     let device_name: String
     let network_type: String
+}
+
+// ── Remote File Explorer models (Phase 3) ─────────────────────────────────────
+
+struct IpcRemoteFileCategoryCounts: Codable {
+    let images: UInt32
+    let videos: UInt32
+    let audio: UInt32
+    let documents: UInt32
+    let apks: UInt32
+    let archives: UInt32
+}
+
+struct IpcRemoteFileSourceCounts: Codable {
+    let whatsapp: UInt32
+    let downloads: UInt32
+    let camera: UInt32
+}
+
+struct IpcRemoteFilesSummary: Codable {
+    let type_counts: IpcRemoteFileCategoryCounts
+    let source_counts: IpcRemoteFileSourceCounts
+}
+
+struct IpcRemoteFileEntry: Codable, Identifiable {
+    let file_id: UInt64
+    let display_name: String
+    let size_bytes: UInt64
+    let mime_type: String
+    let date_modified: UInt64
+    let category: String
+    let source: String
+    let content_uri: String
+
+    var id: UInt64 { file_id }
+}
+
+struct IpcRemoteFilesResult: Codable {
+    let summary: IpcRemoteFilesSummary?
+    let files: [IpcRemoteFileEntry]
+    let total_matching: UInt32
+    let error: String?
+}
+
+struct IpcRemoteThumbnailResult: Codable {
+    let file_id: UInt64
+    let data_base64: String?
+    let error: String?
 }
 
 struct IpcCameraFrameResponse: Codable {
@@ -285,6 +342,58 @@ final class DeskdropIPCClient {
         return Data(base64Encoded: b64)
     }
 
+    // ── Remote Explorer API ───────────────────────────────────────────────────
+
+    func queryRemoteFiles(
+        targetDevice: String,
+        summaryOnly: Bool = false,
+        category: String? = nil,
+        source: String? = nil,
+        searchQuery: String? = nil,
+        offset: UInt32 = 0,
+        limit: UInt32 = 50
+    ) async throws -> IpcRemoteFilesResult {
+        var cmd: [String: Any] = [
+            "cmd": "remote_files_query",
+            "target_device": targetDevice,
+            "summary_only": summaryOnly,
+            "offset": offset,
+            "limit": limit
+        ]
+        if let cat = category { cmd["category"] = cat }
+        if let src = source { cmd["source"] = src }
+        if let query = searchQuery, !query.isEmpty { cmd["search_query"] = query }
+        
+        let raw = try await send(cmd: cmd)
+        let resp = try JSONDecoder().decode(IpcResponse<IpcRemoteFilesResult>.self, from: raw)
+        if let err = resp.message { throw DeskdropIPCError.serverError(err) }
+        guard let data = resp.data else { throw DeskdropIPCError.noData }
+        return data
+    }
+
+    func requestRemoteThumbnail(targetDevice: String, fileId: UInt64, sizePx: UInt32 = 256) async throws -> Data? {
+        let cmd: [String: Any] = [
+            "cmd": "remote_thumbnail_request",
+            "target_device": targetDevice,
+            "file_id": fileId,
+            "size_px": sizePx
+        ]
+        let raw = try await send(cmd: cmd)
+        let resp = try JSONDecoder().decode(IpcResponse<IpcRemoteThumbnailResult>.self, from: raw)
+        if let err = resp.message { throw DeskdropIPCError.serverError(err) }
+        guard let b64 = resp.data?.data_base64 else { return nil }
+        return Data(base64Encoded: b64)
+    }
+
+    func requestRemoteFilePull(targetDevice: String, fileId: UInt64) async throws {
+        let cmd: [String: Any] = [
+            "cmd": "remote_file_pull_request",
+            "target_device": targetDevice,
+            "file_id": fileId
+        ]
+        _ = try await send(cmd: cmd)
+    }
+
     // ── Internal Sender ───────────────────────────────────────────────────────────────
 
     private func mimeType(for url: URL) -> String {
@@ -325,6 +434,7 @@ enum DeskdropIPCError: Error, Equatable {
     case connectionFailed
     case noData
     case disconnected
+    case serverError(String)
 }
 
 // MARK: - Dashboard extensions
@@ -398,6 +508,14 @@ extension DeskdropIPCClient {
             "require_tofu_confirmation":        snapshot.requireTofuConfirmation,
             "show_receive_notification":        snapshot.showReceiveNotification,
             "ignore_patterns":                  snapshot.ignorePatterns,
+        ]
+        _ = try await send(cmd: cmd)
+    }
+    func startSpeedTest(deviceId: String, durationSecs: Int = 10) async throws {
+        let cmd: [String: Any] = [
+            "cmd": "start_speed_test",
+            "device_id": deviceId,
+            "duration_secs": durationSecs
         ]
         _ = try await send(cmd: cmd)
     }

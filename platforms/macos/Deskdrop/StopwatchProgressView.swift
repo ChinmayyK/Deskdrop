@@ -9,7 +9,7 @@ struct StopwatchTextModifier: AnimatableModifier {
     }
 
     func body(content: Content) -> some View {
-        let textStr = String(format: "%.2f%%", progress * 100)
+        let textStr = String(format: "%.1f%%", progress * 100)
         return content.overlay(
             Text(textStr)
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))

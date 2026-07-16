@@ -148,6 +148,26 @@ struct IpcActivityEntry: Codable, Identifiable {
     }
 }
 
+// ── Speed Test model ────────────────────────────────────────────────────────────
+
+struct SpeedTestState: Identifiable, Equatable {
+    let id: String // peer_id
+    let testId: String?
+    let phase: String // "Idle", "Sending", "Receiving"
+    let bytesTransferred: Int64
+    let durationSecs: Int
+    
+    var speedBps: Int64 {
+        if durationSecs == 0 { return 0 }
+        return bytesTransferred / Int64(durationSecs)
+    }
+    
+    var speedMbpsString: String {
+        let mbps = Double(speedBps * 8) / 1_000_000.0
+        return String(format: "%.1f Mbps", mbps)
+    }
+}
+
 // ── File transfer progress model ──────────────────────────────────────────────
 
 struct FileTransferState: Identifiable {
@@ -160,6 +180,20 @@ struct FileTransferState: Identifiable {
     var speedBps: Int64? = nil
     var etaSecs: Int64? = nil
     var status: FileTransferStatus = .incoming
+
+    var exactRatio: Double {
+        if totalBytes > 0 {
+            return min(1.0, max(0.0, Double(bytesReceived) / Double(totalBytes)))
+        }
+        return Double(percent) / 100.0
+    }
+
+    var exactPercentString: String {
+        if totalBytes > 0 {
+            return String(format: "%.1f%%", exactRatio * 100.0)
+        }
+        return "\(percent)%"
+    }
 
     var formattedSize: String {
         let mb = Double(totalBytes) / 1_048_576.0

@@ -162,7 +162,7 @@ private struct DynamicIslandTransferCard: View {
                         .foregroundStyle(Color.primary)
                         .lineLimit(1)
                     
-                    Text("• \(transfer.percent)%")
+                    Text("• \(transfer.exactPercentString)")
                         .font(.system(size: 11, weight: .bold, design: .default))
                         .foregroundStyle(progressColor)
                         .lineLimit(1)
@@ -186,7 +186,8 @@ private struct DynamicIslandTransferCard: View {
                             
                             Capsule()
                                 .fill(progressColor)
-                                .frame(width: max(0, geo.size.width * CGFloat(transfer.percent) / 100.0), height: 4)
+                                .frame(width: max(0, geo.size.width * CGFloat(transfer.exactRatio)), height: 4)
+                                .animation(.linear(duration: 0.15), value: transfer.exactRatio)
                         }
                     }
                     .frame(height: 4)

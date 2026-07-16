@@ -85,6 +85,41 @@ int32_t     deskdrop_accept_file_transfer(DeskdropHandle *handle,
 int32_t     deskdrop_reject_file_transfer(DeskdropHandle *handle,
                                            const char *transfer_id_hex);
 
+// ── Remote Explorer (Phase 3) ─────────────────────────────────────────────────
+#define PB_EVENT_REMOTE_FILES_QUERY        30
+#define PB_EVENT_REMOTE_THUMBNAIL_REQUEST  31
+#define PB_EVENT_REMOTE_FILE_PULL_REQUEST  32
+#define PB_EVENT_REMOTE_FILES_RESPONSE     33
+#define PB_EVENT_REMOTE_THUMBNAIL_RESPONSE 34
+
+int32_t deskdrop_send_remote_files_query(DeskdropHandle *handle,
+                                          const char *target_device_id,
+                                          const char *request_id,
+                                          int32_t summary_only,
+                                          const char *category,
+                                          const char *source,
+                                          const char *search_query,
+                                          uint32_t offset,
+                                          uint32_t limit);
+int32_t deskdrop_send_remote_thumbnail_request(DeskdropHandle *handle,
+                                                const char *target_device_id,
+                                                const char *request_id,
+                                                uint64_t file_id,
+                                                uint32_t size_px);
+int32_t deskdrop_send_remote_file_pull_request(DeskdropHandle *handle,
+                                                const char *target_device_id,
+                                                const char *request_id,
+                                                uint64_t file_id);
+
+const char *deskdrop_event_remote_request_id(PbEvent *event);
+const char *deskdrop_event_remote_summary_json(PbEvent *event);
+const char *deskdrop_event_remote_files_json(PbEvent *event);
+uint32_t    deskdrop_event_remote_total_matching(const PbEvent *event);
+uint64_t    deskdrop_event_remote_file_id(const PbEvent *event);
+const uint8_t *deskdrop_event_remote_thumbnail_data(PbEvent *event);
+size_t      deskdrop_event_remote_thumbnail_len(const PbEvent *event);
+const char *deskdrop_event_remote_error(PbEvent *event);
+
 #ifdef __cplusplus
 }
 #endif

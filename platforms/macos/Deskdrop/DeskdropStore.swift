@@ -37,6 +37,7 @@ final class DeskdropStore: ObservableObject {
     // ── Activity feed ─────────────────────────────────────────────────────────
     @Published var activityFeed: [IpcActivityEntry] = []
     @Published var activeTransfers: [FileTransferState] = []
+    @Published var activeSpeedTests: [SpeedTestState] = []
     @Published var clipboardPolicy = ClipboardPolicy()
 
     // ── Dashboard UI state ────────────────────────────────────────────────────
@@ -305,6 +306,20 @@ final class DeskdropStore: ObservableObject {
                 }
             } else {
                 activeTransfers = []
+            }
+            
+            if let ast = s.active_speed_tests {
+                activeSpeedTests = ast.map { t in
+                    SpeedTestState(
+                        id: t.peer_id,
+                        testId: t.test_id,
+                        phase: t.phase,
+                        bytesTransferred: t.bytes_transferred,
+                        durationSecs: t.duration_secs
+                    )
+                }
+            } else {
+                activeSpeedTests = []
             }
 
             // ── Call continuity: update active call state ─────────────────────
@@ -707,6 +722,36 @@ final class DeskdropStore: ObservableObject {
         sendCurrentClipboard(to: device)
     }
 
+    // MARK: - Remote Explorer (Phase 3)
+    
+    func queryRemoteFiles(
+        targetDevice: String,
+        summaryOnly: Bool = false,
+        category: String? = nil,
+        source: String? = nil,
+        searchQuery: String? = nil,
+        offset: UInt32 = 0,
+        limit: UInt32 = 50
+    ) async throws -> IpcRemoteFilesResult {
+        return try await ipc.queryRemoteFiles(
+            targetDevice: targetDevice,
+            summaryOnly: summaryOnly,
+            category: category,
+            source: source,
+            searchQuery: searchQuery,
+            offset: offset,
+            limit: limit
+        )
+    }
+
+    func requestRemoteThumbnail(targetDevice: String, fileId: UInt64, sizePx: UInt32 = 256) async throws -> Data? {
+        return try await ipc.requestRemoteThumbnail(targetDevice: targetDevice, fileId: fileId, sizePx: sizePx)
+    }
+
+    func pullRemoteFile(targetDevice: String, fileId: UInt64) async throws {
+        try await ipc.requestRemoteFilePull(targetDevice: targetDevice, fileId: fileId)
+    }
+
     private func buildClipboardArchive(from urls: [URL]) -> URL? {
         guard !urls.isEmpty else { return nil }
 
@@ -949,6 +994,11 @@ final class DeskdropStore: ObservableObject {
     @MainActor
     func resumeFileTransfer(_ t: FileTransferState) {
         Task { try? await ipc.resumeFileTransfer(transferId: t.id); updateTransferStatus(id: t.id, status: .transferring) }
+    }
+
+    @MainActor
+    func startSpeedTest(deviceId: String, durationSecs: Int = 10) {
+        Task { try? await ipc.startSpeedTest(deviceId: deviceId, durationSecs: durationSecs) }
     }
 
     @MainActor

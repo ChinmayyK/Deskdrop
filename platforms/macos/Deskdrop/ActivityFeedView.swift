@@ -508,9 +508,9 @@ struct FileTransferBanner: View {
 
                 if case .transferring = transfer.status {
                     VStack(alignment: .leading, spacing: 4) {
-                        let prog = transfer.totalBytes > 0 ? Double(transfer.bytesReceived) / Double(transfer.totalBytes) : 1.0
+                        let prog = transfer.exactRatio
                         StopwatchProgressView(progress: prog, tint: CRTheme.accentIndigo)
-                            .animation(.linear(duration: 0.25), value: prog)
+                            .animation(.linear(duration: 0.15), value: prog)
                         HStack {
                             Text("From \(transfer.fromDeviceName)")
                             Spacer()
@@ -519,9 +519,9 @@ struct FileTransferBanner: View {
                     }
                 } else if case .paused = transfer.status {
                     VStack(alignment: .leading, spacing: 4) {
-                        let prog = transfer.totalBytes > 0 ? Double(transfer.bytesReceived) / Double(transfer.totalBytes) : 1.0
+                        let prog = transfer.exactRatio
                         StopwatchProgressView(progress: prog, tint: CRTheme.accentOrange)
-                            .animation(.linear(duration: 0.25), value: prog)
+                            .animation(.linear(duration: 0.15), value: prog)
                         HStack {
                             Text("Paused - From \(transfer.fromDeviceName)")
                             Spacer()
