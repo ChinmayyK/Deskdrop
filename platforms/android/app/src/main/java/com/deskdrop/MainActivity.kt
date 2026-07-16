@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val activeTransfers by TransferManager.activeTransfersFlow.collectAsState()
+            val activeSpeedTests by TransferManager.activeSpeedTestsFlow.collectAsState()
 
             AppTheme(useDarkTheme = isDarkMode.value) {
                 var showManualIpDialog by remember { mutableStateOf(false) }
@@ -231,6 +232,14 @@ class MainActivity : ComponentActivity() {
                         feed = feed.value,
                         ambientStatus = ambientStatus.value,
                         activeTransfers = activeTransfers,
+                        activeSpeedTests = activeSpeedTests,
+                        onActionStartSpeedTest = { deviceId ->
+                            val intent = android.content.Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_START_SPEED_TEST
+                                putExtra("device_id", deviceId)
+                            }
+                            startService(intent)
+                        },
                         onStartSync = { launchService() },
                     onResumeSync = { sendAction(DeskdropService.ACTION_RESUME_SYNC) },
                     onScanNow = {
@@ -505,10 +514,21 @@ class MainActivity : ComponentActivity() {
     private fun requestRuntimePermissions() {
         val needed = mutableListOf<String>()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            needed += Manifest.permission.POST_NOTIFICATIONS
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += Manifest.permission.POST_NOTIFICATIONS
+            }
+            if (checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += Manifest.permission.READ_MEDIA_IMAGES
+            }
+            if (checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += Manifest.permission.READ_MEDIA_VIDEO
+            }
+            if (checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += Manifest.permission.READ_MEDIA_AUDIO
+            }
+        } else if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += Manifest.permission.READ_EXTERNAL_STORAGE
         }
 
         if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) !=
@@ -518,6 +538,16 @@ class MainActivity : ComponentActivity() {
 
         if (needed.isNotEmpty()) {
             requestPermissions(needed.toTypedArray(), 1001)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+            runCatching {
+                val intent = Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    android.net.Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+            }
         }
     }
 

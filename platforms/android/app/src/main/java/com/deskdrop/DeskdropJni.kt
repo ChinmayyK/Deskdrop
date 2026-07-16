@@ -31,8 +31,13 @@ object DeskdropJni {
     const val CR_EVENT_CAMERA_FRAME          = 25
     const val CR_EVENT_CALL_ACTION              = 18
     const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
-    const val CR_EVENT_NETWORK_STATE_CHANGED    = 28
     const val CR_EVENT_OUTGOING_PAIRING_WAITING = 29
+    const val CR_EVENT_REMOTE_FILES_QUERY      = 30
+    const val CR_EVENT_REMOTE_THUMBNAIL_REQUEST = 31
+    const val CR_EVENT_REMOTE_FILE_PULL_REQUEST = 32
+    const val CR_EVENT_REMOTE_FILES_RESPONSE   = 33
+    const val CR_EVENT_SPEED_TEST_PROGRESS     = 35
+    const val CR_EVENT_SPEED_TEST_COMPLETE     = 36
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
@@ -95,10 +100,17 @@ object DeskdropJni {
     @JvmStatic external fun rejectFileTransfer(engineHandle: Long, transferIdHex: String): Int
     /** Cancel an active file transfer. */
     @JvmStatic external fun cancelFileTransfer(engineHandle: Long, transferIdHex: String): Int
+
+    // ── Speed test accessors ──────────────────────────────────────────────────
+    @JvmStatic external fun eventSpeedTestBytes(event: Long): Long
+    @JvmStatic external fun eventSpeedTestDuration(event: Long): Int
+    @JvmStatic external fun eventSpeedTestPhase(event: Long): String?
     /** Pause an active file transfer. */
     @JvmStatic external fun pauseFileTransfer(engineHandle: Long, transferIdHex: String): Int
     /** Resume a paused file transfer. */
     @JvmStatic external fun resumeFileTransfer(engineHandle: Long, transferIdHex: String): Int
+    /** Start a speed test with the given peer. */
+    @JvmStatic external fun startSpeedTest(engineHandle: Long, deviceId: String, durationSecs: Int): Int
 
     @JvmStatic external fun stopCameraStream(engineHandle: Long): Int
 
@@ -167,4 +179,32 @@ object DeskdropJni {
      * The engine uses this to relax heartbeat timeouts to zero-drain the battery.
      */
     @JvmStatic external fun notifySleepState(handle: Long, isAsleep: Boolean): Int
+
+    // ── Remote Explorer (Phase 2) ─────────────────────────────────────────────
+    @JvmStatic external fun eventRequestId(event: Long): String?
+    @JvmStatic external fun eventSummaryOnly(event: Long): Boolean
+    @JvmStatic external fun eventFileId(event: Long): Long
+    @JvmStatic external fun eventThumbnailSizePx(event: Long): Int
+    @JvmStatic external fun eventOffset(event: Long): Int
+    @JvmStatic external fun eventLimit(event: Long): Int
+    @JvmStatic external fun eventFileCategory(event: Long): String?
+    @JvmStatic external fun eventFileSource(event: Long): String?
+    @JvmStatic external fun eventSearchQuery(event: Long): String?
+    @JvmStatic external fun sendRemoteFilesResponse(
+        handle: Long,
+        requestId: String,
+        targetDeviceId: String,
+        summaryJson: String?,
+        filesJson: String?,
+        totalMatching: Int,
+        error: String?
+    ): Int
+    @JvmStatic external fun sendRemoteThumbnailResponse(
+        handle: Long,
+        requestId: String,
+        targetDeviceId: String,
+        fileId: Long,
+        data: ByteArray?,
+        error: String?
+    ): Int
 }

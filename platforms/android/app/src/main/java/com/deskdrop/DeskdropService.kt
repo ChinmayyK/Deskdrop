@@ -108,6 +108,7 @@ class DeskdropService : Service() {
         const val ACTION_CANCEL_FILE_TRANSFER = "com.deskdrop.CANCEL_FILE_TRANSFER"
         const val ACTION_PAUSE_FILE_TRANSFER  = "com.deskdrop.PAUSE_FILE_TRANSFER"
         const val ACTION_RESUME_FILE_TRANSFER = "com.deskdrop.RESUME_FILE_TRANSFER"
+        const val ACTION_START_SPEED_TEST     = "com.deskdrop.START_SPEED_TEST"
         const val ACTION_CONNECT_MANUAL     = "com.deskdrop.CONNECT_MANUAL"
         const val ACTION_TRUST_PEER         = "com.deskdrop.TRUST_PEER"
         const val ACTION_TRUST_PEER_FROM_QR = "com.deskdrop.TRUST_PEER_FROM_QR"
@@ -210,8 +211,11 @@ class DeskdropService : Service() {
     private val nsdRetryCount = AtomicLong(0L)
     private var nsdRetryRunnable: Runnable? = null
 
-    // WifiLock — keeps the Wi-Fi radio awake without keeping the CPU awake.
+    // WifiLock — keeps the Wi-Fi radio awake without disassociating during Doze mode.
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+
+    // WakeLock — keeps the CPU awake while the foreground service is active so tokio can answer heartbeats & receive files with the screen off.
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
 
     // MulticastLock — held for the lifetime of the service.
     // Many OEM WiFi drivers (Samsung, Xiaomi, OnePlus, Realme) suppress
@@ -620,6 +624,14 @@ class DeskdropService : Service() {
                 }
                 return START_STICKY
             }
+            
+            ACTION_START_SPEED_TEST -> {
+                val deviceId = intent.getStringExtra("device_id") ?: return START_STICKY
+                if (engineHandle != 0L) {
+                    DeskdropJni.startSpeedTest(engineHandle, deviceId, 10)
+                }
+                return START_STICKY
+            }
             else -> Log.w(TAG, "Unknown action: ${intent?.action}")
         }
 
@@ -654,8 +666,9 @@ class DeskdropService : Service() {
                 activeEngineHandle = engineHandle
                 Log.i(TAG, "Engine started — $deviceName")
                 startEventDrainThread()
-                scheduleClipboardWatch()
-                // acquireMulticastLock() handled by onAvailable
+                acquireMulticastLock()
+                acquireWifiLock()
+                acquireWakeLock()
                 // Cache our own UUID prefix so NSD can filter self-connections.
                 myDeviceId = DeskdropJni.getDeviceId(engineHandle)
                 myDeviceUuidPrefix = myDeviceId?.take(8)
@@ -666,6 +679,9 @@ class DeskdropService : Service() {
                 persistStatus()
             } else {
                 // Engine was already running — permission may have just been granted.
+                acquireMulticastLock()
+                acquireWifiLock()
+                acquireWakeLock()
                 startBatteryMonitor()
             }
 
@@ -740,6 +756,7 @@ class DeskdropService : Service() {
         cancelNsdRetry()
         releaseMulticastLock()
         releaseWifiLock()
+        releaseWakeLock()
         isRunning = false
         eventDrainThread?.join(1000)
         handler.removeCallbacksAndMessages(null)
@@ -800,21 +817,45 @@ class DeskdropService : Service() {
             applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager
         }.getOrNull() ?: return
 
-        // WIFI_MODE_FULL tells the OS to keep the Wi-Fi radio on, but allows the CPU to sleep.
-        wifiLock = wm.createWifiLock(
-            android.net.wifi.WifiManager.WIFI_MODE_FULL,
-            "Deskdrop::WifiLock"
-        ).apply {
+        val mode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+        } else {
+            @Suppress("DEPRECATION")
+            android.net.wifi.WifiManager.WIFI_MODE_FULL
+        }
+
+        wifiLock = wm.createWifiLock(mode, "Deskdrop::WifiLock").apply {
             setReferenceCounted(false)
             acquire()
         }
-        Log.i(TAG, "WifiLock acquired (Zero-Drain mode)")
+        Log.i(TAG, "WifiLock acquired (mode: $mode)")
     }
 
     private fun releaseWifiLock() {
         runCatching { wifiLock?.let { if (it.isHeld) it.release() } }
         wifiLock = null
         Log.i(TAG, "WifiLock released")
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val pm = runCatching {
+            applicationContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        }.getOrNull() ?: return
+        wakeLock = pm.newWakeLock(
+            android.os.PowerManager.PARTIAL_WAKE_LOCK,
+            "Deskdrop::ServiceWakeLock"
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+        Log.i(TAG, "Service WakeLock acquired to keep TCP socket active when screen turns off")
+    }
+
+    private fun releaseWakeLock() {
+        runCatching { wakeLock?.let { if (it.isHeld) it.release() } }
+        wakeLock = null
+        Log.i(TAG, "Service WakeLock released")
     }
     // ── Multicast lock ────────────────────────────────────────────────────────
     //
@@ -881,6 +922,7 @@ class DeskdropService : Service() {
         handler.post {
             acquireMulticastLock()
             acquireWifiLock()
+            acquireWakeLock()
             stopNsdDiscovery()
             startNsdDiscovery()
             cancelNsdRetry()
@@ -1092,13 +1134,14 @@ class DeskdropService : Service() {
                     isPaused = isPaused, state = TransferState.PROGRESS, peerName = peerName,
                     isOutbound = isOutbound
                 )
-                TransferManager.publishActiveTransfers()
+                TransferManager.publishActiveTransfers(force = (percent == 100))
                 
                 updateFileTransferNotificationProgress(
                     tid = tid,
                     fileName = name,
                     percent = percent,
                     bytesReceived = bytesReceived,
+                    totalBytes = totalBytes,
                     speedBps = speedBps,
                     etaSecs = etaSecs,
                     isPaused = isPaused,
@@ -1109,6 +1152,7 @@ class DeskdropService : Service() {
             // ── Dedicated file transfer: complete ─────────────────────────────
             DeskdropJni.CR_EVENT_FILE_TRANSFER_COMPLETE -> {
                 val tid      = DeskdropJni.eventTransferId(ev) ?: return
+                lastTransferNotifTimes.remove(tid)
                 val from     = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
@@ -1121,7 +1165,7 @@ class DeskdropService : Service() {
                     updateActivityTransferComplete(tid, "")
                     cancelFileTransferNotification(tid)
                     TransferManager.activeTransfers.remove(tid)
-                    TransferManager.publishActiveTransfers()
+                    TransferManager.publishActiveTransfers(force = true)
                     
                     val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
                         .setSmallIcon(R.mipmap.ic_launcher)
@@ -1152,12 +1196,13 @@ class DeskdropService : Service() {
                 
                 // Immediately remove from active transfers so the UI progress bar disappears without getting stuck
                 TransferManager.activeTransfers.remove(tid)
-                TransferManager.publishActiveTransfers()
+                TransferManager.publishActiveTransfers(force = true)
             }
 
             // ── Dedicated file transfer: failed ───────────────────────────────
             DeskdropJni.CR_EVENT_FILE_TRANSFER_FAILED -> {
                 val tid  = DeskdropJni.eventTransferId(ev) ?: return
+                lastTransferNotifTimes.remove(tid)
                 val from = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
@@ -1165,7 +1210,7 @@ class DeskdropService : Service() {
                 updateActivityTransferFailed(tid)
                 cancelFileTransferNotification(tid)
                 TransferManager.activeTransfers.remove(tid)
-                TransferManager.publishActiveTransfers()
+                TransferManager.publishActiveTransfers(force = true)
             }
 
             DeskdropJni.CR_EVENT_FILE_TRANSFER_PAUSED -> {
@@ -1174,12 +1219,13 @@ class DeskdropService : Service() {
                 if (state != null) {
                     val newState = state.copy(isPaused = true, state = TransferState.PAUSED)
                     TransferManager.activeTransfers[tid] = newState
-                    TransferManager.publishActiveTransfers()
+                    TransferManager.publishActiveTransfers(force = true)
                     updateFileTransferNotificationProgress(
                         tid = tid,
                         fileName = newState.fileName,
                         percent = newState.percent,
                         bytesReceived = newState.bytesReceived,
+                        totalBytes = newState.totalBytes,
                         speedBps = newState.speedBps,
                         etaSecs = newState.etaSecs,
                         isPaused = true,
@@ -1194,12 +1240,13 @@ class DeskdropService : Service() {
                 if (state != null) {
                     val newState = state.copy(isPaused = false, state = TransferState.PROGRESS)
                     TransferManager.activeTransfers[tid] = newState
-                    TransferManager.publishActiveTransfers()
+                    TransferManager.publishActiveTransfers(force = true)
                     updateFileTransferNotificationProgress(
                         tid = tid,
                         fileName = newState.fileName,
                         percent = newState.percent,
                         bytesReceived = newState.bytesReceived,
+                        totalBytes = newState.totalBytes,
                         speedBps = newState.speedBps,
                         etaSecs = newState.etaSecs,
                         isPaused = false,
@@ -1208,6 +1255,28 @@ class DeskdropService : Service() {
                 }
             }
 
+            // ── Speed Test ────────────────────────────────────────────────────────────
+            DeskdropJni.CR_EVENT_SPEED_TEST_PROGRESS -> {
+                val peerId = DeskdropJni.eventDeviceId(ev) ?: return
+                val bytesTransferred = DeskdropJni.eventSpeedTestBytes(ev)
+                val durationSecs = DeskdropJni.eventSpeedTestDuration(ev)
+                val phase = DeskdropJni.eventSpeedTestPhase(ev) ?: "Unknown"
+                val peerName = resolvePeerDisplayName(peerId, DeskdropJni.eventDeviceName(ev))
+                
+                TransferManager.activeSpeedTests[peerId] = SpeedTestProgress(
+                    peerId = peerId,
+                    peerName = peerName,
+                    phase = phase,
+                    bytesTransferred = bytesTransferred,
+                    durationSecs = durationSecs
+                )
+                TransferManager.publishActiveTransfers(force = true)
+            }
+            DeskdropJni.CR_EVENT_SPEED_TEST_COMPLETE -> {
+                val peerId = DeskdropJni.eventDeviceId(ev) ?: return
+                TransferManager.activeSpeedTests.remove(peerId)
+                TransferManager.publishActiveTransfers(force = true)
+            }
             // ── True SAS Pairing (No auto-trust) ──────────────────────────────
             DeskdropJni.CR_EVENT_PAIRING_REQUESTED -> {
                 val deviceId = DeskdropJni.eventDeviceId(ev) ?: return
@@ -1326,6 +1395,94 @@ class DeskdropService : Service() {
 
             DeskdropJni.CR_EVENT_BATTERY_STATE_CHANGED -> {
                 Log.d(TAG, "BatteryStateChanged event received (no-op on Android)")
+            }
+
+            // ── Remote Explorer (Phase 2) ─────────────────────────────────────────────
+            DeskdropJni.CR_EVENT_REMOTE_FILES_QUERY -> {
+                val requestId = DeskdropJni.eventRequestId(ev) ?: return
+                val targetDeviceId = DeskdropJni.eventDeviceId(ev) ?: return
+                val summaryOnly = DeskdropJni.eventSummaryOnly(ev)
+                val category = DeskdropJni.eventFileCategory(ev)
+                val source = DeskdropJni.eventFileSource(ev)
+                val query = DeskdropJni.eventSearchQuery(ev)
+                val offset = DeskdropJni.eventOffset(ev)
+                val limit = DeskdropJni.eventLimit(ev)
+
+                Thread {
+                    try {
+                        if (summaryOnly) {
+                            val (summaryJson, total) = RemoteFileManager.queryFilesSummary(
+                                applicationContext, category, source, query
+                            )
+                            DeskdropJni.sendRemoteFilesResponse(
+                                engineHandle, requestId, targetDeviceId, summaryJson, null, total, null
+                            )
+                        } else {
+                            val (summaryJson, _) = RemoteFileManager.queryFilesSummary(
+                                applicationContext, category, source, query
+                            )
+                            val (filesJson, total) = RemoteFileManager.queryFilesList(
+                                applicationContext, category, source, query, offset, limit
+                            )
+                            DeskdropJni.sendRemoteFilesResponse(
+                                engineHandle, requestId, targetDeviceId, summaryJson, filesJson, total, null
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error handling RemoteFilesQuery", e)
+                        DeskdropJni.sendRemoteFilesResponse(
+                            engineHandle, requestId, targetDeviceId, null, null, 0, e.message ?: "Query error"
+                        )
+                    }
+                }.start()
+            }
+
+            DeskdropJni.CR_EVENT_REMOTE_THUMBNAIL_REQUEST -> {
+                val requestId = DeskdropJni.eventRequestId(ev) ?: return
+                val targetDeviceId = DeskdropJni.eventDeviceId(ev) ?: return
+                val fileId = DeskdropJni.eventFileId(ev)
+                val sizePx = DeskdropJni.eventThumbnailSizePx(ev).let { if (it <= 0) 256 else it }
+
+                Thread {
+                    try {
+                        val thumbnailBytes = RemoteFileManager.getThumbnail(applicationContext, fileId, sizePx)
+                        if (thumbnailBytes != null) {
+                            DeskdropJni.sendRemoteThumbnailResponse(
+                                engineHandle, requestId, targetDeviceId, fileId, thumbnailBytes, null
+                            )
+                        } else {
+                            DeskdropJni.sendRemoteThumbnailResponse(
+                                engineHandle, requestId, targetDeviceId, fileId, null, "Thumbnail generation failed"
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error handling RemoteThumbnailRequest", e)
+                        DeskdropJni.sendRemoteThumbnailResponse(
+                            engineHandle, requestId, targetDeviceId, fileId, null, e.message ?: "Thumbnail error"
+                        )
+                    }
+                }.start()
+            }
+
+            DeskdropJni.CR_EVENT_REMOTE_FILE_PULL_REQUEST -> {
+                val requestId = DeskdropJni.eventRequestId(ev) ?: return
+                val targetDeviceId = DeskdropJni.eventDeviceId(ev) ?: return
+                val fileId = DeskdropJni.eventFileId(ev)
+
+                Thread {
+                    try {
+                        val resolved = RemoteFileManager.resolveFilePathAndMeta(applicationContext, fileId)
+                        if (resolved != null) {
+                            val (filePath, displayName, mimeType) = resolved
+                            Log.i(TAG, "Pulling remote file: $filePath ($displayName, $mimeType) to target $targetDeviceId")
+                            DeskdropJni.sendFilePath(engineHandle, filePath, displayName, mimeType, targetDeviceId)
+                        } else {
+                            Log.w(TAG, "Failed to resolve file path for pull request $fileId")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error handling RemoteFilePullRequest", e)
+                    }
+                }.start()
             }
         }
     }
@@ -1530,16 +1687,26 @@ class DeskdropService : Service() {
         notificationManager.notify(NOTIF_ID_TOFU, notif)
     }
 
+    private val lastTransferNotifTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     private fun updateFileTransferNotificationProgress(
         tid: String,
         fileName: String,
         percent: Int,
         bytesReceived: Long,
+        totalBytes: Long = 0L,
         speedBps: Long,
         etaSecs: Long,
         isPaused: Boolean = false,
         isOutbound: Boolean = false
     ) {
+        val now = System.currentTimeMillis()
+        val lastTime = lastTransferNotifTimes[tid] ?: 0L
+        if (percent < 100 && !isPaused && (now - lastTime < 250L)) {
+            return
+        }
+        lastTransferNotifTimes[tid] = now
+
         val cancelIntent = Intent(ACTION_CANCEL_FILE_TRANSFER).apply {
             `package` = packageName
             putExtra(EXTRA_TRANSFER_ID, tid)
@@ -1557,7 +1724,7 @@ class DeskdropService : Service() {
         val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(if (isOutbound) "Sending $fileName" else "Receiving $fileName")
-            .setContentText(buildTransferStatusLine(percent, bytesReceived, speedBps, etaSecs) + if (isPaused) " (Paused)" else "")
+            .setContentText(buildTransferStatusLine(percent, bytesReceived, totalBytes, speedBps, etaSecs) + if (isPaused) " (Paused)" else "")
             .setProgress(100, percent, false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -1614,12 +1781,18 @@ class DeskdropService : Service() {
     private fun buildTransferStatusLine(
         percent: Int,
         bytesReceived: Long,
+        totalBytes: Long = 0L,
         speedBps: Long,
         etaSecs: Long
     ): String {
-        val parts = mutableListOf("${percent}%")
+        val exactPercentStr = if (totalBytes > 0L) {
+            String.format("%.1f%%", ((bytesReceived.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0)) * 100.0)
+        } else {
+            "${percent}%"
+        }
+        val parts = mutableListOf(exactPercentStr)
         if (bytesReceived > 0L) {
-            parts += formatBytes(bytesReceived)
+            parts += formatBytes(bytesReceived) + if (totalBytes > 0L) " / ${formatBytes(totalBytes)}" else ""
         }
         if (speedBps > 0L) {
             parts += "${formatBytes(speedBps)}/s"
@@ -2712,6 +2885,7 @@ class DeskdropService : Service() {
                 handler.post {
                     acquireMulticastLock() // Fix: Acquire multicast lock only when network is available
                     acquireWifiLock()
+                    acquireWakeLock()
                     
                     // Brief delay lets the IP stack settle before mDNS re-registers.
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }
@@ -2745,6 +2919,8 @@ class DeskdropService : Service() {
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }
                     delayedNetworkAction = null
                     releaseMulticastLock() // Fix: Release multicast lock to save battery when offline
+                    releaseWifiLock()
+                    releaseWakeLock()
                     stopNsdDiscovery()
                     scheduleNsdRetry()
                 }

@@ -67,6 +67,7 @@ import com.deskdrop.ActivityEntry
 import com.deskdrop.ActivityKind
 import com.deskdrop.PeerSnapshot
 import com.deskdrop.TransferProgress
+import com.deskdrop.SpeedTestProgress
 import com.deskdrop.ui.theme.CRBackground
 import com.deskdrop.ui.theme.CRTheme
 import com.deskdrop.ui.theme.CRTypography
@@ -92,6 +93,8 @@ fun MainScreen(
     feed: List<ActivityEntry>,
     ambientStatus: String,
     activeTransfers: List<TransferProgress>,
+    activeSpeedTests: List<SpeedTestProgress> = emptyList(),
+    onActionStartSpeedTest: (String) -> Unit = {},
     onStartSync: () -> Unit,
     onResumeSync: () -> Unit,
     onScanNow: () -> Unit,
@@ -156,6 +159,8 @@ fun MainScreen(
                                 peers = peers,
                                 feed = feed,
                                 activeTransfers = activeTransfers,
+                                activeSpeedTests = activeSpeedTests,
+                                onActionStartSpeedTest = onActionStartSpeedTest,
                                 onActionPushClipboard = onActionPushClipboard,
                                 onActionSendQuickContext = {
                                     onActionPushClipboard()
@@ -294,6 +299,8 @@ fun HomeTab(
     peers: List<PeerSnapshot>,
     feed: List<ActivityEntry>,
     activeTransfers: List<TransferProgress>,
+    activeSpeedTests: List<SpeedTestProgress>,
+    onActionStartSpeedTest: (String) -> Unit,
     onActionPushClipboard: () -> Unit,
     onActionSendQuickContext: () -> Unit,
     quickContextText: String?,
@@ -483,6 +490,8 @@ fun HomeTab(
                         peer = peer,
                         onSendFiles = { onActionSendFiles(peer.id) },
                         onForget = { onForgetPeer(peer) },
+                        onStartSpeedTest = { onActionStartSpeedTest(peer.id) },
+                        speedTestProgress = activeSpeedTests.find { it.peerId == peer.id },
                         modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp)
                     )
                 }
@@ -656,6 +665,16 @@ fun ActiveTransferCard(
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
+                val exactRatio = if (transfer.totalBytes > 0L) {
+                    (transfer.bytesReceived.toDouble() / transfer.totalBytes.toDouble()).coerceIn(0.0, 1.0)
+                } else {
+                    transfer.percent / 100.0
+                }
+                val exactPercentText = if (transfer.totalBytes > 0L) {
+                    String.format("%.1f%%", exactRatio * 100.0)
+                } else {
+                    "${transfer.percent}%"
+                }
                 Text(
                     text = transfer.fileName,
                     style = CRTypography.label,
@@ -664,7 +683,7 @@ fun ActiveTransferCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (transfer.isPaused) "Paused" else "${transfer.percent}% • " + 
+                    text = if (transfer.isPaused) "Paused" else "$exactPercentText • " + 
                            if (transfer.speedBps > 0) "${transfer.speedBps / 1024 / 1024} MB/s" else "Calculating...",
                     style = CRTypography.caption,
                     color = CRTheme.textMedium(isDark),
@@ -676,6 +695,16 @@ fun ActiveTransferCard(
         
         Spacer(modifier = Modifier.height(16.dp))
         
+        val exactRatio = if (transfer.totalBytes > 0L) {
+            (transfer.bytesReceived.toDouble() / transfer.totalBytes.toDouble()).coerceIn(0.0, 1.0)
+        } else {
+            transfer.percent / 100.0
+        }
+        val animatedRatio by animateFloatAsState(
+            targetValue = exactRatio.toFloat(),
+            animationSpec = tween(durationMillis = 150, easing = LinearEasing),
+            label = "progressBar"
+        )
         // Progress Bar
         Box(
             modifier = Modifier
@@ -685,7 +714,7 @@ fun ActiveTransferCard(
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(transfer.percent / 100f)
+                    .fillMaxWidth(animatedRatio)
                     .height(6.dp)
                     .background(if (transfer.isPaused) CRTheme.accentAmber else CRTheme.brandCyan, RoundedCornerShape(3.dp))
             )
@@ -1095,6 +1124,8 @@ fun DeviceCard(
     peer: PeerSnapshot,
     onSendFiles: () -> Unit,
     onForget: () -> Unit,
+    onStartSpeedTest: () -> Unit = {},
+    speedTestProgress: SpeedTestProgress? = null,
     modifier: Modifier = Modifier.width(170.dp)
 ) {
     val haptic = LocalHapticFeedback.current
@@ -1181,9 +1212,30 @@ fun DeviceCard(
                     )
                 }
             }
+        if (speedTestProgress != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "${speedTestProgress.phase}...",
+                    style = CRTypography.caption,
+                    color = CRTheme.blueSoft
+                )
+                Text(
+                    text = speedTestProgress.speedMbpsString,
+                    style = CRTypography.caption,
+                    color = CRTheme.textHigh(isDark)
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            androidx.compose.material3.LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
+                color = CRTheme.blueSoft,
+                trackColor = if(isDark) Color.White.copy(alpha=0.1f) else Color.Black.copy(alpha=0.1f)
+            )
         }
+    }
         
-        androidx.compose.material3.DropdownMenu(
+    androidx.compose.material3.DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false },
             modifier = Modifier.background(if (isDark) Color(0xFF1E1E1E) else Color.White)
@@ -1192,6 +1244,10 @@ fun DeviceCard(
                 androidx.compose.material3.DropdownMenuItem(
                     text = { Text("Send Files", color = CRTheme.textHigh(isDark)) },
                     onClick = { showMenu = false; onSendFiles() }
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Speed Test", color = CRTheme.textHigh(isDark)) },
+                    onClick = { showMenu = false; onStartSpeedTest() }
                 )
             }
             androidx.compose.material3.DropdownMenuItem(

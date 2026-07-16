@@ -26,10 +26,34 @@ object TransferManager {
     
     val pendingOutboundTransferIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     
-    // Maintain state here instead of in DeskdropService directly (or service delegates to this)
-    val activeTransfers = mutableMapOf<String, TransferProgress>()
+    // Thread-safe map for real-time updates from JNI threads
+    val activeTransfers = java.util.concurrent.ConcurrentHashMap<String, TransferProgress>()
+    private var lastPublishTime = 0L
 
-    fun publishActiveTransfers() {
+    fun publishActiveTransfers(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastPublishTime < 33L) {
+            return
+        }
+        lastPublishTime = now
         activeTransfersFlow.value = activeTransfers.values.toList()
+        activeSpeedTestsFlow.value = activeSpeedTests.values.toList()
     }
+    
+    val activeSpeedTestsFlow = MutableStateFlow<List<SpeedTestProgress>>(emptyList())
+    val activeSpeedTests = java.util.concurrent.ConcurrentHashMap<String, SpeedTestProgress>()
+}
+
+data class SpeedTestProgress(
+    val peerId: String,
+    val peerName: String,
+    val phase: String,
+    val bytesTransferred: Long,
+    val durationSecs: Int
+) {
+    val speedBps: Long
+        get() = if (durationSecs > 0) bytesTransferred / durationSecs else 0
+    
+    val speedMbpsString: String
+        get() = String.format("%.1f Mbps", (speedBps * 8).toDouble() / 1_000_000.0)
 }

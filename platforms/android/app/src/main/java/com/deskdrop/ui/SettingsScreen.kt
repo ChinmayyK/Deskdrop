@@ -81,6 +81,7 @@ fun SettingsScreen(
     onDarkModeChange: (Boolean) -> Unit,
     onRenameClicked: () -> Unit,
     onBatterySettingsClicked: () -> Unit,
+    onStorageSettingsClicked: () -> Unit,
     onNotificationSettingsClicked: () -> Unit,
     onForgetDevice: (String) -> Unit,
     onBack: () -> Unit
@@ -438,6 +439,49 @@ fun SettingsScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text("OPEN BATTERY SETTINGS", style = CRTypography.label, color = CRTheme.bg(isDarkMode))
+                            }
+                        }
+                    }
+                }
+
+                // Remote Explorer Storage Permissions Section
+                item {
+                    SettingsSection(
+                        isDark = isDarkMode,
+                        title = "Remote File Explorer Access",
+                        accentColor = CRTheme.statusGreen,
+                        icon = Icons.Rounded.Folder
+                    ) {
+                        Column(modifier = Modifier.padding(24.dp)) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                Box(
+                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.statusGreen.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Rounded.Folder, contentDescription = "Folder", tint = CRTheme.statusGreen, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = "To browse and pull all files across your phone (Photos, Documents, APKs, Downloads) directly from your Mac, grant All Files Access.",
+                                    style = CRTypography.bodyMedium,
+                                    color = CRTheme.textMedium(isDarkMode),
+                                    lineHeight = 22.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(CRTheme.textHigh(isDarkMode))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onStorageSettingsClicked()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("GRANT ALL FILES ACCESS", style = CRTypography.label, color = CRTheme.bg(isDarkMode))
                             }
                         }
                     }

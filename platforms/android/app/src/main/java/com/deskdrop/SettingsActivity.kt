@@ -106,6 +106,7 @@ class SettingsActivity : ComponentActivity() {
                     },
                     onRenameClicked = { showRenameDialog() },
                     onBatterySettingsClicked = { openBatterySettings() },
+                    onStorageSettingsClicked = { openStorageSettings() },
                     onNotificationSettingsClicked = { openNotificationSettings() },
                     onForgetDevice = { deviceId -> 
                         ContextCompat.startForegroundService(this,
@@ -194,6 +195,25 @@ class SettingsActivity : ComponentActivity() {
                     "Open Settings -> Battery -> Deskdrop -> disable optimisation",
                     Toast.LENGTH_LONG).show()
             }
+        }
+    }
+
+    private fun openStorageSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                startActivity(Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    android.net.Uri.parse("package:$packageName")
+                ))
+            }.onFailure {
+                runCatching {
+                    startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                }.onFailure {
+                    requestMediaPermissions()
+                }
+            }
+        } else {
+            requestMediaPermissions()
         }
     }
 
