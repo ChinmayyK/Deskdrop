@@ -124,6 +124,8 @@ pub enum IpcRequest {
     RejectPeer { device_id: String },
     /// Request to pair with an untrusted device.
     SendPairingRequest { device_id: String },
+    /// Cancel an outgoing pairing request.
+    CancelPairingRequest { device_id: String },
     /// Respond to a pairing request from a device.
     RespondToPairing { device_id: String, accepted: bool },
     /// Revoke a trusted device by UUID.
@@ -403,6 +405,13 @@ pub enum IpcRequest {
         target_device: String,
         file_id: u64,
     },
+    /// Perform an action (rename/delete) on a remote file.
+    RemoteFileActionRequest {
+        target_device: String,
+        file_id: u64,
+        action: String,
+        new_name: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -678,6 +687,7 @@ pub async fn handle_ipc_request(
             let active_call = eng.active_call().await;
             let peer_batteries = eng.peer_batteries().await;
             let active_transfers = eng.active_transfers().await;
+            let peer_storages = eng.peer_storages().await;
             IpcResponse::ok(serde_json::json!({
                 "peers": snap.peers,
                 "peer_count": snap.peers.iter().filter(|p| p.status == crate::peer_manager::PeerConnectionState::Connected).count(),
@@ -688,6 +698,7 @@ pub async fn handle_ipc_request(
                 "local_device_name": eng.local_device_name(),
                 "active_call": active_call,
                 "peer_batteries": peer_batteries,
+                "peer_storages": peer_storages,
                 "active_transfers": active_transfers,
                 "active_speed_tests": eng.active_speed_tests().await,
                 "bind_ip": snap.bind_address.ip().to_string(),
@@ -761,6 +772,15 @@ pub async fn handle_ipc_request(
             match crate::ipc::parse_uuid(&device_id).ok() {
                 Some(id) => {
                     eng.send_pairing_request(id).await;
+                    IpcResponse::ok_empty()
+                }
+                None => IpcResponse::err("invalid device id"),
+            }
+        }
+        IpcRequest::CancelPairingRequest { device_id } => {
+            match crate::ipc::parse_uuid(&device_id).ok() {
+                Some(id) => {
+                    let _ = eng.set_outgoing_pairing_waiting(id, false);
                     IpcResponse::ok_empty()
                 }
                 None => IpcResponse::err("invalid device id"),
@@ -1348,6 +1368,14 @@ pub async fn handle_ipc_request(
             };
             let request_id = uuid::Uuid::new_v4();
             eng.send_remote_file_pull_request(target_uuid, request_id, file_id).await;
+            IpcResponse::ok_empty()
+        }
+        IpcRequest::RemoteFileActionRequest { target_device, file_id, action, new_name } => {
+            let target_uuid = match uuid::Uuid::parse_str(&target_device) {
+                Ok(u) => u,
+                Err(e) => return IpcResponse::err(format!("invalid target_device uuid: {e}")),
+            };
+            eng.send_remote_file_action_request(target_uuid, action, file_id, new_name).await;
             IpcResponse::ok_empty()
         }
     }

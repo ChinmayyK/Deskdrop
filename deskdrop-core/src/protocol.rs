@@ -439,10 +439,19 @@ pub enum AppMessage {
         origin_device: Uuid,
         origin_device_name: String,
     },
-    /// Network connection state from a connected device (e.g. Wi-Fi, Cellular, Offline).
     NetworkStatus {
         /// "wifi", "cellular", or "offline"
         network_type: String,
+        origin_device: Uuid,
+        origin_device_name: String,
+    },
+    /// Storage stats from a connected device. Pushed periodically.
+    StorageStatus {
+        images_bytes: u64,
+        videos_bytes: u64,
+        apps_bytes: u64,
+        free_bytes: u64,
+        total_bytes: u64,
         origin_device: Uuid,
         origin_device_name: String,
     },
@@ -457,6 +466,13 @@ pub enum AppMessage {
         /// Notification text/body
         text: String,
         /// Device that originated this event
+        origin_device: Uuid,
+        origin_device_name: String,
+    },
+    /// A generic permission error relayed from a peer to display a UI warning.
+    PermissionError {
+        feature: String,
+        message: String,
         origin_device: Uuid,
         origin_device_name: String,
     },
@@ -522,6 +538,12 @@ pub enum AppMessage {
         request_id: Uuid,
         origin_device: Uuid,
         file_id: u64,
+    },
+    /// Desktop -> Android: Request to perform an action on a remote file.
+    RemoteFileActionRequest {
+        action: String, // "delete", "rename"
+        file_id: u64,
+        new_name: Option<String>,
     },
     Bye,
 }

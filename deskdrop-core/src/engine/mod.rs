@@ -309,6 +309,12 @@ pub enum EngineEvent {
         from_device: Uuid,
         file_id: u64,
     },
+    RemoteFileActionRequestReceived {
+        from_device: Uuid,
+        action: String,
+        file_id: u64,
+        new_name: Option<String>,
+    },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
         device_id: Uuid,
@@ -471,6 +477,18 @@ pub struct PeerNetworkState {
     pub network_type: String,
 }
 
+/// Storage state from a connected peer device.
+#[derive(Debug, Clone, Serialize)]
+pub struct PeerStorageState {
+    pub device_id: Uuid,
+    pub device_name: String,
+    pub images_bytes: u64,
+    pub videos_bytes: u64,
+    pub apps_bytes: u64,
+    pub free_bytes: u64,
+    pub total_bytes: u64,
+}
+
 /// Result of a remote files query (`query_remote_files_sync`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RemoteFilesResult {
@@ -529,6 +547,7 @@ pub(crate) struct EngineShared {
     pub(crate) active_call: Arc<Mutex<Option<ActiveCallState>>>,
     /// Per-peer battery levels (F20). Keyed by device UUID.
     pub(crate) peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
+    pub(crate) peer_storage: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerStorageState>>>,
     /// Cache of local battery state to push to newly connected peers.
     pub(crate) local_battery: Arc<Mutex<Option<(u8, bool)>>>,
     /// Cache of local network state to push to newly connected peers.
@@ -639,6 +658,7 @@ impl Engine {
             )),
             active_call: Arc::new(Mutex::new(None)),
             peer_batteries: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            peer_storage: Arc::new(Mutex::new(std::collections::HashMap::new())),
             local_battery: Arc::new(Mutex::new(None)),
             local_network: Arc::new(Mutex::new(None)),
             peer_networks: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -1544,7 +1564,7 @@ impl Engine {
                 let bg_transfer_id = transfer_id;
                 let bg_peer_id = peer_id;
                 tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 4;
+                    const BATCH_SIZE: usize = 8;
                     'outer: loop {
                         let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
@@ -1557,7 +1577,7 @@ impl Engine {
                         if next_chunk >= total_chunks {
                             break 'outer;
                         }
-                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 16u32 {
+                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 64u32 {
                             tokio::time::sleep(std::time::Duration::from_millis(15)).await;
                             continue;
                         }
@@ -1901,6 +1921,20 @@ impl Engine {
         token
     }
 
+    pub async fn send_message(&self, target_device: Uuid, msg: AppMessage) -> Result<()> {
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+            Ok(())
+        } else {
+            anyhow::bail!("Peer not connected")
+        }
+    }
+
     pub async fn send_remote_files_query(
         &self,
         target_device: Uuid,
@@ -2015,6 +2049,28 @@ impl Engine {
             request_id,
             origin_device: self.shared.config.device_id,
             file_id,
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    pub async fn send_remote_file_action_request(
+        &self,
+        target_device: Uuid,
+        action: String,
+        file_id: u64,
+        new_name: Option<String>,
+    ) {
+        let msg = AppMessage::RemoteFileActionRequest {
+            action,
+            file_id,
+            new_name,
         };
         let peers = self.shared.peer_manager.all_connected_senders();
         if let Some(tx) = peers
@@ -3184,6 +3240,7 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         trusted,
         DiscoverySource::Mdns,
         Some(hs.pin.display()),
+        false, // is_outbound
     )
 }
 
@@ -3247,7 +3304,7 @@ async fn connect_loop(
                         if let Some(device_id) = expected_device_id {
                             let _ = shared
                                 .peer_manager
-                                .mark_disconnected(device_id, Some(err.to_string()));
+                                .mark_failed_all(device_id, err.to_string());
                         }
                         return Err(err);
                     }
@@ -3444,6 +3501,7 @@ async fn connect_once(
         trusted,
         discovery,
         Some(hs.pin.display()),
+        true, // is_outbound
     )
 }
 
@@ -3492,12 +3550,13 @@ fn register_session(
     trusted: bool,
     discovery: DiscoverySource,
     session_pin: Option<String>,
+    is_outbound: bool,
 ) -> Result<()> {
-    // 64 capacity * 1 MB chunk size = ~64 MB max queued memory.
+    // 64 capacity * 4 MB chunk size = ~256 MB max queued memory.
     // If the network is slower than disk I/O, this applies backpressure to the
     // file reading loop so we don't blow up Android's memory limits.
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(64);
-    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(64);
+    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(128);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
     match shared
         .peer_manager
@@ -3509,13 +3568,23 @@ fn register_session(
             return Err(e);
         }
     }
-    let (session_id, replaced) = shared.peer_manager.replace_live_session(
+    let (session_id, replaced, rejected_new) = shared.peer_manager.replace_live_session(
+        shared.config.device_id,
         peer_id,
+        is_outbound,
         endpoint,
         outbox_tx.clone(),
         file_outbox_tx.clone(),
         shutdown_tx,
     )?;
+
+    if rejected_new {
+        tracing::debug!(
+            "Session with {} rejected by dedup (we already have the winning session)",
+            peer_id
+        );
+        return Ok(());
+    }
 
     if let Some(replaced) = replaced {
         if let Some(old_shutdown) = replaced.shutdown_tx {
@@ -4757,7 +4826,7 @@ fn register_session(
                     Ok(AppMessage::PairingRequest {
                         origin_device,
                         origin_device_name,
-                        pin: req_pin,
+                        pin: _req_pin,
                     }) => {
                         touch_last_seen();
 
@@ -4786,7 +4855,6 @@ fn register_session(
                         let pin = rx_session_pin
                             .clone()
                             .or_else(|| shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin))
-                            .or(req_pin)
                             .unwrap_or_else(|| "------".to_string());
                         let _ = shared.peer_manager.set_pairing_pin(peer_id, Some(pin.clone()));
                         let _ = shared
@@ -5090,6 +5158,40 @@ fn register_session(
                             })
                             .await;
                     }
+                    Ok(AppMessage::StorageStatus {
+                        images_bytes,
+                        videos_bytes,
+                        apps_bytes,
+                        free_bytes,
+                        total_bytes,
+                        origin_device,
+                        origin_device_name,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        {
+                            let mut storages = shared.peer_storage.lock().await;
+                            storages.insert(
+                                origin_device,
+                                PeerStorageState {
+                                    device_id: origin_device,
+                                    device_name: origin_device_name.clone(),
+                                    images_bytes,
+                                    videos_bytes,
+                                    apps_bytes,
+                                    free_bytes,
+                                    total_bytes,
+                                },
+                            );
+                        }
+                    }
                     Ok(AppMessage::CallAction {
                         action,
                         origin_device,
@@ -5115,6 +5217,16 @@ fn register_session(
                         // not a user-initiated disconnect. Auto-reconnect must stay
                         // enabled so the watchdog can re-establish the link.
                         break "peer closed session".to_string();
+                    }
+                    Ok(AppMessage::PermissionError {
+                        feature,
+                        message,
+                        origin_device: _,
+                        origin_device_name: _,
+                    }) => {
+                        let _ = shared.event_tx.send(EngineEvent::Warning(
+                            format!("{}: {}", feature, message)
+                        )).await;
                     }
                     Ok(AppMessage::NotificationRelay {
                         id,
@@ -5371,6 +5483,30 @@ fn register_session(
                             })
                             .await;
                     }
+                    Ok(AppMessage::RemoteFileActionRequest {
+                        action,
+                        file_id,
+                        new_name,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::RemoteFileActionRequestReceived {
+                                from_device: peer_id,
+                                action,
+                                file_id,
+                                new_name,
+                            })
+                            .await;
+                    }
                     Ok(AppMessage::Hello { .. }) | Ok(AppMessage::HelloAck { .. }) => {
                         // Ignored in session loop
                     }
@@ -5499,7 +5635,15 @@ fn register_session(
             .peer_manager
             .mark_disconnected_if_current(peer_id, session_id, reason.clone())
         {
-            Ok(true) => {
+            Ok(Some(connected_at)) => {
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                let duration = now.saturating_sub(connected_at);
+                if duration < 15 {
+                    let _ = shared.event_tx.send(EngineEvent::Warning(
+                        format!("Device '{}' disconnected rapidly ({}s). If this is an Android device, please ensure 'Ignore Battery Optimizations' (Background Execution) is enabled in its settings.", peer_name, duration)
+                    )).await;
+                }
+
                 tracing::warn!(
                     "peer disconnected: peer_id={}, reason={:?}",
                     peer_id,
@@ -5523,11 +5667,8 @@ fn register_session(
                     .pause_all_for_device(peer_id);
                 shared.camera_frames.lock().await.remove(&peer_id);
 
-                // FIX: Phantom Pairing Prompts. Clear pairing state if connection drops.
+                // FIX: Phantom Pairing Prompts. Clear incoming pairing state if connection drops.
                 let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
-                let _ = shared
-                    .peer_manager
-                    .set_outgoing_pairing_waiting(peer_id, false);
                 let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
 
                 // Record in activity feed.
@@ -5597,7 +5738,7 @@ fn register_session(
                     }
                 }
             }
-            Ok(false) => {}
+            Ok(None) => {}
             Err(err) => {
                 warn!(peer_id = %peer_id, error = %err, "failed to mark peer disconnected");
             }

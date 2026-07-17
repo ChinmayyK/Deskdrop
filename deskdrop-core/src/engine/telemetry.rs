@@ -183,4 +183,42 @@ impl crate::engine::Engine {
             .cloned()
             .collect()
     }
+
+    /// Push this device's storage status to all connected trusted peers.
+    pub async fn push_storage_status(
+        &self,
+        images_bytes: u64,
+        videos_bytes: u64,
+        apps_bytes: u64,
+        free_bytes: u64,
+        total_bytes: u64,
+    ) {
+        let msg = AppMessage::StorageStatus {
+            images_bytes,
+            videos_bytes,
+            apps_bytes,
+            free_bytes,
+            total_bytes,
+            origin_device: self.shared.config.device_id,
+            origin_device_name: self.shared.config.device_name.clone(),
+        };
+
+        let peers = self.shared.peer_manager.all_trusted_senders();
+        for (peer_id, tx) in peers {
+            if self.is_trusted(peer_id).await {
+                let _ = tx.send(msg.clone()).await;
+            }
+        }
+    }
+
+    /// Get storage states for all peers that have reported their storage.
+    pub async fn peer_storages(&self) -> Vec<PeerStorageState> {
+        self.shared
+            .peer_storage
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect()
+    }
 }

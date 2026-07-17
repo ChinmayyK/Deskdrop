@@ -46,6 +46,16 @@ pub(crate) async fn read_outbound_chunks(
         Option<(Option<std::fs::File>, sha2::Sha256)>,
         Vec<(u32, Vec<u8>, bool)>,
     )>;
+
+    // Determine if we should try LZ4 based on file extension.
+    // Already-compressed formats gain nothing from LZ4 and waste CPU.
+    let try_compress = {
+        let mgr = shared.file_transfers.lock().await;
+        mgr.get_outbound(&transfer_id)
+            .map(|t| should_try_compress(&t.meta.file_name))
+            .unwrap_or(true)
+    };
+
     let res = tokio::task::spawn_blocking(move || -> FileChunkResult {
         use sha2::Digest;
         use std::io::{Read, Seek};
@@ -57,9 +67,13 @@ pub(crate) async fn read_outbound_chunks(
             match instr {
                 crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
                     hasher.update(&data);
-                    let compressed = lz4_flex::compress_prepend_size(&data);
-                    if compressed.len() < data.len() {
-                        chunk_data.push((chunk_index, compressed, true));
+                    if try_compress {
+                        let compressed = lz4_flex::compress_prepend_size(&data);
+                        if compressed.len() < data.len() {
+                            chunk_data.push((chunk_index, compressed, true));
+                        } else {
+                            chunk_data.push((chunk_index, data, false));
+                        }
                     } else {
                         chunk_data.push((chunk_index, data, false));
                     }
@@ -96,9 +110,13 @@ pub(crate) async fn read_outbound_chunks(
                             buf.truncate(read_bytes);
                         }
                         hasher.update(&buf);
-                        let compressed = lz4_flex::compress_prepend_size(&buf);
-                        if compressed.len() < buf.len() {
-                            chunk_data.push((chunk_index, compressed, true));
+                        if try_compress {
+                            let compressed = lz4_flex::compress_prepend_size(&buf);
+                            if compressed.len() < buf.len() {
+                                chunk_data.push((chunk_index, compressed, true));
+                            } else {
+                                chunk_data.push((chunk_index, buf, false));
+                            }
                         } else {
                             chunk_data.push((chunk_index, buf, false));
                         }
@@ -158,4 +176,23 @@ pub(crate) async fn read_outbound_chunks(
     } else {
         Some((msgs, progs))
     }
+}
+
+/// Returns false for file extensions that are already compressed.
+/// LZ4 on these formats wastes CPU and always produces larger output.
+fn should_try_compress(file_name: &str) -> bool {
+    let ext = file_name
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    !matches!(
+        ext.as_str(),
+        "jpg" | "jpeg" | "png" | "gif" | "webp" | "avif" | "heic" | "heif"
+            | "mp4" | "mkv" | "mov" | "avi" | "webm"
+            | "mp3" | "aac" | "ogg" | "opus" | "flac" | "m4a" | "wma"
+            | "zip" | "gz" | "bz2" | "xz" | "zst" | "lz4" | "7z" | "rar" | "tar.gz" | "tgz"
+            | "apk" | "ipa" | "dmg" | "iso"
+            | "pdf"
+    )
 }

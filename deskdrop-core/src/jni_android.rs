@@ -386,6 +386,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         RemoteFilesQueryReceived { .. } => 30,
         RemoteThumbnailRequestReceived { .. } => 31,
         RemoteFilePullRequestReceived { .. } => 32,
+        RemoteFileActionRequestReceived { .. } => 37,
         RemoteFilesResponseReceived { .. } => 33,
         RemoteThumbnailResponseReceived { .. } => 34,
         SpeedTestProgress { .. } => 35,
@@ -429,6 +430,12 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
             };
             return env
                 .new_string(msg)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        crate::engine::EngineEvent::RemoteFileActionRequestReceived { action, .. } => {
+            return env
+                .new_string(action)
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
@@ -526,6 +533,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         RemoteFilesQueryReceived { from_device, .. } => Some(*from_device),
         RemoteThumbnailRequestReceived { from_device, .. } => Some(*from_device),
         RemoteFilePullRequestReceived { from_device, .. } => Some(*from_device),
+        RemoteFileActionRequestReceived { from_device, .. } => Some(*from_device),
         RemoteFilesResponseReceived { from_device, .. } => Some(*from_device),
         RemoteThumbnailResponseReceived { from_device, .. } => Some(*from_device),
         _ => None,
@@ -943,6 +951,54 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_startSpeedTest(
         Err(_) => 0,
     }
 }
+
+// ── sendPermissionError ──────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendPermissionError<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    engine_ptr: jlong,
+    device_id_jstr: JString<'local>,
+    feature_jstr: JString<'local>,
+    message_jstr: JString<'local>,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let device_id_str: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let feature_str: String = match env.get_string(&feature_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let message_str: String = match env.get_string(&message_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let target_uuid = match uuid::Uuid::parse_str(&device_id_str) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    
+    // We send a generic AppMessage::PermissionError
+    let msg = crate::protocol::AppMessage::PermissionError {
+        feature: feature_str,
+        message: message_str,
+        origin_device: h.engine.local_device_id(),
+        origin_device_name: h.engine.local_device_name(),
+    };
+
+    match rt().block_on(h.engine.send_message(target_uuid, msg)) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+}
+
 
 // ── trustPeer / rejectPeer ───────────────────────────────────────────────────
 
@@ -1673,6 +1729,31 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushNetworkStatus(
     0
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_pushStorageStatus(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    images_bytes: jlong,
+    videos_bytes: jlong,
+    apps_bytes: jlong,
+    free_bytes: jlong,
+    total_bytes: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.push_storage_status(
+        images_bytes as u64,
+        videos_bytes as u64,
+        apps_bytes as u64,
+        free_bytes as u64,
+        total_bytes as u64,
+    ));
+    0
+}
+
 // ── notifyNetworkRestored ────────────────────────────────────────────────────
 /// Called from Kotlin when Android's ConnectivityManager reports that the
 /// default network has become available again (e.g., after Doze, Wi-Fi
@@ -1767,6 +1848,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFileId(
         RemoteThumbnailRequestReceived { file_id, .. } => *file_id as jlong,
         RemoteThumbnailResponseReceived { file_id, .. } => *file_id as jlong,
         RemoteFilePullRequestReceived { file_id, .. } => *file_id as jlong,
+        RemoteFileActionRequestReceived { file_id, .. } => *file_id as jlong,
         _ => 0,
     }
 }

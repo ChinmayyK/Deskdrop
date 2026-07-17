@@ -607,6 +607,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "local_device_name":     state.engine.local_device_name(),
                 "active_call":           active_call,
                 "active_transfers":      active_transfers,
+                "active_speed_tests":    state.engine.active_speed_tests().await,
                 "peer_batteries":        peer_batteries,
                 "peer_networks":         peer_networks,
             })))
@@ -683,6 +684,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state.engine.trust_peer(parse_uuid(&device_id)?).await?;
             Ok(IpcResponse::ok_empty())
         }
+
         IpcRequest::RejectPeer { device_id } => {
             state.engine.reject_peer(parse_uuid(&device_id)?).await?;
             Ok(IpcResponse::ok_empty())
@@ -692,6 +694,10 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .engine
                 .send_pairing_request(parse_uuid(&device_id)?)
                 .await;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::CancelPairingRequest { device_id } => {
+            let _ = state.engine.set_outgoing_pairing_waiting(parse_uuid(&device_id)?, false);
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::RespondToPairing {
@@ -1359,6 +1365,11 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             let target_uuid = parse_uuid(&target_device)?;
             let request_id = uuid::Uuid::new_v4();
             state.engine.send_remote_file_pull_request(target_uuid, request_id, file_id).await;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::RemoteFileActionRequest { target_device, file_id, action, new_name } => {
+            let target_uuid = parse_uuid(&target_device)?;
+            state.engine.send_remote_file_action_request(target_uuid, action, file_id, new_name).await;
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::StartSpeedTest { device_id, duration_secs } => {

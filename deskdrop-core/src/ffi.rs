@@ -248,6 +248,7 @@ pub const PB_EVENT_REMOTE_FILES_RESPONSE: c_int = 33;
 pub const PB_EVENT_REMOTE_THUMBNAIL_RESPONSE: c_int = 34;
 pub const PB_EVENT_SPEED_TEST_PROGRESS: c_int = 35;
 pub const PB_EVENT_SPEED_TEST_COMPLETE: c_int = 36;
+pub const PB_EVENT_REMOTE_FILE_ACTION_REQUEST: c_int = 37;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -345,6 +346,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::RemoteFilesQueryReceived { .. } => PB_EVENT_REMOTE_FILES_QUERY,
         EngineEvent::RemoteThumbnailRequestReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_REQUEST,
         EngineEvent::RemoteFilePullRequestReceived { .. } => PB_EVENT_REMOTE_FILE_PULL_REQUEST,
+        EngineEvent::RemoteFileActionRequestReceived { .. } => PB_EVENT_REMOTE_FILE_ACTION_REQUEST,
         EngineEvent::RemoteFilesResponseReceived { .. } => PB_EVENT_REMOTE_FILES_RESPONSE,
         EngineEvent::RemoteThumbnailResponseReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_RESPONSE,
         EngineEvent::SpeedTestProgress { .. } => PB_EVENT_SPEED_TEST_PROGRESS,
