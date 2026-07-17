@@ -18,6 +18,7 @@ struct IpcPeerRecord: Codable {
     let sync_enabled: Bool?
     let auto_connect: Bool?
     let last_seen: Int?
+    let last_discovery_at: Int?
     let last_sync: Int?
     let ip: String?
     let pairing_requested: Bool?
@@ -39,6 +40,7 @@ struct IpcStatusResponse: Codable {
     let active_call: IpcActiveCallState?
     let peer_batteries: [IpcPeerBatteryState]?
     let peer_networks: [IpcPeerNetworkState]?
+    let peer_storages: [IpcPeerStorageState]?
     let active_transfers: [IpcFileTransferState]?
     let active_speed_tests: [IpcSpeedTestState]?
 }
@@ -83,6 +85,17 @@ struct IpcPeerNetworkState: Codable {
     let device_id: String
     let device_name: String
     let network_type: String
+}
+
+/// Peer storage status.
+struct IpcPeerStorageState: Codable {
+    let device_id: String
+    let device_name: String
+    let images_bytes: Int64
+    let videos_bytes: Int64
+    let apps_bytes: Int64
+    let free_bytes: Int64
+    let total_bytes: Int64
 }
 
 // ── Remote File Explorer models (Phase 3) ─────────────────────────────────────
@@ -218,6 +231,10 @@ final class DeskdropIPCClient {
 
     func sendPairingRequest(deviceId: String) async throws {
         _ = try await send(cmd: ["cmd": "send_pairing_request", "device_id": deviceId])
+    }
+
+    func cancelPairingRequest(deviceId: String) async throws {
+        _ = try await send(cmd: ["cmd": "cancel_pairing_request", "device_id": deviceId])
     }
 
     func respondToPairing(deviceId: String, accepted: Bool) async throws {
@@ -391,6 +408,19 @@ final class DeskdropIPCClient {
             "target_device": targetDevice,
             "file_id": fileId
         ]
+        _ = try await send(cmd: cmd)
+    }
+
+    func requestRemoteFileAction(targetDevice: String, fileId: UInt64, action: String, newName: String?) async throws {
+        var cmd: [String: Any] = [
+            "cmd": "remote_file_action_request",
+            "target_device": targetDevice,
+            "file_id": fileId,
+            "action": action
+        ]
+        if let nn = newName {
+            cmd["new_name"] = nn
+        }
         _ = try await send(cmd: cmd)
     }
 

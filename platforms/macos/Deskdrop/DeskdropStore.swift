@@ -42,6 +42,7 @@ final class DeskdropStore: ObservableObject {
 
     // ── Dashboard UI state ────────────────────────────────────────────────────
     @Published var selectedSection: DashboardSection = .devices
+    @Published var selectedPendingDevice: ManagedDevice? = nil
     @Published var toasts: [ToastItem] = []
     @Published var manualConnectAddress: String = ""
     @Published var settings: DeskdropSettingsSnapshot? = nil
@@ -54,8 +55,8 @@ final class DeskdropStore: ObservableObject {
     private var suppressCallUpdatesUntil: Date? = nil
     /// Battery levels for connected peer devices.
     @Published var peerBatteries: [DeviceBatteryState] = []
-    /// Network status for connected peer devices.
     @Published var peerNetworks: [DeviceNetworkState] = []
+    @Published var peerStorages: [DeviceStorageState] = []
 
     private var lastActivityId: Int64 = 0
     private var lastMirroredAutoAppliedEntryId: Int64 = 0
@@ -92,6 +93,23 @@ final class DeskdropStore: ObservableObject {
     var connectionBanner: String { statusLine }
     var devices: [ManagedDevice] { peers.map(ManagedDevice.init) }
     var connectedDevices: [ManagedDevice] { devices.filter { $0.isConnected && $0.trustState == .trusted } }
+    var pendingDevices: [ManagedDevice] { 
+        devices.filter { device in
+            if device.trustState == .trusted { return false } // Trusted devices go to connectedDevices or are hidden when disconnected
+            if device.pairingRequested || device.outgoingPairingWaiting { return true }
+            
+            // For untrusted devices not actively pairing, only show them if they are actively broadcasting mDNS right now.
+            // Since mDNS can be flaky, we give a 60-second grace period.
+            let now = Date()
+            if let lastDiscovery = device.lastDiscoveryAt, now.timeIntervalSince(lastDiscovery) < 60 {
+                return true
+            }
+            if let lastSeen = device.lastSeen, now.timeIntervalSince(lastSeen) < 60 {
+                return true
+            }
+            return false
+        }
+    }
     var status: StatusSnapshot? { dashboardStatus }
 
     var defaultTargetDevice: ManagedDevice? {
@@ -309,7 +327,7 @@ final class DeskdropStore: ObservableObject {
             }
             
             if let ast = s.active_speed_tests {
-                activeSpeedTests = ast.map { t in
+                activeSpeedTests = ast.filter { $0.phase != "Idle" }.map { t in
                     SpeedTestState(
                         id: t.peer_id,
                         testId: t.test_id,
@@ -370,6 +388,22 @@ final class DeskdropStore: ObservableObject {
             }
             if peerNetworks != incomingNetworks {
                 peerNetworks = incomingNetworks
+            }
+
+            // ── Storage Sync ──────────────────────────────────────────────────
+            let incomingStorages = (s.peer_storages ?? []).map { ps in
+                DeviceStorageState(
+                    deviceId: ps.device_id,
+                    deviceName: ps.device_name,
+                    imagesBytes: ps.images_bytes,
+                    videosBytes: ps.videos_bytes,
+                    appsBytes: ps.apps_bytes,
+                    freeBytes: ps.free_bytes,
+                    totalBytes: ps.total_bytes
+                )
+            }
+            if peerStorages != incomingStorages {
+                peerStorages = incomingStorages
             }
 
             // ── Camera Streaming ──────────────────────────────────────────────
@@ -471,10 +505,13 @@ final class DeskdropStore: ObservableObject {
         Task { try? await ipc.renameDevice(deviceId: device.id, displayName: newName); await refresh() }
     }
     func sendPairingRequest(_ device: ManagedDevice) {
-        Task { try? await ipc.sendPairingRequest(deviceId: device.id); await refresh() }
+        Task { try? await ipc.sendPairingRequest(deviceId: device.id); try? await Task.sleep(nanoseconds: 200_000_000); await refresh() }
+    }
+    func cancelPairingRequest(_ device: ManagedDevice) {
+        Task { try? await ipc.cancelPairingRequest(deviceId: device.id); try? await Task.sleep(nanoseconds: 200_000_000); await refresh() }
     }
     func respondToPairing(_ device: ManagedDevice, accepted: Bool) {
-        Task { try? await ipc.respondToPairing(deviceId: device.id, accepted: accepted); await refresh() }
+        Task { try? await ipc.respondToPairing(deviceId: device.id, accepted: accepted); try? await Task.sleep(nanoseconds: 200_000_000); await refresh() }
     }
     
     func generateQrToken() async throws -> String {
@@ -750,6 +787,10 @@ final class DeskdropStore: ObservableObject {
 
     func pullRemoteFile(targetDevice: String, fileId: UInt64) async throws {
         try await ipc.requestRemoteFilePull(targetDevice: targetDevice, fileId: fileId)
+    }
+
+    func performRemoteFileAction(targetDevice: String, fileId: UInt64, action: String, newName: String? = nil) async throws {
+        try await ipc.requestRemoteFileAction(targetDevice: targetDevice, fileId: fileId, action: action, newName: newName)
     }
 
     private func buildClipboardArchive(from urls: [URL]) -> URL? {
@@ -1113,6 +1154,7 @@ final class DeskdropStore: ObservableObject {
             pairingPin: raw.pairing_pin,
             explicitDisconnect: raw.explicit_disconnect ?? false,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
+            lastDiscoveryAt: raw.last_discovery_at.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             ip:          raw.ip
         )

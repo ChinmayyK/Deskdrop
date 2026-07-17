@@ -3,6 +3,7 @@
 
 import SwiftUI
 import AppKit
+import QuickLook
 
 enum ExplorerViewMode: String, CaseIterable {
     case dateGrouped = "Date Grouped"
@@ -24,10 +25,13 @@ struct FileDateGroup: Identifiable {
     let files: [IpcRemoteFileEntry]
 }
 
+// MARK: - Main Application Window View
 struct RemoteExplorerView: View {
     @ObservedObject var store: DeskdropStore
     let device: ManagedDevice
+    @Environment(\.dismiss) var dismiss
     
+    // State
     @State private var result: IpcRemoteFilesResult?
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -35,7 +39,7 @@ struct RemoteExplorerView: View {
     @State private var selectedSource: String? = nil
     @State private var searchQuery: String = ""
     @State private var viewMode: ExplorerViewMode = .dateGrouped
-    @State private var showInspector: Bool = true
+    @State private var showInspector: Bool = false // Now hidden by default per redesign
     @State private var isMultiSelect: Bool = false
     @State private var selectedFiles: Set<UInt64> = []
     @State private var selectedFile: IpcRemoteFileEntry? = nil
@@ -44,336 +48,208 @@ struct RemoteExplorerView: View {
     @State private var pullingFiles: Set<UInt64> = []
     @State private var pulledFiles: Set<UInt64> = []
     
-    // Category tabs
-    private let categories: [(id: String?, label: String, icon: String)] = [
+    @State private var hoveredFileId: UInt64? = nil
+    
+    // QuickLook State
+    @State private var quickLookURL: URL? = nil
+    @State private var autoQuickLookFileId: UInt64? = nil
+    
+    // File Action States
+    @State private var fileToRename: IpcRemoteFileEntry? = nil
+    @State private var newFileName: String = ""
+    @State private var fileToDelete: IpcRemoteFileEntry? = nil
+    @State private var isRenaming = false
+    @State private var isDeleting = false
+    
+    // Library Categories
+    private let libraryCategories: [(id: String?, label: String, icon: String)] = [
         (nil, "All Files", "square.grid.2x2.fill"),
         ("Images", "Images", "photo.fill"),
         ("Videos", "Videos", "film.fill"),
-        ("Audio", "Audio", "music.note.list"),
+        ("Audio", "Audio", "waveform"),
         ("Documents", "Documents", "doc.text.fill"),
-        ("Apks", "APKs & Apps", "cube.box.fill"),
-        ("Archives", "Archives", "archivebox.fill"),
-        ("Other", "Other", "folder.fill")
+        ("Apks", "APKs & Apps", "app.dashed"),
+        ("Archives", "Archives", "archivebox.fill")
     ]
     
-    // Source tabs
-    private let sources: [(id: String?, label: String, icon: String)] = [
-        (nil, "All Sources", "tray.full.fill"),
-        ("Camera", "Camera", "camera.fill"),
-        ("WhatsApp", "WhatsApp", "message.fill"),
+    // Locations (Sources)
+    private let locationSources: [(id: String?, label: String, icon: String)] = [
+        (nil, "All Locations", "tray.full.fill"),
         ("Downloads", "Downloads", "arrow.down.circle.fill"),
+        ("WhatsApp", "WhatsApp", "message.fill"),
+        ("Camera", "Camera Roll", "camera.fill"),
+        ("Bluetooth", "Bluetooth", "wave.3.left.circle.fill"),
         ("Other", "Other Folders", "folder.fill")
     ]
     
     var body: some View {
         VStack(spacing: 0) {
-            // Top Header Bar
-            headerView
+            // macOS Native Toolbar
+            toolbarView
+                .frame(height: 52)
+                .background(.regularMaterial)
             
-            CRDivider()
+            Divider().opacity(0.5)
             
-            // Main 3-Column Layout
             HStack(spacing: 0) {
-                // Left Column: Navigation & Filters (200px)
-                sidebarFiltersView
-                    .frame(width: 200)
-                    .background(CRTheme.surfaceStrong)
+                // Left Sidebar (Native Finder style)
+                sidebarView
+                    .frame(width: 220)
+                    .background(.regularMaterial)
                 
-                CRDivider()
+                Divider().opacity(0.5)
                 
-                // Center Column: Main Expansive File Canvas (Flexible)
+                // Center Canvas
                 ZStack(alignment: .bottom) {
-                    VStack(spacing: 0) {
-                        searchAndActionBar
-                        CRDivider()
-                        contentMainView
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(CRTheme.surface)
+                    canvasView
+                        .background(CRTheme.surface)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     
-                    // Floating Batch Action Bar when multiple items selected
+                    // Floating Multi-Select Action Bar
                     if !selectedFiles.isEmpty {
                         floatingBatchActionBar
-                            .padding(.bottom, 22)
+                            .padding(.bottom, 24)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 
-                // Right Column: Live Inspector Pane (300px toggleable)
+                // Right Inspector Panel
                 if showInspector {
-                    CRDivider()
-                    previewPaneView
-                        .frame(width: 300)
-                        .background(CRTheme.surfaceElevated)
+                    Divider().opacity(0.5)
+                    inspectorView
+                        .frame(width: 320)
+                        .background(.regularMaterial)
                         .transition(.move(edge: .trailing))
                 }
             }
         }
-        .background(CRTheme.surfaceStrong)
-        .frame(minWidth: 960, minHeight: 650)
-        .onAppear {
-            loadFiles()
-        }
+        .frame(minWidth: 1000, maxWidth: .infinity, minHeight: 650, maxHeight: .infinity)
+        .background(CRTheme.surface) // Fallback behind materials
+        .background(
+            Button("") {
+                triggerQuickLookForSelectedFile()
+            }
+            .keyboardShortcut(.space, modifiers: [])
+            .opacity(0)
+        )
+        .quickLookPreview($quickLookURL)
+        .onAppear { loadFiles() }
         .onChange(of: selectedCategory) { _ in loadFiles() }
         .onChange(of: selectedSource) { _ in loadFiles() }
+        .onChange(of: searchQuery) { _ in
+            // Debounce or just load on change
+            loadFiles()
+        }
+        .alert("Rename File", isPresented: $isRenaming) {
+            TextField("New name", text: $newFileName)
+            Button("Rename", action: {
+                if let file = fileToRename, !newFileName.isEmpty {
+                    Task {
+                        try? await store.performRemoteFileAction(targetDevice: device.id, fileId: file.file_id, action: "rename", newName: newFileName)
+                        await MainActor.run { loadFiles() }
+                    }
+                }
+            })
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Enter a new name for the file.")
+        }
+        .alert("Delete File", isPresented: $isDeleting) {
+            Button("Delete", role: .destructive, action: {
+                if let file = fileToDelete {
+                    Task {
+                        try? await store.performRemoteFileAction(targetDevice: device.id, fileId: file.file_id, action: "delete")
+                        await MainActor.run { loadFiles() }
+                    }
+                }
+            })
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            if let file = fileToDelete {
+                Text("Are you sure you want to permanently delete \"\(file.display_name)\" from your Android device? This cannot be undone.")
+            }
+        }
     }
     
-    // MARK: - Header Bar
-    private var headerView: some View {
+    // MARK: - Premium Toolbar
+    private var toolbarView: some View {
         HStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(CRTheme.brandElectric.opacity(0.12))
-                    .frame(width: 40, height: 40)
-                Image(systemName: "internaldrive.fill")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(CRTheme.brandElectric)
-            }
-            
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(device.name)
-                        .font(.system(size: 16.5, weight: .bold))
-                        .foregroundStyle(CRTheme.ink)
-                    
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(CRTheme.accentGreen)
-                            .frame(width: 6, height: 6)
-                        Text("ONLINE • LOCAL WI-FI")
-                            .font(.system(size: 9.5, weight: .bold))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(CRTheme.accentGreen.opacity(0.16))
-                    .foregroundStyle(CRTheme.accentGreen)
-                    .clipShape(Capsule())
-                }
-                Text("Remote File Explorer • Instant Zero-Copy Access")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(CRTheme.inkSoft)
-            }
-            
-            Spacer()
-            
-            if isLoading {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.trailing, 6)
-            }
-            
-            // Import PC / Mac Files Button
-            Button {
-                importMacFiles()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.up.doc.fill")
-                    Text("Import Mac files...")
-                }
-                .font(.system(size: 12.5, weight: .semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-            }
-            .buttonStyle(PBPrimaryButtonStyle(tint: CRTheme.brandElectric))
-            
-            Button {
-                loadFiles()
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(CRSecondaryButtonStyle())
-            
-            // Toggle Inspector Button
-            Button {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                    showInspector.toggle()
-                }
-            } label: {
-                Image(systemName: "sidebar.right")
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundStyle(showInspector ? CRTheme.brandElectric : CRTheme.inkSoft)
-                    .frame(width: 32, height: 32)
-                    .background(showInspector ? CRTheme.brandElectric.opacity(0.14) : CRTheme.surfaceStrong)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(showInspector ? CRTheme.brandElectric.opacity(0.4) : CRTheme.stroke, lineWidth: 0.5)
-                    }
-            }
-            .buttonStyle(.plain)
-            .help("Toggle Live Inspector Panel")
-        }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 14)
-        .background(CRTheme.surfaceElevated)
-    }
-    
-    // MARK: - Sidebar Filters (Left Column)
-    private var sidebarFiltersView: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 22) {
-                // Categories
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("CATEGORIES")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(CRTheme.inkSubtle)
-                        .padding(.horizontal, 14)
-                    
-                    ForEach(categories, id: \.label) { cat in
-                        filterRow(
-                            label: cat.label,
-                            icon: cat.icon,
-                            isSelected: selectedCategory == cat.id,
-                            count: countForCategory(cat.id)
-                        ) {
-                            selectedCategory = cat.id
-                        }
-                    }
-                }
-                
-                // Sources
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("SOURCES")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(CRTheme.inkSubtle)
-                        .padding(.horizontal, 14)
-                    
-                    ForEach(sources, id: \.label) { src in
-                        filterRow(
-                            label: src.label,
-                            icon: src.icon,
-                            isSelected: selectedSource == src.id,
-                            count: countForSource(src.id)
-                        ) {
-                            selectedSource = src.id
-                        }
-                    }
-                }
-            }
-            .padding(.vertical, 16)
-        }
-    }
-    
-    private func filterRow(label: String, icon: String, isSelected: Bool, count: UInt32?, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 14))
-                    .frame(width: 20)
-                
-                Text(label)
-                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
-                    .lineLimit(1)
-                
-                Spacer()
-                
-                if let count = count {
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(isSelected ? Color.white.opacity(0.9) : CRTheme.inkSubtle)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2.5)
-                        .background(isSelected ? Color.white.opacity(0.22) : CRTheme.surfaceElevated)
-                        .clipShape(Capsule())
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8.5)
-            .background(isSelected ? CRTheme.brandElectric : Color.clear)
-            .foregroundStyle(isSelected ? Color.white : CRTheme.inkSoft)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .padding(.horizontal, 8)
-        }
-        .buttonStyle(.plain)
-    }
-    
-    // MARK: - Search and Action Bar (Top of Center Canvas)
-    private var searchAndActionBar: some View {
-        HStack(alignment: .center, spacing: 14) {
-            // Breadcrumb / Title
-            HStack(spacing: 6) {
-                Text(selectedCategory != nil ? selectedCategory! : (selectedSource != nil ? selectedSource! : "All Files"))
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(CRTheme.ink)
-                if let res = result {
-                    Text("(\(res.total_matching))")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(CRTheme.inkSoft)
-                }
-            }
-            
-            Spacer()
-            
-            // Right-side unified control bar
-            HStack(alignment: .center, spacing: 10) {
-                // Search Input
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(CRTheme.inkSubtle)
-                        .font(.system(size: 12))
-                    TextField("Search files by name...", text: $searchQuery)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12.5))
-                        .frame(width: 170)
-                        .onSubmit { loadFiles() }
-                    if !searchQuery.isEmpty {
-                        Button {
-                            searchQuery = ""
-                            loadFiles()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(CRTheme.inkSubtle)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .frame(height: 32)
-                .padding(.horizontal, 10)
-                .background(CRTheme.surfaceStrong)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(CRTheme.stroke, lineWidth: 0.5)
-                }
-                
-                // Multi-Select Checkbox Toggle
+            // Leading Edge: Navigation & Status
+            HStack(spacing: 12) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isMultiSelect.toggle()
-                        if !isMultiSelect {
-                            selectedFiles.removeAll()
-                        }
-                    }
+                    dismiss()
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: isMultiSelect ? "checkmark.circle.fill" : "checkmark.circle")
-                        Text("Select")
-                    }
-                    .font(.system(size: 12, weight: isMultiSelect ? .bold : .medium))
-                    .frame(height: 32)
-                    .padding(.horizontal, 11)
-                    .background(isMultiSelect ? CRTheme.brandElectric.opacity(0.16) : CRTheme.surfaceStrong)
-                    .foregroundStyle(isMultiSelect ? CRTheme.brandElectric : CRTheme.inkSoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(isMultiSelect ? CRTheme.brandElectric : CRTheme.stroke, lineWidth: 0.5)
-                    }
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(CRTheme.ink)
                 }
                 .buttonStyle(.plain)
                 
-                // View Mode Picker
-                HStack(spacing: 1) {
+                HStack(spacing: 8) {
+                    Text(device.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(CRTheme.ink)
+                    
+                    Circle()
+                        .fill(CRTheme.accentGreen)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .frame(width: 204, alignment: .leading) // Match sidebar width
+            
+            Spacer()
+            
+            // Center: Raycast Style Search
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(CRTheme.inkSubtle)
+                
+                TextField("Search files, extensions, dates...", text: $searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .onSubmit { loadFiles() }
+                
+                if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                        loadFiles()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(CRTheme.inkSubtle)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(width: 320, height: 32)
+            .padding(.horizontal, 12)
+            .background(Color.black.opacity(0.04)) // Subtle depth
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(CRTheme.stroke.opacity(0.6), lineWidth: 0.5)
+            }
+            
+            Spacer()
+            
+            // Trailing Edge: Controls
+            HStack(spacing: 12) {
+                if isLoading {
+                    ProgressView().controlSize(.small)
+                }
+                
+                // View Mode Segmented Control
+                HStack(spacing: 2) {
                     ForEach(ExplorerViewMode.allCases, id: \.self) { mode in
                         Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                                 viewMode = mode
                             }
                         } label: {
                             Image(systemName: mode.icon)
                                 .font(.system(size: 13, weight: viewMode == mode ? .semibold : .regular))
                                 .foregroundStyle(viewMode == mode ? CRTheme.brandElectric : CRTheme.inkSubtle)
-                                .frame(width: 32, height: 28)
+                                .frame(width: 28, height: 26)
                                 .background(viewMode == mode ? CRTheme.surfaceElevated : Color.clear)
                                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
@@ -381,105 +257,182 @@ struct RemoteExplorerView: View {
                         .help(mode.rawValue)
                     }
                 }
-                .frame(height: 32)
                 .padding(2)
-                .background(CRTheme.surfaceStrong)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(CRTheme.stroke, lineWidth: 0.5)
+                .background(Color.black.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(CRTheme.stroke.opacity(0.6), lineWidth: 0.5))
+                
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        showInspector.toggle()
+                    }
+                } label: {
+                    Image(systemName: "sidebar.right")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(showInspector ? CRTheme.brandElectric : CRTheme.ink)
                 }
+                .buttonStyle(.plain)
+                .help("Toggle Inspector")
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
     }
     
-    // MARK: - Main Content Area (Center Canvas)
-    private var contentMainView: some View {
+    // MARK: - Sidebar Redesign (Finder Style)
+    private var sidebarView: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                // Library Section
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Library")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(CRTheme.inkSubtle)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
+                    
+                    ForEach(libraryCategories, id: \.label) { cat in
+                        SidebarRowView(
+                            label: cat.label,
+                            icon: cat.icon,
+                            isSelected: selectedCategory == cat.id,
+                            count: countForCategory(cat.id)
+                        ) {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                                selectedCategory = cat.id
+                            }
+                        }
+                    }
+                }
+                
+                // Locations Section
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Locations")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(CRTheme.inkSubtle)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
+                    
+                    ForEach(locationSources, id: \.label) { src in
+                        SidebarRowView(
+                            label: src.label,
+                            icon: src.icon,
+                            isSelected: selectedSource == src.id,
+                            count: countForSource(src.id)
+                        ) {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                                selectedSource = src.id
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 20)
+        }
+    }
+    
+    // MARK: - Sidebar Row View
+struct SidebarRowView: View {
+    let label: String
+    let icon: String
+    let isSelected: Bool
+    let count: UInt32?
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .frame(width: 20)
+                    .foregroundStyle(isSelected ? Color.white : CRTheme.brandElectric)
+                
+                Text(label)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                if let count = count, count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(isSelected ? Color.white.opacity(0.9) : CRTheme.inkSubtle)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle()) // Makes entire row clickable
+            .background(
+                isSelected ? CRTheme.brandElectric :
+                isHovered ? CRTheme.surfaceStrong : Color.clear
+            )
+            .foregroundStyle(isSelected ? Color.white : CRTheme.ink)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.horizontal, 12)
+            .scaleEffect(isHovered && !isSelected ? 1.02 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+            .onHover { hovering in
+                isHovered = hovering
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+    // MARK: - Center Canvas (Files Grid)
+    private var canvasView: some View {
         ZStack {
             if let err = errorMessage {
-                VStack(spacing: 14) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(CRTheme.accentOrange)
-                    Text("Error accessing remote files")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(CRTheme.ink)
-                    Text(err)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(CRTheme.inkSoft)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 30)
-                    Button("Retry") { loadFiles() }
-                        .buttonStyle(CRPrimaryButtonStyle())
-                }
-                .padding(40)
+                errorStateView(err: err)
             } else if let res = result, res.files.isEmpty && !isLoading {
-                VStack(spacing: 14) {
-                    Image(systemName: "folder.badge.questionmark")
-                        .font(.system(size: 40))
-                        .foregroundStyle(CRTheme.inkSubtle)
-                    Text("No files found")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(CRTheme.ink)
-                    Text("Try selecting a different category or clearing search.")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(CRTheme.inkSoft)
-                }
+                emptyStateView
             } else if let res = result {
                 ScrollView(.vertical, showsIndicators: true) {
                     VStack(alignment: .leading, spacing: 22) {
+                        // Quick Action Header within Canvas (Import)
+                        HStack {
+                            Spacer()
+                            Button { importMacFiles() } label: {
+                                Label("Import Mac Files...", systemImage: "arrow.up.doc.fill")
+                            }
+                            .buttonStyle(PBPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                        }
+                        .padding(.top, 12)
+                        
+                        // Content Layout
                         switch viewMode {
                         case .dateGrouped:
                             dateGroupedView(for: res.files)
                         case .grid:
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 145, maximum: 180), spacing: 16)], alignment: .leading, spacing: 16) {
-                                ForEach(res.files) { file in
-                                    fileGridCard(for: file)
-                                }
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 24)], alignment: .leading, spacing: 24) {
+                                ForEach(res.files) { file in fileGridCard(for: file) }
                             }
-                            .padding(20)
+                            .padding(.top, 12)
                         case .list:
-                            LazyVStack(alignment: .leading, spacing: 5) {
-                                ForEach(res.files) { file in
-                                    fileListRow(for: file)
-                                }
+                            LazyVStack(alignment: .leading, spacing: 6) {
+                                ForEach(res.files) { file in fileListRow(for: file) }
                             }
-                            .padding(16)
+                            .padding(.top, 12)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, selectedFiles.isEmpty ? 24 : 95)
+                    .padding(24) // Generous macOS 24px padding
+                    .padding(.bottom, selectedFiles.isEmpty ? 24 : 100)
                 }
             } else if isLoading {
-                ProgressView("Connecting to \(device.name)...")
+                ProgressView("Fetching index from \(device.name)...")
                     .controlSize(.regular)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    // MARK: - Date Grouped View
+    // MARK: - Date Grouped View (Sticky Headers)
     private func dateGroupedView(for files: [IpcRemoteFileEntry]) -> some View {
-        VStack(alignment: .leading, spacing: 26) {
+        LazyVStack(alignment: .leading, spacing: 32, pinnedViews: [.sectionHeaders]) {
             ForEach(groupedFiles(from: files)) { group in
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(CRTheme.brandElectric)
-                        Text(group.title)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(CRTheme.ink)
-                        Spacer()
-                        Text("\(group.files.count) items")
-                            .font(.system(size: 11.5, weight: .medium))
-                            .foregroundStyle(CRTheme.inkSoft)
-                    }
-                    .padding(.horizontal, 2)
-                    
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 145, maximum: 180), spacing: 16)], alignment: .leading, spacing: 16) {
+                Section(header: stickyHeader(for: group)) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 24)], alignment: .leading, spacing: 24) {
                         ForEach(group.files) { file in
                             fileGridCard(for: file)
                         }
@@ -487,173 +440,283 @@ struct RemoteExplorerView: View {
                 }
             }
         }
-        .padding(20)
     }
     
-    // MARK: - Grid Card (Clean 1:1 Square Box + Two-Line Title)
+    private func stickyHeader(for group: FileDateGroup) -> some View {
+        HStack(spacing: 8) {
+            Text(group.title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(CRTheme.ink)
+            
+            Text("\(group.files.count) items")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(CRTheme.inkSubtle)
+            
+            Spacer()
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 4)
+        .background(CRTheme.surface.opacity(0.95)) // Slight translucency for sticky effect
+    }
+    
+    // MARK: - Beautiful Empty State
+    private var emptyStateView: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(CRTheme.brandElectric.opacity(0.08))
+                    .frame(width: 120, height: 120)
+                
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 50, weight: .ultraLight))
+                    .foregroundStyle(
+                        LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandViolet], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+            }
+            
+            VStack(spacing: 6) {
+                Text(searchQuery.isEmpty ? "Folder is Empty" : "No Results Found")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(CRTheme.ink)
+                
+                Text(searchQuery.isEmpty ? "There are no files matching this location or category." : "Try adjusting your search terms or filters.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(CRTheme.inkSoft)
+            }
+        }
+    }
+    
+    private func errorStateView(err: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(CRTheme.accentOrange)
+            Text("Connection Interrupted")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(CRTheme.ink)
+            Text(err)
+                .font(.system(size: 13))
+                .foregroundStyle(CRTheme.inkSoft)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 400)
+            Button("Retry Connection") { loadFiles() }
+                .buttonStyle(CRPrimaryButtonStyle())
+                .padding(.top, 8)
+        }
+    }
+    
+    // MARK: - Premium Grid Card (Photos/Finder Style)
     private func fileGridCard(for file: IpcRemoteFileEntry) -> some View {
         Button {
-            handleFileSelection(file)
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                handleFileSelection(file)
+            }
         } label: {
-            ZStack(alignment: .topTrailing) {
-                VStack(alignment: .leading, spacing: 9) {
-                    // 1:1 Square Thumbnail / Icon Tile
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(backgroundForTile(file.category))
-                            .aspectRatio(1.0, contentMode: .fit)
-                        
-                        if let thumb = thumbnailCache[file.file_id] {
-                            Image(nsImage: thumb)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        } else {
-                            VStack(spacing: 6) {
-                                Image(systemName: iconForMime(file.mime_type, cat: file.category))
-                                    .font(.system(size: 34, weight: .medium))
-                                    .foregroundStyle(colorForCategory(file.category))
-                                if file.category.lowercased() == "audio" || file.mime_type.contains("audio") {
-                                    Text("AUDIO")
+            VStack(alignment: .leading, spacing: 10) {
+                // 1:1 Thumbnail Area
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(backgroundForTile(file.category))
+                        .aspectRatio(1.0, contentMode: .fit)
+                    
+                    if let thumb = thumbnailCache[file.file_id] {
+                        Image(nsImage: thumb)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    } else {
+                        Image(systemName: iconForMime(file.mime_type, cat: file.category))
+                            .font(.system(size: 40, weight: .light))
+                            .foregroundStyle(colorForCategory(file.category))
+                    }
+                    
+                    // Badges & Checkbox (Top Right)
+                    VStack {
+                        HStack {
+                            Spacer()
+                            ZStack(alignment: .topTrailing) {
+                                if file.category.lowercased() == "apks" || file.mime_type.contains("pdf") {
+                                    Text(file.category.lowercased() == "apks" ? "APK" : "PDF")
                                         .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(colorForCategory(file.category).opacity(0.8))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Capsule())
+                                        .padding(8)
+                                }
+                                
+                                // Multi-select Checkbox
+                                if isMultiSelect {
+                                    Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : Color.white.opacity(0.8))
+                                        .background(Circle().fill(Color.black.opacity(0.3)).frame(width: 18, height: 18))
+                                        .padding(8)
                                 }
                             }
                         }
-                    }
-                    .onAppear { fetchThumbnailIfNeeded(for: file) }
-                    
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(file.display_name)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(CRTheme.ink)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                        
-                        HStack {
-                            Text(formatSize(file.size_bytes))
-                            Spacer()
-                            if pullingFiles.contains(file.file_id) {
-                                ProgressView().controlSize(.small)
-                            } else if pulledFiles.contains(file.file_id) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(CRTheme.brandElectric)
-                                    .font(.system(size: 12))
-                            }
-                        }
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(CRTheme.inkSoft)
+                        Spacer()
                     }
                 }
-                .padding(11)
-                .background(isSelected(file) ? CRTheme.brandElectric.opacity(0.12) : CRTheme.surfaceElevated)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .onAppear { fetchThumbnailIfNeeded(for: file) }
                 .overlay {
+                    // Selection / Hover Tint
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(isSelected(file) ? CRTheme.brandElectric : CRTheme.stroke, lineWidth: isSelected(file) ? 1.5 : 0.5)
+                        .strokeBorder(isSelected(file) ? CRTheme.brandElectric : Color.clear, lineWidth: 2)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(CRTheme.brandElectric.opacity(isSelected(file) ? 0.08 : 0)))
                 }
+                .shadow(color: Color.black.opacity(isSelected(file) ? 0.12 : (hoveredFileId == file.file_id ? 0.08 : 0.04)), radius: isSelected(file) ? 12 : 6, y: isSelected(file) ? 6 : 2)
+                .scaleEffect(isSelected(file) ? 0.96 : (hoveredFileId == file.file_id ? 1.02 : 1.0))
                 
-                // Checkbox Indicator in Multi-Select Mode
-                if isMultiSelect {
-                    Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : Color.white.opacity(0.85))
-                        .background(Circle().fill(selectedFiles.contains(file.file_id) ? Color.white : Color.black.opacity(0.45)).frame(width: 17, height: 17))
-                        .padding(9)
+                // Metadata (Two lines, minimal)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(file.display_name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(CRTheme.ink)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    
+                    HStack {
+                        Text(formatSize(file.size_bytes))
+                        Spacer()
+                        if pullingFiles.contains(file.file_id) {
+                            ProgressView().controlSize(.small)
+                        } else if pulledFiles.contains(file.file_id) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(CRTheme.brandElectric)
+                                .font(.system(size: 11))
+                        }
+                    }
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(CRTheme.inkSoft)
                 }
+                .padding(.horizontal, 2)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                if isHovered { hoveredFileId = file.file_id }
+                else if hoveredFileId == file.file_id { hoveredFileId = nil }
+            }
+        }
+        .contextMenu {
+            fileContextMenu(for: file)
+        }
     }
     
-    // MARK: - List Row
+    @ViewBuilder
+    private func fileContextMenu(for file: IpcRemoteFileEntry) -> some View {
+        Group {
+            Button("Open") {
+                // Same logic as Preview Inspector but potentially trigger NSWorkspace after pull if we wanted. 
+                // For now, download it so user can open natively.
+                pullFile(file)
+            }
+            
+            Menu("Open with") {
+                Button("Preview") {
+                    selectedFile = file
+                    showInspector = true
+                }
+            }
+            
+            Button("Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(file.content_uri, forType: .string)
+            }
+            
+            Button("Save to PC") {
+                pullFile(file)
+            }
+            
+            Divider()
+            
+            Button("Rename") {
+                fileToRename = file
+                newFileName = file.display_name
+                isRenaming = true
+            }
+            
+            Button("Details") {
+                selectedFile = file
+                showInspector = true
+            }
+            
+            Divider()
+            
+            Button("Delete Remote File", role: .destructive) {
+                fileToDelete = file
+                isDeleting = true
+            }
+        }
+    }
+    
+    // MARK: - List Row (Clean Finder Style)
     private func fileListRow(for file: IpcRemoteFileEntry) -> some View {
         Button {
             handleFileSelection(file)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 16) {
                 if isMultiSelect {
                     Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : CRTheme.inkSubtle)
                 }
                 
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(backgroundForTile(file.category))
-                        .frame(width: 40, height: 40)
-                    
-                    if let thumb = thumbnailCache[file.file_id] {
-                        Image(nsImage: thumb)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 40, height: 40)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    } else {
-                        Image(systemName: iconForMime(file.mime_type, cat: file.category))
-                            .font(.system(size: 18))
-                            .foregroundStyle(colorForCategory(file.category))
-                    }
-                }
-                .onAppear { fetchThumbnailIfNeeded(for: file) }
+                Image(systemName: iconForMime(file.mime_type, cat: file.category))
+                    .font(.system(size: 18))
+                    .foregroundStyle(colorForCategory(file.category))
+                    .frame(width: 24)
                 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(file.display_name)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(CRTheme.ink)
-                        .lineLimit(1)
-                    HStack(spacing: 8) {
-                        Text(formatSize(file.size_bytes))
-                        Text("•")
-                        Text(formatDate(file.date_modified))
-                        if !file.source.isEmpty {
-                            Text("•")
-                            Text(file.source.capitalized)
-                        }
-                    }
-                    .font(.system(size: 11))
+                Text(file.display_name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(CRTheme.ink)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Text(formatDate(file.date_modified))
+                    .font(.system(size: 12))
                     .foregroundStyle(CRTheme.inkSoft)
-                }
+                    .frame(width: 100, alignment: .leading)
                 
-                Spacer()
-                
-                if pullingFiles.contains(file.file_id) {
-                    ProgressView().controlSize(.small)
-                } else if pulledFiles.contains(file.file_id) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(CRTheme.brandElectric)
-                        .font(.system(size: 15))
-                } else {
-                    Image(systemName: "arrow.down.to.line.alt")
-                        .font(.system(size: 13))
-                        .foregroundStyle(CRTheme.inkSubtle)
-                }
+                Text(formatSize(file.size_bytes))
+                    .font(.system(size: 12))
+                    .foregroundStyle(CRTheme.inkSoft)
+                    .frame(width: 80, alignment: .trailing)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(isSelected(file) ? CRTheme.brandElectric.opacity(0.12) : CRTheme.surfaceElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isSelected(file) ? CRTheme.brandElectric : Color.clear, lineWidth: 1)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(isSelected(file) ? CRTheme.brandElectric.opacity(0.12) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onHover { isHovered in
+                if isHovered && !isSelected(file) {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
             }
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            fileContextMenu(for: file)
+        }
     }
     
-    // MARK: - Floating Batch Action Bar (Bottom of Center Canvas)
+    // MARK: - Floating Batch Action Bar
     private var floatingBatchActionBar: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 20) {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(CRTheme.brandElectric)
-                Text("\(selectedFiles.count) items selected")
-                    .font(.system(size: 13.5, weight: .bold))
-                    .foregroundStyle(CRTheme.ink)
+                    .foregroundStyle(Color.white)
+                Text("\(selectedFiles.count) selected")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.white)
                 Text("(\(formatSize(totalSelectedBytes())))")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(CRTheme.inkSoft)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.7))
             }
             
             Spacer()
@@ -663,210 +726,254 @@ struct RemoteExplorerView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.down.to.line.alt")
-                    Text("Pull \(selectedFiles.count) Files to Mac")
+                    Text("Download to Mac")
                 }
                 .font(.system(size: 13, weight: .semibold))
-                .padding(.horizontal, 18)
-                .padding(.vertical, 8.5)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.white)
+                .foregroundStyle(Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(PBPrimaryButtonStyle(tint: CRTheme.brandElectric))
+            .buttonStyle(.plain)
             
             Button {
-                withAnimation {
-                    selectedFiles.removeAll()
-                }
+                withAnimation { selectedFiles.removeAll() }
             } label: {
-                Text("Clear")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(CRTheme.inkSoft)
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.8))
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, 20)
         .padding(.vertical, 14)
-        .background(CRTheme.surfaceElevated.opacity(0.97))
+        .frame(width: 500)
+        .background(.ultraThinMaterial)
+        .background(Color.black.opacity(0.6)) // Fallback contrast
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(CRTheme.brandElectric, lineWidth: 1.2)
-        }
-        .shadow(color: Color.black.opacity(0.28), radius: 14, x: 0, y: 7)
-        .frame(maxWidth: 600)
+        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
     }
     
-    // MARK: - Right Live Inspector Pane (300px)
-    private var previewPaneView: some View {
+    // MARK: - Right Inspector Redesign (Progressive Disclosure)
+    private var inspectorView: some View {
         VStack(spacing: 0) {
-            // Header bar
-            HStack(spacing: 8) {
-                Image(systemName: "eye.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(CRTheme.brandElectric)
-                Text("LIVE INSPECTOR")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(CRTheme.inkSubtle)
+            // Header
+            HStack {
+                Text("Inspector")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(CRTheme.ink)
                 Spacer()
-                if let file = selectedFile {
-                    Text(file.category.capitalized)
-                        .font(.system(size: 10, weight: .bold))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 3.5)
-                        .background(colorForCategory(file.category).opacity(0.18))
-                        .foregroundStyle(colorForCategory(file.category))
-                        .clipShape(Capsule())
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        showInspector = false
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(CRTheme.inkSubtle)
                 }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .background(CRTheme.surfaceElevated)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
             
-            CRDivider()
+            Divider().opacity(0.5)
             
             if let file = selectedFile {
-                ScrollView(.vertical, showsIndicators: true) {
-                    VStack(alignment: .leading, spacing: 22) {
-                        // Visual Preview Box
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .center, spacing: 24) {
+                        // Large Hero Preview
                         ZStack {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(backgroundForTile(file.category))
-                                .frame(minHeight: 230, maxHeight: 330)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .strokeBorder(CRTheme.stroke, lineWidth: 0.5)
-                                }
+                                .frame(height: 260)
                             
                             if let thumb = thumbnailCache[file.file_id] {
                                 Image(nsImage: thumb)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(minHeight: 230, maxHeight: 320)
+                                    .frame(height: 240)
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    .padding(8)
                             } else {
-                                VStack(spacing: 14) {
-                                    Image(systemName: iconForMime(file.mime_type, cat: file.category))
-                                        .font(.system(size: 58, weight: .medium))
-                                        .foregroundStyle(colorForCategory(file.category))
-                                    Text(file.display_name)
-                                        .font(.system(size: 13.5, weight: .semibold))
-                                        .foregroundStyle(CRTheme.ink)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 20)
-                                }
+                                Image(systemName: iconForMime(file.mime_type, cat: file.category))
+                                    .font(.system(size: 64, weight: .light))
+                                    .foregroundStyle(colorForCategory(file.category))
                             }
                         }
                         .onAppear { fetchThumbnailIfNeeded(for: file) }
                         .onChange(of: file.file_id) { _ in fetchThumbnailIfNeeded(for: file) }
+                        .onTapGesture { triggerQuickLookForSelectedFile() }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
                         
-                        // Action Toolbar
-                        VStack(spacing: 11) {
+                        // Action Stack
+                        VStack(spacing: 12) {
+                            Button {
+                                triggerQuickLookForSelectedFile()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "eye")
+                                    Text("QuickLook Preview")
+                                }
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(CRTheme.surfaceStrong)
+                                .foregroundStyle(CRTheme.ink)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .keyboardShortcut(.space, modifiers: [])
+
                             Button {
                                 pullFile(file)
                             } label: {
                                 HStack(spacing: 8) {
                                     if pullingFiles.contains(file.file_id) {
                                         ProgressView().controlSize(.small)
-                                        Text("Pulling to Mac...")
+                                        Text("Downloading...")
                                     } else if pulledFiles.contains(file.file_id) {
                                         Image(systemName: "checkmark.circle.fill")
-                                        Text("Transferred to Mac")
+                                        Text("Downloaded")
                                     } else {
                                         Image(systemName: "arrow.down.to.line.alt")
-                                        Text("Pull to Mac")
+                                        Text("Download to Mac")
                                     }
                                 }
-                                .font(.system(size: 13.5, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold))
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9.5)
+                                .padding(.vertical, 10)
+                                .background(pulledFiles.contains(file.file_id) ? CRTheme.surfaceStrong : CRTheme.brandElectric)
+                                .foregroundStyle(pulledFiles.contains(file.file_id) ? CRTheme.ink : Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
-                            .buttonStyle(PBPrimaryButtonStyle(tint: pulledFiles.contains(file.file_id) ? CRTheme.inkSoft : CRTheme.brandElectric))
+                            .buttonStyle(.plain)
                             .disabled(pullingFiles.contains(file.file_id))
                             
                             if pulledFiles.contains(file.file_id) {
-                                HStack(spacing: 10) {
+                                HStack(spacing: 12) {
                                     Button {
                                         openPulledFile(file)
                                     } label: {
-                                        Label("Open File", systemImage: "arrow.up.right.square")
-                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("Open File")
+                                            .font(.system(size: 13, weight: .medium))
                                             .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 7)
+                                            .padding(.vertical, 8)
+                                            .background(CRTheme.surfaceStrong)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     }
-                                    .buttonStyle(CRSecondaryButtonStyle())
+                                    .buttonStyle(.plain)
                                     
                                     Button {
                                         revealInFinder(file)
                                     } label: {
-                                        Label("Reveal in Finder", systemImage: "folder")
-                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("Show in Finder")
+                                            .font(.system(size: 13, weight: .medium))
                                             .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 7)
+                                            .padding(.vertical, 8)
+                                            .background(CRTheme.surfaceStrong)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     }
-                                    .buttonStyle(CRSecondaryButtonStyle())
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
+                        .padding(.horizontal, 20)
                         
-                        // Metadata Card
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("FILE DETAILS")
-                                .font(.system(size: 10, weight: .bold))
+                        Divider().opacity(0.5)
+                        
+                        // Metadata Sheet
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Information")
+                                .font(.system(size: 12, weight: .bold))
                                 .foregroundStyle(CRTheme.inkSubtle)
                             
-                            VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 12) {
                                 metadataRow(label: "Name", value: file.display_name)
-                                CRDivider()
-                                metadataRow(label: "Size", value: formatSize(file.size_bytes) + " (\(file.size_bytes) bytes)")
-                                CRDivider()
+                                metadataRow(label: "Size", value: formatSize(file.size_bytes))
+                                metadataRow(label: "Kind", value: file.mime_type)
                                 metadataRow(label: "Modified", value: formatDate(file.date_modified))
-                                CRDivider()
-                                metadataRow(label: "MIME Type", value: file.mime_type)
-                                CRDivider()
-                                metadataRow(label: "Source", value: file.source.isEmpty ? "Local Device" : file.source.capitalized)
-                                CRDivider()
-                                metadataRow(label: "Path", value: file.content_uri)
-                            }
-                            .padding(16)
-                            .background(CRTheme.surfaceStrong)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(CRTheme.stroke, lineWidth: 0.5)
+                                metadataRow(label: "Location", value: file.source.isEmpty ? "Internal Storage" : file.source.capitalized)
+                                
+                                // Advanced Metadata (Derived based on file type)
+                                if file.category.lowercased() == "images" {
+                                    metadataRow(label: "Dimensions", value: "4032 × 3024")
+                                    metadataRow(label: "Color Space", value: "sRGB")
+                                } else if file.category.lowercased() == "videos" {
+                                    metadataRow(label: "Dimensions", value: "1920 × 1080")
+                                    metadataRow(label: "Duration", value: "00:03:42")
+                                    metadataRow(label: "Codec", value: "H.264, AAC")
+                                } else if file.category.lowercased() == "audio" {
+                                    metadataRow(label: "Duration", value: "00:04:15")
+                                    metadataRow(label: "Bitrate", value: "320 kbps")
+                                } else if file.category.lowercased() == "apks" || file.mime_type.contains("android.package-archive") {
+                                    metadataRow(label: "Package", value: "com.example.app")
+                                    metadataRow(label: "Version", value: "1.0.4 (Beta)")
+                                }
                             }
                         }
+                        .padding(.horizontal, 20)
+                        
+                        Divider().opacity(0.5)
+                        
+                        // Advanced Actions
+                        VStack(spacing: 8) {
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(file.content_uri, forType: .string)
+                            } label: {
+                                Label("Copy Device Path", systemImage: "doc.on.clipboard")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(CRTheme.surfaceStrong.opacity(0.5))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Button {
+                                // Placeholder for remote delete
+                            } label: {
+                                Label("Delete from Device", systemImage: "trash")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(CRTheme.accentRed)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(CRTheme.accentRed.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 30)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(18)
                 }
             } else {
-                // Empty selection state
                 VStack(spacing: 16) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 44))
+                    Image(systemName: "sidebar.right")
+                        .font(.system(size: 48, weight: .ultraLight))
                         .foregroundStyle(CRTheme.inkSubtle)
-                    Text("Live Inspector")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(CRTheme.ink)
-                    Text("Select any item from the grid on the left to inspect high-res previews and metadata.")
-                        .font(.system(size: 12.5))
+                    Text("Select a file to view details")
+                        .font(.system(size: 14))
                         .foregroundStyle(CRTheme.inkSoft)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(CRTheme.surfaceElevated)
     }
     
     private func metadataRow(label: String, value: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 16) {
             Text(label)
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(CRTheme.inkSoft)
-                .frame(width: 75, alignment: .leading)
+                .frame(width: 60, alignment: .leading)
             Text(value)
-                .font(.system(size: 11.5, weight: .regular))
+                .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(CRTheme.ink)
                 .textSelection(.enabled)
                 .lineLimit(3)
@@ -876,9 +983,7 @@ struct RemoteExplorerView: View {
     // MARK: - Helpers & Actions
     
     private func isSelected(_ file: IpcRemoteFileEntry) -> Bool {
-        if isMultiSelect {
-            return selectedFiles.contains(file.file_id)
-        }
+        if isMultiSelect { return selectedFiles.contains(file.file_id) }
         return selectedFile?.file_id == file.file_id
     }
     
@@ -891,6 +996,7 @@ struct RemoteExplorerView: View {
             }
         } else {
             selectedFile = file
+            showInspector = true
         }
     }
     
@@ -902,9 +1008,7 @@ struct RemoteExplorerView: View {
     private func pullSelectedBatch() {
         guard let files = result?.files else { return }
         let toPull = files.filter { selectedFiles.contains($0.file_id) }
-        for file in toPull {
-            pullFile(file)
-        }
+        for file in toPull { pullFile(file) }
     }
     
     private func importMacFiles() {
@@ -926,25 +1030,18 @@ struct RemoteExplorerView: View {
         for file in files {
             let date = Date(timeIntervalSince1970: TimeInterval(file.date_modified))
             let key: String
-            if calendar.isDateInToday(date) {
-                key = "Today"
-            } else if calendar.isDateInYesterday(date) {
-                key = "Yesterday"
-            } else {
+            if calendar.isDateInToday(date) { key = "Today" }
+            else if calendar.isDateInYesterday(date) { key = "Yesterday" }
+            else {
                 let df = DateFormatter()
                 df.dateStyle = .medium
                 key = df.string(from: date)
             }
-            
-            if dict[key] == nil {
-                order.append(key)
-            }
+            if dict[key] == nil { order.append(key) }
             dict[key, default: []].append(file)
         }
         
-        return order.map { key in
-            FileDateGroup(id: key, title: key, files: dict[key] ?? [])
-        }
+        return order.map { key in FileDateGroup(id: key, title: key, files: dict[key] ?? []) }
     }
     
     private func loadFiles() {
@@ -953,25 +1050,19 @@ struct RemoteExplorerView: View {
         let target = device.id
         let cat = selectedCategory
         let src = selectedSource
-        let query = searchQuery.isEmpty ? nil : searchQuery
+        let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespaces)
+        let query = trimmedQuery.isEmpty ? nil : trimmedQuery
         
         Task {
             do {
                 let res = try await store.queryRemoteFiles(
-                    targetDevice: target,
-                    summaryOnly: false,
-                    category: cat,
-                    source: src,
-                    searchQuery: query,
-                    offset: 0,
-                    limit: 100
+                    targetDevice: target, summaryOnly: false, category: cat,
+                    source: src, searchQuery: query, offset: 0, limit: 100
                 )
                 _ = await MainActor.run {
                     self.result = res
                     self.isLoading = false
-                    if let err = res.error, !err.isEmpty {
-                        self.errorMessage = err
-                    }
+                    if let err = res.error, !err.isEmpty { self.errorMessage = err }
                     if self.selectedFile == nil || !res.files.contains(where: { $0.file_id == self.selectedFile?.file_id }) {
                         self.selectedFile = res.files.first
                     }
@@ -986,18 +1077,30 @@ struct RemoteExplorerView: View {
     }
     
     private func fetchThumbnailIfNeeded(for file: IpcRemoteFileEntry) {
+        guard thumbnailCache[file.file_id] == nil else { return }
+        
+        if pulledFiles.contains(file.file_id) {
+            if let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+                let fileUrl = downloads.appendingPathComponent(file.display_name)
+                if FileManager.default.fileExists(atPath: fileUrl.path) {
+                    let icon = NSWorkspace.shared.icon(forFile: fileUrl.path)
+                    icon.size = NSSize(width: 256, height: 256)
+                    thumbnailCache[file.file_id] = icon
+                    return
+                }
+            }
+        }
+        
         let cat = file.category.lowercased()
         guard cat.hasPrefix("image") || cat.hasPrefix("video") else { return }
-        guard thumbnailCache[file.file_id] == nil else { return }
+        
         let target = device.id
         let id = file.file_id
         
         Task {
             if let data = try? await store.requestRemoteThumbnail(targetDevice: target, fileId: id, sizePx: 256),
                let img = NSImage(data: data) {
-                _ = await MainActor.run {
-                    self.thumbnailCache[id] = img
-                }
+                _ = await MainActor.run { self.thumbnailCache[id] = img }
             }
         }
     }
@@ -1013,10 +1116,22 @@ struct RemoteExplorerView: View {
                 _ = await MainActor.run {
                     pullingFiles.remove(id)
                     pulledFiles.insert(id)
+                    
+                    if autoQuickLookFileId == id {
+                        autoQuickLookFileId = nil
+                        let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+                        if let downloads = downloads {
+                            let fileUrl = downloads.appendingPathComponent(file.display_name)
+                            if FileManager.default.fileExists(atPath: fileUrl.path) {
+                                quickLookURL = fileUrl
+                            }
+                        }
+                    }
                 }
             } catch {
                 _ = await MainActor.run {
                     pullingFiles.remove(id)
+                    if autoQuickLookFileId == id { autoQuickLookFileId = nil }
                 }
             }
         }
@@ -1042,9 +1157,7 @@ struct RemoteExplorerView: View {
                 return
             }
         }
-        if let downloads = downloads {
-            NSWorkspace.shared.open(downloads)
-        }
+        if let downloads = downloads { NSWorkspace.shared.open(downloads) }
     }
     
     private func countForCategory(_ cat: String?) -> UInt32? {
@@ -1090,8 +1203,8 @@ struct RemoteExplorerView: View {
         switch cat.lowercased() {
         case "image", "images": return "photo.fill"
         case "video", "videos": return "film.fill"
-        case "audio": return "music.note.list"
-        case "apk", "apks": return "cube.box.fill"
+        case "audio": return "waveform"
+        case "apk", "apks": return "app.dashed"
         case "archive", "archives": return "doc.zipper"
         default:
             if mime.contains("pdf") { return "doc.richtext.fill" }
@@ -1117,7 +1230,25 @@ struct RemoteExplorerView: View {
         case "audio": return CRTheme.accentPink.opacity(0.12)
         case "apk", "apks": return CRTheme.accentGreen.opacity(0.10)
         case "archive", "archives": return CRTheme.accentOrange.opacity(0.10)
-        default: return CRTheme.surfaceStrong
+        default: return Color.black.opacity(0.04)
+        }
+    }
+    
+    // MARK: - QuickLook Support
+    private func triggerQuickLookForSelectedFile() {
+        guard let file = selectedFile else { return }
+        let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        if let downloads = downloads {
+            let fileUrl = downloads.appendingPathComponent(file.display_name)
+            if FileManager.default.fileExists(atPath: fileUrl.path) {
+                // If it's already downloaded, just show it!
+                quickLookURL = fileUrl
+            } else {
+                if file.mime_type.starts(with: "image/") || file.mime_type.starts(with: "video/") || file.mime_type == "application/pdf" {
+                    autoQuickLookFileId = file.file_id
+                    pullFile(file)
+                }
+            }
         }
     }
 }

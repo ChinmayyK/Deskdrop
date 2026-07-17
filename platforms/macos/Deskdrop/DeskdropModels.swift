@@ -33,6 +33,7 @@ struct PeerViewModel: Identifiable, Equatable {
 
     // ── Timing ────────────────────────────────────────────────────────────────
     let lastSeen: Date?
+    let lastDiscoveryAt: Date?
     let lastSync: Date?
     let ip: String?
 
@@ -264,4 +265,16 @@ struct DeviceNetworkState: Equatable, Identifiable {
     let deviceId: String
     let deviceName: String
     let networkType: String
+}
+
+/// Device storage status.
+struct DeviceStorageState: Equatable, Identifiable {
+    var id: String { deviceId }
+    let deviceId: String
+    let deviceName: String
+    let imagesBytes: Int64
+    let videosBytes: Int64
+    let appsBytes: Int64
+    let freeBytes: Int64
+    let totalBytes: Int64
 }

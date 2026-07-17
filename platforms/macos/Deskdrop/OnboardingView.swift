@@ -7,14 +7,14 @@ struct RootContainerView: View {
     var body: some View {
         Group {
             if hasCompletedOnboarding {
-                DashboardRootView(store: store)
+                CommandCenterRootView(store: store)
             } else {
                 OnboardingView(store: store, onComplete: {
                     hasCompletedOnboarding = true
                 })
             }
         }
-        .frame(minWidth: 1020, minHeight: 700)
+        .frame(minWidth: 1200, minHeight: 760)
     }
 }
 
