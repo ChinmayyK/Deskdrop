@@ -111,7 +111,9 @@ namespace Deskdrop.Windows
             }
 
             // We are trusted. Did we receive anything recently?
-            bool hasRecentActivity = DeskdropStore.Shared.ActivityFeed.Any(a => a.source == peer.device_id && DateTimeOffset.FromUnixTimeSeconds((long)a.timestamp).UtcDateTime > _sessionStartTime.ToUniversalTime());
+            bool hasRecentActivity = DeskdropStore.Shared.ActivityFeed.Any(a =>
+                a.device_id == peer.device_id
+                && DateTimeOffset.FromUnixTimeMilliseconds((long)a.timestamp_ms).UtcDateTime > _sessionStartTime.ToUniversalTime());
             
             if (hasRecentActivity)
             {

@@ -4,6 +4,8 @@
                     xmlns:local="clr-namespace:Deskdrop.Windows">
 
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+        <local:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibilityConverter"/>
         
         <Storyboard x:Key="FadeInTransition">
             <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25">
@@ -63,10 +65,13 @@
         <!-- macOS CRTheme Palette (Light Mode) -->
         <Color x:Key="BrandElectricColor">#0055CC</Color>
         <SolidColorBrush x:Key="BrandElectric" Color="{StaticResource BrandElectricColor}"/>
+        <SolidColorBrush x:Key="BrandBlue" Color="{StaticResource BrandElectricColor}"/>
         <SolidColorBrush x:Key="BrandViolet" Color="#5E5CE6"/>
         <SolidColorBrush x:Key="BrandCyan" Color="#32ADE6"/>
         <SolidColorBrush x:Key="BrandGreen" Color="#34C759"/>
         <SolidColorBrush x:Key="BrandRed" Color="#FF3B30"/>
+        <SolidColorBrush x:Key="BrandOrange" Color="#FF9500"/>
+        <SolidColorBrush x:Key="AccentGold" Color="#AF52DE"/>
         
         <SolidColorBrush x:Key="SurfaceElevated" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="SurfaceStrong" Color="#F5F5F5"/>
@@ -78,6 +83,8 @@
         <SolidColorBrush x:Key="InkSubtle" Color="#66000000"/> <!-- 40% Black -->
         <SolidColorBrush x:Key="Stroke" Color="#1A000000"/> <!-- 10% Black -->
         <SolidColorBrush x:Key="StrokeSoft" Color="#0D000000"/> <!-- 5% Black -->
+        <SolidColorBrush x:Key="RowHover" Color="#0A000000"/>
+        <SolidColorBrush x:Key="RowSelected" Color="#14000000"/>
 
         <!-- macOS Traffic Light Colors -->
         <SolidColorBrush x:Key="MacRed" Color="#FF5F56"/>
@@ -130,13 +137,13 @@
                                 <Setter Property="Foreground" Value="{StaticResource Ink}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource BrandElectric}"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource RowSelected}"/>
                                 <Setter TargetName="border" Property="Effect">
                                     <Setter.Value>
-                                        <DropShadowEffect Color="#0055CC" Opacity="0.35" BlurRadius="8" ShadowDepth="0"/>
+                                        <DropShadowEffect Color="Black" Opacity="0.06" BlurRadius="8" ShadowDepth="2"/>
                                     </Setter.Value>
                                 </Setter>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Foreground" Value="{StaticResource BrandElectric}"/>
                                 <Setter TargetName="label" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -232,6 +239,15 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <Style x:Key="CircleIconButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="#0D000000"/>
+            <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+            <Setter Property="BorderThickness" Value="0"/>
         </Style>
 
         <!-- Standard ScrollViewer -->

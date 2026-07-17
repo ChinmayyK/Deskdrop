@@ -154,6 +154,12 @@ namespace Deskdrop.Windows
         public static JsonDocument? PushText(string text) =>
             Send(new { cmd = "push_text", text });
 
+        public static JsonDocument? PushTextTo(string text, string targetDevice) =>
+            Send(new { cmd = "push_text_to", text, target = targetDevice });
+
+        public static JsonDocument? PushClipboard(string? targetDeviceId = null) =>
+            Send(new { cmd = "push_clipboard", target_device_id = targetDeviceId });
+
         public static JsonDocument? SetSyncEnabled(bool enabled) =>
             Send(new { cmd = "set_sync_enabled", enabled });
 
@@ -173,8 +179,11 @@ namespace Deskdrop.Windows
         public static JsonDocument? PauseFileTransfer(string transferId) => Send(new { cmd = "pause_file_transfer", transfer_id = transferId });
         public static JsonDocument? ResumeFileTransfer(string transferId) => Send(new { cmd = "resume_file_transfer", transfer_id = transferId });
         public static JsonDocument? CancelFileTransfer(string transferId) => Send(new { cmd = "cancel_file_transfer", transfer_id = transferId });
+        public static JsonDocument? StartSpeedTest(string deviceId, int durationSecs = 10) => Send(new { cmd = "start_speed_test", device_id = deviceId, duration_secs = durationSecs });
 
         // ── Device Management ─────────────────────────────────────────────────
+        public static JsonDocument? DisconnectAllPeers() => Send(new { cmd = "disconnect_all_peers" });
+        public static JsonDocument? RescanPeers() => Send(new { cmd = "rescan_peers" });
         public static JsonDocument? RenameTrustedDevice(string deviceId, string displayName) => Send(new { cmd = "rename_trusted_device", device_id = deviceId, display_name = displayName });
         public static JsonDocument? PauseSyncPeer(string deviceId) => Send(new { cmd = "pause_sync_peer", device_id = deviceId });
         public static JsonDocument? ResumeSyncPeer(string deviceId) => Send(new { cmd = "resume_sync_peer", device_id = deviceId });
@@ -185,7 +194,15 @@ namespace Deskdrop.Windows
         public static JsonDocument? ActivityRecent(int limit) => Send(new { cmd = "activity_recent", limit });
         public static JsonDocument? PendingRemoteClipboards() => Send(new { cmd = "pending_remote_clipboards" });
         public static JsonDocument? ApplyClipboard(string contentHash) => Send(new { cmd = "apply_clipboard", content_hash = contentHash });
+        public static JsonDocument? GetSettings() => Send(new { cmd = "get_settings" });
         public static JsonDocument? GetMetrics() => Send(new { cmd = "get_metrics" });
+
+        // ── Remote File Explorer ──────────────────────────────────────────────
+        public static async Task<JsonDocument?> RemoteFileListRequestAsync(string deviceId, string path) =>
+            await SendAsync(new { cmd = "remote_file_list_request", target_device = deviceId, path = path });
+            
+        public static JsonDocument? RemoteFileActionRequest(string deviceId, string action, string path) =>
+            Send(new { cmd = "remote_file_action_request", target_device = deviceId, action = action, path = path });
 
         public static JsonDocument? Shutdown() => Send(new { cmd = "shutdown" });
         

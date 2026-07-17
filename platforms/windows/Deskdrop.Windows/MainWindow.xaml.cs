@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Specialized;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -15,31 +17,56 @@ namespace Deskdrop.Windows
         private bool _isBroadcasting;
         private bool _hasCompletedOnboarding = false;
         private string _activeCallDeviceId = "";
+        private string _activityFilter = "all";
         private System.ComponentModel.PropertyChangedEventHandler? _storePropertyChangedHandler;
+        private NotifyCollectionChangedEventHandler? _activityFeedChangedHandler;
+        private NotifyCollectionChangedEventHandler? _peersChangedHandler;
 
         public MainWindow(ClipboardManager clipboardManager)
         {
             InitializeComponent();
+            DataContext = DeskdropStore.Shared;
             _clipboardManager = clipboardManager;
             _clipboardManager.HistoryItemAdded += OnHistoryItemAdded;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             _clipboardManager.SystemHealthUpdated += OnSystemHealthUpdated;
-            LoadDevicesView();
             
             // Bind UI lists to the global store
             if (ActiveTransfersList != null) ActiveTransfersList.ItemsSource = DeskdropStore.Shared.ActiveTransfers;
+            if (ActiveSpeedTestsList != null) ActiveSpeedTestsList.ItemsSource = DeskdropStore.Shared.ActiveSpeedTests;
             if (DevicesList != null) DevicesList.ItemsSource = DeskdropStore.Shared.Peers;
+            if (PendingClipboardList != null) PendingClipboardList.ItemsSource = DeskdropStore.Shared.PendingClipboards;
+
+            _activityFeedChangedHandler = (_, _) => Dispatcher.Invoke(() =>
+            {
+                RefreshActivityFeedList();
+                RefreshTransferHistoryList();
+            });
+            DeskdropStore.Shared.ActivityFeed.CollectionChanged += _activityFeedChangedHandler;
+
+            _peersChangedHandler = (_, _) => Dispatcher.Invoke(() =>
+            {
+                RefreshDevicesListUI();
+                if (CommandPaletteOverlay.Visibility == Visibility.Visible) RefreshCommandList();
+            });
+            DeskdropStore.Shared.Peers.CollectionChanged += _peersChangedHandler;
             
             _storePropertyChangedHandler = (s, e) => {
-                if (e.PropertyName == nameof(DeskdropStore.IsDaemonRunning) || e.PropertyName == nameof(DeskdropStore.Peers))
+                if (e.PropertyName == nameof(DeskdropStore.IsDaemonRunning)
+                    || e.PropertyName == nameof(DeskdropStore.ActiveCall)
+                    || e.PropertyName == nameof(DeskdropStore.ConnectedCount)
+                    || e.PropertyName == nameof(DeskdropStore.AttentionCount))
                 {
                     Dispatcher.Invoke(() => {
                         UpdateOnboardingStatus(DeskdropStore.Shared.Peers.ToList());
+                        RefreshDevicesListUI();
                         RefreshDiagnosticsStateUI();
                     });
                 }
             };
             DeskdropStore.Shared.PropertyChanged += _storePropertyChangedHandler;
+            DeskdropStore.Shared.UpdateStateFromDaemon();
+            LoadDevicesView();
         }
 
         protected override void OnClosed(EventArgs e)
@@ -48,6 +75,16 @@ namespace Deskdrop.Windows
             {
                 DeskdropStore.Shared.PropertyChanged -= _storePropertyChangedHandler;
                 _storePropertyChangedHandler = null;
+            }
+            if (_activityFeedChangedHandler != null)
+            {
+                DeskdropStore.Shared.ActivityFeed.CollectionChanged -= _activityFeedChangedHandler;
+                _activityFeedChangedHandler = null;
+            }
+            if (_peersChangedHandler != null)
+            {
+                DeskdropStore.Shared.Peers.CollectionChanged -= _peersChangedHandler;
+                _peersChangedHandler = null;
             }
             if (_clipboardManager != null)
             {
@@ -87,15 +124,9 @@ namespace Deskdrop.Windows
         private void LoadTransfersView()
         {
             HideAllViews();
+            if (NavBtnTransfers != null) NavBtnTransfers.IsChecked = true;
             if (TransfersView != null) AnimateView(TransfersView);
-            
-            // Populate history
-            if (TransfersHistoryList != null)
-            {
-                TransfersHistoryList.ItemsSource = _clipboardManager.GetHistory()
-                    .Where(h => h.TypeIcon == "📎" || h.Summary.Contains("File"))
-                    .ToList();
-            }
+            RefreshTransferHistoryList();
         }
 
         private void HideAllViews()
@@ -117,12 +148,70 @@ namespace Deskdrop.Windows
         private void LoadActivityView()
         {
             HideAllViews();
+            if (NavBtnActivity != null) NavBtnActivity.IsChecked = true;
             if (ActivityView != null) AnimateView(ActivityView);
-            if (ActivityFeedList != null)
-            {
-                ActivityFeedList.ItemsSource = _clipboardManager.GetHistory().ToList();
-            }
+            RefreshActivityFeedList();
         }
+
+        private void TxtActivitySearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            RefreshActivityFeedList();
+        }
+
+        private void ActivityFilter_Checked(object sender, RoutedEventArgs e)
+        {
+            _activityFilter = (sender as FrameworkElement)?.Tag?.ToString() ?? "all";
+            RefreshActivityFeedList();
+        }
+
+        private void RefreshActivityFeedList()
+        {
+            if (ActivityFeedList == null) return;
+
+            var query = TxtActivitySearch?.Text?.Trim() ?? "";
+            ActivityFeedList.ItemsSource = DeskdropStore.Shared.ActivityFeed
+                .Where(entry => MatchesActivityFilter(entry) && MatchesActivityQuery(entry, query))
+                .OrderByDescending(entry => entry.timestamp_ms)
+                .ToList();
+        }
+
+        private void RefreshTransferHistoryList()
+        {
+            if (TransfersHistoryList == null) return;
+
+            TransfersHistoryList.ItemsSource = DeskdropStore.Shared.ActivityFeed
+                .Where(entry => entry.kind.Contains("file_transfer", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(entry => entry.timestamp_ms)
+                .ToList();
+        }
+
+        private bool MatchesActivityFilter(ActivityEntry entry)
+        {
+            var kind = entry.kind ?? "";
+            return _activityFilter switch
+            {
+                "text" => kind.Contains("clipboard", StringComparison.OrdinalIgnoreCase) && !kind.Contains("image", StringComparison.OrdinalIgnoreCase),
+                "image" => kind.Contains("image", StringComparison.OrdinalIgnoreCase),
+                "file" => kind.Contains("file", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(entry.file_name),
+                "device" => kind.Contains("peer", StringComparison.OrdinalIgnoreCase) || kind.Contains("sync", StringComparison.OrdinalIgnoreCase) || kind.Contains("notification", StringComparison.OrdinalIgnoreCase),
+                _ => true
+            };
+        }
+
+        private static bool MatchesActivityQuery(ActivityEntry entry, string query)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return true;
+
+            return Contains(entry.Title, query)
+                || Contains(entry.Preview, query)
+                || Contains(entry.Source, query)
+                || Contains(entry.kind, query)
+                || Contains(entry.file_name, query)
+                || Contains(entry.dest_path, query);
+        }
+
+        private static bool Contains(string? value, string query) =>
+            !string.IsNullOrWhiteSpace(value) && value.Contains(query, StringComparison.OrdinalIgnoreCase);
 
         private void OnQuickContextUpdated(string? text)
         {
@@ -233,6 +322,12 @@ namespace Deskdrop.Windows
             }
         }
 
+        private void HeaderSearch_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            ToggleCommandPalette();
+            e.Handled = true;
+        }
+
         private void TxtCommandInput_TextChanged(object sender, TextChangedEventArgs e)
         {
             RefreshCommandList();
@@ -240,21 +335,21 @@ namespace Deskdrop.Windows
 
         private void RefreshCommandList()
         {
-            var query = TxtCommandInput.Text.ToLowerInvariant();
+            var query = TxtCommandInput.Text?.Trim() ?? "";
             var allCommands = new System.Collections.Generic.List<PaletteCommand>
             {
-                new PaletteCommand { Title = "Send a File", Icon = "📎", Action = "SendFile" },
-                new PaletteCommand { Title = "Show Magic Link (QR)", Icon = "📱", Action = "ShowQR" },
-                new PaletteCommand { Title = "View Diagnostics", Icon = "🔧", Action = "Diagnostics" },
-                new PaletteCommand { Title = "Settings", Icon = "⚙", Action = "Settings" },
-                new PaletteCommand { Title = "Quit Deskdrop", Icon = "🛑", Action = "Quit" }
+                new PaletteCommand { Title = "Send a File", Icon = "Send", Action = "SendFile" },
+                new PaletteCommand { Title = "Show Magic Link (QR)", Icon = "QrCode", Action = "ShowQR" },
+                new PaletteCommand { Title = "View Diagnostics", Icon = "Wrench", Action = "Diagnostics" },
+                new PaletteCommand { Title = "Settings", Icon = "Settings", Action = "Settings" },
+                new PaletteCommand { Title = "Quit Deskdrop", Icon = "Power", Action = "Quit" }
             };
 
             foreach (var peer in DeskdropStore.Shared.Peers)
             {
                 allCommands.Insert(0, new PaletteCommand {
-                    Title = $"Send Clipboard to {peer.friendly_name}",
-                    Icon = "📋",
+                    Title = $"Send Clipboard to {peer.DisplayName}",
+                    Icon = "Clipboard",
                     Action = "SendClipboardToTarget",
                     Target = peer.device_id
                 });
@@ -262,7 +357,7 @@ namespace Deskdrop.Windows
 
             var filtered = string.IsNullOrWhiteSpace(query)
                 ? allCommands
-                : allCommands.Where(c => c.Title.ToLowerInvariant().Contains(query)).ToList();
+                : allCommands.Where(c => c.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
 
             CommandList.ItemsSource = filtered;
             if (filtered.Count > 0)
@@ -311,12 +406,12 @@ namespace Deskdrop.Windows
                             
                             if (!string.IsNullOrEmpty(clipboardText))
                             {
-                                DaemonClient.Send(new {
-                                    cmd = "push_clipboard",
-                                    target_device = cmd.Target,
-                                    text = clipboardText
-                                });
+                                DaemonClient.PushTextTo(clipboardText, cmd.Target);
                                 Dispatcher.Invoke(() => ShowToast("Clipboard sent."));
+                            }
+                            else
+                            {
+                                Dispatcher.Invoke(() => ShowToast("Clipboard is empty.", true));
                             }
                         });
                         break;
@@ -371,8 +466,12 @@ namespace Deskdrop.Windows
         private void NavScan_Click(object sender, RoutedEventArgs e)
         {
             // Trigger network rescan via the daemon
-            DaemonClient.Send(new { cmd = "rescan_peers" });
-            if (HeaderStatusText != null) HeaderStatusText.Text = "Scanning…";
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                DaemonClient.Send(new { cmd = "rescan_peers" });
+                DeskdropStore.Shared.UpdateStateFromDaemon();
+            });
+            ShowToast("Scanning for nearby devices...");
         }
 
         private void LoadDiagnosticsView()
@@ -492,6 +591,7 @@ namespace Deskdrop.Windows
         private void LoadDevicesView()
         {
             HideAllViews();
+            if (NavBtnDevices != null) NavBtnDevices.IsChecked = true;
             if (DevicesView != null) AnimateView(DevicesView);
             
             RefreshDevicesListUI();
@@ -648,20 +748,34 @@ namespace Deskdrop.Windows
             }
         }
 
+        private void BtnStartSpeedTest_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        DaemonClient.StartSpeedTest(deviceId, 10);
+                        DeskdropStore.Shared.UpdateStateFromDaemon();
+                        Dispatcher.Invoke(() => ShowToast("Speed test started."));
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() => ShowToast($"Speed test failed: {ex.Message}", true));
+                    }
+                });
+            }
+        }
+
         private void BtnFilesDevice_Click(object sender, RoutedEventArgs e)
         {
             if (sender is System.Windows.Controls.Button btn && btn.Tag is string deviceId)
             {
-                var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = false };
-                if (dialog.ShowDialog() == true)
-                {
-                    System.Threading.Tasks.Task.Run(() =>
-                    {
-                        var path = dialog.FileName;
-                        var name = System.IO.Path.GetFileName(path);
-                        DaemonClient.Send(new { cmd = "send_file_path", path = path, name = name, mime = "application/octet-stream", target_device = deviceId });
-                    });
-                }
+                var deviceName = DeskdropStore.Shared.Peers.FirstOrDefault(p => p.device_id == deviceId)?.DisplayName ?? "Device";
+                var explorer = new RemoteExplorerWindow(deviceId, deviceName);
+                explorer.Owner = this;
+                explorer.Show();
             }
         }
 
@@ -751,17 +865,35 @@ namespace Deskdrop.Windows
 
             System.Threading.Tasks.Task.Run(() =>
             {
-                var settingsDoc = DaemonClient.Send(new { cmd = "get_settings" });
-                if (settingsDoc != null && settingsDoc.RootElement.TryGetProperty("settings", out var settings))
+                var settingsDoc = DaemonClient.GetSettings();
+                if (settingsDoc != null)
                 {
-                    Dispatcher.Invoke(() =>
+                    var root = settingsDoc.RootElement;
+                    JsonElement settings = default;
+                    if (root.TryGetProperty("data", out var data))
                     {
-                        if (settings.TryGetProperty("sync_enabled", out var sync)) ChkSyncEnabled.IsChecked = sync.GetBoolean();
-                        if (settings.TryGetProperty("show_receive_notification", out var notif)) ChkShowNotifications.IsChecked = notif.GetBoolean();
-                        if (settings.TryGetProperty("require_tofu_confirmation", out var tofu)) ChkRequireTofu.IsChecked = tofu.GetBoolean();
-                        if (settings.TryGetProperty("auto_accept_file_transfers", out var autoAccept)) ChkAutoAcceptFiles.IsChecked = autoAccept.GetBoolean();
-                        if (settings.TryGetProperty("device_name", out var devName)) TxtDeviceName.Text = devName.GetString() ?? "";
-                    });
+                        settings = data;
+                    }
+                    else if (root.TryGetProperty("settings", out var wrapped))
+                    {
+                        settings = wrapped;
+                    }
+                    else if (root.ValueKind == JsonValueKind.Object)
+                    {
+                        settings = root;
+                    }
+
+                    if (settings.ValueKind == JsonValueKind.Object)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            if (settings.TryGetProperty("sync_enabled", out var sync)) ChkSyncEnabled.IsChecked = sync.GetBoolean();
+                            if (settings.TryGetProperty("show_receive_notification", out var notif)) ChkShowNotifications.IsChecked = notif.GetBoolean();
+                            if (settings.TryGetProperty("require_tofu_confirmation", out var tofu)) ChkRequireTofu.IsChecked = tofu.GetBoolean();
+                            if (settings.TryGetProperty("auto_accept_file_transfers", out var autoAccept)) ChkAutoAcceptFiles.IsChecked = autoAccept.GetBoolean();
+                            if (settings.TryGetProperty("device_name", out var devName)) TxtDeviceName.Text = devName.GetString() ?? "";
+                        });
+                    }
                 }
             });
         }
@@ -770,6 +902,10 @@ namespace Deskdrop.Windows
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Deskdrop");
             key.SetValue("EnableHotkeys", ChkEnableHotkeys.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            key.SetValue("SyncEnabled", ChkSyncEnabled.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            key.SetValue("RequireTofu", ChkRequireTofu.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            key.SetValue("ShowNotifications", ChkShowNotifications.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            key.SetValue("AutoAcceptFiles", ChkAutoAcceptFiles.IsChecked == true ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
 
             try
             {
@@ -802,8 +938,9 @@ namespace Deskdrop.Windows
                     device_name = string.IsNullOrWhiteSpace(TxtDeviceName.Text) ? null : TxtDeviceName.Text,
                     require_tofu_confirmation = ChkRequireTofu.IsChecked == true,
                     show_receive_notification = ChkShowNotifications.IsChecked == true,
-                    auto_accept_file_transfers = ChkAutoAcceptFiles.IsChecked == true,
                 });
+                DaemonClient.PatchSettings(new { auto_accept_file_transfers = ChkAutoAcceptFiles.IsChecked == true });
+                DeskdropStore.Shared.UpdateStateFromDaemon();
             });
             
             ShowToast("Settings saved");
@@ -1097,16 +1234,17 @@ namespace Deskdrop.Windows
                     try
                     {
                         if (transfer.status == "incoming") DaemonClient.AcceptFileTransfer(transfer.transfer_id);
-                        else if (transfer.status == "in_progress") DaemonClient.PauseFileTransfer(transfer.transfer_id);
+                        else if (transfer.status == "in_progress" || transfer.status == "transferring" || transfer.status == "verifying") DaemonClient.PauseFileTransfer(transfer.transfer_id);
                         else if (transfer.status == "paused") DaemonClient.ResumeFileTransfer(transfer.transfer_id);
-                        else if (transfer.status == "completed" && !string.IsNullOrEmpty(transfer.destination))
+                        else if ((transfer.status == "completed" || transfer.status == "complete") && !string.IsNullOrEmpty(transfer.destination))
                         {
-                            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{transfer.destination}\"");
+                            RevealPath(transfer.destination);
                         }
+                        DeskdropStore.Shared.UpdateStateFromDaemon();
                     }
                     catch (Exception ex)
                     {
-                        System.Windows.Application.Current?.Dispatcher.Invoke(() => ShowToast($"Transfer action failed: {ex.Message}"));
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => ShowToast($"Transfer action failed: {ex.Message}", true));
                     }
                 });
             }
@@ -1121,19 +1259,56 @@ namespace Deskdrop.Windows
                     try
                     {
                         if (transfer.status == "incoming") DaemonClient.RejectFileTransfer(transfer.transfer_id, "User rejected");
-                        else if (transfer.status == "in_progress" || transfer.status == "paused") DaemonClient.CancelFileTransfer(transfer.transfer_id);
+                        else if (transfer.status == "in_progress" || transfer.status == "transferring" || transfer.status == "paused" || transfer.status == "verifying") DaemonClient.CancelFileTransfer(transfer.transfer_id);
+                        DeskdropStore.Shared.UpdateStateFromDaemon();
                     }
                     catch (Exception ex)
                     {
-                        System.Windows.Application.Current?.Dispatcher.Invoke(() => ShowToast($"Transfer action failed: {ex.Message}"));
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => ShowToast($"Transfer action failed: {ex.Message}", true));
                     }
                 });
             }
         }
 
+        private void BtnApplyPendingClipboard_Click(object sender, RoutedEventArgs e)
+        {
+            string? contentHash = null;
+            if ((sender as FrameworkElement)?.Tag is string tag && !string.IsNullOrWhiteSpace(tag))
+            {
+                contentHash = tag;
+            }
+            else if ((sender as FrameworkElement)?.DataContext is ActivityEntry entry)
+            {
+                contentHash = entry.content_hash;
+            }
+            else if ((sender as FrameworkElement)?.DataContext is PendingClipboard clip)
+            {
+                contentHash = clip.content_hash;
+            }
+
+            if (!string.IsNullOrWhiteSpace(contentHash))
+            {
+                ApplyPendingClipboard(contentHash);
+            }
+            e.Handled = true;
+        }
+
+        private void BtnOpenActivityItem_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is ActivityEntry entry)
+            {
+                OpenActivityEntry(entry);
+            }
+            e.Handled = true;
+        }
+
         private void ActivityFeedItem_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is HistoryItem item)
+            if ((sender as FrameworkElement)?.DataContext is ActivityEntry entry)
+            {
+                OpenActivityEntry(entry);
+            }
+            else if ((sender as FrameworkElement)?.DataContext is HistoryItem item)
             {
                 if (item.TypeIcon == "📎")
                 {
@@ -1156,8 +1331,110 @@ namespace Deskdrop.Windows
 
         private void TransferHistoryItem_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            ActivityFeedItem_Click(sender, e);
+            if ((sender as FrameworkElement)?.DataContext is ActivityEntry entry)
+            {
+                OpenActivityEntry(entry);
+            }
+            else
+            {
+                ActivityFeedItem_Click(sender, e);
+            }
+        }
+
+        private void ApplyPendingClipboard(string contentHash)
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var response = DaemonClient.ApplyClipboard(contentHash);
+                    DeskdropStore.Shared.UpdateStateFromDaemon();
+                    Dispatcher.Invoke(() =>
+                    {
+                        ShowToast(response == null ? "Deskdrop engine is unreachable." : "Clipboard applied.", response == null);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() => ShowToast($"Could not apply clipboard: {ex.Message}", true));
+                }
+            });
+        }
+
+        private void OpenActivityEntry(ActivityEntry entry)
+        {
+            if (entry.CanApply && !string.IsNullOrWhiteSpace(entry.content_hash))
+            {
+                ApplyPendingClipboard(entry.content_hash);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(entry.dest_path))
+            {
+                RevealPath(entry.dest_path);
+                return;
+            }
+
+            var text = !string.IsNullOrWhiteSpace(entry.text_preview) ? entry.text_preview : entry.summary;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                System.Windows.Clipboard.SetText(text);
+                ShowToast("Copied to clipboard.");
+            }
+        }
+
+        private void BtnPauseSync_Click(object sender, RoutedEventArgs e)
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                DaemonClient.SetSyncEnabled(false);
+                DeskdropStore.Shared.UpdateStateFromDaemon();
+                Dispatcher.Invoke(() => ShowToast("Sync paused."));
+            });
+        }
+
+        private void BtnResumeSync_Click(object sender, RoutedEventArgs e)
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                DaemonClient.SetSyncEnabled(true);
+                DeskdropStore.Shared.UpdateStateFromDaemon();
+                Dispatcher.Invoke(() => ShowToast("Sync resumed."));
+            });
+        }
+
+        private void BtnScanNow_Click(object sender, RoutedEventArgs e)
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                DaemonClient.RescanPeers();
+                Dispatcher.Invoke(() => ShowToast("Scanning for peers..."));
+            });
+        }
+
+        private void BtnStopService_Click(object sender, RoutedEventArgs e)
+        {
+            var result = MessageBox.Show(this, "Are you sure you want to stop the Deskdrop service? The app will close.", "Stop Service", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (result == MessageBoxResult.Yes)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    DaemonClient.Shutdown();
+                    Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown());
+                });
+            }
+        }
+
+        private static void RevealPath(string path)
+        {
+            if (System.IO.File.Exists(path))
+            {
+                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+            }
+            else if (System.IO.Directory.Exists(path))
+            {
+                System.Diagnostics.Process.Start("explorer.exe", $"\"{path}\"");
+            }
         }
     }
 }
-

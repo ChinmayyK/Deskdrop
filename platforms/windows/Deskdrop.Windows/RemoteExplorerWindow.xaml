@@ -1,0 +1,118 @@
+<Window x:Class="Deskdrop.Windows.RemoteExplorerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        xmlns:local="clr-namespace:Deskdrop.Windows"
+        Title="Remote Explorer" Height="600" Width="800"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Surface}"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        FontFamily="Segoe UI">
+
+    <Window.Resources>
+        <ResourceDictionary Source="AppStyles.xaml" />
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource StrokeSoft}" BorderThickness="0,0,0,1" Padding="24,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
+                    <Button Style="{StaticResource CircleIconButton}" Click="BtnBack_Click" ToolTip="Go Back">
+                        <iconPacks:PackIconLucide Kind="ChevronLeft" Width="16" Height="16"/>
+                    </Button>
+                    <TextBlock Text="{Binding CurrentPath}" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Ink}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="2" VerticalAlignment="Center">
+                    <ToggleButton x:Name="BtnSelectMode" Style="{StaticResource ModernButton}" Content="Select" Padding="12,6" Checked="BtnSelectMode_CheckedChanged" Unchecked="BtnSelectMode_CheckedChanged"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Loading State -->
+        <Grid Grid.Row="1" x:Name="LoadingSpinner" Visibility="Collapsed">
+            <TextBlock Text="Loading..." HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource InkSoft}" FontSize="14"/>
+        </Grid>
+
+        <!-- File List -->
+        <ListView x:Name="FileListView" Grid.Row="1" Background="Transparent" BorderThickness="0" 
+                  ItemsSource="{Binding Files}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                  MouseDoubleClick="FileListView_MouseDoubleClick">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0" />
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListViewItem">
+                                <Border Background="{TemplateBinding Background}" Padding="16,12" BorderBrush="{StaticResource StrokeSoft}" BorderThickness="0,0,0,0.5">
+                                    <ContentPresenter />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource SurfaceElevated}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Cursor="Hand">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,16,0"
+                                  Visibility="{Binding DataContext.IsSelectionMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                  
+                        <iconPacks:PackIconLucide Grid.Column="1" Kind="{Binding IconKind}" Foreground="{Binding IconColor}" Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        
+                        <TextBlock Grid.Column="2" Text="{Binding display_name}" FontSize="14" Foreground="{StaticResource Ink}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        
+                        <TextBlock Grid.Column="3" Text="{Binding FormattedDate}" Foreground="{StaticResource InkSoft}" FontSize="12" VerticalAlignment="Center" Margin="0,0,24,0" Width="120"/>
+                        <TextBlock Grid.Column="4" Text="{Binding FormattedSize}" Foreground="{StaticResource InkSoft}" FontSize="12" VerticalAlignment="Center" TextAlignment="Right" Width="80"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- Batch Action Bar -->
+        <Border Grid.Row="2" x:Name="BatchActionBar" Background="{StaticResource SurfaceElevated}" BorderBrush="{StaticResource StrokeSoft}" BorderThickness="0,1,0,0" Padding="24,16" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding SelectedCountText}" FontSize="14" FontWeight="Medium" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Style="{StaticResource ModernButton}" Content="Download" Background="{StaticResource BrandElectric}" Foreground="White" Padding="16,8" Margin="0,0,8,0" Click="BtnDownloadBatch_Click"/>
+                    <Button Style="{StaticResource ModernButton}" Content="Delete" Background="{StaticResource BrandRed}" Foreground="White" Padding="16,8" Click="BtnDeleteBatch_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
