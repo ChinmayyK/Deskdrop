@@ -14,6 +14,8 @@ package com.deskdrop
 
 import android.app.*
 import android.content.*
+import android.content.res.Configuration
+import android.Manifest
 import android.content.ClipboardManager
 import android.net.ConnectivityManager
 import android.net.Network
@@ -676,6 +678,7 @@ class DeskdropService : Service() {
                 registerNetworkCallback() // restart NSD on WiFi changes
                 // call continuity: receiver is statically registered now
                 startBatteryMonitor()     // F20: relay battery status to peers
+                startStorageMonitor()     // relay storage status to peers
                 persistStatus()
             } else {
                 // Engine was already running — permission may have just been granted.
@@ -752,6 +755,7 @@ class DeskdropService : Service() {
         stopNsdDiscovery()
 
         stopBatteryMonitor()
+        stopStorageMonitor()
         unregisterNetworkCallback()
         cancelNsdRetry()
         releaseMulticastLock()
@@ -818,10 +822,10 @@ class DeskdropService : Service() {
         }.getOrNull() ?: return
 
         val mode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
         } else {
             @Suppress("DEPRECATION")
-            android.net.wifi.WifiManager.WIFI_MODE_FULL
+            android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
         }
 
         wifiLock = wm.createWifiLock(mode, "Deskdrop::WifiLock").apply {
@@ -1409,6 +1413,15 @@ class DeskdropService : Service() {
                 val limit = DeskdropJni.eventLimit(ev)
 
                 Thread {
+                    if (!hasFilePermissions()) {
+                        Log.w(TAG, "Storage permission missing for RemoteFilesQuery")
+                        showPermissionRequiredNotification()
+                        DeskdropJni.sendRemoteFilesResponse(
+                            engineHandle, requestId, targetDeviceId, null, null, 0, "Permission Denied: Please grant storage permission on your Android device to browse files."
+                        )
+                        return@Thread
+                    }
+
                     try {
                         if (summaryOnly) {
                             val (summaryJson, total) = RemoteFileManager.queryFilesSummary(
@@ -1444,6 +1457,12 @@ class DeskdropService : Service() {
                 val sizePx = DeskdropJni.eventThumbnailSizePx(ev).let { if (it <= 0) 256 else it }
 
                 Thread {
+                    if (!hasFilePermissions()) {
+                        DeskdropJni.sendRemoteThumbnailResponse(
+                            engineHandle, requestId, targetDeviceId, fileId, null, "Permission Denied"
+                        )
+                        return@Thread
+                    }
                     try {
                         val thumbnailBytes = RemoteFileManager.getThumbnail(applicationContext, fileId, sizePx)
                         if (thumbnailBytes != null) {
@@ -1470,6 +1489,11 @@ class DeskdropService : Service() {
                 val fileId = DeskdropJni.eventFileId(ev)
 
                 Thread {
+                    if (!hasFilePermissions()) {
+                        Log.w(TAG, "Storage permission missing for RemoteFilePullRequest")
+                        showPermissionRequiredNotification()
+                        return@Thread
+                    }
                     try {
                         val resolved = RemoteFileManager.resolveFilePathAndMeta(applicationContext, fileId)
                         if (resolved != null) {
@@ -1481,6 +1505,27 @@ class DeskdropService : Service() {
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error handling RemoteFilePullRequest", e)
+                    }
+                }.start()
+            }
+
+            DeskdropJni.CR_EVENT_REMOTE_FILE_ACTION_REQUEST -> {
+                val targetDeviceId = DeskdropJni.eventDeviceId(ev) ?: return
+                val fileId = DeskdropJni.eventFileId(ev)
+                val action = DeskdropJni.eventText(ev) ?: return
+                val newName = DeskdropJni.eventSearchQuery(ev)
+
+                Thread {
+                    if (!hasFilePermissions()) {
+                        Log.w(TAG, "Storage permission missing for RemoteFileActionRequest")
+                        showPermissionRequiredNotification()
+                        return@Thread
+                    }
+                    try {
+                        Log.i(TAG, "Executing remote file action: $action on file $fileId (new name: $newName)")
+                        RemoteFileManager.executeAction(applicationContext, fileId, action, newName)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error executing remote file action", e)
                     }
                 }.start()
             }
@@ -2527,6 +2572,73 @@ class DeskdropService : Service() {
         Log.i(TAG, "Battery status monitor stopped")
     }
 
+    private var storageMonitorRunnable: Runnable? = null
+
+    private fun startStorageMonitor() {
+        if (storageMonitorRunnable != null) return
+        val r = object : Runnable {
+            override fun run() {
+                val h = engineHandle
+                if (h != 0L) {
+                    Thread {
+                        try {
+                            val path = android.os.Environment.getExternalStorageDirectory()
+                            val stat = android.os.StatFs(path.path)
+                            val blockSize = stat.blockSizeLong
+                            val totalBlocks = stat.blockCountLong
+                            val availableBlocks = stat.availableBlocksLong
+                            
+                            val totalBytes = totalBlocks * blockSize
+                            val freeBytes = availableBlocks * blockSize
+
+                            var imgSize = 0L
+                            var vidSize = 0L
+                            
+                            val uri = android.provider.MediaStore.Files.getContentUri("external")
+                            val proj = arrayOf(
+                                android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE,
+                                android.provider.MediaStore.Files.FileColumns.SIZE
+                            )
+                            val sel = "${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=?"
+                            val selArgs = arrayOf(
+                                android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+                                android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
+                            )
+                            
+                            contentResolver.query(uri, proj, sel, selArgs, null)?.use { cursor ->
+                                val typeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE)
+                                val sizeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.SIZE)
+                                while (cursor.moveToNext()) {
+                                    val type = cursor.getInt(typeCol)
+                                    val size = cursor.getLong(sizeCol)
+                                    if (type == android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE) {
+                                        imgSize += size
+                                    } else {
+                                        vidSize += size
+                                    }
+                                }
+                            }
+                            
+                            DeskdropJni.pushStorageStatus(h, imgSize, vidSize, 0L, freeBytes, totalBytes)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Storage telemetry failed", e)
+                        }
+                    }.start()
+                }
+                handler.postDelayed(this, 60_000L) // every 60s
+            }
+        }
+        storageMonitorRunnable = r
+        handler.post(r)
+        Log.i(TAG, "Storage monitor started")
+    }
+
+    private fun stopStorageMonitor() {
+        storageMonitorRunnable?.let { handler.removeCallbacks(it) }
+        storageMonitorRunnable = null
+        Log.i(TAG, "Storage monitor stopped")
+    }
+
     // ── NSD (Network Service Discovery) ────────────────────────────────────────────────
     //
     // Android does not support Rust’s mdns-sd crate, so we use the
@@ -2881,16 +2993,25 @@ class DeskdropService : Service() {
 
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                Log.i(TAG, "Network: default network available — restarting discovery + reconnecting peers")
+                val cm = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager
+                val caps = cm?.getNetworkCapabilities(network)
+                val isWifiOrEth = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true || 
+                                  caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) == true
+
+                Log.i(TAG, "Network: default network available (wifi/eth=$isWifiOrEth) — reconnecting peers")
                 handler.post {
-                    acquireMulticastLock() // Fix: Acquire multicast lock only when network is available
-                    acquireWifiLock()
+                    if (isWifiOrEth) {
+                        acquireMulticastLock()
+                        acquireWifiLock()
+                    }
                     acquireWakeLock()
                     
                     // Brief delay lets the IP stack settle before mDNS re-registers.
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }
                     val action = Runnable {
-                        restartDiscoveryNow()
+                        if (isWifiOrEth) {
+                            restartDiscoveryNow()
+                        }
                         // Immediately tell the Rust engine to reconnect all known peers.
                         val h = engineHandle
                         if (h != 0L) {
@@ -3287,5 +3408,44 @@ class DeskdropService : Service() {
         prefs().edit()
             .putBoolean(PREF_SERVICE_RUNNING, running)
             .apply()
+    }
+
+    private fun hasFilePermissions(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (android.os.Environment.isExternalStorageManager()) {
+                return true
+            }
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun showPermissionRequiredNotification() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("request_permissions", true)
+        }
+        val launchPi = PendingIntent.getActivity(
+            this, 42,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+            .setContentTitle("Permission Required")
+            .setContentText("Deskdrop needs storage access to browse files. Tap here to grant permission.")
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setAutoCancel(true)
+            .setContentIntent(launchPi)
+            .build()
+
+        getSystemService(NotificationManager::class.java).notify(4242, notif)
     }
 }

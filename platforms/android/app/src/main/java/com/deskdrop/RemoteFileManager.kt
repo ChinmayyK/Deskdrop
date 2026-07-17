@@ -2,6 +2,7 @@ package com.deskdrop
 
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -365,5 +366,35 @@ object RemoteFileManager {
             }
         }
         return inSampleSize
+    }
+
+    fun executeAction(context: Context, fileId: Long, action: String, newName: String?) {
+        val uri = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), fileId)
+        val resolver = context.contentResolver
+        when (action) {
+            "delete" -> {
+                try {
+                    val count = resolver.delete(uri, null, null)
+                    Log.i(TAG, "Deleted file $fileId, count: $count")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to delete file $fileId", e)
+                }
+            }
+            "rename" -> {
+                if (newName.isNullOrEmpty()) return
+                try {
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, newName)
+                    }
+                    val count = resolver.update(uri, values, null, null)
+                    Log.i(TAG, "Renamed file $fileId to $newName, count: $count")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to rename file $fileId", e)
+                }
+            }
+            else -> {
+                Log.w(TAG, "Unknown file action: $action")
+            }
+        }
     }
 }

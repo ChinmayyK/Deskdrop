@@ -35,6 +35,7 @@ object DeskdropJni {
     const val CR_EVENT_REMOTE_FILES_QUERY      = 30
     const val CR_EVENT_REMOTE_THUMBNAIL_REQUEST = 31
     const val CR_EVENT_REMOTE_FILE_PULL_REQUEST = 32
+    const val CR_EVENT_REMOTE_FILE_ACTION_REQUEST = 37
     const val CR_EVENT_REMOTE_FILES_RESPONSE   = 33
     const val CR_EVENT_SPEED_TEST_PROGRESS     = 35
     const val CR_EVENT_SPEED_TEST_COMPLETE     = 36
@@ -50,11 +51,10 @@ object DeskdropJni {
     @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
     @JvmStatic external fun pushVideoFrame(handle: Long, data: ByteArray): Int
     @JvmStatic external fun pushBatteryStatus(handle: Long, level: Int, charging: Boolean): Int
+    @JvmStatic external fun pushStorageStatus(handle: Long, imagesBytes: Long, videosBytes: Long, appsBytes: Long, freeBytes: Long, totalBytes: Long): Int
 
-    // ── Event poll ────────────────────────────────────────────────────────────
-    @JvmStatic external fun pollEvent(handle: Long): Long
-    @JvmStatic external fun eventType(event: Long): Int
-    @JvmStatic external fun freeEvent(event: Long)
+    // ── Permission Error ──────────────────────────────────────────────────────
+    @JvmStatic external fun sendPermissionError(handle: Long, deviceId: String, feature: String, message: String): Int
 
     // ── Common event accessors ────────────────────────────────────────────────
     @JvmStatic external fun eventText(event: Long): String?
@@ -62,6 +62,13 @@ object DeskdropJni {
     @JvmStatic external fun eventBinaryData(event: Long): ByteArray?
     @JvmStatic external fun eventDeviceName(event: Long): String?
     @JvmStatic external fun eventMimeType(event: Long): String?
+
+    // ── Event poll ────────────────────────────────────────────────────────────
+    @JvmStatic external fun pollEvent(handle: Long): Long
+    @JvmStatic external fun eventType(event: Long): Int
+    @JvmStatic external fun freeEvent(event: Long)
+
+    // ── Common event accessors ────────────────────────────────────────────────
     @JvmStatic external fun eventFileName(event: Long): String?
     @JvmStatic external fun eventFingerprint(event: Long): String?
 

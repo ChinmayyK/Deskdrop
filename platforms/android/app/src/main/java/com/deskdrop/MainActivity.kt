@@ -141,8 +141,14 @@ class MainActivity : ComponentActivity() {
                 preferredRefreshRate = bestRate
             }
         }
-        requestRuntimePermissions()
-        requestBatteryOptimizationExemption()
+
+        if (intent?.getBooleanExtra("request_permissions", false) == true) {
+            requestRuntimePermissions()
+        }
+
+        if (hasCompletedOnboarding.value) {
+            requestBatteryOptimizationExemption()
+        }
 
         val imageLoader = coil.ImageLoader.Builder(this)
             .components {
@@ -221,6 +227,7 @@ class MainActivity : ComponentActivity() {
                             onComplete = {
                                 getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putBoolean("has_completed_onboarding", true).apply()
                                 hasCompletedOnboarding.value = true
+                                requestBatteryOptimizationExemption()
                             }
                         )
                     } else {
@@ -556,12 +563,23 @@ class MainActivity : ComponentActivity() {
             val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
             if (!pm.isIgnoringBatteryOptimizations(packageName)) {
                 runCatching {
-                    startActivity(Intent(
-                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        android.net.Uri.parse("package:$packageName")
-                    ))
+                    startActivity(getBatteryOptimizationExemptionIntent())
                 }
             }
+        }
+    }
+
+    private fun getBatteryOptimizationExemptionIntent(): android.content.Intent {
+        return android.content.Intent(
+            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            android.net.Uri.parse("package:$packageName")
+        )
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        if (intent?.getBooleanExtra("request_permissions", false) == true) {
+            requestRuntimePermissions()
         }
     }
 
