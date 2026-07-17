@@ -31,24 +31,15 @@ final class ClipboardWatcher {
 
     /// Incremented by the caller before setting the clipboard programmatically.
     /// The watcher skips that many change events to prevent echo.
-    private var _suppressCount = 0
+    private var _lastAppliedChangeCount: Int = 0
+
+    func setLastAppliedChangeCount(_ count: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        _lastAppliedChangeCount = max(_lastAppliedChangeCount, count)
+    }
+
     private let lock = NSLock()
-
-    func incrementSuppressCount(by count: Int = 1) {
-        lock.lock()
-        defer { lock.unlock() }
-        _suppressCount += count
-    }
-
-    func tryConsumeSuppress() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        if _suppressCount > 0 {
-            _suppressCount -= 1
-            return true
-        }
-        return false
-    }
 
     // ── Callbacks ─────────────────────────────────────────────────────────────
 
@@ -83,7 +74,11 @@ final class ClipboardWatcher {
                 lastChangeCount = currentCount
                 consecutiveNoChange = 0
 
-                if tryConsumeSuppress() {
+                lock.lock()
+                let applied = _lastAppliedChangeCount
+                lock.unlock()
+
+                if currentCount <= applied {
                     sleep(intervalMs: activeIntervalMs)
                     continue
                 }
@@ -178,24 +173,24 @@ final class ClipboardSetter {
     }
 
     func setText(_ text: String) {
-        watcher?.incrementSuppressCount(by: 2)
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
+        watcher?.setLastAppliedChangeCount(pb.changeCount)
     }
 
     func setImage(_ data: Data, mimeType: String) {
-        watcher?.incrementSuppressCount(by: 2)
         let pb = NSPasteboard.general
         pb.clearContents()
         let type: NSPasteboard.PasteboardType = mimeType.contains("png") ? .png : .tiff
         pb.setData(data, forType: type)
+        watcher?.setLastAppliedChangeCount(pb.changeCount)
     }
 
     func setFileURL(_ url: URL) {
-        watcher?.incrementSuppressCount(by: 2)
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.writeObjects([url as NSURL])
+        watcher?.setLastAppliedChangeCount(pb.changeCount)
     }
 }

@@ -71,11 +71,9 @@ actor PersistentIPCConnection {
                 }
             }
             newConnection.stateUpdateHandler = { [weak self] state in
-                if case .failed = state {
-                    newConnection.cancel()
-                }
                 guard guardObj.tryResume() else {
                     if case .failed = state {
+                        newConnection.cancel()
                         Task { await self?.clearConnectionIfCurrent(newConnection) }
                     }
                     return
@@ -85,6 +83,7 @@ actor PersistentIPCConnection {
                 case .ready:
                     continuation.resume(returning: newConnection)
                 case .failed(let error):
+                    newConnection.cancel()
                     continuation.resume(throwing: error)
                 case .cancelled:
                     continuation.resume(throwing: DeskdropIPCError.disconnected)
