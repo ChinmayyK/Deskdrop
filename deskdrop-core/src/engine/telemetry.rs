@@ -184,7 +184,6 @@ impl crate::engine::Engine {
             .collect()
     }
 
-    /// Push this device's storage status to all connected trusted peers.
     pub async fn push_storage_status(
         &self,
         images_bytes: u64,
@@ -193,6 +192,14 @@ impl crate::engine::Engine {
         free_bytes: u64,
         total_bytes: u64,
     ) {
+        *self.shared.local_storage.lock().await = Some((
+            images_bytes,
+            videos_bytes,
+            apps_bytes,
+            free_bytes,
+            total_bytes,
+        ));
+        
         let msg = AppMessage::StorageStatus {
             images_bytes,
             videos_bytes,

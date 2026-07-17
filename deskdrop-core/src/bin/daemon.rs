@@ -594,6 +594,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             let active_transfers = state.engine.active_transfers().await;
             let peer_batteries = state.engine.peer_batteries().await;
             let peer_networks = state.engine.peer_networks().await;
+            let peer_storages = state.engine.peer_storages().await;
             Ok(IpcResponse::ok(json!({
                 "device_name":           settings.resolved_device_name(),
                 "port":                  settings.port,
@@ -610,6 +611,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "active_speed_tests":    state.engine.active_speed_tests().await,
                 "peer_batteries":        peer_batteries,
                 "peer_networks":         peer_networks,
+                "peer_storages":         peer_storages,
             })))
         }
         // Re-trigger mDNS discovery — called by the Mac "Scan" button and

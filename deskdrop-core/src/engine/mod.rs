@@ -550,6 +550,8 @@ pub(crate) struct EngineShared {
     pub(crate) peer_storage: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerStorageState>>>,
     /// Cache of local battery state to push to newly connected peers.
     pub(crate) local_battery: Arc<Mutex<Option<(u8, bool)>>>,
+    /// Cache of local storage state to push to newly connected peers.
+    pub(crate) local_storage: Arc<Mutex<Option<(u64, u64, u64, u64, u64)>>>,
     /// Cache of local network state to push to newly connected peers.
     local_network: Arc<Mutex<Option<String>>>,
     /// Per-peer network status. Keyed by device UUID.
@@ -660,6 +662,7 @@ impl Engine {
             peer_batteries: Arc::new(Mutex::new(std::collections::HashMap::new())),
             peer_storage: Arc::new(Mutex::new(std::collections::HashMap::new())),
             local_battery: Arc::new(Mutex::new(None)),
+            local_storage: Arc::new(Mutex::new(None)),
             local_network: Arc::new(Mutex::new(None)),
             peer_networks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             camera_frames: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -3631,6 +3634,21 @@ fn register_session(
                 let _ = outbox
                     .send(AppMessage::NetworkStatus {
                         network_type: net,
+                        origin_device: sh.config.device_id,
+                        origin_device_name: sh.config.device_name.clone(),
+                    })
+                    .await;
+            }
+            if let Some((images, videos, apps, free, total)) =
+                *sh.local_storage.lock().await
+            {
+                let _ = outbox
+                    .send(AppMessage::StorageStatus {
+                        images_bytes: images,
+                        videos_bytes: videos,
+                        apps_bytes: apps,
+                        free_bytes: free,
+                        total_bytes: total,
                         origin_device: sh.config.device_id,
                         origin_device_name: sh.config.device_name.clone(),
                     })
