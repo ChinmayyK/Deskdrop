@@ -523,27 +523,34 @@ struct LiveDevicePanel: View {
                             GeometryReader { geo in
                                 let used = max(0, storage.totalBytes - storage.freeBytes)
                                 let total = max(1, storage.totalBytes)
-                                let imgRatio = CGFloat(storage.imagesBytes) / CGFloat(total)
-                                let vidRatio = CGFloat(storage.videosBytes) / CGFloat(total)
-                                let otherRatio = CGFloat(used - storage.imagesBytes - storage.videosBytes) / CGFloat(total)
+                                let imgRatio = max(0, CGFloat(storage.imagesBytes) / CGFloat(total))
+                                let vidRatio = max(0, CGFloat(storage.videosBytes) / CGFloat(total))
+                                let otherRatio = max(0, CGFloat(used - storage.imagesBytes - storage.videosBytes) / CGFloat(total))
                                 
-                                HStack(spacing: 2) {
-                                    if imgRatio > 0 {
-                                        Rectangle().fill(Color.orange)
-                                            .frame(width: max(0, geo.size.width * imgRatio - 2))
+                                ZStack(alignment: .leading) {
+                                    // 1. Full-width background track
+                                    Capsule()
+                                        .fill(CRTheme.surfaceStrong)
+                                        .frame(width: geo.size.width, height: 8)
+                                    
+                                    // 2. Filled segments
+                                    HStack(spacing: 2) {
+                                        if imgRatio > 0 {
+                                            Rectangle().fill(Color.orange)
+                                                .frame(width: max(0, geo.size.width * imgRatio - 1))
+                                        }
+                                        if vidRatio > 0 {
+                                            Rectangle().fill(Color.purple)
+                                                .frame(width: max(0, geo.size.width * vidRatio - 1))
+                                        }
+                                        if otherRatio > 0 {
+                                            Rectangle().fill(Color.gray.opacity(0.6))
+                                                .frame(width: max(0, geo.size.width * otherRatio - 1))
+                                        }
                                     }
-                                    if vidRatio > 0 {
-                                        Rectangle().fill(Color.purple)
-                                            .frame(width: max(0, geo.size.width * vidRatio - 2))
-                                    }
-                                    if otherRatio > 0 {
-                                        Rectangle().fill(Color.gray.opacity(0.3))
-                                            .frame(width: max(0, geo.size.width * otherRatio - 2))
-                                    }
+                                    .clipShape(Capsule())
+                                    .frame(height: 8)
                                 }
-                                .clipShape(Capsule())
-                                .frame(height: 8)
-                                .background(Capsule().fill(CRTheme.surfaceStrong))
                             }
                             .frame(height: 8)
                             

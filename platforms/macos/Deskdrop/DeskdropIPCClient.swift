@@ -459,12 +459,30 @@ final class DeskdropIPCClient {
     }
 }
 
-enum DeskdropIPCError: Error, Equatable {
+enum DeskdropIPCError: Error, Equatable, LocalizedError {
     case socketFailed
     case connectionFailed
     case noData
     case disconnected
     case serverError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .socketFailed:
+            return "Failed to communicate with the local background service."
+        case .connectionFailed:
+            return "Could not connect to the local background service."
+        case .noData:
+            return "Received an empty response from the local service."
+        case .disconnected:
+            return "The background service disconnected unexpectedly."
+        case .serverError(let msg):
+            if msg == "PermissionError" {
+                return "Permission Required: The remote device has not granted file access permissions. Please accept the prompt on the device."
+            }
+            return msg
+        }
+    }
 }
 
 // MARK: - Dashboard extensions

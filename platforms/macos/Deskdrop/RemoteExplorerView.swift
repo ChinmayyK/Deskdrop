@@ -58,6 +58,7 @@ struct RemoteExplorerView: View {
     @State private var fileToRename: IpcRemoteFileEntry? = nil
     @State private var newFileName: String = ""
     @State private var fileToDelete: IpcRemoteFileEntry? = nil
+    @State private var isDeletingBatch: Bool = false
     @State private var isRenaming = false
     @State private var isDeleting = false
     
@@ -169,6 +170,14 @@ struct RemoteExplorerView: View {
                 Text("Are you sure you want to permanently delete \"\(file.display_name)\" from your Android device? This cannot be undone.")
             }
         }
+        .alert("Delete Multiple Files", isPresented: $isDeletingBatch) {
+            Button("Delete All", role: .destructive, action: {
+                deleteSelectedBatch()
+            })
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to permanently delete \(selectedFiles.count) files from your Android device? This cannot be undone.")
+        }
     }
     
     // MARK: - Premium Toolbar
@@ -237,6 +246,24 @@ struct RemoteExplorerView: View {
                 if isLoading {
                     ProgressView().controlSize(.small)
                 }
+                
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isMultiSelect.toggle()
+                        if !isMultiSelect {
+                            selectedFiles.removeAll()
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle")
+                        Text(isMultiSelect ? "Done" : "Select")
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isMultiSelect ? CRTheme.brandElectric : CRTheme.ink)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
                 
                 // View Mode Segmented Control
                 HStack(spacing: 2) {
@@ -738,6 +765,22 @@ struct SidebarRowView: View {
             .buttonStyle(.plain)
             
             Button {
+                isDeletingBatch = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "trash")
+                    Text("Delete")
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(CRTheme.surfaceElevated)
+                .foregroundStyle(CRTheme.accentRed)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            
+            Button {
                 withAnimation { selectedFiles.removeAll() }
             } label: {
                 Image(systemName: "xmark")
@@ -1009,6 +1052,20 @@ struct SidebarRowView: View {
         guard let files = result?.files else { return }
         let toPull = files.filter { selectedFiles.contains($0.file_id) }
         for file in toPull { pullFile(file) }
+    }
+    
+    private func deleteSelectedBatch() {
+        guard let files = result?.files else { return }
+        let toDelete = files.filter { selectedFiles.contains($0.file_id) }
+        Task {
+            for file in toDelete {
+                try? await store.performRemoteFileAction(targetDevice: device.id, fileId: file.file_id, action: "delete")
+            }
+            await MainActor.run {
+                selectedFiles.removeAll()
+                loadFiles()
+            }
+        }
     }
     
     private func importMacFiles() {
