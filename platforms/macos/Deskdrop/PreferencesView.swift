@@ -18,78 +18,76 @@ struct PreferencesView: View {
     @StateObject private var virtualCamera = VirtualCameraInstaller.shared
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Sidebar
+        VStack(spacing: 0) {
+            // Header with horizontal tabs
             VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Settings").font(.system(size: 24, weight: .bold)).foregroundStyle(CRTheme.ink)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 30)
+                Text("Settings")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(CRTheme.ink)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 40)
 
-                VStack(spacing: 4) {
-                    ForEach(SettingsTab.allCases) { t in 
-                        PrefsTabChip(tab: t, isSelected: tab == t) { tab = t } 
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(SettingsTab.allCases) { t in 
+                            PrefsTabChip(tab: t, isSelected: tab == t) { tab = t } 
+                        }
                     }
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 16)
                 }
-                .padding(.horizontal, 12)
-                Spacer()
             }
-            .frame(width: 220)
             .background(CRTheme.surfaceElevated)
 
-            Rectangle().fill(CRTheme.stroke).frame(width: 0.5)
+            Rectangle().fill(CRTheme.stroke).frame(height: 1)
 
             // Content
-            VStack(spacing: 0) {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        pane
-                            .padding(.horizontal, 32)
-                            .padding(.top, 32)
-                            .padding(.bottom, 28)
-                    }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    pane
+                        .padding(.horizontal, 40)
+                        .padding(.top, 32)
+                        .padding(.bottom, 28)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Mark dirty on any meaningful change
-                .onChange(of: copy.deviceName)                  { _ in isDirty = true }
-                .onChange(of: copy.syncEnabled)                 { _ in isDirty = true }
-                .onChange(of: copy.syncText)                    { _ in isDirty = true }
-                .onChange(of: copy.syncImages)                  { _ in isDirty = true }
-                .onChange(of: copy.syncFiles)                   { _ in isDirty = true }
-                .onChange(of: copy.syncMode)                    { _ in isDirty = true }
-                .onChange(of: copy.maxPayloadBytes)             { _ in isDirty = true }
-                .onChange(of: copy.clipboardPollMs)             { _ in isDirty = true }
-                .onChange(of: copy.maxPushesPerSec)             { _ in isDirty = true }
-                .onChange(of: copy.rateLimitBurst)              { _ in isDirty = true }
-                .onChange(of: copy.smartSyncDuplicateWindowMs)  { _ in isDirty = true }
-                .onChange(of: copy.smartSyncDebounceMs)         { _ in isDirty = true }
-                .onChange(of: copy.startOnLogin)                { _ in isDirty = true }
-                .onChange(of: copy.blockSensitiveText)          { _ in isDirty = true }
-                .onChange(of: copy.requireTofuConfirmation)     { _ in isDirty = true }
-                .onChange(of: copy.showReceiveNotification)     { _ in isDirty = true }
-                .onChange(of: copy.historyLimit)                { _ in isDirty = true }
-                .onChange(of: copy.maxHistoryTextBytes)         { _ in isDirty = true }
-                .onChange(of: copy.ignorePatterns)              { _ in isDirty = true }
-
-                PrefsFooter(
-                    isDirty:      isDirty,
-                    portIsInvalid: portIsInvalid,
-                    onRevert: {
-                        if let s = store.settings { copy = s; portString = "\(s.port)" }
-                        portIsInvalid = false
-                        isDirty       = false
-                    },
-                    onSave: {
-                        guard !portIsInvalid else { return }
-                        store.saveSettings(copy)
-                        isDirty = false
-                    }
-                )
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Mark dirty on any meaningful change
+            .onChange(of: copy.deviceName)                  { _ in isDirty = true }
+            .onChange(of: copy.syncEnabled)                 { _ in isDirty = true }
+            .onChange(of: copy.syncText)                    { _ in isDirty = true }
+            .onChange(of: copy.syncImages)                  { _ in isDirty = true }
+            .onChange(of: copy.syncFiles)                   { _ in isDirty = true }
+            .onChange(of: copy.syncMode)                    { _ in isDirty = true }
+            .onChange(of: copy.maxPayloadBytes)             { _ in isDirty = true }
+            .onChange(of: copy.clipboardPollMs)             { _ in isDirty = true }
+            .onChange(of: copy.maxPushesPerSec)             { _ in isDirty = true }
+            .onChange(of: copy.rateLimitBurst)              { _ in isDirty = true }
+            .onChange(of: copy.smartSyncDuplicateWindowMs)  { _ in isDirty = true }
+            .onChange(of: copy.smartSyncDebounceMs)         { _ in isDirty = true }
+            .onChange(of: copy.startOnLogin)                { _ in isDirty = true }
+            .onChange(of: copy.blockSensitiveText)          { _ in isDirty = true }
+            .onChange(of: copy.requireTofuConfirmation)     { _ in isDirty = true }
+            .onChange(of: copy.showReceiveNotification)     { _ in isDirty = true }
+            .onChange(of: copy.historyLimit)                { _ in isDirty = true }
+            .onChange(of: copy.maxHistoryTextBytes)         { _ in isDirty = true }
+            .onChange(of: copy.ignorePatterns)              { _ in isDirty = true }
+
+            PrefsFooter(
+                isDirty:      isDirty,
+                portIsInvalid: portIsInvalid,
+                onRevert: {
+                    if let s = store.settings { copy = s; portString = "\(s.port)" }
+                    portIsInvalid = false
+                    isDirty       = false
+                },
+                onSave: {
+                    guard !portIsInvalid else { return }
+                    store.saveSettings(copy)
+                    isDirty = false
+                }
+            )
         }
-        .frame(minWidth: 720, minHeight: 600)
-        .background(CRTheme.surfaceStrong.ignoresSafeArea())
+        .background(CRTheme.surface.ignoresSafeArea())
         .onAppear {
             if let s = store.settings { copy = s; portString = "\(s.port)" }
         }
@@ -150,9 +148,8 @@ private struct PrefsTabChip: View {
                 Text(tab.label)
                     .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? CRTheme.ink : CRTheme.inkSoft)
-                Spacer()
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
+            .padding(.horizontal, 14).padding(.vertical, 8)
             .background {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(isSelected ? CRTheme.surface : (hovered ? CRTheme.surfaceElevated : .clear))

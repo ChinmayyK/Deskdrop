@@ -234,6 +234,7 @@ struct ManagedDevice: Identifiable {
     let autoConnect: Bool
     let fingerprint: String?
     let lastSeen: Date?
+    let lastDiscoveryAt: Date?
     let lastSync: Date?
     let lastError: String?
     let pairingRequested: Bool
@@ -277,6 +278,7 @@ struct ManagedDevice: Identifiable {
         self.autoConnect     = peer.autoConnect
         self.fingerprint     = nil
         self.lastSeen        = peer.lastSeen
+        self.lastDiscoveryAt = peer.lastDiscoveryAt
         self.lastSync        = peer.lastSync
         self.lastError       = peer.lastError
         self.pairingRequested = peer.pairingRequested

@@ -193,7 +193,10 @@ struct DeviceCard: View {
             HStack(spacing: 8) {
                 if device.isConnected {
                     ModernDeviceCardButton(icon: "internaldrive.fill", color: CRTheme.brandViolet, help: "Remote File Explorer") { showingRemoteExplorer = true }
-                    ModernDeviceCardButton(icon: "gauge.with.dots.needle.bottom.50percent", color: CRTheme.brandCyan, help: "Speed Test") { store.startSpeedTest(deviceId: device.id) }
+                    ModernDeviceCardButton(icon: "gauge.with.dots.needle.bottom.50percent", color: CRTheme.brandCyan, help: "Speed Test") { 
+                        store.startSpeedTest(deviceId: device.id)
+                        withAnimation { store.selectedSection = .transfers }
+                    }
                     ModernDeviceCardButton(icon: "wifi.slash", color: CRTheme.accentOrange, help: "Disconnect") { store.disconnect(device) }
                 } else if device.trustState == .trusted {
                     ModernDeviceCardButton(icon: "antenna.radiowaves.left.and.right", color: CRTheme.brandElectric, help: "Connect") { store.connect(device) }
@@ -371,6 +374,25 @@ struct DeviceCentricDashboardView: View {
                         LazyVStack(spacing: 12) {
                             ForEach(store.activeTransfers) { transfer in
                                 ActiveTransferCard(transfer: transfer, store: store)
+                                    .padding(.horizontal, 40)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 30)
+                }
+
+                // Active Speed Tests Section
+                if !store.activeSpeedTests.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "gauge.with.dots.needle.bottom.50percent").foregroundStyle(CRTheme.brandCyan)
+                            Text("Speed Tests").font(.system(size: 14, weight: .semibold)).foregroundStyle(CRTheme.ink)
+                        }
+                        .padding(.horizontal, 40)
+                        
+                        LazyVStack(spacing: 12) {
+                            ForEach(store.activeSpeedTests) { test in
+                                ActiveSpeedTestCard(test: test, store: store)
                                     .padding(.horizontal, 40)
                             }
                         }
@@ -589,7 +611,10 @@ struct CompactDeviceCard: View {
                                 icon: "gauge.with.dots.needle.bottom.50percent",
                                 color: CRTheme.brandCyan,
                                 help: "Speed Test",
-                                action: { store.startSpeedTest(deviceId: device.id) }
+                                action: { 
+                                    store.startSpeedTest(deviceId: device.id)
+                                    withAnimation { store.selectedSection = .transfers }
+                                }
                             )
                             
                             ModernDeviceCardButton(

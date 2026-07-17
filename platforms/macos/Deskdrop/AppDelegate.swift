@@ -353,7 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func setupWindows() {
         dashboardController = Self.makeWindow(
             title: "Deskdrop",
-            size:  NSSize(width: 1020, height: 700),
+            size:  NSSize(width: 1200, height: 760),
             rootView: RootContainerView(store: store)
         )
         quickAccessController = Self.makePanel(
@@ -790,7 +790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             syncEnabled: true, autoConnect: false, lastError: nil,
             pairingRequested: false, outgoingPairingWaiting: false, pairingPin: nil,
             explicitDisconnect: false,
-            lastSeen: detail.lastSeen, lastSync: nil, ip: nil
+            lastSeen: detail.lastSeen, lastDiscoveryAt: nil, lastSync: nil, ip: nil
         ))
 
         let respond: (Bool) -> Void = { [weak self] approved in
