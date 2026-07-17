@@ -57,10 +57,10 @@ fun getLocalIpAddress(): String {
 }
 
 @Composable
-fun SettingsScreen(
-    deviceName: String,
-    deviceId: String,
-    syncEnabled: Boolean,
+fun SettingsTab(
+    isDark: Boolean,
+    isServiceRunning: Boolean,
+    isSyncEnabled: Boolean,
     syncText: Boolean,
     syncImages: Boolean,
     syncFiles: Boolean,
@@ -68,7 +68,8 @@ fun SettingsScreen(
     notificationMirroringEnabled: Boolean,
     autoForwardSms: Boolean,
     autoForwardScreenshots: Boolean,
-    isDarkMode: Boolean,
+    deviceName: String,
+    deviceId: String,
     peers: List<com.deskdrop.PeerSnapshot>,
     onSyncEnabledChange: (Boolean) -> Unit,
     onSyncTextChange: (Boolean) -> Unit,
@@ -79,80 +80,74 @@ fun SettingsScreen(
     onAutoForwardSmsChange: (Boolean) -> Unit,
     onAutoForwardScreenshotsChange: (Boolean) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
-    onRenameClicked: () -> Unit,
-    onBatterySettingsClicked: () -> Unit,
-    onStorageSettingsClicked: () -> Unit,
-    onNotificationSettingsClicked: () -> Unit,
     onForgetDevice: (String) -> Unit,
-    onBack: () -> Unit
+    onStartSync: () -> Unit,
+    onResumeSync: () -> Unit,
+    onScanNow: () -> Unit,
+    onActionPauseSync: () -> Unit,
+    onActionDisconnectAll: () -> Unit,
+    onActionStopService: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    onBatterySettingsClicked: () -> Unit = {},
+    onStorageSettingsClicked: () -> Unit = {},
+    onNotificationSettingsClicked: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val listState = rememberLazyListState()
 
-    val titleScale by remember {
-        derivedStateOf {
-            val offset = listState.firstVisibleItemScrollOffset
-            if (listState.firstVisibleItemIndex == 0) {
-                1f - (offset / 800f).coerceIn(0f, 0.2f)
-            } else {
-                0.8f
-            }
-        }
-    }
-
-    CRBackground(isDark = isDarkMode) {
-        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize()) {
             
-            // Premium Top Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(CRTheme.glass(isDarkMode))
-                        .border(1.dp, CRTheme.stroke(isDarkMode), CircleShape)
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onBack()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = CRTheme.textHigh(isDarkMode),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(20.dp))
-                Text(
-                    text = "Settings",
-                    style = CRTypography.h1,
-                    color = CRTheme.textHigh(isDarkMode),
-                    modifier = Modifier.scale(titleScale)
-                )
-            }
+        Text(
+            text = "Settings",
+            style = CRTypography.h2,
+            color = CRTheme.textHigh(isDark),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 64.dp),
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 item {
-                    // Profile Card Hero
+                    SettingsSection(
+                        isDark = isDark,
+                        title = "Service Controls",
+                        accentColor = CRTheme.brandElectric,
+                        icon = Icons.Rounded.Settings
+                    ) {
+                        Column {
+                            if (isSyncEnabled) {
+                                SettingsActionTile(isDark = isDark, icon = Icons.Rounded.Pause, label = "Pause Sync", color = CRTheme.accentAmber, onClick = onActionPauseSync)
+                            } else {
+                                SettingsActionTile(isDark = isDark, icon = Icons.Rounded.PlayArrow, label = "Resume Sync", color = CRTheme.accentGreen, onClick = onResumeSync)
+                            }
+                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
+                            if (!isServiceRunning) {
+                                SettingsActionTile(isDark = isDark, icon = Icons.Rounded.PlayCircle, label = "Start Service", color = CRTheme.accentGreen, onClick = onStartSync)
+                                HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
+                            }
+                            SettingsActionTile(isDark = isDark, icon = Icons.Rounded.Search, label = "Scan Now", color = CRTheme.brandCyan, onClick = onScanNow)
+                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
+                            SettingsActionTile(isDark = isDark, icon = Icons.Rounded.LinkOff, label = "Disconnect All", color = CRTheme.brandPink, onClick = onActionDisconnectAll)
+                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
+                            SettingsActionTile(isDark = isDark, icon = Icons.Rounded.Stop, label = "Stop Service", color = CRTheme.accentRed, onClick = onActionStopService)
+                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
+                            SettingsActionTile(isDark = isDark, icon = Icons.Rounded.Info, label = "Diagnostics", color = CRTheme.brandElectric, onClick = onOpenDiagnostics)
+                        }
+                    }
+                }
+
+                item {
+                    // Aboutfile Card Hero
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .crGlassCard(isDark = isDarkMode, cornerRadius = 24.dp)
+                            .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onRenameClicked()
+
                             }
                     ) {
                         Column(
@@ -175,14 +170,14 @@ fun SettingsScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(20.dp))
-                            Text(text = deviceName, style = CRTypography.h2, color = CRTheme.textHigh(isDarkMode))
+                            Text(text = deviceName, style = CRTypography.h2, color = CRTheme.textHigh(isDark))
                             Spacer(modifier = Modifier.height(12.dp))
                             
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(CRTheme.surface(isDarkMode).copy(alpha = 0.5f))
-                                    .border(1.dp, CRTheme.stroke(isDarkMode), RoundedCornerShape(12.dp))
+                                    .background(CRTheme.surface(isDark).copy(alpha = 0.5f))
+                                    .border(1.dp, CRTheme.stroke(isDark), RoundedCornerShape(12.dp))
                                     .padding(horizontal = 14.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
@@ -191,7 +186,7 @@ fun SettingsScreen(
                                     text = "IP: ${getLocalIpAddress()}",
                                     fontSize = 12.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = CRTheme.textMedium(isDarkMode),
+                                    color = CRTheme.textMedium(isDark),
                                     fontWeight = FontWeight.Medium
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -200,7 +195,7 @@ fun SettingsScreen(
                                 Text(
                                     text = "ACTIVE",
                                     style = CRTypography.caption,
-                                    color = CRTheme.textHigh(isDarkMode)
+                                    color = CRTheme.textHigh(isDark)
                                 )
                             }
                             
@@ -216,17 +211,17 @@ fun SettingsScreen(
 
                 item {
                     SettingsSection(
-                        isDark = isDarkMode,
+                        isDark = isDark,
                         title = "Appearance",
                         accentColor = CRTheme.blueSoft,
                         icon = Icons.Rounded.Brush
                     ) {
                         SettingsSwitchRow(
-                            isDark = isDarkMode,
+                            isDark = isDark,
                             icon = Icons.Rounded.DarkMode,
                             title = "Dark Mode",
                             subtitle = "Pure black theme for OLED displays",
-                            checked = isDarkMode,
+                            checked = isDark,
                             onCheckedChange = onDarkModeChange
                         )
                     }
@@ -234,48 +229,48 @@ fun SettingsScreen(
 
                 item {
                     SettingsSection(
-                        isDark = isDarkMode,
+                        isDark = isDark,
                         title = "Clipboard Sync",
                         accentColor = CRTheme.statusGreen,
                         icon = Icons.Rounded.Sync
                     ) {
                         Column {
                             SettingsSwitchRow(
-                                isDark = isDarkMode,
+                                isDark = isDark,
                                 icon = Icons.Rounded.Link,
                                 title = "Enable Sync",
                                 subtitle = "Master switch to pause all transfers",
-                                checked = syncEnabled,
+                                checked = isSyncEnabled,
                                 onCheckedChange = onSyncEnabledChange
                             )
                             
                             AnimatedVisibility(
-                                visible = syncEnabled,
+                                visible = isSyncEnabled,
                                 enter = expandVertically() + fadeIn(),
                                 exit = shrinkVertically() + fadeOut()
                             ) {
                                 Column {
-                                    HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                                    HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
                                     SettingsSwitchRow(
-                                        isDark = isDarkMode,
+                                        isDark = isDark,
                                         icon = Icons.Rounded.TextFields,
                                         title = "Sync Text",
                                         subtitle = null,
                                         checked = syncText,
                                         onCheckedChange = onSyncTextChange
                                     )
-                                    HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                                    HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
                                     SettingsSwitchRow(
-                                        isDark = isDarkMode,
+                                        isDark = isDark,
                                         icon = Icons.Rounded.Image,
                                         title = "Sync Images",
                                         subtitle = null,
                                         checked = syncImages,
                                         onCheckedChange = onSyncImagesChange
                                     )
-                                    HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                                    HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
                                     SettingsSwitchRow(
-                                        isDark = isDarkMode,
+                                        isDark = isDark,
                                         icon = Icons.Rounded.FilePresent,
                                         title = "Sync Files",
                                         subtitle = "Saved directly to Downloads folder",
@@ -290,41 +285,41 @@ fun SettingsScreen(
 
                 item {
                     SettingsSection(
-                        isDark = isDarkMode,
+                        isDark = isDark,
                         title = "Ambient Continuity",
                         accentColor = CRTheme.statusAmber,
                         icon = Icons.Rounded.Star
                     ) {
                         Column {
                             SettingsSwitchRow(
-                                isDark = isDarkMode,
+                                isDark = isDark,
                                 icon = Icons.Rounded.Message,
                                 title = "Auto-forward SMS 2FA",
                                 subtitle = "Automatically copies 2FA codes to Mac clipboard",
                                 checked = autoForwardSms,
                                 onCheckedChange = onAutoForwardSmsChange
                             )
-                            HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
                             SettingsSwitchRow(
-                                isDark = isDarkMode,
+                                isDark = isDark,
                                 icon = Icons.Rounded.CameraAlt,
                                 title = "Screenshot Sync",
                                 subtitle = "Instantly sends Android screenshots to your Mac",
                                 checked = autoForwardScreenshots,
                                 onCheckedChange = onAutoForwardScreenshotsChange
                             )
-                            HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
                             SettingsSwitchRow(
-                                isDark = isDarkMode,
+                                isDark = isDark,
                                 icon = Icons.Rounded.Phone,
                                 title = "Call Continuity",
                                 subtitle = "Requires Phone, Contacts, and Call Log permissions",
                                 checked = callContinuityEnabled,
                                 onCheckedChange = onCallContinuityChange
                             )
-                            HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 72.dp))
+                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
                             SettingsSwitchRow(
-                                isDark = isDarkMode,
+                                isDark = isDark,
                                 icon = Icons.Rounded.Notifications,
                                 title = "Notification Mirroring",
                                 subtitle = "Mirror Android notifications to your Mac",
@@ -337,7 +332,7 @@ fun SettingsScreen(
 
                 item {
                     SettingsSection(
-                        isDark = isDarkMode,
+                        isDark = isDark,
                         title = "Saved Devices",
                         accentColor = CRTheme.cyanSoft,
                         icon = Icons.Rounded.Devices
@@ -349,7 +344,7 @@ fun SettingsScreen(
                                     Text(
                                         text = "No saved devices.",
                                         style = CRTypography.bodyMedium,
-                                        color = CRTheme.textMedium(isDarkMode)
+                                        color = CRTheme.textMedium(isDark)
                                     )
                                 }
                             } else {
@@ -361,19 +356,19 @@ fun SettingsScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Box(
-                                            modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.surface(isDarkMode)),
+                                            modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.surface(isDark)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text(peer.name.take(1).uppercase(), style = CRTypography.h2, color = CRTheme.textHigh(isDarkMode))
+                                            Text(peer.name.take(1).uppercase(), style = CRTypography.h2, color = CRTheme.textHigh(isDark))
                                         }
                                         Spacer(modifier = Modifier.width(16.dp))
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(text = peer.name, style = CRTypography.bodyMedium, color = CRTheme.textHigh(isDarkMode))
+                                            Text(text = peer.name, style = CRTypography.bodyMedium, color = CRTheme.textHigh(isDark))
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(if (peer.isConnected) CRTheme.statusGreen else CRTheme.textMedium(isDarkMode)))
+                                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(if (peer.isConnected) CRTheme.statusGreen else CRTheme.textMedium(isDark)))
                                                 Spacer(modifier = Modifier.width(6.dp))
-                                                Text(text = if (peer.isConnected) "Connected" else "Offline", fontSize = 12.sp, color = CRTheme.textMedium(isDarkMode))
+                                                Text(text = if (peer.isConnected) "Connected" else "Offline", fontSize = 12.sp, color = CRTheme.textMedium(isDark))
                                             }
                                         }
                                         Box(
@@ -394,7 +389,7 @@ fun SettingsScreen(
                                         }
                                     }
                                     if (index < savedPeers.size - 1) {
-                                        HorizontalDivider(color = CRTheme.stroke(isDarkMode), modifier = Modifier.padding(start = 80.dp))
+                                        HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 80.dp))
                                     }
                                 }
                             }
@@ -404,7 +399,7 @@ fun SettingsScreen(
 
                 item {
                     SettingsSection(
-                        isDark = isDarkMode,
+                        isDark = isDark,
                         title = "Background Execution",
                         accentColor = CRTheme.statusAmber,
                         icon = Icons.Rounded.BatteryAlert
@@ -421,7 +416,7 @@ fun SettingsScreen(
                                 Text(
                                     text = "To ensure Deskdrop stays alive in the background and receives clips instantly, disable battery optimization for this app.",
                                     style = CRTypography.bodyMedium,
-                                    color = CRTheme.textMedium(isDarkMode),
+                                    color = CRTheme.textMedium(isDark),
                                     lineHeight = 22.sp
                                 )
                             }
@@ -431,14 +426,14 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .height(48.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(CRTheme.textHigh(isDarkMode))
+                                    .background(CRTheme.textHigh(isDark))
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onBatterySettingsClicked()
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("OPEN BATTERY SETTINGS", style = CRTypography.label, color = CRTheme.bg(isDarkMode))
+                                Text("OPEN BATTERY SETTINGS", style = CRTypography.label, color = CRTheme.bg(isDark))
                             }
                         }
                     }
@@ -447,7 +442,7 @@ fun SettingsScreen(
                 // Remote Explorer Storage Permissions Section
                 item {
                     SettingsSection(
-                        isDark = isDarkMode,
+                        isDark = isDark,
                         title = "Remote File Explorer Access",
                         accentColor = CRTheme.statusGreen,
                         icon = Icons.Rounded.Folder
@@ -464,7 +459,7 @@ fun SettingsScreen(
                                 Text(
                                     text = "To browse and pull all files across your phone (Photos, Documents, APKs, Downloads) directly from your Mac, grant All Files Access.",
                                     style = CRTypography.bodyMedium,
-                                    color = CRTheme.textMedium(isDarkMode),
+                                    color = CRTheme.textMedium(isDark),
                                     lineHeight = 22.sp
                                 )
                             }
@@ -474,14 +469,14 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .height(48.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(CRTheme.textHigh(isDarkMode))
+                                    .background(CRTheme.textHigh(isDark))
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onStorageSettingsClicked()
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("GRANT ALL FILES ACCESS", style = CRTypography.label, color = CRTheme.bg(isDarkMode))
+                                Text("GRANT ALL FILES ACCESS", style = CRTypography.label, color = CRTheme.bg(isDark))
                             }
                         }
                     }
@@ -490,7 +485,7 @@ fun SettingsScreen(
                 // Status Bar Notification Hiding Section
                 item {
                     SettingsSection(
-                        isDark = isDarkMode,
+                        isDark = isDark,
                         title = "Status Bar Notification",
                         accentColor = CRTheme.blueSoft,
                         icon = Icons.Rounded.NotificationsOff
@@ -507,7 +502,7 @@ fun SettingsScreen(
                                 Text(
                                     text = "Deskdrop runs an ultra-efficient background service so clips sync instantly. You can minimize or hide the top status bar icon in system notification settings without affecting sync.",
                                     style = CRTypography.bodyMedium,
-                                    color = CRTheme.textMedium(isDarkMode),
+                                    color = CRTheme.textMedium(isDark),
                                     lineHeight = 22.sp
                                 )
                             }
@@ -517,14 +512,14 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .height(48.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(CRTheme.textHigh(isDarkMode))
+                                    .background(CRTheme.textHigh(isDark))
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onNotificationSettingsClicked()
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("HIDE STATUS BAR ICON", style = CRTypography.label, color = CRTheme.bg(isDarkMode))
+                                Text("HIDE STATUS BAR ICON", style = CRTypography.label, color = CRTheme.bg(isDark))
                             }
                         }
                     }
@@ -536,26 +531,25 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(CRTheme.glass(isDarkMode))
-                                .border(1.dp, CRTheme.stroke(isDarkMode), RoundedCornerShape(16.dp)),
+                                .background(CRTheme.glass(isDark))
+                                .border(1.dp, CRTheme.stroke(isDark), RoundedCornerShape(16.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Rounded.EnergySavingsLeaf, contentDescription = "Deskdrop", tint = CRTheme.statusGreen, modifier = Modifier.size(32.dp))
                         }
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(text = "Deskdrop", style = CRTypography.h2, color = CRTheme.textHigh(isDarkMode))
+                        Text(text = "Deskdrop", style = CRTypography.h2, color = CRTheme.textHigh(isDark))
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = "VERSION 1.0.0", style = CRTypography.caption, color = CRTheme.textMedium(isDarkMode))
+                        Text(text = "VERSION 1.0.0", style = CRTypography.caption, color = CRTheme.textMedium(isDark))
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = "NO CLOUD. NO ACCOUNT. NO TELEMETRY.",
                             style = CRTypography.caption,
-                            color = CRTheme.textHigh(isDarkMode),
+                            color = CRTheme.textHigh(isDark),
                             textAlign = TextAlign.Center
                         )
                     }
                 }
-            }
         }
     }
 }
@@ -639,5 +633,41 @@ fun SettingsSwitchRow(
         }
         Spacer(modifier = Modifier.width(16.dp))
         CRSwitch(checked = checked, isDark = isDark)
+    }
+}
+
+@Composable
+fun SettingsActionTile(
+    isDark: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    color: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                onClick()
+            }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(color.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = label,
+            style = CRTypography.label,
+            color = CRTheme.textHigh(isDark)
+        )
     }
 }

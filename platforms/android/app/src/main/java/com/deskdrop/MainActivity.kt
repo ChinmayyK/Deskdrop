@@ -47,6 +47,15 @@ class MainActivity : ComponentActivity() {
 
     private val isServiceRunning = mutableStateOf(false)
     private val isSyncEnabled = mutableStateOf(true)
+    private val syncText = mutableStateOf(true)
+    private val syncImages = mutableStateOf(true)
+    private val syncFiles = mutableStateOf(true)
+    private val callContinuityEnabled = mutableStateOf(false)
+    private val notificationMirroringEnabled = mutableStateOf(false)
+    private val autoForwardSms = mutableStateOf(false)
+    private val autoForwardScreenshots = mutableStateOf(false)
+    private val deviceName = mutableStateOf("")
+    private val deviceId = mutableStateOf("")
     private val peers = mutableStateOf<List<PeerSnapshot>>(emptyList())
     private val feed = mutableStateOf<List<ActivityEntry>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
@@ -235,11 +244,74 @@ class MainActivity : ComponentActivity() {
                         isDark = isDarkMode.value,
                         isServiceRunning = isServiceRunning.value,
                         isSyncEnabled = isSyncEnabled.value,
+                        syncText = syncText.value,
+                        syncImages = syncImages.value,
+                        syncFiles = syncFiles.value,
+                        callContinuityEnabled = callContinuityEnabled.value,
+                        notificationMirroringEnabled = notificationMirroringEnabled.value,
+                        autoForwardSms = autoForwardSms.value,
+                        autoForwardScreenshots = autoForwardScreenshots.value,
+                        deviceName = deviceName.value,
+                        deviceId = deviceId.value,
                         peers = peers.value,
                         feed = feed.value,
                         ambientStatus = ambientStatus.value,
                         activeTransfers = activeTransfers,
                         activeSpeedTests = activeSpeedTests,
+                        onSyncEnabledChange = {
+                            isSyncEnabled.value = it
+                            saveBooleanPref("sync_enabled", it)
+                        },
+                        onSyncTextChange = {
+                            syncText.value = it
+                            saveBooleanPref("sync_text", it)
+                        },
+                        onSyncImagesChange = {
+                            syncImages.value = it
+                            saveBooleanPref("sync_images", it)
+                        },
+                        onSyncFilesChange = {
+                            syncFiles.value = it
+                            saveBooleanPref("sync_files", it)
+                        },
+                        onCallContinuityChange = {
+                            callContinuityEnabled.value = it
+                            saveBooleanPref("call_continuity_enabled", it)
+                            if (it) {
+                                requestCallContinuityPermissions()
+                            }
+                        },
+                        onNotificationMirroringChange = {
+                            notificationMirroringEnabled.value = it
+                            saveBooleanPref("notification_mirroring", it)
+                            if (it) {
+                                requestNotificationListenerPermission()
+                            }
+                        },
+                        onAutoForwardSmsChange = {
+                            autoForwardSms.value = it
+                            saveBooleanPref("auto_forward_sms", it)
+                            if (it) requestSmsPermission()
+                        },
+                        onAutoForwardScreenshotsChange = {
+                            autoForwardScreenshots.value = it
+                            saveBooleanPref("auto_forward_screenshots", it)
+                            if (it) requestMediaPermissions()
+                        },
+                        onDarkModeChange = {
+                            isDarkMode.value = it
+                            saveBooleanPref("dark_mode", it)
+                        },
+                        onForgetDevice = { targetId ->
+                            ContextCompat.startForegroundService(this@MainActivity,
+                                Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                    action = DeskdropService.ACTION_FORGET_PEER
+                                    putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, targetId)
+                                }
+                            )
+                            peers.value = peers.value.filter { it.id != targetId }
+                            Toast.makeText(this@MainActivity, "Device forgotten", Toast.LENGTH_SHORT).show()
+                        },
                         onActionStartSpeedTest = { deviceId ->
                             val intent = android.content.Intent(this@MainActivity, DeskdropService::class.java).apply {
                                 action = DeskdropService.ACTION_START_SPEED_TEST
@@ -413,12 +485,12 @@ class MainActivity : ComponentActivity() {
                         showSnack("Forgot ${peer.name}")
                         window.decorView.postDelayed({ refreshDashboardState() }, 200)
                     },
-                    onOpenSettings = {
-                        startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
-                    },
                     onOpenDiagnostics = {
                         startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java))
                     },
+                    onBatterySettingsClicked = { openBatterySettings() },
+                    onStorageSettingsClicked = { openStorageSettings() },
+                    onNotificationSettingsClicked = { openNotificationSettings() },
                     onReplayOnboarding = {
                         getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putBoolean("has_completed_onboarding", false).apply()
                         hasCompletedOnboarding.value = false
@@ -477,10 +549,26 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    private fun saveBooleanPref(key: String, value: Boolean) {
+        getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putBoolean(key, value).apply()
+        sendBroadcast(Intent(DeskdropService.ACTION_SETTINGS_CHANGED).setPackage(packageName))
+    }
+
     private fun refreshDashboardState() {
         val prefs = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
         isServiceRunning.value = prefs.getBoolean(DeskdropService.PREF_SERVICE_RUNNING, false)
         isSyncEnabled.value = prefs.getBoolean("sync_enabled", true)
+        syncText.value = prefs.getBoolean("sync_text", true)
+        syncImages.value = prefs.getBoolean("sync_images", true)
+        syncFiles.value = prefs.getBoolean("sync_files", true)
+        callContinuityEnabled.value = prefs.getBoolean("call_continuity_enabled", false)
+        notificationMirroringEnabled.value = prefs.getBoolean("notification_mirroring", false)
+        autoForwardSms.value = prefs.getBoolean("auto_forward_sms", false)
+        autoForwardScreenshots.value = prefs.getBoolean("auto_forward_screenshots", false)
+        deviceName.value = prefs.getString("device_name", null)?.trim()?.takeIf { it.isNotBlank() }
+            ?: prefs.getString("local_device_name", null)?.trim()?.takeIf { it.isNotBlank() }
+            ?: Build.MODEL
+        deviceId.value = prefs.getString("device_id", "—") ?: "—"
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
         hasCompletedOnboarding.value = prefs.getBoolean("has_completed_onboarding", false)
         
@@ -594,6 +682,124 @@ class MainActivity : ComponentActivity() {
             if (readPhone >= 0 &&
                 grantResults[readPhone] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 startService(Intent(this, DeskdropService::class.java))
+            }
+        } else if (requestCode == 1002) {
+            ContextCompat.startForegroundService(this, Intent(this, DeskdropService::class.java).apply {
+                action = DeskdropService.ACTION_SETTINGS_CHANGED
+            })
+        }
+    }
+
+    private fun requestCallContinuityPermissions() {
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_PHONE_STATE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.READ_PHONE_STATE
+        }
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.READ_CONTACTS
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && ContextCompat.checkSelfPermission(this, android.Manifest.permission.ANSWER_PHONE_CALLS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.ANSWER_PHONE_CALLS
+        }
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.READ_CALL_LOG
+        }
+        if (needed.isNotEmpty()) {
+            requestPermissions(needed.toTypedArray(), 1002)
+        }
+    }
+
+    private fun requestNotificationListenerPermission() {
+        val enabledListeners = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        val hasPermission = enabledListeners?.contains(packageName) == true
+        if (!hasPermission) {
+            Toast.makeText(this, "Please allow Deskdrop to read notifications", Toast.LENGTH_LONG).show()
+            startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+        }
+    }
+
+    private fun requestSmsPermission() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECEIVE_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECEIVE_SMS), 1003)
+        }
+    }
+
+    private fun requestMediaPermissions() {
+        val needed = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += android.Manifest.permission.READ_MEDIA_IMAGES
+            }
+            if (Build.VERSION.SDK_INT >= 34) {
+                if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    needed += android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+                }
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += android.Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+        }
+        if (needed.isNotEmpty()) {
+            requestPermissions(needed.toTypedArray(), 1004)
+        }
+    }
+
+    private fun openBatterySettings() {
+        runCatching {
+            startActivity(Intent(
+                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                android.net.Uri.parse("package:$packageName")))
+        }.onFailure {
+            runCatching {
+                startActivity(Intent(
+                    android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS))
+            }.onFailure {
+                Toast.makeText(this,
+                    "Open Settings -> Battery -> Deskdrop -> disable optimisation",
+                    Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun openStorageSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                startActivity(Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    android.net.Uri.parse("package:$packageName")
+                ))
+            }.onFailure {
+                runCatching {
+                    startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                }.onFailure {
+                    requestMediaPermissions()
+                }
+            }
+        } else {
+            requestMediaPermissions()
+        }
+    }
+
+    private fun openNotificationSettings() {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startActivity(Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                    putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, "cr_service")
+                })
+            } else {
+                startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                })
+            }
+        }.onFailure {
+            runCatching {
+                startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                })
+            }.onFailure {
+                Toast.makeText(this, "Long-press Deskdrop notification -> Settings -> Minimize", Toast.LENGTH_LONG).show()
             }
         }
     }

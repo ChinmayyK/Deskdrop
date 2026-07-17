@@ -254,8 +254,9 @@ private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCance
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
                 ) {
                     val rawStr = selectedPeer.pairingPin.filter { it.isDigit() }
                     val digits = rawStr.padStart(6, '0').takeLast(6)
@@ -263,20 +264,19 @@ private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCance
                     digits.forEachIndexed { index, char ->
                         Box(
                             modifier = Modifier
-                                .size(48.dp, 56.dp)
+                                .weight(1f)
+                                .aspectRatio(0.85f)
                                 .crGlassCard(isDark, cornerRadius = 12.dp, elevated = true),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = char.toString(),
-                                style = CRTypography.h1.copy(fontSize = 32.sp),
+                                style = CRTypography.h1.copy(fontSize = 28.sp),
                                 color = CRTheme.textHigh(isDark)
                             )
                         }
                         if (index == 2 && digits.length > 3) {
-                            Spacer(modifier = Modifier.width(4.dp))
                             Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(CRTheme.textMedium(isDark).copy(alpha = 0.5f)))
-                            Spacer(modifier = Modifier.width(4.dp))
                         }
                     }
                 }

@@ -89,6 +89,15 @@ fun MainScreen(
     isDark: Boolean,
     isServiceRunning: Boolean,
     isSyncEnabled: Boolean,
+    syncText: Boolean,
+    syncImages: Boolean,
+    syncFiles: Boolean,
+    callContinuityEnabled: Boolean,
+    notificationMirroringEnabled: Boolean,
+    autoForwardSms: Boolean,
+    autoForwardScreenshots: Boolean,
+    deviceName: String,
+    deviceId: String,
     peers: List<PeerSnapshot>,
     feed: List<ActivityEntry>,
     ambientStatus: String,
@@ -120,8 +129,20 @@ fun MainScreen(
     onForgetPeer: (PeerSnapshot) -> Unit,
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
-    onOpenSettings: () -> Unit,
+    onSyncEnabledChange: (Boolean) -> Unit,
+    onSyncTextChange: (Boolean) -> Unit,
+    onSyncImagesChange: (Boolean) -> Unit,
+    onSyncFilesChange: (Boolean) -> Unit,
+    onCallContinuityChange: (Boolean) -> Unit,
+    onNotificationMirroringChange: (Boolean) -> Unit,
+    onAutoForwardSmsChange: (Boolean) -> Unit,
+    onAutoForwardScreenshotsChange: (Boolean) -> Unit,
+    onDarkModeChange: (Boolean) -> Unit,
+    onForgetDevice: (String) -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onBatterySettingsClicked: () -> Unit = {},
+    onStorageSettingsClicked: () -> Unit = {},
+    onNotificationSettingsClicked: () -> Unit = {},
     onDeleteActivity: (ActivityEntry) -> Unit = {},
     onResendActivity: (ActivityEntry) -> Unit = {},
     onReplayOnboarding: () -> Unit = {}
@@ -178,7 +199,8 @@ fun MainScreen(
                                 onDeleteActivity = onDeleteActivity,
                                 onResendActivity = onResendActivity,
                                 onReplayOnboarding = onReplayOnboarding,
-                                onTabSelected = { currentTab = it }
+                                onTabSelected = { currentTab = it },
+                                onRespondPairing = onRespondPairing
                             )
                             AppTab.Activity -> ActivityTab(
                                 isDark = isDark,
@@ -197,16 +219,38 @@ fun MainScreen(
                             )
                             AppTab.Settings -> SettingsTab(
                                 isDark = isDark,
-                                isSyncEnabled = isSyncEnabled,
                                 isServiceRunning = isServiceRunning,
+                                isSyncEnabled = isSyncEnabled,
+                                syncText = syncText,
+                                syncImages = syncImages,
+                                syncFiles = syncFiles,
+                                callContinuityEnabled = callContinuityEnabled,
+                                notificationMirroringEnabled = notificationMirroringEnabled,
+                                autoForwardSms = autoForwardSms,
+                                autoForwardScreenshots = autoForwardScreenshots,
+                                deviceName = deviceName,
+                                deviceId = deviceId,
+                                peers = peers,
+                                onSyncEnabledChange = onSyncEnabledChange,
+                                onSyncTextChange = onSyncTextChange,
+                                onSyncImagesChange = onSyncImagesChange,
+                                onSyncFilesChange = onSyncFilesChange,
+                                onCallContinuityChange = onCallContinuityChange,
+                                onNotificationMirroringChange = onNotificationMirroringChange,
+                                onAutoForwardSmsChange = onAutoForwardSmsChange,
+                                onAutoForwardScreenshotsChange = onAutoForwardScreenshotsChange,
+                                onDarkModeChange = onDarkModeChange,
+                                onForgetDevice = onForgetDevice,
                                 onStartSync = onStartSync,
                                 onResumeSync = onResumeSync,
                                 onScanNow = onScanNow,
                                 onActionPauseSync = onActionPauseSync,
                                 onActionDisconnectAll = onActionDisconnectAll,
                                 onActionStopService = onActionStopService,
-                                onOpenSettings = onOpenSettings,
-                                onOpenDiagnostics = onOpenDiagnostics
+                                onOpenDiagnostics = onOpenDiagnostics,
+                                onBatterySettingsClicked = onBatterySettingsClicked,
+                                onStorageSettingsClicked = onStorageSettingsClicked,
+                                onNotificationSettingsClicked = onNotificationSettingsClicked
                             )
                         }
                     }
@@ -316,7 +360,8 @@ fun HomeTab(
     onDeleteActivity: (ActivityEntry) -> Unit,
     onResendActivity: (ActivityEntry) -> Unit,
     onReplayOnboarding: () -> Unit,
-    onTabSelected: (AppTab) -> Unit
+    onTabSelected: (AppTab) -> Unit,
+    onRespondPairing: (PeerSnapshot, Boolean) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -491,6 +536,7 @@ fun HomeTab(
                         onSendFiles = { onActionSendFiles(peer.id) },
                         onForget = { onForgetPeer(peer) },
                         onStartSpeedTest = { onActionStartSpeedTest(peer.id) },
+                        onRespond = { onRespondPairing(peer, it) },
                         speedTestProgress = activeSpeedTests.find { it.peerId == peer.id },
                         modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp)
                     )
@@ -1125,6 +1171,7 @@ fun DeviceCard(
     onSendFiles: () -> Unit,
     onForget: () -> Unit,
     onStartSpeedTest: () -> Unit = {},
+    onRespond: (Boolean) -> Unit = {},
     speedTestProgress: SpeedTestProgress? = null,
     modifier: Modifier = Modifier.width(170.dp)
 ) {
@@ -1206,12 +1253,13 @@ fun DeviceCard(
                     )
                 } else {
                     Text(
-                        text = "Pending",
+                        text = if (peer.lifecycleState == "pairing_in_progress") "Waiting for ${peer.name}" else "Pending",
                         style = CRTypography.caption,
                         color = CRTheme.statusAmber
                     )
                 }
             }
+        }
         if (speedTestProgress != null) {
             Spacer(modifier = Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -1233,14 +1281,22 @@ fun DeviceCard(
                 trackColor = if(isDark) Color.White.copy(alpha=0.1f) else Color.Black.copy(alpha=0.1f)
             )
         }
-    }
         
-    androidx.compose.material3.DropdownMenu(
+        androidx.compose.material3.DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false },
             modifier = Modifier.background(if (isDark) Color(0xFF1E1E1E) else Color.White)
         ) {
-            if (peer.isConnected) {
+            if (peer.lifecycleState == "pending_approval" && !peer.trusted) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Accept Pairing", color = CRTheme.accentGreen) },
+                    onClick = { showMenu = false; onRespond(true) }
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Reject Pairing", color = CRTheme.accentRed) },
+                    onClick = { showMenu = false; onRespond(false) }
+                )
+            } else if (peer.isConnected) {
                 androidx.compose.material3.DropdownMenuItem(
                     text = { Text("Send Files", color = CRTheme.textHigh(isDark)) },
                     onClick = { showMenu = false; onSendFiles() }
@@ -1616,93 +1672,6 @@ fun PeerListCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun SettingsTab(
-    isDark: Boolean,
-    isSyncEnabled: Boolean,
-    isServiceRunning: Boolean,
-    onStartSync: () -> Unit,
-    onResumeSync: () -> Unit,
-    onScanNow: () -> Unit,
-    onActionPauseSync: () -> Unit,
-    onActionDisconnectAll: () -> Unit,
-    onActionStopService: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenDiagnostics: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Settings",
-            style = CRTypography.h2,
-            color = CRTheme.textHigh(isDark),
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
-        LazyColumn(
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                if (isSyncEnabled) {
-                    SettingsActionTile(isDark = isDark, icon = Icons.Default.Pause, label = "Pause Sync", color = CRTheme.accentAmber, onClick = onActionPauseSync)
-                } else {
-                    SettingsActionTile(isDark = isDark, icon = Icons.Default.PlayArrow, label = "Resume Sync", color = CRTheme.accentGreen, onClick = onResumeSync)
-                }
-            }
-            item {
-                if (!isServiceRunning) {
-                    SettingsActionTile(isDark = isDark, icon = Icons.Default.PlayCircle, label = "Start Service", color = CRTheme.accentGreen, onClick = onStartSync)
-                }
-            }
-            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Search, label = "Scan Now", color = CRTheme.brandCyan, onClick = onScanNow) }
-            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.LinkOff, label = "Disconnect All", color = CRTheme.brandPink, onClick = onActionDisconnectAll) }
-            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Stop, label = "Stop Service", color = CRTheme.accentRed, onClick = onActionStopService) }
-            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Settings, label = "Advanced Settings", color = CRTheme.textMedium(isDark), onClick = onOpenSettings) }
-            item { SettingsActionTile(isDark = isDark, icon = Icons.Default.Info, label = "Diagnostics", color = CRTheme.brandElectric, onClick = onOpenDiagnostics) }
-        }
-    }
-}
-
-@Composable
-fun SettingsActionTile(
-    isDark: Boolean,
-    icon: ImageVector,
-    label: String,
-    color: Color,
-    onClick: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .crGlassCard(
-                isDark = isDark,
-                cornerRadius = 16.dp,
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onClick()
-                }
-            )
-            .semantics(mergeDescendants = true) {}
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(color.copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = label,
-            style = CRTypography.label,
-            color = CRTheme.textHigh(isDark)
-        )
     }
 }
 

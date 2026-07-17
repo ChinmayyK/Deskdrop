@@ -84,11 +84,7 @@
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- ── Settings ──────────────────────────────────────────────── -->
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
+
 
         <!-- ── Diagnostics ───────────────────────────────────────────── -->
         <activity
