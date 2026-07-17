@@ -218,9 +218,11 @@ struct PeerStoreData {
 struct LivePeerSession {
     session_id: u64,
     endpoint: SocketAddr,
-    sender: mpsc::Sender<AppMessage>,
-    file_sender: mpsc::Sender<AppMessage>,
-    shutdown_tx: Option<oneshot::Sender<SessionShutdown>>,
+    pub sender: mpsc::Sender<AppMessage>,
+    pub file_sender: mpsc::Sender<AppMessage>,
+    pub shutdown_tx: Option<oneshot::Sender<SessionShutdown>>,
+    pub is_outbound: bool,
+    pub connected_at: u64,
 }
 
 #[derive(Debug)]
@@ -509,12 +511,24 @@ impl PeerManager {
 
     pub fn replace_live_session(
         &self,
+        local_device_id: Uuid,
         device_id: Uuid,
+        is_outbound: bool,
         endpoint: SocketAddr,
         sender: mpsc::Sender<AppMessage>,
         file_sender: mpsc::Sender<AppMessage>,
         shutdown_tx: oneshot::Sender<SessionShutdown>,
-    ) -> Result<(u64, Option<ReplacedSession>)> {
+    ) -> Result<(u64, Option<ReplacedSession>, bool)> {
+        let we_are_initiator = local_device_id < device_id;
+        let incoming_is_winner = we_are_initiator == is_outbound;
+
+        if let Some(existing) = self.live.get(&device_id) {
+            let existing_is_winner = we_are_initiator == existing.is_outbound;
+            if !incoming_is_winner && existing_is_winner {
+                return Ok((0, None, true)); // rejected_new = true
+            }
+        }
+
         let session_id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
         {
             
@@ -541,6 +555,8 @@ impl PeerManager {
                 sender,
                 file_sender,
                 shutdown_tx: Some(shutdown_tx),
+                is_outbound,
+                connected_at: now_secs(),
             },
         );
         self.save()?;
@@ -552,6 +568,7 @@ impl PeerManager {
                 endpoint: session.endpoint,
                 shutdown_tx: session.shutdown_tx,
             }),
+            false,
         ))
     }
 
@@ -575,20 +592,35 @@ impl PeerManager {
         device_id: Uuid,
         session_id: u64,
         reason: Option<String>,
-    ) -> Result<bool> {
-        {
+    ) -> Result<Option<u64>> {
+        let connected_at = {
             
             if let Some(current) = self.live.get(&device_id) {
                 if current.session_id != session_id {
-                    return Ok(false);
+                    return Ok(None);
                 }
+                current.connected_at
             } else {
-                return Ok(false);
+                return Ok(None);
             }
-        }
+        };
 
         self.mark_disconnected(device_id, reason)?;
-        Ok(true)
+        Ok(Some(connected_at))
+    }
+
+    pub fn mark_failed_all(&self, device_id: Uuid, reason: String) -> Result<()> {
+        if self.live.contains_key(&device_id) {
+            return Ok(());
+        }
+        self.live.remove(&device_id);
+        {
+            if let Some(mut entry) = self.store.get_mut(&device_id) {
+                entry.status = PeerConnectionState::Failed;
+                entry.last_error = Some(reason);
+            }
+        }
+        self.save()
     }
 
     pub fn mark_failed(&self, device_id: Uuid, endpoint: SocketAddr, reason: String) -> Result<()> {

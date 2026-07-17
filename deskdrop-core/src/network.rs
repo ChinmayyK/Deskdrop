@@ -37,7 +37,7 @@ const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(3);
 #[allow(dead_code)]
 const KEEPALIVE_RETRIES: u32 = 3;
 const SOCKET_BUFFER_MIN: usize = 8 * 1024 * 1024; // 8 MB
-const SOCKET_BUFFER_PREFERRED: usize = 16 * 1024 * 1024; // 16 MB — room for multiple 1 MB chunks in flight
+const SOCKET_BUFFER_PREFERRED: usize = 16 * 1024 * 1024; // 16 MB — room for multiple 4 MB chunks in flight
 
 // ── TCP helpers ───────────────────────────────────────────────────────────────
 
@@ -231,12 +231,17 @@ async fn send_encrypted_no_flush(
     let len = (12 + buffer.len()) as u32;
     let len_bytes = len.to_le_bytes();
 
-    let mut flat = Vec::with_capacity(4 + 12 + buffer.len());
-    flat.extend_from_slice(&len_bytes);
-    flat.extend_from_slice(&nonce);
-    flat.append(&mut buffer);
+    // Zero-copy chaining avoids allocating a flat Vec for length+nonce+ciphertext.
+    use bytes::Buf;
+    let mut chained = Buf::chain(
+        Buf::chain(
+            std::io::Cursor::new(len_bytes),
+            std::io::Cursor::new(nonce.to_vec()),
+        ),
+        std::io::Cursor::new(buffer),
+    );
 
-    stream.write_all(&flat).await?;
+    stream.write_all_buf(&mut chained).await?;
     Ok(())
 }
 
@@ -253,11 +258,21 @@ async fn recv_encrypted(
     let len = u32::from_le_bytes(len_buf);
     anyhow::ensure!((16..=MAX_FRAME_SIZE).contains(&len), "encrypted frame length invalid: {len}");
 
-    let mut cipher_buffer = vec![0u8; len as usize];
-    tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut cipher_buffer))
-        .await
-        .context("timeout waiting for encrypted frame body")?
-        .context("reading encrypted frame body")?;
+    let mut cipher_buffer = Vec::with_capacity(std::cmp::min(len as usize, 64 * 1024));
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        stream.take(len as u64).read_to_end(&mut cipher_buffer),
+    )
+    .await
+    .context("timeout waiting for encrypted frame body")?
+    .context("reading encrypted frame body")?;
+
+    anyhow::ensure!(
+        cipher_buffer.len() == len as usize,
+        "incomplete frame body: got {}, expected {}",
+        cipher_buffer.len(),
+        len
+    );
         
     session
         .decrypt_in_place(&mut cipher_buffer)

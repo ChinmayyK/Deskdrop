@@ -36,14 +36,16 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chunks reduce
-                                                // encrypt/serialize/frame overhead per byte.
+pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks reduce
+                                                    // encrypt/serialize/frame overhead per byte.
+                                                    // 4× bigger = 4× fewer mutex locks, syscalls,
+                                                    // and encrypt/serialize round-trips.
 
 /// Maximum transfer size (4 GB). Rejects announced transfers exceeding this
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 4; // ACK every 4 MB — balances responsive progress updates with minimal TCP/locking overhead
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 2; // ACK every 8 MB — balances responsive progress updates with minimal TCP/locking overhead
 
 pub type TransferId = [u8; 16];
 
@@ -426,7 +428,7 @@ impl InboundTransfer {
             .with_context(|| "creating destination file atomically")?;
         
         self.dest_path = Some(dest);
-        self.file_handle = Some(BufWriter::with_capacity(2 * 1024 * 1024, file));
+        self.file_handle = Some(BufWriter::with_capacity(8 * 1024 * 1024, file));
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
         Ok(())
@@ -457,7 +459,7 @@ impl InboundTransfer {
             "transfer is not active"
         );
         anyhow::ensure!(!self.paused, "transfer is paused");
-        anyhow::ensure!(data_len <= 4 * 1024 * 1024, "chunk size exceeds limit");
+        anyhow::ensure!(data_len <= 8 * 1024 * 1024, "chunk size exceeds limit");
         anyhow::ensure!(
             chunk_index < self.total_chunks,
             "chunk {} out of range",
@@ -499,7 +501,7 @@ impl InboundTransfer {
             "transfer is not active"
         );
         anyhow::ensure!(!self.paused, "transfer is paused");
-        anyhow::ensure!(data.len() <= 4 * 1024 * 1024, "chunk size exceeds limit");
+        anyhow::ensure!(data.len() <= 8 * 1024 * 1024, "chunk size exceeds limit");
 
         anyhow::ensure!(
             chunk_index < self.total_chunks,
@@ -698,6 +700,10 @@ impl FileTransferManager {
         Ok(self.outbound.get(&tid).unwrap())
     }
 
+    pub fn get_outbound(&self, tid: &TransferId) -> Option<&OutboundTransfer> {
+        self.outbound.get(tid)
+    }
+
     pub fn get_outbound_mut(&mut self, tid: &TransferId) -> Option<&mut OutboundTransfer> {
         self.outbound.get_mut(tid)
     }
@@ -830,9 +836,15 @@ impl FileTransferManager {
 
     pub fn pause_all_for_device(&mut self, peer_id: Uuid) {
         for t in self.inbound.values_mut() {
-            if t.from_device == peer_id {
+            if t.from_device == peer_id && (t.status == TransferStatus::Transferring || t.status == TransferStatus::Pending) {
                 t.status = TransferStatus::Pending;
                 t.file_handle = None;
+            }
+        }
+        for t in self.outbound.values_mut() {
+            if t.target_device == Some(peer_id) && (t.status == TransferStatus::Transferring || t.status == TransferStatus::Pending) {
+                t.status = TransferStatus::Pending;
+                // No file handle to clear for outbound currently.
             }
         }
     }

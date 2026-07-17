@@ -607,7 +607,12 @@ impl History {
             .collect();
 
         let bytes = serde_json::to_vec_pretty(&persistable_entries)?;
-        std::fs::write(&tmp_path, &bytes).context("writing history tmp")?;
+        {
+            use std::io::Write;
+            let mut file = std::fs::File::create(&tmp_path).context("creating history tmp")?;
+            file.write_all(&bytes).context("writing history tmp")?;
+            let _ = file.sync_all();
+        }
         std::fs::rename(&tmp_path, &self.path).context("renaming history file")?;
         Ok(())
     }
