@@ -1,11 +1,11 @@
-<Window x:Class="Deskdrop.Windows.QuickAccessWindow"
+﻿<Window x:Class="Deskdrop.Windows.QuickAccessWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
         Title="Quick Access" Height="600" Width="380"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
-        Deactivated="Window_Deactivated" Loaded="Window_Loaded">
+        Deactivated="Window_Deactivated" Loaded="Window_Loaded" UseLayoutRounding="True" SnapsToDevicePixels="True">
     
     <Window.Resources>
         <SolidColorBrush x:Key="BrandElectric" Color="#0055CC"/>

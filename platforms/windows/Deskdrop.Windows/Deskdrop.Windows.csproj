@@ -12,6 +12,7 @@
     <Product>Deskdrop</Product>
     <Version>1.2.2</Version>
     <Description>Proximity-Based Shared Clipboard</Description>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,5 +30,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\logo.png" />
+    <Resource Include="Assets\logo.ico" />
+    <Resource Include="Assets\dark_logo.ico" />
   </ItemGroup>
 </Project>

@@ -57,6 +57,8 @@ namespace Deskdrop.Windows
             catch { return false; }
         }
 
+
+
         /// <summary>
         /// Send a JSON command and return the parsed response.
         /// Returns null if the daemon is not running.
@@ -162,6 +164,19 @@ namespace Deskdrop.Windows
 
         public static JsonDocument? SetSyncEnabled(bool enabled) =>
             Send(new { cmd = "set_sync_enabled", enabled });
+
+        public static JsonDocument? PushBatteryStatus(int level, bool charging) =>
+            Send(new { cmd = "push_battery_status", level, charging });
+
+        public static JsonDocument? PushStorageStatus(ulong imagesBytes, ulong videosBytes, ulong appsBytes, ulong freeBytes, ulong totalBytes) =>
+            Send(new { 
+                cmd = "push_storage_status", 
+                images_bytes = imagesBytes, 
+                videos_bytes = videosBytes, 
+                apps_bytes = appsBytes, 
+                free_bytes = freeBytes, 
+                total_bytes = totalBytes 
+            });
 
         public static JsonDocument? HistoryClear() => Send(new { cmd = "history_clear" });
 

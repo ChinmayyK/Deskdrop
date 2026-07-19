@@ -447,6 +447,9 @@ namespace Deskdrop.Windows
                     if (tid != null)
                     {
                         StatusChanged?.Invoke($"⬇️ Incoming {name} from {from}...");
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => {
+                            new IncomingFileBannerWindow(name, from).Show();
+                        });
                         // Do not auto-accept here; let core policy or user UI handle it
                     }
                     break;

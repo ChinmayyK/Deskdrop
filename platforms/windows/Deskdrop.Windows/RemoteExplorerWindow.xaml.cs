@@ -80,7 +80,7 @@ namespace Deskdrop.Windows
 
             try
             {
-                var response = await WindowsIpcClient.RemoteFileListRequestAsync(_deviceId, CurrentPath);
+                var response = await DaemonClient.RemoteFileListRequestAsync(_deviceId, CurrentPath);
                 if (response != null && response.RootElement.TryGetProperty("files", out var filesProp))
                 {
                     var files = JsonSerializer.Deserialize<System.Collections.Generic.List<RemoteFile>>(filesProp.GetRawText()) ?? new();
@@ -153,7 +153,7 @@ namespace Deskdrop.Windows
                 // Just download it on double click
                 string sep = CurrentPath.EndsWith("/") ? "" : "/";
                 string fullPath = $"{CurrentPath}{sep}{regularFile.name}";
-                WindowsIpcClient.RemoteFileActionRequest(_deviceId, "download", fullPath);
+                DaemonClient.RemoteFileActionRequest(_deviceId, "download", fullPath);
                 MessageBox.Show(this, $"Started download of {regularFile.name}", "Download");
             }
         }
@@ -176,7 +176,7 @@ namespace Deskdrop.Windows
             foreach (var file in selected)
             {
                 string fullPath = $"{CurrentPath}{sep}{file.name}";
-                WindowsIpcClient.RemoteFileActionRequest(_deviceId, "download", fullPath);
+                DaemonClient.RemoteFileActionRequest(_deviceId, "download", fullPath);
             }
             
             MessageBox.Show(this, $"Started download for {selected.Count} items.", "Batch Download");
@@ -195,7 +195,7 @@ namespace Deskdrop.Windows
                 foreach (var file in selected)
                 {
                     string fullPath = $"{CurrentPath}{sep}{file.name}";
-                    WindowsIpcClient.RemoteFileActionRequest(_deviceId, "delete", fullPath);
+                    DaemonClient.RemoteFileActionRequest(_deviceId, "delete", fullPath);
                 }
                 
                 // Refresh folder

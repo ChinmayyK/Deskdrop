@@ -1,10 +1,10 @@
-<Window x:Class="Deskdrop.Windows.QRCodeWindow"
+﻿<Window x:Class="Deskdrop.Windows.QRCodeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Magic Link Pairing" Height="420" Width="360"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="#F2F2F7" FontFamily="Segoe UI"
-        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType">
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Grid Margin="24">
         <StackPanel>
             <TextBlock Text="Scan this QR Code from your Deskdrop mobile app to pair instantly." 

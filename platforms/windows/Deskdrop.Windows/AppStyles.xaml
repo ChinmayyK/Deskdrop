@@ -4,6 +4,8 @@
                     xmlns:local="clr-namespace:Deskdrop.Windows">
 
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <local:RatioToStarConverter x:Key="RatioToStarConverter"/>
+
         <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
         <local:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibilityConverter"/>
         
@@ -264,7 +266,7 @@
             </Setter>
         </Style>
         <!-- Hover Card Style for Bouncy Depth -->
-        <Style x:Key="HoverCardStyle" TargetType="Border">
+        <Style x:Key="HoverCardStyle" TargetType="FrameworkElement">
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="RenderTransform">
                 <Setter.Value>

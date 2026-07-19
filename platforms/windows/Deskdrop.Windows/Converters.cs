@@ -30,4 +30,40 @@ namespace Deskdrop.Windows
             throw new NotSupportedException();
         }
     }
+
+    public class NullToVisibilityConverter : IValueConverter
+    {
+        public Visibility NullValue { get; set; } = Visibility.Collapsed;
+        public Visibility NonNullValue { get; set; } = Visibility.Visible;
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return value == null ? NullValue : NonNullValue;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class MultiplyConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is IConvertible val && parameter != null)
+            {
+                if (double.TryParse(parameter.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out double multiplier))
+                {
+                    return val.ToDouble(CultureInfo.InvariantCulture) * multiplier;
+                }
+            }
+            return value;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }

@@ -6,7 +6,7 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" AllowDrop="True"
         ResizeMode="NoResize" Loaded="Window_Loaded"
-        DragEnter="Window_DragEnter" DragLeave="Window_DragLeave" Drop="Window_Drop">
+        DragEnter="Window_DragEnter" DragLeave="Window_DragLeave" Drop="Window_Drop" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Grid>
         <!-- Resting Edge Sliver -->
         <Border x:Name="RestingSliver" HorizontalAlignment="Left" VerticalAlignment="Center" Width="5" Height="90" CornerRadius="2.5" Margin="2,0,0,0">

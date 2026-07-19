@@ -249,6 +249,44 @@ namespace Deskdrop.Windows
         }
         public string BatteryColor => BatteryCharging ? "#34C759" : (BatteryLevel <= 20 ? "#FF3B30" : "#8E8E93");
 
+        private long _storageTotal;
+        public long StorageTotal { get => _storageTotal; set { if(SetProperty(ref _storageTotal, value)) NotifyStorageProperties(); } }
+        private long _storageFree;
+        public long StorageFree { get => _storageFree; set { if(SetProperty(ref _storageFree, value)) NotifyStorageProperties(); } }
+        private long _storageImages;
+        public long StorageImages { get => _storageImages; set { if(SetProperty(ref _storageImages, value)) NotifyStorageProperties(); } }
+        private long _storageVideos;
+        public long StorageVideos { get => _storageVideos; set { if(SetProperty(ref _storageVideos, value)) NotifyStorageProperties(); } }
+        private long _storageApps;
+        public long StorageApps { get => _storageApps; set { if(SetProperty(ref _storageApps, value)) NotifyStorageProperties(); } }
+
+        public bool ShowStorage => StorageTotal > 0;
+        public string StorageFreeText => StorageTotal > 0 ? $"{DeskdropFormatting.FormatBytes(StorageFree)} free" : "";
+        public double StorageImagesRatio => StorageTotal > 0 ? (double)StorageImages / StorageTotal : 0;
+        public double StorageVideosRatio => StorageTotal > 0 ? (double)StorageVideos / StorageTotal : 0;
+        public double StorageAppsRatio => StorageTotal > 0 ? (double)StorageApps / StorageTotal : 0;
+        public double StorageOtherRatio 
+        {
+            get
+            {
+                if (StorageTotal == 0) return 0;
+                long used = StorageTotal - StorageFree;
+                long other = used - StorageImages - StorageVideos - StorageApps;
+                if (other < 0) other = 0;
+                return (double)other / StorageTotal;
+            }
+        }
+
+        private void NotifyStorageProperties()
+        {
+            OnPropertyChanged(nameof(ShowStorage));
+            OnPropertyChanged(nameof(StorageFreeText));
+            OnPropertyChanged(nameof(StorageImagesRatio));
+            OnPropertyChanged(nameof(StorageVideosRatio));
+            OnPropertyChanged(nameof(StorageAppsRatio));
+            OnPropertyChanged(nameof(StorageOtherRatio));
+        }
+
         private void NotifyPeerStateProperties()
         {
             OnPropertyChanged(nameof(StatusIcon));
@@ -404,6 +442,17 @@ namespace Deskdrop.Windows
         public bool charging { get; set; }
     }
 
+    public class PeerStorageState
+    {
+        public string device_id { get; set; } = "";
+        public string device_name { get; set; } = "";
+        public long images_bytes { get; set; }
+        public long videos_bytes { get; set; }
+        public long apps_bytes { get; set; }
+        public long free_bytes { get; set; }
+        public long total_bytes { get; set; }
+    }
+
     public class ActiveCallState
     {
         public string device_id { get; set; } = "";
@@ -457,6 +506,13 @@ namespace Deskdrop.Windows
         {
             get => _peers;
             set { _peers = value; OnPropertyChanged(); }
+        }
+
+        private ObservableCollection<PeerViewModel> _connectedPeers = new ObservableCollection<PeerViewModel>();
+        public ObservableCollection<PeerViewModel> ConnectedPeers
+        {
+            get => _connectedPeers;
+            set { _connectedPeers = value; OnPropertyChanged(); }
         }
 
         private ObservableCollection<HistoryItem> _history = null!;
@@ -703,9 +759,29 @@ namespace Deskdrop.Windows
                         }
                     }
 
-                    if (newPeers != null)
+                    if (dataElem.TryGetProperty("peer_storages", out var storElem))
                     {
+                        var storages = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerStorageState>>(storElem.GetRawText(), JsonOptions);
+                        if (newPeers != null && storages != null)
+                        {
+                            foreach (var peer in newPeers)
+                            {
+                                var st = storages.Find(s => s.device_id == peer.device_id);
+                                if (st != null)
+                                {
+                                    peer.StorageTotal = st.total_bytes;
+                                    peer.StorageFree = st.free_bytes;
+                                    peer.StorageImages = st.images_bytes;
+                                    peer.StorageVideos = st.videos_bytes;
+                                    peer.StorageApps = st.apps_bytes;
+                                }
+                            }
+                        }
+                    }
+
+                    if (newPeers != null)                    {
                         var existing = Peers.ToList();
+                        var existingConnected = ConnectedPeers.ToList();
                         foreach(var peer in newPeers)
                         {
                             var match = Peers.FirstOrDefault(p => p.device_id == peer.device_id);
@@ -723,6 +799,11 @@ namespace Deskdrop.Windows
                                 match.last_error = peer.last_error;
                                 match.BatteryLevel = peer.BatteryLevel;
                                 match.BatteryCharging = peer.BatteryCharging;
+                                match.StorageTotal = peer.StorageTotal;
+                                match.StorageFree = peer.StorageFree;
+                                match.StorageImages = peer.StorageImages;
+                                match.StorageVideos = peer.StorageVideos;
+                                match.StorageApps = peer.StorageApps;
                                 match.pairingPin = peer.pairingPin;
                                 match.pairingRequested = peer.pairingRequested;
                                 match.outgoingPairingWaiting = peer.outgoingPairingWaiting;
@@ -731,9 +812,16 @@ namespace Deskdrop.Windows
                             else
                             {
                                 Peers.Add(peer);
+                                if (peer.is_trusted && peer.status == "connected") ConnectedPeers.Add(peer);
                             }
                         }
                         foreach(var rem in existing) Peers.Remove(rem);
+                        foreach(var rem in existingConnected) { if (!Peers.Any(p => p.device_id == rem.device_id) || !rem.is_trusted || rem.status != "connected") ConnectedPeers.Remove(rem); }
+                        // Ensure connected peers is synced for existing peers that updated
+                        foreach (var peer in Peers) {
+                            if (peer.is_trusted && peer.status == "connected" && !ConnectedPeers.Contains(peer)) ConnectedPeers.Add(peer);
+                            else if ((!peer.is_trusted || peer.status != "connected") && ConnectedPeers.Contains(peer)) ConnectedPeers.Remove(peer);
+                        }
                         
                         StatusLine = Peers.Count == 0 ? "Running - no devices connected" : $"Connected to {ConnectedCount} device{(ConnectedCount == 1 ? "" : "s")}";
                         NotifyPeerMetrics();
@@ -880,6 +968,23 @@ namespace Deskdrop.Windows
         {
             OnPropertyChanged(nameof(PendingClipboardCount));
             OnPropertyChanged(nameof(HasPendingClipboards));
+        }
+    }
+
+    public class RatioToStarConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value is double ratio)
+            {
+                return new GridLength(ratio, GridUnitType.Star);
+            }
+            return new GridLength(0);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
         }
     }
 

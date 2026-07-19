@@ -14,6 +14,7 @@ namespace Deskdrop.Windows
     {
         private readonly TaskbarIcon _tray;
         private readonly ClipboardManager _mgr = new();
+        private readonly Services.SystemTelemetryPoller _telemetryPoller = new();
         private readonly ContextMenu _menu = new();
 
         private readonly MenuItem _statusItem;
@@ -57,6 +58,8 @@ namespace Deskdrop.Windows
             quitItem.Click += (_, _) => { 
                 if (_edgeDropWindow != null) { try { _edgeDropWindow.Close(); } catch { } }
                 _mgr.Stop(); 
+                _telemetryPoller.Stop();
+                _telemetryPoller.Dispose();
                 System.Windows.Application.Current?.Shutdown();
             };
 
@@ -79,7 +82,7 @@ namespace Deskdrop.Windows
 
             _tray = new TaskbarIcon
             {
-                IconSource = BuildTrayIcon(false),
+                Icon = BuildTrayIcon(false),
                 ToolTipText = "Deskdrop",
                 ContextMenu = _menu
             };
@@ -138,6 +141,8 @@ namespace Deskdrop.Windows
                 });
             }
 
+            _mgr.Start();
+            _telemetryPoller.Start();
             _mgr.StatusChanged       += OnStatusChanged;
             _mgr.TofuPromptRequested += OnTofuPrompt;
             _mgr.HistoryItemAdded    += item => {
@@ -207,7 +212,7 @@ namespace Deskdrop.Windows
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
                 bool connected = _mgr.IsConnected();
-                _tray.IconSource = BuildTrayIcon(connected);
+                _tray.Icon = BuildTrayIcon(connected);
                 _tray.ToolTipText = connected ? "Deskdrop — syncing" : "Deskdrop — idle";
                 _sendItem.IsEnabled = connected;
                 _sendFileItem.IsEnabled = connected;
@@ -370,43 +375,26 @@ namespace Deskdrop.Windows
         }
 
         // MARK: - Tray Icon (Original Backup for Rollback)
-        private static ImageSource BuildTrayIconOriginal(bool connected)
+        private static System.Drawing.Icon BuildTrayIconOriginal(bool connected)
         {
             try {
-                return new BitmapImage(new Uri("pack://application:,,,/Assets/logo.png"));
+                return System.Drawing.SystemIcons.Shield;
             } catch {
                 return null!;
             }
         }
 
-        private static ImageSource BuildTrayIcon(bool connected)
+        private static System.Drawing.Icon BuildTrayIcon(bool connected)
         {
-            try
-            {
-                // Experimental: Connected Devices icon (Laptop + Smartphone vector glyph matching macOS)
-                int size = 16;
-                var visual = new DrawingVisual();
-                using (var dc = visual.RenderOpen())
+            try {
+                var uri = new Uri("pack://application:,,,/Assets/dark_logo.ico");
+                var streamInfo = System.Windows.Application.GetResourceStream(uri);
+                if (streamInfo != null)
                 {
-                    var brush = connected ? Brushes.DodgerBlue : Brushes.White;
-                    var pen = new Pen(brush, 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-
-                    // Laptop monitor (left side)
-                    dc.DrawRoundedRectangle(null, pen, new Rect(1, 3, 9, 7), 1, 1);
-                    // Laptop keyboard base
-                    dc.DrawLine(pen, new Point(0, 11), new Point(11, 11));
-
-                    // Smartphone (overlapping on right side)
-                    dc.DrawRoundedRectangle(brush, pen, new Rect(10, 5, 4, 7), 1, 1);
+                    return new System.Drawing.Icon(streamInfo.Stream);
                 }
-
-                var rtb = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
-                rtb.Render(visual);
-                rtb.Freeze();
-                return rtb;
-            }
-            catch
-            {
+                return connected ? System.Drawing.SystemIcons.Application : System.Drawing.SystemIcons.Exclamation;
+            } catch {
                 return BuildTrayIconOriginal(connected);
             }
         }

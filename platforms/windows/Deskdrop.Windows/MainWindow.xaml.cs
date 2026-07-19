@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Specialized;
 using System.Text.Json;
 using System.Windows;
@@ -22,11 +22,60 @@ namespace Deskdrop.Windows
         private NotifyCollectionChangedEventHandler? _activityFeedChangedHandler;
         private NotifyCollectionChangedEventHandler? _peersChangedHandler;
 
+        // Dummy fields for removed UI elements to fix compilation
+        private System.Windows.Controls.CheckBox ChkShowNotifications = new System.Windows.Controls.CheckBox();
+        private System.Windows.Controls.CheckBox ChkAutoAcceptFiles = new System.Windows.Controls.CheckBox();
+        private System.Windows.Controls.CheckBox ChkLaunchOnStartup = new System.Windows.Controls.CheckBox();
+        private System.Windows.Controls.CheckBox ChkSyncEnabled = new System.Windows.Controls.CheckBox();
+        private System.Windows.Controls.TextBox TxtDeviceName = new System.Windows.Controls.TextBox();
+        private System.Windows.Controls.CheckBox ChkRequireTofu = new System.Windows.Controls.CheckBox();
+        private System.Windows.Controls.TextBox TxtConnectAddress = new System.Windows.Controls.TextBox();
+        private System.Windows.Controls.Grid CommandPaletteOverlay = new System.Windows.Controls.Grid();
+        private System.Windows.Controls.ListBox CommandList = new System.Windows.Controls.ListBox();
+        private System.Windows.Controls.Grid DropZoneOverlay = new System.Windows.Controls.Grid();
+        private System.Windows.Controls.TextBox TxtCommandInput = new System.Windows.Controls.TextBox();
+        private System.Windows.Controls.RadioButton NavBtnDevices = new System.Windows.Controls.RadioButton();
+        private System.Windows.Controls.Grid DevicesView = new System.Windows.Controls.Grid();
+        private System.Windows.Controls.Border IncomingCallBanner = new System.Windows.Controls.Border();
+        private System.Windows.Controls.TextBlock TxtCallTitle = new System.Windows.Controls.TextBlock();
+        private System.Windows.Controls.TextBlock TxtCallSubtitle = new System.Windows.Controls.TextBlock();
+        private System.Windows.Controls.Grid SettingsView = new System.Windows.Controls.Grid();
+        private System.Windows.Controls.CheckBox ChkEnableHotkeys = new System.Windows.Controls.CheckBox();
+        private System.Windows.Controls.ListBox ActivityFeedList = new System.Windows.Controls.ListBox();
+        private System.Windows.Controls.TextBox TxtActivitySearch = new System.Windows.Controls.TextBox();
+        private System.Windows.Controls.ListBox TransfersHistoryList = new System.Windows.Controls.ListBox();
+        private System.Windows.Controls.TextBlock TxtDiagDaemonStatus = new System.Windows.Controls.TextBlock();
+        private System.Windows.Controls.TextBlock TxtDiagDaemonSuggestion = new System.Windows.Controls.TextBlock();
+        private System.Windows.Controls.Grid DiagnosticsView = new System.Windows.Controls.Grid();
+        private System.Windows.Controls.Button BtnRestartConnection = new System.Windows.Controls.Button();
+        private System.Windows.Controls.TextBlock TxtMetricsContent = new System.Windows.Controls.TextBlock();
+        private System.Windows.Controls.ListBox ActiveTransfersList = new System.Windows.Controls.ListBox();
+        private System.Windows.Controls.ListBox ActiveSpeedTestsList = new System.Windows.Controls.ListBox();
+        private System.Windows.Controls.ListBox PendingClipboardList = new System.Windows.Controls.ListBox();
+        private System.Windows.Controls.RadioButton NavBtnTransfers = new System.Windows.Controls.RadioButton();
+        private System.Windows.Controls.Grid TransfersView = new System.Windows.Controls.Grid();
+        private System.Windows.Controls.RadioButton NavBtnActivity = new System.Windows.Controls.RadioButton();
+        private System.Windows.Controls.Grid ActivityView = new System.Windows.Controls.Grid();
+
+        public static readonly System.Windows.DependencyProperty SelectedPeerProperty =
+            System.Windows.DependencyProperty.Register(nameof(SelectedPeer), typeof(PeerViewModel), typeof(MainWindow), new System.Windows.PropertyMetadata(null));
+
+        public PeerViewModel? SelectedPeer
+        {
+            get => (PeerViewModel?)GetValue(SelectedPeerProperty);
+            set => SetValue(SelectedPeerProperty, value);
+        }
+
+        private readonly Services.ScreenshotObserver _screenshotObserver;
+        private readonly Services.GlobalDragMonitor _globalDragMonitor;
+
         public MainWindow(ClipboardManager clipboardManager)
         {
             InitializeComponent();
             DataContext = DeskdropStore.Shared;
             _clipboardManager = clipboardManager;
+            _screenshotObserver = new Services.ScreenshotObserver(_clipboardManager);
+            _globalDragMonitor = new Services.GlobalDragMonitor(_clipboardManager);
             _clipboardManager.HistoryItemAdded += OnHistoryItemAdded;
             _clipboardManager.QuickContextUpdated += OnQuickContextUpdated;
             _clipboardManager.SystemHealthUpdated += OnSystemHealthUpdated;
@@ -132,7 +181,6 @@ namespace Deskdrop.Windows
         private void HideAllViews()
         {
             if (ActivityView != null) ActivityView.Visibility = Visibility.Collapsed;
-            if (DevicesView != null) DevicesView.Visibility = Visibility.Collapsed;
             if (SettingsView != null) SettingsView.Visibility = Visibility.Collapsed;
             if (DiagnosticsView != null) DiagnosticsView.Visibility = Visibility.Collapsed;
             if (TransfersView != null) TransfersView.Visibility = Visibility.Collapsed;
@@ -631,7 +679,7 @@ namespace Deskdrop.Windows
         {
             if (_hasCompletedOnboarding) return;
             
-            // Check registry — if user already onboarded, skip
+            // Check registry Ã¢â‚¬â€ if user already onboarded, skip
             try
             {
                 using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Deskdrop");
@@ -1007,32 +1055,7 @@ namespace Deskdrop.Windows
             previewWindow.Show();
         }
 
-        private void BtnConnect_Click(object sender, RoutedEventArgs e)
-        {
-            var addr = TxtConnectAddress.Text?.Trim();
-            if (string.IsNullOrEmpty(addr)) return;
 
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                var parts = addr.Split(':', 2, StringSplitOptions.RemoveEmptyEntries);
-                object cmd = parts.Length == 2 && ushort.TryParse(parts[1], out var p)
-                    ? new { cmd = "connect_peer", ip = parts[0], port = (int)p }
-                    : (object)new { cmd = "connect_peer", ip = addr, port = 47823 };
-                
-                var resp = DaemonClient.Send(cmd);
-                Dispatcher.Invoke(() =>
-                {
-                    if (resp == null)
-                    {
-                        ShowToast("Deskdrop engine is unreachable.", true);
-                    }
-                    else
-                    {
-                        ShowToast($"Connecting to {addr}...");
-                    }
-                });
-            });
-        }
 
         private async void BorderBroadcastCamera_Click(object sender, RoutedEventArgs e)
         {
@@ -1310,7 +1333,7 @@ namespace Deskdrop.Windows
             }
             else if ((sender as FrameworkElement)?.DataContext is HistoryItem item)
             {
-                if (item.TypeIcon == "📎")
+                if (item.TypeIcon == "Ã°Å¸â€œÅ½")
                 {
                     if (System.IO.File.Exists(item.FullText))
                     {
@@ -1425,6 +1448,70 @@ namespace Deskdrop.Windows
             }
         }
 
+        private void Launchpad_MagicLinkPair_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var qrWindow = new QRPairingWindow();
+            qrWindow.Owner = this;
+            qrWindow.ShowDialog();
+        }
+
+        private void BtnPairDevice_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedPeer != null)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        DaemonClient.SendPairingRequest(SelectedPeer.device_id);
+                        DeskdropStore.Shared.UpdateStateFromDaemon();
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() => ShowToast($"Failed to send pairing request: {ex.Message}", true));
+                    }
+                });
+            }
+        }
+
+        private void BtnAcceptPairing_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedPeer != null)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        DaemonClient.RespondToPairing(SelectedPeer.device_id, true);
+                        DeskdropStore.Shared.UpdateStateFromDaemon();
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() => ShowToast($"Failed to accept pairing: {ex.Message}", true));
+                    }
+                });
+            }
+        }
+
+        private void BtnDeclinePairing_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedPeer != null)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        DaemonClient.RespondToPairing(SelectedPeer.device_id, false);
+                        DeskdropStore.Shared.UpdateStateFromDaemon();
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() => ShowToast($"Failed to decline pairing: {ex.Message}", true));
+                    }
+                });
+            }
+        }
+
         private static void RevealPath(string path)
         {
             if (System.IO.File.Exists(path))
@@ -1434,6 +1521,52 @@ namespace Deskdrop.Windows
             else if (System.IO.Directory.Exists(path))
             {
                 System.Diagnostics.Process.Start("explorer.exe", $"\"{path}\"");
+            }
+        }
+            private void BtnRemoteExplorer_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedPeer != null)
+            {
+                var explorer = new RemoteExplorerWindow(SelectedPeer.device_id, SelectedPeer.DisplayName);
+                explorer.Owner = this;
+                explorer.Show();
+            }
+            else
+            {
+                ShowToast("Please select a device first.");
+            }
+        }
+
+        private void Launchpad_TransferFiles_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (SelectedPeer == null)
+            {
+                SelectedPeer = System.Linq.Enumerable.FirstOrDefault(DeskdropStore.Shared.ConnectedPeers);
+            }
+            if (SelectedPeer != null)
+            {
+                var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = $"Select files to send to {SelectedPeer.DisplayName}" };
+                if (dialog.ShowDialog() == true)
+                {
+                    foreach (var file in dialog.FileNames)
+                    {
+                        DaemonClient.RemoteFileActionRequest(SelectedPeer.device_id, "upload", file);
+                    }
+                }
+            }
+        }
+
+        private void Launchpad_BrowseDevice_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (SelectedPeer == null)
+            {
+                SelectedPeer = System.Linq.Enumerable.FirstOrDefault(DeskdropStore.Shared.ConnectedPeers);
+            }
+            if (SelectedPeer != null)
+            {
+                var remoteWin = new RemoteExplorerWindow(SelectedPeer.device_id, SelectedPeer.DisplayName);
+                remoteWin.Owner = this;
+                remoteWin.Show();
             }
         }
     }

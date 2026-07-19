@@ -27,12 +27,15 @@ namespace Deskdrop.Windows
         [STAThread]
         static void Main(string[] args)
         {
+            var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "startup_log.txt");
+            File.AppendAllText(logPath, $"[Main] Started. Args: {args.Length}\n");
             try
             {
                 using var mutex = new Mutex(true, $"Deskdrop_SingleInstance_v1_{Environment.UserName}", out bool isNew);
-                
+                File.AppendAllText(logPath, $"[Main] Mutex created. isNew: {isNew}\n");
                 if (!isNew)
                 {
+                    File.AppendAllText(logPath, $"[Main] Exiting because isNew is false.\n");
                     if (args.Length > 0)
                     {
                         try
@@ -60,6 +63,7 @@ namespace Deskdrop.Windows
                     return;
                 }
 
+                File.AppendAllText(logPath, $"[Main] Proceeding to init.\n");
                 Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
@@ -72,6 +76,7 @@ namespace Deskdrop.Windows
 
                 var wpfApp = new System.Windows.Application();
                 wpfApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+                wpfApp.Resources.MergedDictionaries.Add(new System.Windows.ResourceDictionary { Source = new Uri("pack://application:,,,/AppStyles.xaml") });
             wpfApp.DispatcherUnhandledException += (_, e) => 
             {
                 LogError(e.Exception);
@@ -264,15 +269,8 @@ namespace Deskdrop.Windows
             try
             {
                 var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
-                string errorMsg = $"[{DateTime.Now:u}] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
-                var inner = ex.InnerException;
-                while (inner != null)
-                {
-                    errorMsg += $"\n--- Inner Exception: {inner.GetType().Name}: {inner.Message}\n{inner.StackTrace}";
-                    inner = inner.InnerException;
-                }
-                errorMsg += "\n\n";
-                File.AppendAllText(Path.Combine(dir, "crash.txt"), errorMsg);
+                string errorMsg = $"[{DateTime.Now:u}] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n\n";
+                File.AppendAllText(Path.Combine(dir, "real_crash.txt"), errorMsg);
             }
             catch { }
         }
