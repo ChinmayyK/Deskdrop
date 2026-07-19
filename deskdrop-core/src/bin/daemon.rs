@@ -1327,6 +1327,16 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state.engine.push_battery_status(level, charging).await;
             Ok(IpcResponse::ok_empty())
         }
+        IpcRequest::PushStorageStatus {
+            images_bytes,
+            videos_bytes,
+            apps_bytes,
+            free_bytes,
+            total_bytes,
+        } => {
+            state.engine.push_storage_status(images_bytes, videos_bytes, apps_bytes, free_bytes, total_bytes).await;
+            Ok(IpcResponse::ok_empty())
+        }
         IpcRequest::RemoteFilesQuery {
             target_device,
             summary_only,

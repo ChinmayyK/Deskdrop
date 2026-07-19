@@ -379,6 +379,14 @@ pub enum IpcRequest {
         /// Whether the device is charging
         charging: bool,
     },
+    /// Push storage status from the local device to all peers.
+    PushStorageStatus {
+        images_bytes: u64,
+        videos_bytes: u64,
+        apps_bytes: u64,
+        free_bytes: u64,
+        total_bytes: u64,
+    },
     // ── Remote File Explorer (Phase 3) ────────────────────────────────────────
     /// Query remote files or summary from a connected Android peer.
     RemoteFilesQuery {
@@ -710,6 +718,16 @@ pub async fn handle_ipc_request(
             IpcResponse::ok_empty()
         }
         IpcRequest::Peers => IpcResponse::ok(eng.status_snapshot().await.peers),
+        IpcRequest::PushStorageStatus {
+            images_bytes,
+            videos_bytes,
+            apps_bytes,
+            free_bytes,
+            total_bytes,
+        } => {
+            eng.push_storage_status(images_bytes, videos_bytes, apps_bytes, free_bytes, total_bytes).await;
+            IpcResponse::ok_empty()
+        }
         IpcRequest::TrustedDevices => IpcResponse::ok(eng.trusted_devices().await),
         IpcRequest::ActivityRecent { limit } => IpcResponse::ok(eng.activity_recent(limit).await),
         IpcRequest::ActivitySince { since_id } => {
