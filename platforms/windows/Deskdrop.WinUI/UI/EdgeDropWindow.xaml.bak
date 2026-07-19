@@ -1,0 +1,35 @@
+﻿<Window x:Class="Deskdrop.Windows.UI.EdgeDropWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <!-- Resting Edge Sliver -->
+        <Border x:Name="RestingSliver" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="2.5" Margin="2,0,0,0">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#0055CC" Offset="0.0"/>
+                    <GradientStop Color="#00E5FF" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            
+        </Border>
+
+        <!-- Expanded Glass Card -->
+        <Border x:Name="ExpandedCard" CornerRadius="16" BorderBrush="#0055CC" BorderThickness="2"
+                Opacity="0" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
+            
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid Margin="0,0,0,14">
+                    <Ellipse Fill="#400055CC" Stroke="#0055CC" StrokeThickness="2"/>
+                    <FontIcon Glyph="&#xE8A5;"  Foreground="#0055CC" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+                <TextBlock Text="Edge Portal Drop âœ¨" Foreground="White" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="ExpandedSubText" Text="Instant transfer to active mesh" Foreground="#8CFFFFFF" FontSize="11.5" FontWeight="Medium" HorizontalAlignment="Center" Margin="12,4,12,0" TextWrapping="Wrap" TextAlignment="Center"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
+
+
+
+
+
