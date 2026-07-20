@@ -12,8 +12,6 @@ namespace Deskdrop.WinUI
         public RemoteExplorerWindow()
         {
             this.InitializeComponent();
-
-            this.SystemBackdrop = new DesktopAcrylicBackdrop();
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
@@ -62,3 +60,5 @@ namespace Deskdrop.WinUI
         }
     }
 }
+
+

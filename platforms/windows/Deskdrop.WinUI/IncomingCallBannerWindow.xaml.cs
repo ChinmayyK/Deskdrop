@@ -10,8 +10,6 @@ namespace Deskdrop.WinUI
         public IncomingCallBannerWindow()
         {
             this.InitializeComponent();
-
-            this.SystemBackdrop = new DesktopAcrylicBackdrop();
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
@@ -42,3 +40,5 @@ namespace Deskdrop.WinUI
         }
     }
 }
+
+

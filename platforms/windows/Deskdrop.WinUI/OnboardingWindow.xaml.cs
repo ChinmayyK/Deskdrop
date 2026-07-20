@@ -39,3 +39,4 @@ namespace Deskdrop.WinUI
         }
     }
 }
+

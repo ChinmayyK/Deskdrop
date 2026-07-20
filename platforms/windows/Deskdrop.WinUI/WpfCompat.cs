@@ -37,3 +37,4 @@ namespace Deskdrop.WinUI
         public static void InvokeAsync(Action action) { action(); }
     }
 }
+

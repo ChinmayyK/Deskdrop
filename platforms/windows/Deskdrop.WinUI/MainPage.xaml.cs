@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -19,6 +19,7 @@ public sealed partial class MainPage : Page
         // TODO: Add your initialization logic here.
     }
 }
+
 
 
 

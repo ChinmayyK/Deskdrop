@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Dispatching;
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -129,6 +129,7 @@ namespace Deskdrop.WinUI
         }
     }
 }
+
 
 
 

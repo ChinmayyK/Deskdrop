@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -1045,7 +1045,24 @@ namespace Deskdrop.WinUI
 
 
 
-namespace Deskdrop.WinUI { public class HistoryItem { public string id {get;set;} public string display_text {get;set;} public string path {get;set;} public bool is_text {get;set;} } }
+namespace Deskdrop.WinUI { 
+    public class HistoryItem { 
+        public string id {get;set;} = Guid.NewGuid().ToString();
+        public string display_text {get;set;} 
+        public string path {get;set;} 
+        public bool is_text {get;set;} 
+        public bool IsPinned { get; set; } = false;
+        public string PinColor => IsPinned ? "#32ADE6" : "#8E8E93";
+        public string TypeIcon { get; set; } = "📝";
+        public string Summary { get; set; } = "";
+        public string FullText { get; set; } = "";
+        public string Source { get; set; } = "";
+        public string RelativeTime { get; set; } = "Just now";
+        public DateTime Time { get; set; } = DateTime.Now;
+        public string Id { get => id; set => id = value; }
+    } 
+}
+
 
 
 

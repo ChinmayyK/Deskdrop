@@ -16,8 +16,6 @@ namespace Deskdrop.WinUI
         public QRPairingWindow()
         {
             this.InitializeComponent();
-
-            this.SystemBackdrop = new DesktopAcrylicBackdrop();
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
@@ -58,3 +56,5 @@ namespace Deskdrop.WinUI
         }
     }
 }
+
+

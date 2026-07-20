@@ -27,15 +27,25 @@ public partial class App : Application
     public System.Windows.Input.ICommand ShowMainWindowCommand { get; }
     public System.Windows.Input.ICommand ExitApplicationCommand { get; }
 
+    private static System.Threading.Mutex? _singleInstanceMutex;
+
     public App()
     {
+        var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+        
+        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App constructor started\n");
+        
+
+
         InitializeComponent();
+        
+        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App InitializeComponent finished\n");
         
         ShowMainWindowCommand = new RelayCommand(() =>
         {
             if (MainWindow == null)
             {
-                MainWindow = new MainWindow();
+                MainWindow = new DashboardWindow();
             }
             MainWindow.Activate();
         });
@@ -49,30 +59,43 @@ public partial class App : Application
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        // Initialize the Tray Icon entirely in C# to avoid x:Bind issues in App.xaml
-        TrayIcon = new H.NotifyIcon.TaskbarIcon
+        var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] OnLaunched started\n");
+
+        try
         {
-            ToolTipText = "Deskdrop",
-            IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
-            LeftClickCommand = ShowMainWindowCommand
-        };
+            // Initialize the Tray Icon entirely in C# to avoid x:Bind issues in App.xaml
+            TrayIcon = new H.NotifyIcon.TaskbarIcon
+            {
+                ToolTipText = "Deskdrop",
+                IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
+                LeftClickCommand = ShowMainWindowCommand
+            };
 
-        var menu = new MenuFlyout();
-        var openItem = new MenuFlyoutItem { Text = "Open Deskdrop", Command = ShowMainWindowCommand };
-        openItem.Icon = new FontIcon { Glyph = "\uE8A7" };
-        var quitItem = new MenuFlyoutItem { Text = "Quit", Command = ExitApplicationCommand };
-        quitItem.Icon = new FontIcon { Glyph = "\uE711" };
+            var menu = new MenuFlyout();
+            var openItem = new MenuFlyoutItem { Text = "Open Deskdrop", Command = ShowMainWindowCommand };
+            openItem.Icon = new FontIcon { Glyph = "\uE8A7" };
+            var quitItem = new MenuFlyoutItem { Text = "Quit", Command = ExitApplicationCommand };
+            quitItem.Icon = new FontIcon { Glyph = "\uE711" };
 
-        menu.Items.Add(openItem);
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(quitItem);
+            menu.Items.Add(openItem);
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(quitItem);
 
-        TrayIcon.ContextFlyout = menu;
-        TrayIcon.ForceCreate();
-        
-        MainWindow = new MainWindow();
-        _window = MainWindow;
-        _window.Activate();
+            TrayIcon.ContextFlyout = menu;
+            TrayIcon.ForceCreate();
+            
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] TrayIcon created. Creating MainWindow...\n");
+
+            MainWindow = new DashboardWindow();
+            _window = MainWindow;
+            _window.Activate();
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow activated.\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Exception in OnLaunched: " + ex.Message + "\n" + ex.StackTrace + "\n");
+        }
     }
 }
 
@@ -84,3 +107,4 @@ public class RelayCommand : System.Windows.Input.ICommand
     public bool CanExecute(object? parameter) => true;
     public void Execute(object? parameter) => _execute();
 }
+

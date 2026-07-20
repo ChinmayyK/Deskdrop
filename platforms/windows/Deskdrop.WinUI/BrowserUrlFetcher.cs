@@ -1,3 +1,4 @@
-﻿namespace Deskdrop.WinUI { public static class BrowserUrlFetcher { public static string GetActiveBrowserUrl() { return null; } } }
+namespace Deskdrop.WinUI { public static class BrowserUrlFetcher { public static string GetActiveBrowserUrl() { return null; } } }
+
 
 

@@ -11,8 +11,6 @@ namespace Deskdrop.WinUI.UI
         public EdgeDropWindow()
         {
             this.InitializeComponent();
-
-            this.SystemBackdrop = new DesktopAcrylicBackdrop();
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
@@ -47,3 +45,5 @@ namespace Deskdrop.WinUI.UI
         }
     }
 }
+
+

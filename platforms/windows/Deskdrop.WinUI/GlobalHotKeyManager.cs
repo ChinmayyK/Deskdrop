@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 namespace Deskdrop.WinUI
 {
     public class GlobalHotKeyManager : IDisposable
@@ -9,6 +9,7 @@ namespace Deskdrop.WinUI
         public void Dispose() { }
     }
 }
+
 
 
 

@@ -16,12 +16,11 @@ namespace Deskdrop.WinUI
         {
             this.InitializeComponent();
 
-            // Set Premium Desktop Acrylic Backdrop to match macOS deep blur
-            this.SystemBackdrop = new DesktopAcrylicBackdrop();
+            // Use MicaBackdrop if supported, else fallback to default solid background
 
             // Optional: Hide default title bar to mimic macOS frameless look
-            ExtendsContentIntoTitleBar = true;
-            SetTitleBar(AppTitleBar);
+            // ExtendsContentIntoTitleBar = true;
+            // SetTitleBar(AppTitleBar);
 
             // Resize the window
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -42,8 +41,9 @@ namespace Deskdrop.WinUI
 
         private void BtnOpenDashboard_Click(object sender, RoutedEventArgs e)
         {
-            var dashboard = new QuickAccessWindow();
+            var dashboard = new DashboardWindow();
             dashboard.Activate();
         }
     }
 }
+

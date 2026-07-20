@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Dispatching;
 using System;
 using System.IO;
 using Windows.Data.Xml.Dom;
@@ -69,6 +69,7 @@ namespace Deskdrop.WinUI
         }
     }
 }
+
 
 
 

@@ -39,10 +39,10 @@
                         </StackPanel>
                         
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                            <Button Style="{ThemeResource TransparentButtonStyle}" Click="BtnHeaderDiagnostics_Click" ToolTipService.ToolTip="Diagnostics">
+                            <Button Background="Transparent" BorderThickness="0" Click="BtnHeaderDiagnostics_Click" ToolTipService.ToolTip="Diagnostics">
                                 <FontIcon Glyph="&#xE9D9;" />
                             </Button>
-                            <Button Style="{ThemeResource TransparentButtonStyle}" Click="BtnHeaderQuit_Click" ToolTipService.ToolTip="Quit">
+                            <Button Background="Transparent" BorderThickness="0" Click="BtnHeaderQuit_Click" ToolTipService.ToolTip="Quit">
                                 <FontIcon Glyph="&#xE711;" />
                             </Button>
                         </StackPanel>
@@ -63,7 +63,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="0" CornerRadius="8" Padding="12,8">
+                                <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="0" CornerRadius="8" Padding="12,8" Click="DeviceTarget_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon Glyph="&#xE896;" Foreground="#0A84FF" />
                                         <TextBlock Text="{Binding friendly_name}" FontSize="13" FontWeight="Medium"/>
@@ -79,7 +79,7 @@
                 <ItemsControl x:Name="TimelineList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="12" Margin="0,0,0,8" Padding="12">
+                            <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="0" CornerRadius="12" Margin="0,0,0,8" Padding="12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="HistoryItem_Click">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -87,21 +87,20 @@
                                     </Grid.ColumnDefinitions>
                                     
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{Binding Summary}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding Source}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12"/>
+                                        <TextBlock Text="{Binding display_text}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding path}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12"/>
                                     </StackPanel>
                                     
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding RelativeTime}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11"/>
-                                        <Button Style="{ThemeResource TransparentButtonStyle}" Click="BtnPinItem_Click" Padding="4">
+                                        <Button Background="Transparent" BorderThickness="0" Click="BtnPinItem_Click" Padding="4">
                                             <FontIcon Glyph="&#xE718;" FontSize="14"/>
                                         </Button>
-                                        <Button Style="{ThemeResource TransparentButtonStyle}" Click="BtnDeleteItem_Click" Padding="4" Foreground="#FF3B30">
+                                        <Button Background="Transparent" BorderThickness="0" Click="BtnDeleteItem_Click" Padding="4" Foreground="#FF3B30">
                                             <FontIcon Glyph="&#xE74D;" FontSize="14"/>
                                         </Button>
                                     </StackPanel>
                                 </Grid>
-                            </Border>
+                            </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -109,3 +108,4 @@
         </ScrollViewer>
     </Grid>
 </Window>
+

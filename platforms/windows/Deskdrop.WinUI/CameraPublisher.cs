@@ -1,4 +1,4 @@
-﻿namespace Deskdrop.WinUI
+namespace Deskdrop.WinUI
 {
     public class CameraPublisher
     {
@@ -7,3 +7,4 @@
         public void Stop() {}
     }
 }
+

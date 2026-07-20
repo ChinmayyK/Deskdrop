@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 namespace Deskdrop.WinUI
 {
     public partial class QRCodeWindow : Window
@@ -7,4 +7,5 @@ namespace Deskdrop.WinUI
         public void ShowDialog() {}
     }
 }
+
 

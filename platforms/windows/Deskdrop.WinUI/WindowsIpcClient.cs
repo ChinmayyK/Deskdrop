@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Dispatching;
 // WindowsIpcServer.cs
 // Full named-pipe IPC server for Windows.
 // Replaces the stub in ipc.rs for the C# tray application.
@@ -43,7 +43,7 @@ namespace Deskdrop.WinUI
             return Send(new { cmd = "send_file_path", path = path, name = name, mime = mime, target_device = targetDevice });
         }
 
-        // â”€â”€ Security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Security ────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Returns true if the daemon is currently reachable.
@@ -102,7 +102,7 @@ namespace Deskdrop.WinUI
             return await Task.Run(() => Send(request), ct);
         }
 
-        // â”€â”€ Convenience commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Convenience commands ──────────────────────────────────────────────
 
         public static JsonDocument? Ping()       => Send(new { cmd = "ping" });
         public static JsonDocument? Status()     => Send(new { cmd = "status" });
@@ -122,7 +122,7 @@ namespace Deskdrop.WinUI
 
         public static JsonDocument? LatestCameraFrame(string peerId) => Send(new { cmd = "latest_camera_frame", target_device = peerId });
 
-        // â”€â”€ Private transport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Private transport ─────────────────────────────────────────────────
 
         private static NamedPipeClientStream? OpenPipe(int timeoutMs)
         {
@@ -187,7 +187,7 @@ namespace Deskdrop.WinUI
         public static JsonDocument? RevokeTrustedDevice(string deviceId) =>
             Send(new { cmd = "revoke_trusted_device", device_id = deviceId });
 
-        // â”€â”€ Transfer Controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Transfer Controls ─────────────────────────────────────────────────
         public static JsonDocument? SendPairingRequest(string deviceId) => Send(new { cmd = "send_pairing_request", device_id = deviceId });
         public static JsonDocument? RespondToPairing(string deviceId, bool accepted) => Send(new { cmd = "respond_to_pairing", device_id = deviceId, accepted });
         public static JsonDocument? AcceptFileTransfer(string transferId) => Send(new { cmd = "accept_file_transfer", transfer_id = transferId });
@@ -197,7 +197,7 @@ namespace Deskdrop.WinUI
         public static JsonDocument? CancelFileTransfer(string transferId) => Send(new { cmd = "cancel_file_transfer", transfer_id = transferId });
         public static JsonDocument? StartSpeedTest(string deviceId, int durationSecs = 10) => Send(new { cmd = "start_speed_test", device_id = deviceId, duration_secs = durationSecs });
 
-        // â”€â”€ Device Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Device Management ─────────────────────────────────────────────────
         public static JsonDocument? DisconnectAllPeers() => Send(new { cmd = "disconnect_all_peers" });
         public static JsonDocument? RescanPeers() => Send(new { cmd = "rescan_peers" });
         public static JsonDocument? RenameTrustedDevice(string deviceId, string displayName) => Send(new { cmd = "rename_trusted_device", device_id = deviceId, display_name = displayName });
@@ -206,14 +206,14 @@ namespace Deskdrop.WinUI
         public static JsonDocument? ForgetDevice(string deviceId) => Send(new { cmd = "forget_device", device_id = deviceId });
         public static JsonDocument? SetAutoConnect(string deviceId, bool enabled) => Send(new { cmd = "set_auto_connect", device_id = deviceId, enabled });
 
-        // â”€â”€ Activity & Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Activity & Settings ───────────────────────────────────────────────
         public static JsonDocument? ActivityRecent(int limit) => Send(new { cmd = "activity_recent", limit });
         public static JsonDocument? PendingRemoteClipboards() => Send(new { cmd = "pending_remote_clipboards" });
         public static JsonDocument? ApplyClipboard(string contentHash) => Send(new { cmd = "apply_clipboard", content_hash = contentHash });
         public static JsonDocument? GetSettings() => Send(new { cmd = "get_settings" });
         public static JsonDocument? GetMetrics() => Send(new { cmd = "get_metrics" });
 
-        // â”€â”€ Remote File Explorer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Remote File Explorer ──────────────────────────────────────────────
         public static async Task<JsonDocument?> RemoteFileListRequestAsync(string deviceId, string path) =>
             await SendAsync(new { cmd = "remote_file_list_request", target_device = deviceId, path = path });
             
@@ -298,6 +298,7 @@ namespace Deskdrop.WinUI
         public void Dispose() { _timer?.Dispose(); }
     }
 }
+
 
 
 
