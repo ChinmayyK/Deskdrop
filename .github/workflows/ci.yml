@@ -158,11 +158,11 @@ jobs:
       - name: Build C# project
         run: |
           # Create a stub DLL so the csproj can resolve the native ref.
-          New-Item -ItemType Directory -Force -Path platforms\windows\Deskdrop.Windows\
+          New-Item -ItemType Directory -Force -Path platforms\windows\Deskdrop.WinUI\
           Copy-Item target\release\deskdrop_core.dll `
-                    platforms\windows\Deskdrop.Windows\deskdrop_core.dll `
+                    platforms\windows\Deskdrop.WinUI\deskdrop_core.dll `
                     -ErrorAction SilentlyContinue
-          dotnet build platforms\windows\Deskdrop.Windows\Deskdrop.Windows.csproj `
+          dotnet build platforms\windows\Deskdrop.WinUI\Deskdrop.WinUI.csproj `
             -c Release
 
   # ── Security audit ────────────────────────────────────────────────────────

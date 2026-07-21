@@ -32,8 +32,8 @@ jobs:
       - name: Build C# app
         run: |
           Copy-Item target\release\deskdrop_core.dll `
-                    platforms\windows\Deskdrop.Windows\
-          dotnet publish platforms\windows\Deskdrop.Windows\Deskdrop.Windows.csproj `
+                    platforms\windows\Deskdrop.WinUI\
+          dotnet publish platforms\windows\Deskdrop.WinUI\Deskdrop.WinUI.csproj `
             -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             -o publish\windows

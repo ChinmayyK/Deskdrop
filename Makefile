@@ -118,8 +118,8 @@ windows:
 	@echo -e "$(CYAN)Building Windows DLL + C# app...$(RESET)"
 	$(CARGO) build --release
 	cp target/release/deskdrop_core.dll \
-	   platforms/windows/Deskdrop.Windows/
-	dotnet build platforms/windows/Deskdrop.Windows/Deskdrop.Windows.csproj \
+	   platforms/windows/Deskdrop.WinUI/
+	dotnet build platforms/windows/Deskdrop.WinUI/Deskdrop.WinUI.csproj \
 		-c Release
 	@echo -e "$(GREEN)✓ Windows build complete.$(RESET)"
 
@@ -201,8 +201,8 @@ clean:
 	rm -f libdeskdrop_core.dylib deskdrop_core.dll
 	rm -f bom.json
 	rm -rf platforms/android/app/build
-	rm -rf platforms/windows/Deskdrop.Windows/bin
-	rm -rf platforms/windows/Deskdrop.Windows/obj
+	rm -rf platforms/windows/Deskdrop.WinUI/bin
+	rm -rf platforms/windows/Deskdrop.WinUI/obj
 	@echo -e "$(GREEN)✓ Clean.$(RESET)"
 
 # ── Help ──────────────────────────────────────────────────────────────────────

@@ -51,7 +51,7 @@
       <!-- Main executable -->
       <Component Id="MainExe" Guid="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
         <File Id="DeskdropExe"
-              Source="platforms\windows\Deskdrop.Windows\bin\Release\net8.0-windows\Deskdrop.exe"
+              Source="platforms\windows\Deskdrop.WinUI\bin\Release\net8.0-windows10.0.26100.0\Deskdrop.exe"
               KeyPath="yes" />
 
         <!-- Run on startup (optional — controlled by app settings) -->

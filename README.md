@@ -167,13 +167,15 @@ adb shell monkey -p com.deskdrop.debug -c android.intent.category.LAUNCHER 1
 cargo run -p deskdrop-linux
 ```
 
-#### Windows Client (`Deskdrop.Windows`)
+#### Windows Client (`Deskdrop.WinUI`)
 ```bash
 # Build the core Windows dynamic library
 cargo build --release -p deskdrop-core
 
-# Open and compile the solution in Visual Studio 2022
-# Solution path: platforms/windows/Deskdrop.sln
+# Open and compile the project in Visual Studio 2022 or run using PowerShell
+# Project path: platforms/windows/Deskdrop.WinUI/Deskdrop.WinUI.csproj
+# Or run installation script directly:
+powershell -ExecutionPolicy Bypass -File platforms/windows/Deskdrop.WinUI/install_and_run.ps1
 ```
 
 ---
