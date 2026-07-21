@@ -9,6 +9,9 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Ensure adb and Homebrew tools are in PATH automatically
+export PATH="/opt/homebrew/share/android-commandlinetools/platform-tools:${HOME}/Library/Android/sdk/platform-tools:/opt/homebrew/bin:${PATH}"
+
 BUILD_TYPE="debug"
 
 for arg in "$@"; do
@@ -52,6 +55,9 @@ rm -rf /Applications/Deskdrop.app
 echo -e "${BLUE}▶ [macOS] Installing new version to /Applications...${NC}"
 cp -a platforms/macos/build/Deskdrop.app /Applications/
 
+echo -e "${BLUE}▶ [macOS] Deleting local build bundle to keep repository clean...${NC}"
+rm -rf platforms/macos/build/Deskdrop.app
+
 echo -e "${GREEN}▶ [macOS] ✅ Installed! Launching...${NC}"
 open /Applications/Deskdrop.app
 
@@ -60,6 +66,9 @@ echo -e "\n----------------------------------------\n"
 # ==========================================
 # 2. Android Reinstall
 # ==========================================
+echo -e "${BLUE}▶ [Android] Cleaning up old/stale APKs...${NC}"
+find platforms/android/app/build/outputs -name "*.apk" -delete 2>/dev/null || true
+
 echo -e "${BLUE}▶ [Android] Building latest APK...${NC}"
 if [ "$BUILD_TYPE" = "release" ]; then
     bash scripts/build-android.sh --release --fast-abi
@@ -78,10 +87,12 @@ echo -e "${BLUE}▶ [Android] Installing new version...${NC}"
 if adb install -r "$APK_PATH"; then
     echo -e "${BLUE}▶ [Android] Wiping app data to prevent backup restore...${NC}"
     adb shell pm clear "$APP_ID" || true
-    echo -e "${GREEN}▶ [Android] ✅ Installed! Launching...${NC}"
+    echo -e "${BLUE}▶ [Android] Deleting installed APK from Mac to prevent storage bloat...${NC}"
+    find platforms/android/app/build/outputs -name "*.apk" -delete 2>/dev/null || true
+    echo -e "${GREEN}▶ [Android] ✅ Installed & cleaned! Launching...${NC}"
     adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
 else
     echo -e "${RED}▶ [Android] ❌ Failed to install APK. Is a device connected?${NC}"
 fi
 
-echo -e "\n${GREEN}🎉 All done! Both platforms have been reinstalled with the latest code (${BUILD_TYPE}).${NC}"
+echo -e "\n${GREEN}🎉 All done! Both platforms reinstalled (${BUILD_TYPE}) and old binaries cleaned from disk.${NC}"

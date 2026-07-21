@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# Ensure adb and Homebrew tools are in PATH automatically
+export PATH="/opt/homebrew/share/android-commandlinetools/platform-tools:${HOME}/Library/Android/sdk/platform-tools:/opt/homebrew/bin:${PATH}"
+
 log() { echo "▶ $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
