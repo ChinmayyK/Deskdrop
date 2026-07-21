@@ -1102,7 +1102,9 @@ mod tests {
         let (stop, _stop_rx) = oneshot::channel();
         manager
             .replace_live_session(
+                Uuid::nil(),
                 id,
+                true,
                 SocketAddr::from(([192, 168, 1, 10], 47823)),
                 tx.clone(),
                 tx,
@@ -1152,9 +1154,11 @@ mod tests {
             .unwrap();
         let (tx1, _rx1) = mpsc::channel(1);
         let (stop1, _stop1_rx) = oneshot::channel();
-        let (first_session_id, _) = manager
+        let (first_session_id, _, _) = manager
             .replace_live_session(
+                Uuid::nil(),
                 id,
+                true,
                 SocketAddr::from(([192, 168, 1, 8], 47823)),
                 tx1.clone(),
                 tx1,
@@ -1163,9 +1167,11 @@ mod tests {
             .unwrap();
         let (tx2, _rx2) = mpsc::channel(1);
         let (stop2, _stop_rx2) = oneshot::channel();
-        let (second_session_id, replaced) = manager
+        let (second_session_id, replaced, _) = manager
             .replace_live_session(
+                Uuid::nil(),
                 id,
+                true,
                 SocketAddr::from(([172, 20, 10, 4], 47823)),
                 tx2.clone(),
                 tx2,
@@ -1174,12 +1180,14 @@ mod tests {
             .unwrap();
         let replaced = replaced.unwrap();
         assert_eq!(replaced.session_id, first_session_id);
-        assert!(!manager
+        assert!(manager
             .mark_disconnected_if_current(id, first_session_id, Some("stale".into()))
-            .unwrap());
+            .unwrap()
+            .is_none());
         assert!(manager
             .mark_disconnected_if_current(id, second_session_id, Some("closed".into()))
-            .unwrap());
+            .unwrap()
+            .is_some());
         assert_eq!(manager.list().len(), 1);
         assert!(manager
             .get(id)
@@ -1226,7 +1234,9 @@ mod tests {
         let (stop, _stop_rx) = oneshot::channel();
         manager
             .replace_live_session(
+                Uuid::nil(),
                 id_a,
+                true,
                 SocketAddr::from(([192, 168, 1, 10], 47823)),
                 tx.clone(),
                 tx,
@@ -1287,7 +1297,7 @@ mod tests {
             let (tx, _rx) = mpsc::channel(1);
             let (stop, _) = oneshot::channel();
             manager
-                .replace_live_session(id, SocketAddr::from((ip, 47823)), tx.clone(), tx, stop)
+                .replace_live_session(Uuid::nil(), id, true, SocketAddr::from((ip, 47823)), tx.clone(), tx, stop)
                 .unwrap();
         }
 

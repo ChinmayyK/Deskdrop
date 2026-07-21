@@ -162,10 +162,20 @@ final class DeskdropIPCClient {
     static let shared = DeskdropIPCClient()
 
     private var socketPath: String {
+        var candidates: [String] = []
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
-            return "\(runtime)/deskdrop.sock"
+            candidates.append("\(runtime)/deskdrop.sock")
         }
-        return "/tmp/deskdrop-\(getuid())/deskdrop.sock"
+        candidates.append("/tmp/deskdrop-\(getuid())/deskdrop.sock")
+        if let home = ProcessInfo.processInfo.environment["HOME"] {
+            candidates.append("\(home)/.deskdrop.sock")
+        }
+        for path in candidates {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        return candidates.first ?? "/tmp/deskdrop-\(getuid())/deskdrop.sock"
     }
 
     func status() async throws -> IpcStatusResponse {

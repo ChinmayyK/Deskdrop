@@ -254,12 +254,21 @@ pub const PB_EVENT_REMOTE_FILE_ACTION_REQUEST: c_int = 37;
 /// Must be freed with `deskdrop_free_event`.
 pub struct PbEvent {
     inner: EngineEvent,
-    // Cached C-string allocations for accessors.
-    cached_str: Option<CString>,
-    _cached_bytes: Option<Vec<u8>>,
-    cached_mime: Option<CString>,
-    cached_name: Option<CString>,
-    cached_path: Option<CString>,
+    // Cached C-string allocations for accessors so multiple calls never invalidate earlier pointers.
+    cached_strings: Vec<CString>,
+}
+
+impl PbEvent {
+    fn cache_str(&mut self, s: impl Into<Vec<u8>>) -> *const c_char {
+        let bytes = s.into();
+        if let Some(existing) = self.cached_strings.iter().find(|cs| cs.as_bytes() == bytes.as_slice()) {
+            return existing.as_ptr();
+        }
+        let cs = CString::new(bytes).unwrap_or_default();
+        let ptr = cs.as_ptr();
+        self.cached_strings.push(cs);
+        ptr
+    }
 }
 
 /// Non-blocking poll. Returns a heap-allocated `PbEvent*` or NULL if no event.
@@ -277,11 +286,7 @@ pub unsafe extern "C" fn deskdrop_poll_event(handle: *mut DeskdropHandle) -> *mu
         match rx.try_recv() {
             Ok(event) => Box::into_raw(Box::new(PbEvent {
                 inner: event,
-                cached_str: None,
-                _cached_bytes: None,
-                cached_mime: None,
-                cached_name: None,
-                cached_path: None,
+                cached_strings: Vec::new(),
             })),
             Err(_) => std::ptr::null_mut(),
         }
@@ -393,9 +398,7 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
     };
 
     if let Some(s) = text {
-        let cs = CString::new(s.as_bytes()).unwrap_or_default();
-        e.cached_str = Some(cs);
-        return e.cached_str.as_ref().unwrap().as_ptr();
+        return e.cache_str(s);
     }
 
     std::ptr::null()
@@ -405,24 +408,22 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    let name: Option<&str> = match &e.inner {
-        EngineEvent::ClipboardReceived { from_name, .. } => Some(from_name.as_str()),
-        EngineEvent::HistoryMetadataReceived { from_name, .. } => Some(from_name.as_str()),
-        EngineEvent::ClipboardSynced { peer_name, .. } => Some(peer_name.as_str()),
-        EngineEvent::ClipboardSyncFailed { peer_name, .. } => Some(peer_name.as_str()),
-        EngineEvent::PairingRequested { device_name, .. } => Some(device_name.as_str()),
-        EngineEvent::OutgoingPairingWaiting { device_name, .. } => Some(device_name.as_str()),
-        EngineEvent::PeerConnected { device_name, .. } => Some(device_name.as_str()),
-        EngineEvent::FileTransferIncoming { from_name, .. } => Some(from_name.as_str()),
-        EngineEvent::FileTransferComplete { from_name, .. } => Some(from_name.as_str()),
-        EngineEvent::BatteryStateChanged { from_name, .. } => Some(from_name.as_str()),
-        EngineEvent::NetworkStateChanged { from_name, .. } => Some(from_name.as_str()),
+    let name: Option<String> = match &e.inner {
+        EngineEvent::ClipboardReceived { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::HistoryMetadataReceived { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::ClipboardSynced { peer_name, .. } => Some(peer_name.clone()),
+        EngineEvent::ClipboardSyncFailed { peer_name, .. } => Some(peer_name.clone()),
+        EngineEvent::PairingRequested { device_name, .. } => Some(device_name.clone()),
+        EngineEvent::OutgoingPairingWaiting { device_name, .. } => Some(device_name.clone()),
+        EngineEvent::PeerConnected { device_name, .. } => Some(device_name.clone()),
+        EngineEvent::FileTransferIncoming { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::FileTransferComplete { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::BatteryStateChanged { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::NetworkStateChanged { from_name, .. } => Some(from_name.clone()),
         _ => None,
     };
     if let Some(n) = name {
-        let cs = CString::new(n).unwrap_or_default();
-        e.cached_name = Some(cs);
-        e.cached_name.as_ref().unwrap().as_ptr()
+        e.cache_str(n)
     } else {
         std::ptr::null()
     }
@@ -475,9 +476,7 @@ pub unsafe extern "C" fn deskdrop_event_transfer_id(event: *mut PbEvent) -> *con
         _ => None,
     };
     if let Some(s) = tid {
-        let cs = CString::new(s).unwrap_or_default();
-        e.cached_str = Some(cs);
-        e.cached_str.as_ref().unwrap().as_ptr()
+        e.cache_str(s)
     } else {
         std::ptr::null()
     }
@@ -490,16 +489,14 @@ pub unsafe extern "C" fn deskdrop_event_transfer_file_name(event: *mut PbEvent) 
         return std::ptr::null();
     }
     let e = &mut *event;
-    let name = match &e.inner {
-        EngineEvent::FileTransferIncoming { file_name, .. } => Some(file_name.as_str()),
-        EngineEvent::FileTransferProgress { file_name, .. } => Some(file_name.as_str()),
-        EngineEvent::FileTransferComplete { file_name, .. } => Some(file_name.as_str()),
+    let name: Option<String> = match &e.inner {
+        EngineEvent::FileTransferIncoming { file_name, .. } => Some(file_name.clone()),
+        EngineEvent::FileTransferProgress { file_name, .. } => Some(file_name.clone()),
+        EngineEvent::FileTransferComplete { file_name, .. } => Some(file_name.clone()),
         _ => None,
     };
     if let Some(n) = name {
-        let cs = CString::new(n).unwrap_or_default();
-        e.cached_mime = Some(cs);
-        e.cached_mime.as_ref().unwrap().as_ptr()
+        e.cache_str(n)
     } else {
         std::ptr::null()
     }
@@ -552,10 +549,7 @@ pub unsafe extern "C" fn deskdrop_event_transfer_dest_path(event: *mut PbEvent) 
     }
     let e = &mut *event;
     if let EngineEvent::FileTransferComplete { dest_path, .. } = &e.inner {
-        let s = dest_path.to_string_lossy().into_owned();
-        let cs = CString::new(s).unwrap_or_default();
-        e.cached_path = Some(cs);
-        e.cached_path.as_ref().unwrap().as_ptr()
+        e.cache_str(dest_path.to_string_lossy().into_owned())
     } else {
         std::ptr::null()
     }
@@ -565,15 +559,13 @@ pub unsafe extern "C" fn deskdrop_event_transfer_dest_path(event: *mut PbEvent) 
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_fingerprint(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    let pin_str = match &e.inner {
-        EngineEvent::PairingRequested { pin, .. } => Some(pin.as_bytes()),
-        EngineEvent::OutgoingPairingWaiting { pin, .. } => Some(pin.as_bytes()),
+    let pin_str: Option<Vec<u8>> = match &e.inner {
+        EngineEvent::PairingRequested { pin, .. } => Some(pin.as_bytes().to_vec()),
+        EngineEvent::OutgoingPairingWaiting { pin, .. } => Some(pin.as_bytes().to_vec()),
         _ => None,
     };
     if let Some(bytes) = pin_str {
-        let cs = CString::new(bytes).unwrap_or_default();
-        e.cached_mime = Some(cs);
-        e.cached_mime.as_ref().unwrap().as_ptr()
+        e.cache_str(bytes)
     } else {
         std::ptr::null()
     }
@@ -599,9 +591,7 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
         _ => None,
     };
     if let Some(s) = id_str {
-        let cs = CString::new(s).unwrap_or_default();
-        e.cached_str = Some(cs);
-        e.cached_str.as_ref().unwrap().as_ptr()
+        e.cache_str(s)
     } else {
         std::ptr::null()
     }
@@ -640,16 +630,14 @@ pub unsafe extern "C" fn deskdrop_event_speed_test_phase(event: *mut PbEvent) ->
         return std::ptr::null();
     }
     let e = &mut *event;
-    let phase_str = match &e.inner {
+    let phase_str: Option<String> = match &e.inner {
         EngineEvent::SpeedTestProgress { direction, .. } => {
-            Some(direction.as_str())
+            Some(direction.as_str().to_string())
         }
         _ => None,
     };
     if let Some(s) = phase_str {
-        let cs = CString::new(s).unwrap_or_default();
-        e.cached_str = Some(cs);
-        e.cached_str.as_ref().unwrap().as_ptr()
+        e.cache_str(s)
     } else {
         std::ptr::null()
     }
@@ -1011,11 +999,7 @@ pub unsafe extern "C" fn deskdrop_register_event_callback(
                 let cb: DeskdropEventCallback = std::mem::transmute(cb_addr);
                 let pb_event = Box::into_raw(Box::new(PbEvent {
                     inner: event,
-                    cached_str: None,
-                    _cached_bytes: None,
-                    cached_mime: None,
-                    cached_name: None,
-                    cached_path: None,
+                    cached_strings: Vec::new(),
                 }));
                 cb(pb_event, ud_addr as *mut std::ffi::c_void);
             }
@@ -1190,9 +1174,7 @@ pub unsafe extern "C" fn deskdrop_event_remote_request_id(event: *mut PbEvent) -
         _ => None,
     };
     if let Some(str_val) = s {
-        let cs = CString::new(str_val).unwrap_or_default();
-        e.cached_str = Some(cs);
-        e.cached_str.as_ref().unwrap().as_ptr()
+        e.cache_str(str_val)
     } else {
         std::ptr::null()
     }
@@ -1203,9 +1185,7 @@ pub unsafe extern "C" fn deskdrop_event_remote_summary_json(event: *mut PbEvent)
     let e = &mut *event;
     if let EngineEvent::RemoteFilesResponseReceived { summary: Some(s), .. } = &e.inner {
         if let Ok(json) = serde_json::to_string(s) {
-            let cs = CString::new(json).unwrap_or_default();
-            e.cached_str = Some(cs);
-            return e.cached_str.as_ref().unwrap().as_ptr();
+            return e.cache_str(json);
         }
     }
     std::ptr::null()
@@ -1216,9 +1196,7 @@ pub unsafe extern "C" fn deskdrop_event_remote_files_json(event: *mut PbEvent) -
     let e = &mut *event;
     if let EngineEvent::RemoteFilesResponseReceived { files, .. } = &e.inner {
         if let Ok(json) = serde_json::to_string(files) {
-            let cs = CString::new(json).unwrap_or_default();
-            e.cached_str = Some(cs);
-            return e.cached_str.as_ref().unwrap().as_ptr();
+            return e.cache_str(json);
         }
     }
     std::ptr::null()
@@ -1279,9 +1257,7 @@ pub unsafe extern "C" fn deskdrop_event_remote_error(event: *mut PbEvent) -> *co
         _ => None,
     };
     if let Some(s) = err_opt {
-        let cs = CString::new(s).unwrap_or_default();
-        e.cached_str = Some(cs);
-        e.cached_str.as_ref().unwrap().as_ptr()
+        e.cache_str(s)
     } else {
         std::ptr::null()
     }

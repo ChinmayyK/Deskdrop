@@ -451,13 +451,31 @@ pub async fn spawn_multicast_beacon(
                     for iface in ifaces {
                         if !should_bind_interface(&iface, config.bind_interface.as_deref()) { continue; }
                         if let IpAddr::V4(ipv4) = iface.ip() {
-                            let sock = cached_sockets.entry(ipv4).or_insert_with(|| {
-                                match create_multicast_send_socket(ipv4) {
-                                    Ok(s) => std::sync::Arc::new(s),
-                                    Err(_) => std::sync::Arc::new(create_multicast_send_socket(Ipv4Addr::UNSPECIFIED).unwrap_or_else(|_| initial_socket.take().unwrap()))
-                                }
-                            });
-                            active_sockets.push(sock.clone());
+                            let sock = match cached_sockets.get(&ipv4) {
+                                Some(s) => Some(s.clone()),
+                                None => match create_multicast_send_socket(ipv4) {
+                                    Ok(s) => {
+                                        let arc = std::sync::Arc::new(s);
+                                        cached_sockets.insert(ipv4, arc.clone());
+                                        Some(arc)
+                                    }
+                                    Err(_) => match create_multicast_send_socket(Ipv4Addr::UNSPECIFIED) {
+                                        Ok(s) => {
+                                            let arc = std::sync::Arc::new(s);
+                                            cached_sockets.insert(ipv4, arc.clone());
+                                            Some(arc)
+                                        }
+                                        Err(_) => initial_socket.take().map(|s| {
+                                            let arc = std::sync::Arc::new(s);
+                                            cached_sockets.insert(ipv4, arc.clone());
+                                            arc
+                                        }),
+                                    },
+                                },
+                            };
+                            if let Some(sock) = sock {
+                                active_sockets.push(sock);
+                            }
                         }
                     }
                 }
@@ -465,10 +483,24 @@ pub async fn spawn_multicast_beacon(
                 // Fallback if no interfaces found
                 if active_sockets.is_empty() {
                     let fallback_ip = Ipv4Addr::UNSPECIFIED;
-                    let sock = cached_sockets.entry(fallback_ip).or_insert_with(|| {
-                        std::sync::Arc::new(create_multicast_send_socket(fallback_ip).unwrap_or_else(|_| initial_socket.take().unwrap()))
-                    });
-                    active_sockets.push(sock.clone());
+                    let sock = match cached_sockets.get(&fallback_ip) {
+                        Some(s) => Some(s.clone()),
+                        None => match create_multicast_send_socket(fallback_ip) {
+                            Ok(s) => {
+                                let arc = std::sync::Arc::new(s);
+                                cached_sockets.insert(fallback_ip, arc.clone());
+                                Some(arc)
+                            }
+                            Err(_) => initial_socket.take().map(|s| {
+                                let arc = std::sync::Arc::new(s);
+                                cached_sockets.insert(fallback_ip, arc.clone());
+                                arc
+                            }),
+                        },
+                    };
+                    if let Some(sock) = sock {
+                        active_sockets.push(sock);
+                    }
                 }
 
                 for socket in active_sockets {

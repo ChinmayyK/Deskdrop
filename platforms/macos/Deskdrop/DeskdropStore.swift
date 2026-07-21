@@ -62,6 +62,7 @@ final class DeskdropStore: ObservableObject {
     private var lastMirroredAutoAppliedEntryId: Int64 = 0
     private let ipc: DeskdropIPCClient
     private var pollTimer: Timer?
+    private var lastRefreshTime: Date = Date.distantPast
     private var pendingRename: PeerViewModel? = nil
     private var toastWorkItems: [UUID: DispatchWorkItem] = [:]
     private var ipcFailureCount: Int = 0
@@ -265,6 +266,11 @@ final class DeskdropStore: ObservableObject {
     }
 
     func refresh() async {
+        let now = Date()
+        if now.timeIntervalSince(lastRefreshTime) < 0.08 {
+            return
+        }
+        lastRefreshTime = now
         do {
             let s = try await ipc.status()
             ipcFailureCount = 0

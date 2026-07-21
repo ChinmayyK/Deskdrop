@@ -4,6 +4,7 @@
 //! After the handshake, every frame is AEAD-encrypted with a
 //! per-session ChaCha20-Poly1305 key derived via X25519 ECDH + HKDF.
 
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -346,7 +347,7 @@ pub enum AppMessage {
         transfer_id: [u8; 16],
         chunk_index: u32,
         total_chunks: u32,
-        data: Vec<u8>,
+        data: Bytes,
         #[serde(default)]
         compressed: bool,
     },

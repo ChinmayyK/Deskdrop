@@ -34,7 +34,7 @@ fn paused_peer_never_receives_clipboard_push() {
         .unwrap();
     let (tx, _rx) = mpsc::channel(4);
     let (stop, _) = oneshot::channel();
-    mgr.replace_live_session(id, addr(10), tx.clone(), tx, stop)
+    mgr.replace_live_session(Uuid::nil(), id, true, addr(10), tx.clone(), tx, stop)
         .unwrap();
 
     // Pause sync — peer must not appear in active_senders
@@ -120,7 +120,7 @@ fn four_device_mesh_respects_pause() {
         .unwrap();
         let (tx, _) = mpsc::channel(4);
         let (stop, _) = oneshot::channel();
-        mgr.replace_live_session(id, addr(30 + i as u8), tx.clone(), tx, stop)
+        mgr.replace_live_session(Uuid::nil(), id, true, addr(30 + i as u8), tx.clone(), tx, stop)
             .unwrap();
     }
 
@@ -139,7 +139,7 @@ fn four_device_mesh_respects_pause() {
     mgr.set_sync_enabled(ids[1], true).unwrap();
     let (tx2, _) = mpsc::channel(4);
     let (stop2, _) = oneshot::channel();
-    mgr.replace_live_session(ids[1], addr(31), tx2.clone(), tx2, stop2)
+    mgr.replace_live_session(Uuid::nil(), ids[1], true, addr(31), tx2.clone(), tx2, stop2)
         .unwrap();
     assert_eq!(mgr.active_senders().len(), 2);
 }
@@ -154,7 +154,7 @@ fn all_connected_senders_includes_paused_peers() {
         .unwrap();
     let (tx, _) = mpsc::channel(4);
     let (stop, _) = oneshot::channel();
-    mgr.replace_live_session(id, addr(50), tx.clone(), tx, stop)
+    mgr.replace_live_session(Uuid::nil(), id, true, addr(50), tx.clone(), tx, stop)
         .unwrap();
 
     mgr.set_sync_enabled(id, false).unwrap();

@@ -28,6 +28,7 @@
 
 use crate::protocol::FileTransferMetadata;
 use anyhow::{Context, Result};
+use bytes::Bytes;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -68,7 +69,7 @@ pub enum FileTransferMessage {
         transfer_id: TransferId,
         chunk_index: u32,
         total_chunks: u32,
-        data: Vec<u8>,
+        data: Bytes,
         #[serde(default)]
         compressed: bool,
     },
@@ -117,7 +118,7 @@ pub enum TransferStatus {
 // ── Sender state ──────────────────────────────────────────────────────────────
 
 enum OutboundSource {
-    Memory(Vec<u8>),
+    Memory(Bytes),
     FilePath(PathBuf, Option<std::fs::File>),
 }
 
@@ -137,7 +138,7 @@ pub struct OutboundTransfer {
 }
 
 impl OutboundTransfer {
-    pub fn new(data: Vec<u8>, meta: FileTransferMetadata, target_device: Option<Uuid>) -> Self {
+    pub fn new(data: impl Into<Bytes>, meta: FileTransferMetadata, target_device: Option<Uuid>) -> Self {
         let total_chunks = chunk_count(meta.size_bytes).unwrap_or(u32::MAX);
 
         Self {
@@ -145,7 +146,7 @@ impl OutboundTransfer {
             // back to the sender's local outbound state.
             transfer_id: meta.transfer_id,
             meta,
-            source: OutboundSource::Memory(data),
+            source: OutboundSource::Memory(data.into()),
             total_chunks,
             next_chunk: 0,
             last_acked_chunk: 0,
@@ -194,7 +195,7 @@ impl OutboundTransfer {
             OutboundSource::Memory(data_vec) => {
                 let start = (idx as usize) * FILE_CHUNK_SIZE;
                 let end = (start + FILE_CHUNK_SIZE).min(data_vec.len());
-                data_vec[start..end].to_vec()
+                data_vec.slice(start..end)
             }
             OutboundSource::FilePath(path, cached_file) => {
                 if cached_file.is_none() {
@@ -239,7 +240,7 @@ impl OutboundTransfer {
                 let end = (start + FILE_CHUNK_SIZE).min(data_vec.len());
                 ChunkInstruction::Memory {
                     chunk_index: idx,
-                    data: data_vec[start..end].to_vec(),
+                    data: data_vec.slice(start..end),
                 }
             }
             OutboundSource::FilePath(path, _) => {
@@ -258,10 +259,28 @@ impl OutboundTransfer {
         Ok(Some(instr))
     }
 
+    /// Calculate dynamic chunk batch size based on current in-flight queue depth.
+    /// Scales up when ACKs arrive fast (low RTT/high LAN throughput) and throttles down when network backs up.
+    pub fn adaptive_batch_size(&self, max_batch: usize) -> usize {
+        if max_batch <= 1 {
+            return 1;
+        }
+        let in_flight = self.next_chunk.saturating_sub(self.last_acked_chunk);
+        if in_flight < 2 {
+            max_batch
+        } else if in_flight < 6 {
+            (max_batch / 2).max(1)
+        } else if in_flight < 12 {
+            2.min(max_batch)
+        } else {
+            1
+        }
+    }
+
     pub fn process_chunk_data(
         &mut self,
         chunk_index: u32,
-        data: Vec<u8>,
+        data: Bytes,
         compressed: bool,
     ) -> FileTransferMessage {
         self.next_chunk = chunk_index + 1;
@@ -349,7 +368,7 @@ impl OutboundTransfer {
 pub enum ChunkInstruction {
     Memory {
         chunk_index: u32,
-        data: Vec<u8>,
+        data: Bytes,
     },
     File {
         chunk_index: u32,
@@ -671,8 +690,7 @@ impl FileTransferManager {
         };
         let transfer = OutboundTransfer::new(data, meta, target_device);
         let tid = transfer.transfer_id;
-        self.outbound.insert(tid, transfer);
-        Ok(self.outbound.get(&tid).unwrap())
+        Ok(self.outbound.entry(tid).or_insert(transfer))
     }
 
     pub fn start_outbound_path(
@@ -696,8 +714,7 @@ impl FileTransferManager {
         };
         let transfer = OutboundTransfer::from_path(path, meta, target_device)?;
         let tid = transfer.transfer_id;
-        self.outbound.insert(tid, transfer);
-        Ok(self.outbound.get(&tid).unwrap())
+        Ok(self.outbound.entry(tid).or_insert(transfer))
     }
 
     pub fn get_outbound(&self, tid: &TransferId) -> Option<&OutboundTransfer> {
@@ -1010,7 +1027,7 @@ impl FileTransferManager {
 /// 2. Remove any remaining `/` or `\` characters.
 /// 3. Strip leading dots to avoid hidden files (e.g. `.bashrc`).
 /// 4. If the result is empty or is a reserved name, substitute "file".
-fn sanitize_file_name(name: &str) -> String {
+pub fn sanitize_file_name(name: &str) -> String {
     // Take the basename only.
     let base = std::path::Path::new(name)
         .file_name()
@@ -1030,7 +1047,25 @@ fn sanitize_file_name(name: &str) -> String {
     trimmed = trimmed.trim_end_matches(['.', ' ']);
 
     if trimmed.is_empty() {
-        "file".to_string()
+        return "file".to_string();
+    }
+
+    // Windows reserved device names check (stem before the first dot).
+    let stem = match trimmed.split_once('.') {
+        Some((s, _)) => s,
+        None => trimmed,
+    };
+    let upper = stem.to_ascii_uppercase();
+    let is_reserved = match upper.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" => true,
+        s if (s.len() == 4
+            && (s.starts_with("COM") || s.starts_with("LPT"))
+            && s.chars().nth(3).map_or(false, |c| c.is_ascii_digit() && c != '0')) => true,
+        _ => false,
+    };
+
+    if is_reserved {
+        format!("file_{}", trimmed)
     } else {
         trimmed.to_string()
     }
@@ -1159,7 +1194,7 @@ fn read_file_chunk_from_file(
     file: &mut File,
     chunk_index: u32,
     total_bytes: u64,
-) -> Result<Vec<u8>> {
+) -> Result<Bytes> {
     let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
     let remaining = total_bytes.saturating_sub(offset);
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
@@ -1171,7 +1206,7 @@ fn read_file_chunk_from_file(
     let mut buf = vec![0u8; to_read];
     file.read_exact(&mut buf)
         .with_context(|| "reading outbound file chunk".to_string())?;
-    Ok(buf)
+    Ok(Bytes::from(buf))
 }
 
 pub fn checksum_file(path: &Path) -> Result<String> {

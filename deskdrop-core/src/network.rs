@@ -89,21 +89,25 @@ fn apply_socket_buffers(stream: &TcpStream) -> Result<()> {
     use socket2::SockRef;
 
     let sock_ref = SockRef::from(stream);
-    let mut target = SOCKET_BUFFER_PREFERRED;
+    let candidate_sizes = [
+        SOCKET_BUFFER_PREFERRED,
+        SOCKET_BUFFER_MIN,
+        4 * 1024 * 1024,
+        2 * 1024 * 1024,
+        1024 * 1024,
+        512 * 1024,
+        256 * 1024,
+    ];
 
-    loop {
+    for &target in &candidate_sizes {
         let send_res = sock_ref.set_send_buffer_size(target);
         let recv_res = sock_ref.set_recv_buffer_size(target);
         if send_res.is_ok() && recv_res.is_ok() {
             return Ok(());
         }
-        if target == SOCKET_BUFFER_MIN {
-            send_res.context("setting SO_SNDBUF")?;
-            recv_res.context("setting SO_RCVBUF")?;
-            return Ok(());
-        }
-        target = SOCKET_BUFFER_MIN;
     }
+    // If all custom sizes fail due to strict kernel limits, keep OS defaults without dropping connection.
+    Ok(())
 }
 
 /// Apply TCP keepalive settings to any TcpStream (client or server).
@@ -169,9 +173,9 @@ async fn send_frame<T: Serialize>(stream: &mut TcpStream, value: &T) -> Result<(
 
 async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream, max_size: u32) -> Result<T> {
     let mut len_buf = [0u8; 4];
-    stream
-        .read_exact(&mut len_buf)
+    tokio::time::timeout(Duration::from_secs(10), stream.read_exact(&mut len_buf))
         .await
+        .context("timeout waiting for frame length")?
         .context("reading frame length")?;
     let len = u32::from_le_bytes(len_buf);
 
@@ -182,11 +186,21 @@ async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream, max_size: u32) 
         max_size
     );
 
-    let mut buf = vec![0u8; len as usize];
-    stream
-        .read_exact(&mut buf)
-        .await
-        .context("reading frame body")?;
+    let mut buf = Vec::with_capacity(std::cmp::min(len as usize, 64 * 1024));
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        stream.take(len as u64).read_to_end(&mut buf),
+    )
+    .await
+    .context("timeout waiting for frame body")?
+    .context("reading frame body")?;
+
+    anyhow::ensure!(
+        buf.len() == len as usize,
+        "incomplete frame body: got {}, expected {}",
+        buf.len(),
+        len
+    );
     bincode::deserialize(&buf).context("deserializing frame")
 }
 
@@ -338,7 +352,7 @@ pub async fn handshake_initiator(
 
     let identity_proof = my_identity_key
         .read()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
     let metadata = crate::protocol::DeviceMetadata {
@@ -502,7 +516,7 @@ where
 
     let identity_proof = my_identity_key
         .read()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ecdh.ecdh_pubkey, &session_salt);
 
     let ack = AppMessage::HelloAck {

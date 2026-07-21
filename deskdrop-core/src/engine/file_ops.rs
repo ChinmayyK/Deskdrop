@@ -15,7 +15,8 @@ pub(crate) async fn read_outbound_chunks(
         let mut mgr = shared.file_transfers.lock().await;
         let t = mgr.get_outbound_mut(&transfer_id)?;
         io_ctx = t.take_io_context();
-        for _ in 0..batch_size {
+        let effective_batch = t.adaptive_batch_size(batch_size);
+        for _ in 0..effective_batch {
             match t.next_chunk_instruction() {
                 Ok(Some(i)) => instrs.push(i),
                 Ok(None) => break,
@@ -44,7 +45,7 @@ pub(crate) async fn read_outbound_chunks(
 
     type FileChunkResult = anyhow::Result<(
         Option<(Option<std::fs::File>, sha2::Sha256)>,
-        Vec<(u32, Vec<u8>, bool)>,
+        Vec<(u32, bytes::Bytes, bool)>,
     )>;
 
     // Determine if we should try LZ4 based on file extension.
@@ -67,10 +68,22 @@ pub(crate) async fn read_outbound_chunks(
             match instr {
                 crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
                     hasher.update(&data);
-                    if try_compress {
+                    let do_compress = if try_compress {
+                        let sample_len = data.len().min(4096);
+                        if sample_len > 0 {
+                            let sample = &data[..sample_len];
+                            let c_sample = lz4_flex::compress_prepend_size(sample);
+                            c_sample.len() < sample_len * 95 / 100
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+                    if do_compress {
                         let compressed = lz4_flex::compress_prepend_size(&data);
                         if compressed.len() < data.len() {
-                            chunk_data.push((chunk_index, compressed, true));
+                            chunk_data.push((chunk_index, bytes::Bytes::from(compressed), true));
                         } else {
                             chunk_data.push((chunk_index, data, false));
                         }
@@ -110,15 +123,27 @@ pub(crate) async fn read_outbound_chunks(
                             buf.truncate(read_bytes);
                         }
                         hasher.update(&buf);
-                        if try_compress {
-                            let compressed = lz4_flex::compress_prepend_size(&buf);
-                            if compressed.len() < buf.len() {
-                                chunk_data.push((chunk_index, compressed, true));
+                        let do_compress = if try_compress {
+                            let sample_len = buf.len().min(4096);
+                            if sample_len > 0 {
+                                let sample = &buf[..sample_len];
+                                let c_sample = lz4_flex::compress_prepend_size(sample);
+                                c_sample.len() < sample_len * 95 / 100
                             } else {
-                                chunk_data.push((chunk_index, buf, false));
+                                false
                             }
                         } else {
-                            chunk_data.push((chunk_index, buf, false));
+                            false
+                        };
+                        if do_compress {
+                            let compressed = lz4_flex::compress_prepend_size(&buf);
+                            if compressed.len() < buf.len() {
+                                chunk_data.push((chunk_index, bytes::Bytes::from(compressed), true));
+                            } else {
+                                chunk_data.push((chunk_index, bytes::Bytes::from(buf), false));
+                            }
+                        } else {
+                            chunk_data.push((chunk_index, bytes::Bytes::from(buf), false));
                         }
                     }
                 }

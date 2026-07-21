@@ -280,7 +280,10 @@ impl Reassembler {
                         ClipboardContent::Text(s)
                     }
                     ChunkKind::Image { mime } => ClipboardContent::Image { mime, data: buf },
-                    ChunkKind::File { name } => ClipboardContent::File { name, data: buf },
+                    ChunkKind::File { name } => ClipboardContent::File {
+                        name: crate::file_transfer::sanitize_file_name(&name),
+                        data: buf,
+                    },
                 };
 
                 Ok(Some(ReassemblerOutput::Complete(content)))

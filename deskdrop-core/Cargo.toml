@@ -35,7 +35,7 @@ zeroize = "1"
 
 # Networking
 tokio-util = { version = "0.7", features = ["codec"] }
-bytes = "1"
+bytes = { version = "1", features = ["serde"] }
 libc = "0.2"
 socket2 = { version = "0.5", features = ["all"] }
 image = { version = "0.24", optional = true }

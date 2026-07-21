@@ -486,28 +486,41 @@ pub fn socket_path() -> PathBuf {
                 use std::os::unix::fs::DirBuilderExt;
                 use std::os::unix::fs::MetadataExt;
 
+                let mut ok = true;
                 if !dir.exists() {
                     let mut builder = std::fs::DirBuilder::new();
                     builder.mode(0o700);
                     if let Err(e) = builder.create(&dir) {
                         if e.kind() != std::io::ErrorKind::AlreadyExists {
-                            panic!("Failed to securely create IPC directory: {}", e);
+                            eprintln!("Failed to securely create IPC directory: {}", e);
+                            ok = false;
                         }
                     }
                 }
 
-                if let Ok(meta) = dir.symlink_metadata() {
-                    if !meta.is_dir() {
-                        panic!("IPC path {:?} is not a directory (symlink attack?)", dir);
+                if ok {
+                    if let Ok(meta) = dir.symlink_metadata() {
+                        if !meta.is_dir() {
+                            eprintln!("IPC path {:?} is not a directory (symlink attack?)", dir);
+                            ok = false;
+                        } else if meta.uid() != uid as u32 {
+                            eprintln!("IPC directory {:?} is owned by UID {} instead of {}! Hijack attempt detected.", dir, meta.uid(), uid);
+                            ok = false;
+                        } else {
+                            use std::os::unix::fs::PermissionsExt;
+                            let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+                        }
+                    } else {
+                        eprintln!("Could not verify ownership of IPC directory {:?}", dir);
+                        ok = false;
                     }
-                    if meta.uid() != uid as u32 {
-                        panic!("IPC directory {:?} is owned by UID {} instead of {}! Hijack attempt detected.", dir, meta.uid(), uid);
+                }
+
+                if !ok {
+                    if let Ok(home) = std::env::var("HOME") {
+                        return PathBuf::from(home).join(".deskdrop.sock");
                     }
-                    // Defense in depth: enforce permissions just in case.
-                    use std::os::unix::fs::PermissionsExt;
-                    let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
-                } else {
-                    panic!("Could not verify ownership of IPC directory {:?}", dir);
+                    return PathBuf::from(format!("/tmp/deskdrop-{}-{}.sock", uid, std::process::id()));
                 }
             }
 

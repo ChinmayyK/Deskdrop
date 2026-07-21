@@ -4173,7 +4173,7 @@ fn register_session(
 
                         let data = if compressed {
                             match lz4_flex::decompress_size_prepended(&payload) {
-                                Ok(d) => d,
+                                Ok(d) => bytes::Bytes::from(d),
                                 Err(e) => {
                                     tracing::error!("Failed to decompress file chunk: {}", e);
                                     let mut mgr = shared.file_transfers.lock().await;

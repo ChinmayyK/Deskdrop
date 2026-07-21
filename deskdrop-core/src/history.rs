@@ -560,14 +560,19 @@ impl History {
                     last.pinned = pinned;
                     self.persist()?;
                 }
-                return Ok(self.entries.back().expect("history entry exists"));
+                return self
+                    .entries
+                    .back()
+                    .ok_or_else(|| anyhow::anyhow!("History entry missing after upgrade"));
             }
         }
 
         self.entries.push_back(entry);
         self.trim_to_limit();
         self.persist()?;
-        Ok(self.entries.back().expect("history entry exists"))
+        self.entries
+            .back()
+            .ok_or_else(|| anyhow::anyhow!("History entry immediately trimmed (max_entries may be 0)"))
     }
 
     fn trim_to_limit(&mut self) {

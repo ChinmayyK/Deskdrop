@@ -80,25 +80,32 @@ final class DaemonManager {
         }
     }
 
-    private func isDaemonSocketPresent() -> Bool {
-        let path: String
+    private func candidateSocketPaths() -> [String] {
+        var paths: [String] = []
         if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
-            path = "\(runtime)/deskdrop.sock"
-        } else {
-            path = "/tmp/deskdrop-\(getuid())/deskdrop.sock"
+            paths.append("\(runtime)/deskdrop.sock")
         }
-        return FileManager.default.fileExists(atPath: path)
+        paths.append("/tmp/deskdrop-\(getuid())/deskdrop.sock")
+        if let home = ProcessInfo.processInfo.environment["HOME"] {
+            paths.append("\(home)/.deskdrop.sock")
+        }
+        return paths
+    }
+
+    private func isDaemonSocketPresent() -> Bool {
+        for path in candidateSocketPaths() {
+            if FileManager.default.fileExists(atPath: path) {
+                return true
+            }
+        }
+        return false
     }
 
     private func cleanupDaemonSocketIfNeeded() {
-        let path: String
-        if let runtime = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"] {
-            path = "\(runtime)/deskdrop.sock"
-        } else {
-            path = "/tmp/deskdrop-\(getuid())/deskdrop.sock"
-        }
-        if FileManager.default.fileExists(atPath: path) {
-            try? FileManager.default.removeItem(atPath: path)
+        for path in candidateSocketPaths() {
+            if FileManager.default.fileExists(atPath: path) {
+                try? FileManager.default.removeItem(atPath: path)
+            }
         }
     }
     

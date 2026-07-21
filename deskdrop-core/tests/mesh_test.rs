@@ -48,7 +48,7 @@ fn three_device_fanout_all_receive() {
         .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(10 + i as u8), tx.clone(), tx.clone(), stop)
+        mgr.replace_live_session(Uuid::nil(), id, true, peer_addr(10 + i as u8), tx.clone(), tx.clone(), stop)
             .unwrap();
         txs.push(tx);
     }
@@ -76,7 +76,7 @@ fn pause_sync_removes_one_from_fanout() {
         .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(20 + i as u8), tx.clone(), tx, stop)
+        mgr.replace_live_session(Uuid::nil(), id, true, peer_addr(20 + i as u8), tx.clone(), tx, stop)
             .unwrap();
     }
 
@@ -121,7 +121,7 @@ fn peer_disconnect_does_not_cascade() {
         .unwrap();
         let (tx, _rx) = mpsc::channel(8);
         let (stop, _stop_rx) = oneshot::channel();
-        mgr.replace_live_session(id, peer_addr(30 + i as u8), tx.clone(), tx, stop)
+        mgr.replace_live_session(Uuid::nil(), id, true, peer_addr(30 + i as u8), tx.clone(), tx, stop)
             .unwrap();
     }
 
@@ -312,7 +312,7 @@ fn explicit_disconnect_prevents_immediate_session_cleanup_reconnect() {
     let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
     let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
     let (stx, _srx) = tokio::sync::oneshot::channel();
-    let _ = mgr.replace_live_session(id, peer_addr(80), tx1, tx2, stx).unwrap();
+    let _ = mgr.replace_live_session(Uuid::nil(), id, true, peer_addr(80), tx1, tx2, stx).unwrap();
 
     // Verify explicit_disconnect is NOT wiped by replace_live_session
     assert!(
