@@ -13,6 +13,15 @@ namespace Deskdrop.WinUI
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
+            if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+            }
+            else if (Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+            }
+
             // Make the window transparent and click-through where appropriate
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
@@ -43,10 +52,34 @@ namespace Deskdrop.WinUI
             DropGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(128, 0, 0, 0)); // Revert
         }
 
-        private void DropGrid_Drop(object sender, Microsoft.UI.Xaml.DragEventArgs e)
+        private async void DropGrid_Drop(object sender, Microsoft.UI.Xaml.DragEventArgs e)
         {
             DropGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(128, 0, 0, 0)); // Revert
-            // Handle drop logic
+            try
+            {
+                if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+                {
+                    var items = await e.DataView.GetStorageItemsAsync();
+                    if (items.Count > 0 && items[0] is Windows.Storage.StorageFile file)
+                    {
+                        var target = DeskdropStore.Shared.Peers.Count > 0 ? DeskdropStore.Shared.Peers[0].device_id : "";
+                        if (!string.IsNullOrEmpty(target))
+                        {
+                            System.Threading.Tasks.Task.Run(() => DaemonClient.PushFile(target, file.Path));
+                        }
+                    }
+                }
+                else if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+                {
+                    var text = await e.DataView.GetTextAsync();
+                    var target = DeskdropStore.Shared.Peers.Count > 0 ? DeskdropStore.Shared.Peers[0].device_id : "";
+                    if (!string.IsNullOrEmpty(target))
+                    {
+                        System.Threading.Tasks.Task.Run(() => DaemonClient.PushTextTo(text, target));
+                    }
+                }
+            }
+            catch { }
         }
     }
 }

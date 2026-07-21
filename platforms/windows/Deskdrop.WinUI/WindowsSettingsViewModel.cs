@@ -28,6 +28,12 @@ namespace Deskdrop.WinUI
             set => SetProperty(ref _requireTofu, value);
         }
 
+        public bool OtpShieldEnabled
+        {
+            get => DeskdropStore.Shared.OtpShieldEnabled;
+            set { DeskdropStore.Shared.OtpShieldEnabled = value; OnPropertyChanged(); }
+        }
+
         // Add other core daemon settings here as needed
         // e.g., Device Name, Max Payload Size, etc.
         

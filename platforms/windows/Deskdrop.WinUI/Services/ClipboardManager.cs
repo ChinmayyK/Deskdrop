@@ -16,7 +16,9 @@ namespace Deskdrop.WinUI.Services
     {
         private readonly DispatcherQueue _dispatcher;
         private string _lastText = string.Empty;
+        private readonly DispatcherTimer _pollTimer;
         private readonly DispatcherTimer _timer;
+        private uint _lastSequenceNumber;
 
         public ObservableCollection<HistoryItem> History { get; set; } = new ObservableCollection<HistoryItem>();
         public event Action<string>? QuickContextUpdated;
@@ -25,14 +27,100 @@ namespace Deskdrop.WinUI.Services
         {
             _dispatcher = DispatcherQueue.GetForCurrentThread();
             _timer = new DispatcherTimer();
-            _timer.Interval = TimeSpan.FromMilliseconds(1000);
+            _timer.Interval = TimeSpan.FromMilliseconds(500);
             _timer.Tick += OnTick;
             _timer.Start();
+
+            _pollTimer = new DispatcherTimer();
+            _pollTimer.Interval = TimeSpan.FromMilliseconds(30);
+            _pollTimer.Tick += OnPollTick;
+            _pollTimer.Start();
         }
 
         private async void OnTick(object? sender, object e)
         {
             await CheckClipboardAsync();
+        }
+
+        private void OnPollTick(object? sender, object e)
+        {
+            DrainEvents();
+        }
+
+        private void DrainEvents()
+        {
+            if (App.EngineHandle == IntPtr.Zero) return;
+            while (true)
+            {
+                var ev = NativeCore.deskdrop_poll_event(App.EngineHandle);
+                if (ev == IntPtr.Zero) break;
+                try
+                {
+                    int kind = NativeCore.deskdrop_event_type(ev);
+                    switch (kind)
+                    {
+                        case NativeCore.PB_EVENT_CLIPBOARD_TEXT:
+                        {
+                            var text = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev));
+                            var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                            if (text != null)
+                            {
+                                _lastText = text;
+                                _dispatcher.TryEnqueue(() => {
+                                    try {
+                                        var package = new DataPackage();
+                                        package.SetText(text);
+                                        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+                                    } catch { }
+                                    AddHistoryItem(text, from, "📝", text);
+                                });
+                            }
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_FILE_TRANSFER_INCOMING:
+                        case NativeCore.PB_EVENT_CLIPBOARD_FILE:
+                        {
+                            var fileName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
+                            var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                            _dispatcher.TryEnqueue(() => {
+                                AddHistoryItem(fileName, from, "📎", fileName);
+                                try { new IncomingFileBannerWindow(fileName, from).Activate(); } catch { }
+                            });
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_CALL_STATE_CHANGED:
+                        {
+                            var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                            _dispatcher.TryEnqueue(() => {
+                                try { new IncomingCallBannerWindow().Activate(); } catch { }
+                            });
+                            break;
+                        }
+                    }
+                }
+                finally
+                {
+                    NativeCore.deskdrop_free_event(ev);
+                }
+            }
+        }
+
+        private void AddHistoryItem(string summary, string source, string icon, string fullText)
+        {
+            var item = new HistoryItem
+            {
+                Summary = summary.Length > 80 ? summary[..77] + "…" : summary,
+                FullText = fullText,
+                Source = source,
+                TypeIcon = icon,
+                Time = DateTime.Now,
+                RelativeTime = "Just now",
+                display_text = summary,
+                is_text = icon == "📝"
+            };
+            History.Insert(0, item);
+            if (History.Count > 100) History.RemoveAt(History.Count - 1);
+            try { DeskdropStore.Shared.History.Insert(0, item); } catch { }
         }
 
         private async Task CheckClipboardAsync()
@@ -47,8 +135,21 @@ namespace Deskdrop.WinUI.Services
                     var text = await packageView.GetTextAsync();
                     if (!string.IsNullOrEmpty(text) && text != _lastText)
                     {
+                        if (DeskdropStore.Shared.OtpShieldEnabled && IsSensitiveContent(text))
+                        {
+                            _lastText = text;
+                            return; // Filter out sensitive OTP/passwords/tokens
+                        }
                         _lastText = text;
-                        DaemonClient.Send(new { cmd = "clipboard_push", content = text });
+                        if (App.EngineHandle != IntPtr.Zero)
+                        {
+                            NativeCore.deskdrop_push_text(App.EngineHandle, text);
+                        }
+                        else
+                        {
+                            DaemonClient.PushText(text);
+                        }
+                        AddHistoryItem(text, "local", "📝", text);
                     }
                 }
                 else if (packageView.Contains(StandardDataFormats.StorageItems))
@@ -58,7 +159,17 @@ namespace Deskdrop.WinUI.Services
                     {
                         if (item is Windows.Storage.StorageFile file)
                         {
-                            try { DaemonClient.SendFilePath(file.Path, file.Name, "application/octet-stream"); } catch { }
+                            try {
+                                if (App.EngineHandle != IntPtr.Zero)
+                                {
+                                    NativeCore.deskdrop_send_file_path(App.EngineHandle, null, file.Path, file.Name, "application/octet-stream");
+                                }
+                                else
+                                {
+                                    DaemonClient.SendFilePath(file.Path, file.Name, "application/octet-stream");
+                                }
+                                AddHistoryItem(file.Name, "local", "📎", file.Path);
+                            } catch { }
                         }
                     }
                 }
@@ -73,6 +184,7 @@ namespace Deskdrop.WinUI.Services
                 string name = json.GetProperty("name").GetString() ?? "Unknown";
                 string from = json.GetProperty("from").GetString() ?? "Unknown";
                 _dispatcher.TryEnqueue(() => {
+                    AddHistoryItem(name, from, "📎", name);
                     new IncomingFileBannerWindow(name, from).Activate();
                 });
             }
@@ -83,7 +195,17 @@ namespace Deskdrop.WinUI.Services
             if (!string.IsNullOrEmpty(path) && File.Exists(path))
             {
                 string name = Path.GetFileName(path);
-                try { DaemonClient.SendFilePath(path, name, "application/octet-stream", targetDevice); } catch { }
+                try {
+                    if (App.EngineHandle != IntPtr.Zero)
+                    {
+                        NativeCore.deskdrop_send_file_path(App.EngineHandle, targetDevice, path, name, "application/octet-stream");
+                    }
+                    else
+                    {
+                        DaemonClient.SendFilePath(path, name, "application/octet-stream", targetDevice);
+                    }
+                    _dispatcher.TryEnqueue(() => AddHistoryItem(name, "local", "📎", path));
+                } catch { }
             }
         }
 
@@ -91,9 +213,21 @@ namespace Deskdrop.WinUI.Services
         {
         }
 
+        private bool IsSensitiveContent(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var t = text.Trim();
+            if (t.Length >= 4 && t.Length <= 8 && t.All(char.IsDigit)) return true; // 4-8 digit OTP code
+            if (t.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.StartsWith("sk-", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.Contains("password", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         public void Dispose()
         {
             _timer.Stop();
+            _pollTimer.Stop();
         }
     }
 }

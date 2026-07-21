@@ -41,7 +41,20 @@ namespace Deskdrop.WinUI.Views
         {
             if (sender is Button btn && btn.DataContext is HistoryItem item)
             {
-                // DeskdropStore.Shared.PushLocalClipboard(); // To be implemented
+                if (item.is_text && !string.IsNullOrEmpty(item.FullText))
+                {
+                    try {
+                        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                        package.SetText(item.FullText);
+                        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+                    } catch { }
+                }
+                else if (!string.IsNullOrEmpty(item.path) && System.IO.File.Exists(item.path))
+                {
+                    try {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.path) { UseShellExecute = true });
+                    } catch { }
+                }
             }
         }
 
@@ -49,7 +62,11 @@ namespace Deskdrop.WinUI.Views
         {
             if (sender is Button btn && btn.DataContext is HistoryItem item)
             {
-                // Pin logic
+                item.IsPinned = !item.IsPinned;
+                TimelineList.ItemsSource = DeskdropStore.Shared.History
+                    .OrderByDescending(h => h.IsPinned)
+                    .ThenByDescending(h => h.Time)
+                    .ToList();
             }
         }
 
@@ -58,6 +75,7 @@ namespace Deskdrop.WinUI.Views
             if (sender is Button btn && btn.DataContext is HistoryItem item)
             {
                 DeskdropStore.Shared.History.Remove(item);
+                App.Clipboard?.History.Remove(item);
                 TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList();
             }
         }

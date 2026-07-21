@@ -588,6 +588,8 @@ namespace Deskdrop.WinUI
         public bool HasPendingClipboards => PendingClipboardCount > 0;
         public bool HasActiveTransfers => ActiveTransfers.Count > 0;
         public bool HasActiveSpeedTests => ActiveSpeedTests.Count > 0;
+        private bool _otpShieldEnabled = true;
+        public bool OtpShieldEnabled { get => _otpShieldEnabled; set => SetProperty(ref _otpShieldEnabled, value); }
         public string DaemonStatusText => IsDaemonRunning ? "Running" : "Stopped";
         public string HeaderStatusText
         {
@@ -1046,12 +1048,13 @@ namespace Deskdrop.WinUI
 
 
 namespace Deskdrop.WinUI { 
-    public class HistoryItem { 
+    public class HistoryItem : BaseViewModel { 
         public string id {get;set;} = Guid.NewGuid().ToString();
-        public string display_text {get;set;} 
-        public string path {get;set;} 
-        public bool is_text {get;set;} 
-        public bool IsPinned { get; set; } = false;
+        public string display_text {get;set;} = "";
+        public string path {get;set;} = "";
+        public bool is_text {get;set;} = true;
+        private bool _isPinned;
+        public bool IsPinned { get => _isPinned; set { if (SetProperty(ref _isPinned, value)) OnPropertyChanged(nameof(PinColor)); } }
         public string PinColor => IsPinned ? "#32ADE6" : "#8E8E93";
         public string TypeIcon { get; set; } = "📝";
         public string Summary { get; set; } = "";

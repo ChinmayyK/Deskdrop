@@ -7,7 +7,7 @@
     mc:Ignorable="d"
     Title="Edge Drop">
 
-    <Grid Background="Transparent" AllowDrop="True" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave">
+    <Grid Background="Transparent" AllowDrop="True" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave" Drop="Grid_Drop">
         <Border x:Name="AppTitleBar" Height="1" VerticalAlignment="Top" Background="Transparent" />
         
         <!-- Resting Edge Sliver -->
