@@ -50,7 +50,7 @@ Write-Host "[+] Using .NET SDK at $dotnetCmd"
 $installPath = "$env:LOCALAPPDATA\DeskdropApp"
 Write-Host "[*] Building and publishing Deskdrop to $installPath..." -ForegroundColor Cyan
 
-& $dotnetCmd publish Deskdrop.Windows.csproj -c Release -r win-x64 --self-contained true -o $installPath
+& $dotnetCmd publish Deskdrop.WinUI.csproj -c Release -r win-x64 --self-contained true -o $installPath
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[-] Build failed. Please check the errors above." -ForegroundColor Red

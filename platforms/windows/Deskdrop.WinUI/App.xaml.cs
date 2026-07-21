@@ -28,14 +28,15 @@ public partial class App : Application
     public System.Windows.Input.ICommand ExitApplicationCommand { get; }
 
     private static System.Threading.Mutex? _singleInstanceMutex;
+    private static IntPtr _engineHandle = IntPtr.Zero;
+    public static IntPtr EngineHandle => _engineHandle;
+    public static Deskdrop.WinUI.Services.ClipboardManager? Clipboard { get; private set; }
 
     public App()
     {
         var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
         
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App constructor started\n");
-        
-
 
         InitializeComponent();
         
@@ -53,6 +54,11 @@ public partial class App : Application
         ExitApplicationCommand = new RelayCommand(() =>
         {
             TrayIcon?.Dispose();
+            if (_engineHandle != IntPtr.Zero)
+            {
+                try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch { }
+            }
+            try { GlobalHotKeyManager.Shared.Dispose(); } catch { }
             Application.Current.Exit();
         });
     }
@@ -64,6 +70,18 @@ public partial class App : Application
 
         try
         {
+            if (!DaemonClient.IsDaemonRunning())
+            {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Starting native engine via deskdrop_start...\n");
+                _engineHandle = NativeCore.deskdrop_start(null, 0);
+                if (_engineHandle == IntPtr.Zero)
+                {
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ERROR: deskdrop_start returned null handle!\n");
+                }
+            }
+
+            Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
+
             // Initialize the Tray Icon entirely in C# to avoid x:Bind issues in App.xaml
             TrayIcon = new H.NotifyIcon.TaskbarIcon
             {
@@ -91,6 +109,20 @@ public partial class App : Application
             _window = MainWindow;
             _window.Activate();
             System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow activated.\n");
+
+            try
+            {
+                GlobalHotKeyManager.Shared.Register(true, true, false, false, 0x56, () => {
+                    _window?.DispatcherQueue.TryEnqueue(() => new QuickAccessWindow().Activate());
+                });
+                GlobalHotKeyManager.Shared.Register(true, false, false, false, 0x4B, () => {
+                    _window?.DispatcherQueue.TryEnqueue(() => {
+                        if (_window == null) _window = new DashboardWindow();
+                        _window.Activate();
+                    });
+                });
+            }
+            catch { }
         }
         catch (Exception ex)
         {
