@@ -21,6 +21,15 @@ namespace Deskdrop.WinUI
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
+            if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+            }
+            else if (Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+            }
+
             // Resize the window
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
@@ -76,7 +85,14 @@ namespace Deskdrop.WinUI
 
         private void BtnPinItem_Click(object sender, RoutedEventArgs e)
         {
-            // Pin not supported in current model
+            if (((FrameworkElement)sender).DataContext is HistoryItem item)
+            {
+                item.IsPinned = !item.IsPinned;
+                TimelineList.ItemsSource = DeskdropStore.Shared.History
+                    .OrderByDescending(h => h.IsPinned)
+                    .ThenByDescending(h => h.Time)
+                    .ToList();
+            }
         }
 
         private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
@@ -84,6 +100,7 @@ namespace Deskdrop.WinUI
             if (((FrameworkElement)sender).DataContext is HistoryItem item)
             {
                 DeskdropStore.Shared.History.Remove(item);
+                App.Clipboard?.History.Remove(item);
                 DeskdropStore.Shared.TriggerHistoryUpdate();
             }
         }
@@ -92,13 +109,18 @@ namespace Deskdrop.WinUI
         {
             if (((FrameworkElement)sender).DataContext is HistoryItem item)
             {
-                // Apply to local clipboard
-                if (item.is_text && !string.IsNullOrEmpty(item.display_text))
+                if (item.is_text && !string.IsNullOrEmpty(item.FullText))
                 {
                     try {
                         var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
-                        dp.SetText(item.display_text);
+                        dp.SetText(item.FullText);
                         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
+                    } catch { }
+                }
+                else if (!string.IsNullOrEmpty(item.path) && System.IO.File.Exists(item.path))
+                {
+                    try {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.path) { UseShellExecute = true });
                     } catch { }
                 }
                 Close();
@@ -113,12 +135,7 @@ namespace Deskdrop.WinUI
                 {
                     try 
                     {
-                        var req = new {
-                            cmd = "push_clipboard",
-                            target_device = peer.device_id,
-                            text = "WinUI Clipboard (Placeholder)"
-                        };
-                        DaemonClient.Send(req);
+                        DaemonClient.PushClipboard(peer.device_id);
                     } 
                     catch { }
                 });

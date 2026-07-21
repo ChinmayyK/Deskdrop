@@ -16,7 +16,14 @@ namespace Deskdrop.WinUI
         {
             this.InitializeComponent();
 
-            // Use MicaBackdrop if supported, else fallback to default solid background
+            if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+            }
+            else if (Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+            }
 
             // Optional: Hide default title bar to mimic macOS frameless look
             // ExtendsContentIntoTitleBar = true;

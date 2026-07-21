@@ -12,6 +12,15 @@ namespace Deskdrop.WinUI.Views
             
             ExtendsContentIntoTitleBar = true;
             
+            if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+            }
+            else if (Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+            }
+            
             var timer = new DispatcherTimer { Interval = System.TimeSpan.FromSeconds(10) };
             timer.Tick += (s, e) => { timer.Stop(); this.Close(); };
             timer.Start();
