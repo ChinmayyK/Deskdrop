@@ -33,8 +33,23 @@ namespace Deskdrop.WinUI
 
     public static class Dispatcher
     {
-        public static void Invoke(Action action) { action(); }
-        public static void InvokeAsync(Action action) { action(); }
+        public static void Invoke(Action action)
+        {
+            if (App.MainDispatcherQueue?.HasThreadAccess == true)
+            {
+                try { action(); } catch { }
+            }
+            else
+            {
+                var queue = App.MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                queue?.TryEnqueue(() => { try { action(); } catch { } });
+            }
+        }
+        public static void InvokeAsync(Action action)
+        {
+            var queue = App.MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            queue?.TryEnqueue(() => { try { action(); } catch { } });
+        }
     }
 }
 

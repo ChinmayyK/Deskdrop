@@ -22,13 +22,14 @@ namespace Deskdrop.WinUI.Views
             }
             
             var timer = new DispatcherTimer { Interval = System.TimeSpan.FromSeconds(10) };
-            timer.Tick += (s, e) => { timer.Stop(); this.Close(); };
+            timer.Tick += (s, e) => { try { timer.Stop(); this.Close(); } catch { } };
+            this.Closed += (s, e) => { try { timer.Stop(); } catch { } };
             timer.Start();
         }
 
         private void BtnAccept_Click(object sender, RoutedEventArgs e)
         {
-            this.Close();
+            try { this.Close(); } catch { }
         }
     }
 }

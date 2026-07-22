@@ -41,6 +41,21 @@ public partial class App : Application
         
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App constructor started\n");
 
+        this.UnhandledException += (s, e) =>
+        {
+            e.Handled = true;
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] WinUI UnhandledException: {e.Exception?.Message}\n{e.Exception?.StackTrace}\n"); } catch { }
+        };
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] AppDomain UnhandledException: {(e.ExceptionObject as Exception)?.Message}\n"); } catch { }
+        };
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            e.SetObserved();
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] TaskScheduler UnobservedTaskException: {e.Exception?.Message}\n"); } catch { }
+        };
+
         InitializeComponent();
         
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App InitializeComponent finished\n");
@@ -157,13 +172,11 @@ public partial class App : Application
             try
             {
                 GlobalHotKeyManager.Shared.Register(true, true, false, false, 0x56, () => {
-                    _window?.DispatcherQueue.TryEnqueue(() => new QuickAccessWindow().Activate());
+                    var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                    queue?.TryEnqueue(() => { try { new QuickAccessWindow().Activate(); } catch { } });
                 });
                 GlobalHotKeyManager.Shared.Register(true, false, false, false, 0x4B, () => {
-                    _window?.DispatcherQueue.TryEnqueue(() => {
-                        if (_window == null) _window = new DashboardWindow();
-                        _window.Activate();
-                    });
+                    ShowMainWindowCommand?.Execute(null);
                 });
             }
             catch { }

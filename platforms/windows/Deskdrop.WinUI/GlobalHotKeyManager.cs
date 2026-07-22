@@ -81,11 +81,15 @@ namespace Deskdrop.WinUI
         {
             if (uMsg == 0x0312) // WM_HOTKEY
             {
-                int id = wParam.ToInt32();
-                if (_callbacks.TryGetValue(id, out var action))
+                try
                 {
-                    action?.Invoke();
+                    int id = wParam.ToInt32();
+                    if (_callbacks.TryGetValue(id, out var action))
+                    {
+                        action?.Invoke();
+                    }
                 }
+                catch { }
             }
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }

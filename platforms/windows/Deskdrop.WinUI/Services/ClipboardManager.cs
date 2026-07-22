@@ -66,7 +66,7 @@ namespace Deskdrop.WinUI.Services
                             if (text != null)
                             {
                                 _lastText = text;
-                                _dispatcher.TryEnqueue(() => {
+                                (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                     try {
                                         var package = new DataPackage();
                                         package.SetText(text);
@@ -82,7 +82,7 @@ namespace Deskdrop.WinUI.Services
                         {
                             var fileName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
                             var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                            _dispatcher.TryEnqueue(() => {
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                 AddHistoryItem(fileName, from, "📎", fileName);
                                 try { new IncomingFileBannerWindow(fileName, from).Activate(); } catch { }
                             });
@@ -91,7 +91,7 @@ namespace Deskdrop.WinUI.Services
                         case NativeCore.PB_EVENT_CALL_STATE_CHANGED:
                         {
                             var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
-                            _dispatcher.TryEnqueue(() => {
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                 try { new IncomingCallBannerWindow().Activate(); } catch { }
                             });
                             break;
