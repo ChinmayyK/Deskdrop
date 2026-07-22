@@ -7,75 +7,179 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+    <Grid Background="#FFFFFF">
+        <Grid.ColumnDefinitions>
+            <!-- Center Main Launchpad Content -->
+            <ColumnDefinition Width="*"/>
+            <!-- Right Device Inspector Panel -->
+            <ColumnDefinition Width="320"/>
+        </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,24">
-            <TextBlock Text="Connected Devices" FontSize="28" FontWeight="Bold" Margin="0,0,0,8"/>
-            <TextBlock Text="Manage your paired devices and view their live telemetry status." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="14"/>
-        </StackPanel>
+        <!-- CENTER LAUNCHPAD CONTENT -->
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="40,28,40,40">
+            <StackPanel Spacing="0">
+                
+                <!-- Search Bar -->
+                <Border Background="#F2F2F7" CornerRadius="10" Padding="14,10" Margin="0,0,0,28">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE721;" FontSize="14" Foreground="#6E6E73" Grid.Column="0"/>
+                        <TextBox PlaceholderText="Search Files, Clipboard, Devices..." 
+                                 BorderThickness="0" Background="Transparent" 
+                                 Foreground="#1D1D1F" FontSize="14" 
+                                 Grid.Column="1" Margin="8,0,0,0"/>
+                    </Grid>
+                </Border>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <ItemsControl x:Name="DeviceTargetsList">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Spacing="16"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" CornerRadius="16" Padding="24">
-                            <StackPanel>
-                                <!-- Header -->
-                                <Grid Margin="0,0,0,24">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{Binding friendly_name}" FontSize="20" FontWeight="SemiBold"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                                            <TextBlock Text="Connected" Foreground="#1AAB29" FontSize="13" FontWeight="Medium"/>
-                                            <TextBlock Text="â€¢" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="13"/>
-                                            <TextBlock Text="{Binding ip_address}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="13"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                    <Button Grid.Column="1" Content="Disconnect" BorderThickness="0" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" CornerRadius="8"/>
-                                </Grid>
+                <!-- Hero Header -->
+                <TextBlock Text="Your screens, acting as one." 
+                           FontSize="28" FontWeight="Bold" Foreground="#1D1D1F" 
+                           CharacterSpacing="-10" Margin="0,0,0,6"/>
+                
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,32">
+                    <Border Width="8" Height="8" CornerRadius="4" Background="#34C759" VerticalAlignment="Center"/>
+                    <TextBlock Text="Connected over Local Wi-Fi." FontSize="14" Foreground="#6E6E73"/>
+                </StackPanel>
 
-                                <!-- Battery -->
-                                <StackPanel Margin="0,0,0,24">
-                                    <Grid Margin="0,0,0,8">
-                                        <TextBlock Text="Battery" FontSize="13" FontWeight="Medium" HorizontalAlignment="Left"/>
-                                        <TextBlock Text="85%" FontSize="13" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </Grid>
-                                    <Border Height="8" CornerRadius="4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                                        <Border Width="200" Height="8" CornerRadius="4" Background="#1AAB29" HorizontalAlignment="Left"/>
-                                    </Border>
-                                </StackPanel>
+                <!-- Launchpad Section Title -->
+                <TextBlock Text="Launchpad" FontSize="17" FontWeight="Bold" Foreground="#1D1D1F" Margin="0,0,0,16"/>
 
-                                <!-- Storage -->
-                                <StackPanel>
-                                    <Grid Margin="0,0,0,8">
-                                        <TextBlock Text="Storage" FontSize="13" FontWeight="Medium" HorizontalAlignment="Left"/>
-                                        <TextBlock Text="112 GB available" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" HorizontalAlignment="Right"/>
-                                    </Grid>
-                                    <Border Height="8" CornerRadius="4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Margin="0,0,0,12">
-                                        <Grid>
-                                            <Border Width="120" Height="8" CornerRadius="4,0,0,4" Background="#0A84FF" HorizontalAlignment="Left"/>
-                                            <Border Width="60" Height="8" Background="#FF9500" HorizontalAlignment="Left" Margin="120,0,0,0"/>
-                                            <Border Width="30" Height="8" Background="#FF2D55" HorizontalAlignment="Left" Margin="180,0,0,0"/>
-                                        </Grid>
-                                    </Border>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                <!-- 3x2 Launchpad Grid -->
+                <Grid Margin="0,0,0,36">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 1. Transfer Files -->
+                    <Border Grid.Row="0" Grid.Column="0" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="0,0,8,16">
+                        <StackPanel HorizontalAlignment="Center" Spacing="12">
+                            <Border Width="52" Height="52" CornerRadius="26" Background="#E3F2FD" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE896;" FontSize="22" Foreground="#0A84FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Transfer Files" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 2. Browse Device -->
+                    <Border Grid.Row="0" Grid.Column="1" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="8,0,8,16">
+                        <StackPanel HorizontalAlignment="Center" Spacing="12">
+                            <Border Width="52" Height="52" CornerRadius="26" Background="#EDE7F6" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE8F1;" FontSize="22" Foreground="#7C3AED" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Browse Device" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 3. Clipboard -->
+                    <Border Grid.Row="0" Grid.Column="2" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="8,0,0,16">
+                        <StackPanel HorizontalAlignment="Center" Spacing="12">
+                            <Border Width="52" Height="52" CornerRadius="26" Background="#FFEBEE" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="22" Foreground="#E11D48" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Clipboard" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 4. Speed Test -->
+                    <Border Grid.Row="1" Grid.Column="0" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="0,0,8,0">
+                        <StackPanel HorizontalAlignment="Center" Spacing="12">
+                            <Border Width="52" Height="52" CornerRadius="26" Background="#E0F2FE" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE916;" FontSize="22" Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Speed Test" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 5. Remote Control -->
+                    <Border Grid.Row="1" Grid.Column="1" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="8,0,8,0">
+                        <StackPanel HorizontalAlignment="Center" Spacing="12">
+                            <Border Width="52" Height="52" CornerRadius="26" Background="#FEF3C7" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE81C;" FontSize="22" Foreground="#D97706" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Remote Control" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 6. Settings -->
+                    <Border Grid.Row="1" Grid.Column="2" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="8,0,0,0">
+                        <StackPanel HorizontalAlignment="Center" Spacing="12">
+                            <Border Width="52" Height="52" CornerRadius="26" Background="#F3F4F6" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE713;" FontSize="22" Foreground="#4B5563" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Settings" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Recent Activity Section -->
+                <TextBlock Text="Recent Activity" FontSize="17" FontWeight="Bold" Foreground="#1D1D1F" Margin="0,0,0,16"/>
+                <Border Background="#F5F5F7" CornerRadius="12" Padding="20,16" HorizontalAlignment="Left">
+                    <TextBlock Text="No recent activity." FontSize="13.5" Foreground="#8E8E93"/>
+                </Border>
+            </StackPanel>
         </ScrollViewer>
+
+        <!-- RIGHT INSPECTOR PANEL (`#FAFAFC`) -->
+        <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
+            <StackPanel Spacing="28">
+                <!-- Device Header -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="OnePlus Nord 4" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Width="8" Height="8" CornerRadius="4" Background="#34C759" VerticalAlignment="Center"/>
+                        <TextBlock Text="Connected - Wi-Fi 6 · 192.168.x.x" FontSize="13" Foreground="#6E6E73"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Battery Section -->
+                <StackPanel Spacing="8">
+                    <Grid>
+                        <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
+                        <TextBlock Text="37%" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
+                        <Border Width="100" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- Storage Section -->
+                <StackPanel Spacing="8">
+                    <Grid>
+                        <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
+                        <TextBlock Text="112.9 GB / 219.5 GB" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
+                        <Grid>
+                            <Border Width="40" Height="8" CornerRadius="4,0,0,4" Background="#FF9500" HorizontalAlignment="Left"/>
+                            <Border Width="95" Height="8" Background="#AF52DE" HorizontalAlignment="Left" Margin="40,0,0,0"/>
+                        </Grid>
+                    </Border>
+                    <!-- Legend -->
+                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#FF9500"/>
+                            <TextBlock Text="Images" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#AF52DE"/>
+                            <TextBlock Text="Videos" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#E5E5EA"/>
+                            <TextBlock Text="Other" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
     </Grid>
 </Page>

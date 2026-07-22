@@ -7,37 +7,45 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Deskdrop Dashboard">
+    Title="DeskDrop Dashboard">
 
-    <Grid Background="#E8E8E8">
+    <Grid Background="#F8F9FB">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <!-- Custom Title Bar Area for dragging -->
-        <Grid x:Name="AppTitleBar" Height="40" Background="Transparent" Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Top" Canvas.ZIndex="100"/>
+        <Grid x:Name="AppTitleBar" Height="38" Background="Transparent" Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Top" Canvas.ZIndex="100"/>
 
-        <!-- Navigation View mimicking macOS Sidebar -->
+        <!-- Navigation View mimicking exact 3-panel macOS Sidebar -->
         <NavigationView x:Name="NavView"
                         Grid.Row="0" Grid.RowSpan="2"
                         PaneDisplayMode="Left"
                         IsPaneToggleButtonVisible="False"
                         IsBackButtonVisible="Collapsed"
-                        IsSettingsVisible="True"
-                        OpenPaneLength="240"
+                        IsSettingsVisible="False"
+                        OpenPaneLength="220"
                         SelectionChanged="NavView_SelectionChanged"
                         Background="Transparent">
             
+            <NavigationView.PaneHeader>
+                <StackPanel Orientation="Horizontal" Spacing="8" Padding="16,14,0,16">
+                    <TextBlock Text="⚡" FontSize="20" Foreground="#0A84FF"/>
+                    <TextBlock Text="DeskDrop" FontSize="18" FontWeight="Bold" Foreground="#1D1D1F"/>
+                </StackPanel>
+            </NavigationView.PaneHeader>
+
             <NavigationView.MenuItems>
-                <NavigationViewItem Tag="Activity" Content="Activity" x:Name="NavActivity" Margin="0,32,0,0">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE81C;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
+                <NavigationViewItemHeader Content="WORKSPACE" Margin="12,0,0,4" Foreground="#8E8E93"/>
                 <NavigationViewItem Tag="Devices" Content="Devices" x:Name="NavDevices">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8F1;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="Clipboard" Content="Clipboard" x:Name="NavClipboard">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8C8;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Tag="Transfers" Content="Transfers" x:Name="NavTransfers">
@@ -45,16 +53,24 @@
                         <FontIcon Glyph="&#xE896;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Tag="Settings" Content="Settings" x:Name="NavSettings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItemSeparator Margin="0,12,0,4"/>
+                <NavigationViewItemHeader Content="DEVICES" Margin="12,0,0,4" Foreground="#8E8E93"/>
+                <NavigationViewItem Tag="DevicePeer" Content="OnePlus Nord 4" x:Name="NavPeer">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8EA;" Foreground="#34C759"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
 
-            <!-- White solid content area with rounded corner -->
-            <Grid Background="#FFFFFF"
-                  CornerRadius="8,0,0,0"
-                  BorderBrush="#D0D0D0"
-                  BorderThickness="1,1,0,0">
-                <ScrollViewer>
-                    <Frame x:Name="ContentFrame" Padding="24" Background="Transparent" />
-                </ScrollViewer>
+            <!-- Main center + right inspector area inside clean white surface -->
+            <Grid Background="#FFFFFF" BorderBrush="#E5E5EA" BorderThickness="1,0,0,0">
+                <Frame x:Name="ContentFrame" Background="Transparent" />
             </Grid>
         </NavigationView>
     </Grid>

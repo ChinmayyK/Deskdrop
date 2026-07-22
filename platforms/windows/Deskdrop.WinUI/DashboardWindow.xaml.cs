@@ -25,31 +25,28 @@ namespace Deskdrop.WinUI
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-            appWindow.Resize(new Windows.Graphics.SizeInt32(960, 720));
+            appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
 
-            // Default to Activity View
+            // Default to exact 3-panel Devices/Launchpad view matching macOS
             NavView.Loaded += (s, e) =>
             {
-                NavView.SelectedItem = NavActivity;
+                NavView.SelectedItem = NavDevices;
             };
-            ContentFrame.Navigate(typeof(ActivityView));
+            ContentFrame.Navigate(typeof(DevicesView));
         }
 
         private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
         {
-            if (args.IsSettingsSelected)
-            {
-                // ContentFrame.Navigate(typeof(SettingsView)); // Settings view to be implemented later if needed
-            }
-            else if (args.SelectedItem is NavigationViewItem item)
+            if (args.SelectedItem is NavigationViewItem item)
             {
                 switch (item.Tag)
                 {
+                    case "Devices":
+                    case "DevicePeer":
+                        ContentFrame.Navigate(typeof(DevicesView));
+                        break;
                     case "Activity":
                         ContentFrame.Navigate(typeof(ActivityView));
-                        break;
-                    case "Devices":
-                        ContentFrame.Navigate(typeof(DevicesView));
                         break;
                     case "Transfers":
                         ContentFrame.Navigate(typeof(TransfersView));
