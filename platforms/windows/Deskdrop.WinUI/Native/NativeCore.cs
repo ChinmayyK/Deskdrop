@@ -121,11 +121,16 @@ namespace Deskdrop.WinUI
         public static string? PtrToUtf8String(IntPtr ptr)
         {
             if (ptr == IntPtr.Zero) return null;
-            int len = 0;
-            while (Marshal.ReadByte(ptr, len) != 0) len++;
-            var buf = new byte[len];
-            Marshal.Copy(ptr, buf, 0, len);
-            return Encoding.UTF8.GetString(buf);
+            try
+            {
+                int len = 0;
+                while (Marshal.ReadByte(ptr, len) != 0) len++;
+                if (len == 0) return string.Empty;
+                var buf = new byte[len];
+                Marshal.Copy(ptr, buf, 0, len);
+                return Encoding.UTF8.GetString(buf);
+            }
+            catch { return null; }
         }
     }
 }

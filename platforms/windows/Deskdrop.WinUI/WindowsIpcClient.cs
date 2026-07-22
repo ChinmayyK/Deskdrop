@@ -87,17 +87,10 @@ namespace Deskdrop.WinUI
                 var line = ReadLineWithTimeout(pipe, TimeoutMs);
                 if (line != null)
                 {
-                    var doc = JsonDocument.Parse(line);
-                    if (doc.RootElement.TryGetProperty("status", out var st) && st.GetString() == "error")
-                    {
-                        var msg = doc.RootElement.TryGetProperty("message", out var err) ? err.GetString() : "Unknown IPC error";
-                        throw new InvalidOperationException($"IPC returned error: {msg}");
-                    }
-                    return doc;
+                    try { return JsonDocument.Parse(line); } catch { return null; }
                 }
                 return null;
             }
-            catch (InvalidOperationException) { throw; }
             catch { return null; }
         }
 
@@ -207,10 +200,23 @@ namespace Deskdrop.WinUI
         public static JsonDocument? DisconnectPeer(string deviceId) => Send(new { cmd = "disconnect_peer", device_id = deviceId });
         public static JsonDocument? DisconnectAllPeers()
         {
-            foreach (var p in DeskdropStore.Shared.Peers)
+            try
             {
-                DisconnectPeer(p.device_id);
+                var peers = DeskdropStore.Shared.Peers;
+                System.Collections.Generic.List<string> ids = new();
+                if (App.MainDispatcherQueue?.HasThreadAccess == true)
+                {
+                    foreach (var p in peers) ids.Add(p.device_id);
+                }
+                else
+                {
+                    // If on background thread, send explicit IPC command or safely marshal
+                    Send(new { cmd = "disconnect_all_peers" });
+                    return null;
+                }
+                foreach (var id in ids) DisconnectPeer(id);
             }
+            catch { }
             return null;
         }
         public static JsonDocument? RescanPeers() => Send(new { cmd = "rescan_peers" });
@@ -297,42 +303,49 @@ namespace Deskdrop.WinUI
 
         private void Poll()
         {
-            bool running = DaemonClient.IsDaemonRunning();
-            if (running != _wasDaemonRunning)
-            {
-                _wasDaemonRunning = running;
-                DaemonAvailabilityChanged?.Invoke(running);
-            }
-
-            if (!running) { SchedulePoll(SlowMs); return; }
-
-            var resp = DaemonClient.Status();
-            if (resp == null) { SchedulePoll(SlowMs); return; }
-
             try
             {
-                var root = resp.RootElement;
-                if (root.TryGetProperty("data", out var data))
+                bool running = DaemonClient.IsDaemonRunning();
+                if (running != _wasDaemonRunning)
                 {
-                    int peerCount = data.TryGetProperty("peer_count", out var pc)
-                        ? pc.GetInt32() : 0;
-                    bool syncEnabled = !data.TryGetProperty("sync_enabled", out var se)
-                        || se.GetBoolean();
-                    int pending = data.TryGetProperty("pending_clipboard_count", out var pcc)
-                        ? pcc.GetInt32() : 0;
-
-                    if (peerCount != _lastPeerCount)
-                    { _lastPeerCount = peerCount; PeerCountChanged?.Invoke(peerCount); }
-                    if (syncEnabled != _lastSyncState)
-                    { _lastSyncState = syncEnabled; SyncStateChanged?.Invoke(syncEnabled); }
-                    if (pending != _lastPendingClipboard)
-                    { _lastPendingClipboard = pending; PendingClipboardCountChanged?.Invoke(pending); }
+                    _wasDaemonRunning = running;
+                    try { DaemonAvailabilityChanged?.Invoke(running); } catch { }
                 }
-            }
-            catch { }
 
-            // Adaptive interval: fast when peers are present, slow otherwise.
-            SchedulePoll(_lastPeerCount > 0 ? FastMs : SlowMs);
+                if (!running) { SchedulePoll(SlowMs); return; }
+
+                var resp = DaemonClient.Status();
+                if (resp == null) { SchedulePoll(SlowMs); return; }
+
+                try
+                {
+                    var root = resp.RootElement;
+                    if (root.TryGetProperty("data", out var data))
+                    {
+                        int peerCount = data.TryGetProperty("peer_count", out var pc)
+                            ? pc.GetInt32() : 0;
+                        bool syncEnabled = !data.TryGetProperty("sync_enabled", out var se)
+                            || se.GetBoolean();
+                        int pending = data.TryGetProperty("pending_clipboard_count", out var pcc)
+                            ? pcc.GetInt32() : 0;
+
+                        if (peerCount != _lastPeerCount)
+                        { _lastPeerCount = peerCount; try { PeerCountChanged?.Invoke(peerCount); } catch { } }
+                        if (syncEnabled != _lastSyncState)
+                        { _lastSyncState = syncEnabled; try { SyncStateChanged?.Invoke(syncEnabled); } catch { } }
+                        if (pending != _lastPendingClipboard)
+                        { _lastPendingClipboard = pending; try { PendingClipboardCountChanged?.Invoke(pending); } catch { } }
+                    }
+                }
+                catch { }
+
+                // Adaptive interval: fast when peers are present, slow otherwise.
+                SchedulePoll(_lastPeerCount > 0 ? FastMs : SlowMs);
+            }
+            catch
+            {
+                try { SchedulePoll(SlowMs); } catch { }
+            }
         }
 
         public void Dispose() { _timer?.Dispose(); }
