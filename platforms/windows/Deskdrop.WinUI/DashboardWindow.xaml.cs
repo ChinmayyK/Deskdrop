@@ -42,14 +42,22 @@ namespace Deskdrop.WinUI
                 switch (item.Tag)
                 {
                     case "Devices":
-                    case "DevicePeer":
                         ContentFrame.Navigate(typeof(DevicesView));
                         break;
-                    case "Activity":
-                        ContentFrame.Navigate(typeof(ActivityView));
+                    case "DevicePeer":
+                        ContentFrame.Navigate(typeof(RemoteExplorerView));
+                        break;
+                    case "Clipboard":
+                        ContentFrame.Navigate(typeof(ClipboardView));
                         break;
                     case "Transfers":
                         ContentFrame.Navigate(typeof(TransfersView));
+                        break;
+                    case "Settings":
+                        ContentFrame.Navigate(typeof(SettingsView));
+                        break;
+                    case "Activity":
+                        ContentFrame.Navigate(typeof(ActivityView));
                         break;
                 }
             }
