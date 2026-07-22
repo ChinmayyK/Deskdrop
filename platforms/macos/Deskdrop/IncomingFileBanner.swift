@@ -33,7 +33,7 @@ final class FileBannerWindowManager: NSObject {
 
         dismissTimer?.invalidate()
         dismissTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.hide()
             }
         }
@@ -42,8 +42,8 @@ final class FileBannerWindowManager: NSObject {
     func hide() {
         hostingView.rootView = FileBannerContainerView(message: nil)
         // Let SwiftUI animate out before hiding window
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.panel.orderOut(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.panel.orderOut(nil)
         }
     }
 

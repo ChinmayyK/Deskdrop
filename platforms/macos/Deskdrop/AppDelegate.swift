@@ -451,9 +451,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     
     // Handle notification click
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
             NSApp.activate(ignoringOtherApps: true)
-            self.openQuickAccess()
+            self?.openQuickAccess()
             completionHandler()
         }
     }
@@ -522,7 +522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     systemImage: "doc.on.clipboard",
                     ttl: 6.0,
                     primaryAction: ToastAction(title: "Apply", role: .primary) { [weak self] in
-                        Task { @MainActor in
+                        Task { @MainActor [weak self] in
                             await self?.store.applyClipboard(entry: entry)
                         }
                     }
@@ -1221,8 +1221,8 @@ extension AppDelegate: MenuBarDropViewDelegate {
         guard isEnabled else { return }
         
         NSLog("Deskdrop: Auto-syncing Mac screenshot -> Android: \(url.path)")
-        Task { @MainActor in
-            store.sendFile(url: url)
+        Task { @MainActor [weak self] in
+            self?.store.sendFile(url: url)
         }
     }
 }
