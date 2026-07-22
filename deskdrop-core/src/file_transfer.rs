@@ -335,12 +335,8 @@ impl OutboundTransfer {
         let elapsed = self.created_at.elapsed();
         let speed_bps = bytes_sent.checked_div(elapsed.as_secs().max(1));
         let eta_secs = speed_bps.and_then(|spd| {
-            if spd > 0 {
-                let remaining = self.meta.size_bytes.saturating_sub(bytes_sent);
-                Some(remaining / spd)
-            } else {
-                None
-            }
+            let remaining = self.meta.size_bytes.saturating_sub(bytes_sent);
+            remaining.checked_div(spd)
         });
 
         TransferProgress {

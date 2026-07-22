@@ -11,7 +11,6 @@
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
     <PublishProfile Condition="Exists('Properties\PublishProfiles\win-$(Platform).pubxml')">win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
-    <UseWindowsForms>true</UseWindowsForms>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -19,10 +18,6 @@
     <AssemblyName>Deskdrop</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Using Remove="System.Windows.Forms" />
-  </ItemGroup>
 
   <ItemGroup>
     <Content Include="Assets\SplashScreen.scale-200.png" />
@@ -90,10 +85,10 @@
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed>False</PublishTrimmed>
-    <_WarnAboutWindowsFormsOrWpfWithTrimming>false</_WarnAboutWindowsFormsOrWpfWithTrimming>
+    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
+    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
     <SuppressTrimAnalysis>true</SuppressTrimAnalysis>
-    <NoWarn>$(NoWarn);NETSDK1175;IL2026;IL2037;IL2057</NoWarn>
+    <NoWarn>$(NoWarn);IL2026;IL2037;IL2057</NoWarn>
   </PropertyGroup>
 
 </Project>
