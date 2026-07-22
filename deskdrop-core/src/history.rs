@@ -570,9 +570,9 @@ impl History {
         self.entries.push_back(entry);
         self.trim_to_limit();
         self.persist()?;
-        self.entries
-            .back()
-            .ok_or_else(|| anyhow::anyhow!("History entry immediately trimmed (max_entries may be 0)"))
+        self.entries.back().ok_or_else(|| {
+            anyhow::anyhow!("History entry immediately trimmed (max_entries may be 0)")
+        })
     }
 
     fn trim_to_limit(&mut self) {
@@ -1441,7 +1441,9 @@ mod tests {
         let tmp = NamedTempFile::new().unwrap();
         let mut history = History::load_with_limit(tmp.path(), 50).unwrap();
         let old_content = ClipboardContent::Text("Old regular note".into());
-        let _ = history.push_with_options(&old_content, "MacBook".into(), 1024).unwrap();
+        let _ = history
+            .push_with_options(&old_content, "MacBook".into(), 1024)
+            .unwrap();
 
         // Simulate item created 10 days ago (864000 seconds ago)
         let now = 1_700_000_000u64;
@@ -1453,7 +1455,9 @@ mod tests {
         assert!(history.entries().is_empty());
 
         // If pinned, it should survive age pruning
-        let _ = history.push_with_options(&old_content, "MacBook".into(), 1024).unwrap();
+        let _ = history
+            .push_with_options(&old_content, "MacBook".into(), 1024)
+            .unwrap();
         let pin_id = history.entries().back().unwrap().id;
         history.entries_mut().back_mut().unwrap().timestamp = now - 10 * 86400;
         let _ = history.set_pinned(pin_id, true).unwrap();

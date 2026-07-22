@@ -212,9 +212,11 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
                     ),
                     Err(e) => {
                         tracing::warn!("Failed to apply clipboard: {e}");
-                        SUPPRESS_COUNT.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
-                            Some(v.saturating_sub(1))
-                        }).ok();
+                        SUPPRESS_COUNT
+                            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
+                                Some(v.saturating_sub(1))
+                            })
+                            .ok();
                     }
                 }
             } else {

@@ -199,7 +199,7 @@ impl crate::engine::Engine {
             free_bytes,
             total_bytes,
         ));
-        
+
         let msg = AppMessage::StorageStatus {
             images_bytes,
             videos_bytes,

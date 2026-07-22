@@ -181,7 +181,9 @@ impl AdaptiveCongestionController {
             min_rate_bps,
             max_rate_bps,
             step_increase_bps,
-            current_rate_bps: Arc::new(AtomicU64::new(DEFAULT_RATE_BPS.clamp(min_rate_bps, max_rate_bps))),
+            current_rate_bps: Arc::new(AtomicU64::new(
+                DEFAULT_RATE_BPS.clamp(min_rate_bps, max_rate_bps),
+            )),
             consecutive_successes: Arc::new(AtomicU32::new(0)),
         }
     }
@@ -203,7 +205,9 @@ impl AdaptiveCongestionController {
         if count >= 2 {
             self.consecutive_successes.store(0, Ordering::Relaxed);
             let current = self.current_rate_bps.load(Ordering::Relaxed);
-            let new_rate = current.saturating_add(self.step_increase_bps).min(self.max_rate_bps);
+            let new_rate = current
+                .saturating_add(self.step_increase_bps)
+                .min(self.max_rate_bps);
             if new_rate != current {
                 self.current_rate_bps.store(new_rate, Ordering::Relaxed);
                 throttle.set_rate(new_rate, (new_rate * 2).max(1)).await;

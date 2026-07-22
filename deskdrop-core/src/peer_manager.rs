@@ -288,7 +288,8 @@ impl PeerManager {
         let path = self.path.clone();
 
         let store_to_save = PeerStoreData {
-            peers: self.store
+            peers: self
+                .store
                 .iter()
                 .filter(|p| p.value().trusted || p.value().remembered)
                 .map(|p| (*p.key(), p.value().clone()))
@@ -347,27 +348,14 @@ impl PeerManager {
         discovery: DiscoverySource,
         platform: Option<String>,
     ) -> Result<PeerRecord> {
-        if self
-            .store
-            
-            .len()
-            > 1000
-        {
+        if self.store.len() > 1000 {
             self.prune_stale_peers();
-            if self
-                .store
-                
-                
-                .len()
-                > 1000
-            {
+            if self.store.len() > 1000 {
                 return Err(anyhow::anyhow!("Peer limit reached"));
             }
         }
         let now = now_secs();
         let record = {
-            
-
             let is_placeholder = |name: &str| {
                 name.starts_with("device-") || name.eq_ignore_ascii_case("Deskdrop Device")
             };
@@ -481,7 +469,6 @@ impl PeerManager {
         }
 
         {
-            
             let mut entry = self.store.entry(device_id).or_insert_with(|| PeerRecord {
                 id: device_id,
                 port: endpoint
@@ -531,7 +518,6 @@ impl PeerManager {
 
         let session_id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
         {
-            
             let mut entry = self.store.entry(device_id).or_insert_with(|| PeerRecord {
                 id: device_id,
                 port: endpoint.port(),
@@ -573,11 +559,8 @@ impl PeerManager {
     }
 
     pub fn mark_disconnected(&self, device_id: Uuid, reason: Option<String>) -> Result<()> {
-        self.live
-            
-            .remove(&device_id);
+        self.live.remove(&device_id);
         {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Disconnected;
                 entry.last_error = reason;
@@ -594,7 +577,6 @@ impl PeerManager {
         reason: Option<String>,
     ) -> Result<Option<u64>> {
         let connected_at = {
-            
             if let Some(current) = self.live.get(&device_id) {
                 if current.session_id != session_id {
                     return Ok(None);
@@ -627,7 +609,6 @@ impl PeerManager {
         if let Some(live_endpoint) = self.live_endpoint(device_id) {
             if live_endpoint != endpoint {
                 {
-                    
                     if let Some(mut entry) = self.store.get_mut(&device_id) {
                         if !entry.ips.contains(&live_endpoint.ip()) {
                             entry.ips.push(live_endpoint.ip());
@@ -641,11 +622,8 @@ impl PeerManager {
             }
         }
 
-        self.live
-            
-            .remove(&device_id);
+        self.live.remove(&device_id);
         {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Failed;
                 entry.last_error = Some(reason);
@@ -656,7 +634,6 @@ impl PeerManager {
 
     pub fn update_trust(&self, device_id: Uuid, trusted: bool) -> Result<()> {
         {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.trusted = trusted;
             }
@@ -666,7 +643,6 @@ impl PeerManager {
 
     pub fn update_last_sync(&self, device_id: Uuid) -> Result<()> {
         {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.last_sync = Some(now_secs());
                 entry.last_seen = Some(now_secs());
@@ -679,7 +655,6 @@ impl PeerManager {
 
     pub fn set_sync_enabled(&self, device_id: Uuid, enabled: bool) -> Result<bool> {
         let found = {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.sync_enabled = enabled;
                 true
@@ -695,7 +670,6 @@ impl PeerManager {
 
     pub fn set_auto_connect(&self, device_id: Uuid, auto_connect: bool) -> Result<bool> {
         let found = {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.auto_connect = auto_connect;
                 true
@@ -712,7 +686,6 @@ impl PeerManager {
     /// Sets whether this peer has an active pairing request pending.
     pub fn set_pairing_requested(&self, device_id: Uuid, requested: bool) -> Result<bool> {
         let changed = {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.pairing_requested = requested;
                 true
@@ -728,7 +701,6 @@ impl PeerManager {
 
     pub fn set_outgoing_pairing_waiting(&self, device_id: Uuid, waiting: bool) -> Result<bool> {
         let changed = {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.outgoing_pairing_waiting = waiting;
                 true
@@ -745,7 +717,6 @@ impl PeerManager {
     /// Sets the pairing PIN for this peer.
     pub fn set_pairing_pin(&self, device_id: Uuid, pin: Option<String>) -> Result<bool> {
         let found = {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.pairing_pin = pin;
                 true
@@ -761,7 +732,6 @@ impl PeerManager {
 
     pub fn set_explicit_disconnect(&self, device_id: Uuid, explicit: bool) -> Result<bool> {
         let found = {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.explicit_disconnect = explicit;
                 if explicit {
@@ -788,7 +758,6 @@ impl PeerManager {
 
     pub fn forget_device(&self, device_id: Uuid) -> Result<bool> {
         let found = {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.trusted = false;
                 entry.remembered = false;
@@ -811,12 +780,11 @@ impl PeerManager {
 
     /// Connected + trusted + sync_enabled peers — receives clipboard payloads.
     pub fn active_senders(&self) -> Vec<(Uuid, mpsc::Sender<AppMessage>)> {
-        
         self.live
-            
             .iter()
             .filter(|p| {
-                self.store.get(p.key())
+                self.store
+                    .get(p.key())
                     .map(|p| p.value().is_sync_eligible())
                     .unwrap_or(false)
             })
@@ -825,23 +793,16 @@ impl PeerManager {
     }
 
     pub fn sender(&self, device_id: Uuid) -> Option<mpsc::Sender<AppMessage>> {
-        self.live
-            
-            .get(&device_id)
-            .map(|s| s.sender.clone())
+        self.live.get(&device_id).map(|s| s.sender.clone())
     }
 
     pub fn file_sender(&self, device_id: Uuid) -> Option<mpsc::Sender<AppMessage>> {
-        self.live
-            
-            .get(&device_id)
-            .map(|s| s.file_sender.clone())
+        self.live.get(&device_id).map(|s| s.file_sender.clone())
     }
 
     /// All connected peers regardless of sync state (for heartbeats / control).
     pub fn all_connected_senders(&self) -> Vec<(Uuid, mpsc::Sender<AppMessage>)> {
         self.live
-            
             .iter()
             .map(|p| (*p.key(), p.value().sender.clone()))
             .collect()
@@ -849,11 +810,14 @@ impl PeerManager {
 
     /// All connected AND trusted peers (for manual file transfers, ignoring sync_enabled).
     pub fn all_trusted_senders(&self) -> Vec<(Uuid, mpsc::Sender<AppMessage>)> {
-        
         self.live
-            
             .iter()
-            .filter(|p| self.store.get(p.key()).map(|r| r.value().trusted).unwrap_or(false))
+            .filter(|p| {
+                self.store
+                    .get(p.key())
+                    .map(|r| r.value().trusted)
+                    .unwrap_or(false)
+            })
             .map(|p| (*p.key(), p.value().sender.clone()))
             .collect()
     }
@@ -867,9 +831,9 @@ impl PeerManager {
     /// - It has at least one known address (from addr_history or current IPs)
     /// - It was not explicitly disconnected by the user
     pub fn peers_needing_probe(&self) -> Vec<PeerRecord> {
-        
-        
-        self.store.iter().map(|p| p.value().clone())
+        self.store
+            .iter()
+            .map(|p| p.value().clone())
             .filter(|p| {
                 p.trusted
                     && p.remembered
@@ -883,16 +847,11 @@ impl PeerManager {
     }
 
     pub fn is_connected(&self, device_id: Uuid) -> bool {
-        self.live
-            
-            .contains_key(&device_id)
+        self.live.contains_key(&device_id)
     }
 
     pub fn live_endpoint(&self, device_id: Uuid) -> Option<SocketAddr> {
-        self.live
-            
-            .get(&device_id)
-            .map(|s| s.endpoint)
+        self.live.get(&device_id).map(|s| s.endpoint)
     }
 
     pub fn endpoint_for(&self, device_id: Uuid) -> Option<SocketAddr> {
@@ -901,24 +860,15 @@ impl PeerManager {
     }
 
     pub fn note_manual_target(&self, endpoint: SocketAddr) {
-        self.manual_targets
-            
-            .entry(endpoint)
-            .or_insert(0);
+        self.manual_targets.entry(endpoint).or_insert(0);
     }
 
     pub fn record_manual_failure(&self, endpoint: SocketAddr) {
-        *self
-            .manual_targets
-            
-            .entry(endpoint)
-            .or_insert(0) += 1;
+        *self.manual_targets.entry(endpoint).or_insert(0) += 1;
     }
 
     pub fn clear_manual_target(&self, endpoint: SocketAddr) {
-        self.manual_targets
-            
-            .remove(&endpoint);
+        self.manual_targets.remove(&endpoint);
     }
 
     pub fn manual_targets(&self) -> Vec<SocketAddr> {
@@ -934,14 +884,14 @@ impl PeerManager {
             }
         }
         {
-            
             for mut entry in self.store.iter_mut() {
                 entry.status = PeerConnectionState::Disconnected;
                 entry.last_error = Some(reason.to_string());
             }
         }
         self.save()?;
-        Ok(sessions.into_iter()
+        Ok(sessions
+            .into_iter()
             .map(|s| ReplacedSession {
                 session_id: s.1.session_id,
                 endpoint: s.1.endpoint,
@@ -951,12 +901,8 @@ impl PeerManager {
     }
 
     pub fn shutdown_peer_session(&self, device_id: Uuid) -> Result<Option<ReplacedSession>> {
-        let removed = self
-            .live
-            
-            .remove(&device_id);
+        let removed = self.live.remove(&device_id);
         {
-            
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Disconnected;
                 entry.last_error = Some("manually disconnected".to_string());
@@ -993,15 +939,11 @@ impl PeerManager {
     ///
     /// Call periodically (e.g. every 5 minutes from a background task).
     pub fn prune_stale_peers(&self) -> usize {
-        let live_ids: std::collections::HashSet<Uuid> = self
-            .live
-            .iter()
-            .map(|r| *r.key())
-            .collect();
+        let live_ids: std::collections::HashSet<Uuid> =
+            self.live.iter().map(|r| *r.key()).collect();
         let now = now_secs();
         const STALE_THRESHOLD_SECS: u64 = 24 * 3600; // 24 hours
         let pruned = {
-            
             let before = self.store.len();
             self.store.retain(|id, record| {
                 // Always keep live connections
@@ -1040,16 +982,13 @@ impl PeerManager {
     /// Uses `unwrap_or_else(|p| p.into_inner())` on both locks so a panicking
     /// task elsewhere cannot permanently poison the count (LOW-08).
     pub fn sync_eligible_count(&self) -> usize {
-        let live_ids: Vec<Uuid> = self
-            .live
-            .iter()
-            .map(|r| *r.key())
-            .collect();
-        
+        let live_ids: Vec<Uuid> = self.live.iter().map(|r| *r.key()).collect();
+
         live_ids
             .iter()
             .filter(|id| {
-                self.store.get(id)
+                self.store
+                    .get(id)
                     .map(|r| r.value().sync_enabled && r.value().trusted)
                     .unwrap_or(false)
             })
@@ -1297,7 +1236,15 @@ mod tests {
             let (tx, _rx) = mpsc::channel(1);
             let (stop, _) = oneshot::channel();
             manager
-                .replace_live_session(Uuid::nil(), id, true, SocketAddr::from((ip, 47823)), tx.clone(), tx, stop)
+                .replace_live_session(
+                    Uuid::nil(),
+                    id,
+                    true,
+                    SocketAddr::from((ip, 47823)),
+                    tx.clone(),
+                    tx,
+                    stop,
+                )
                 .unwrap();
         }
 

@@ -200,9 +200,8 @@ pub enum EngineEvent {
     FileTransferResumed {
         transfer_id: [u8; 16],
     },
-    
+
     // ── Speed Test Events ────────────────────────────────────────────────────
-    
     SpeedTestProgress {
         test_id: Uuid,
         peer_id: Uuid,
@@ -525,7 +524,8 @@ pub(crate) struct EngineShared {
     /// File transfer manager.
     pub(crate) file_transfers: Arc<Mutex<FileTransferManager>>,
     /// Speed tests manager.
-    pub(crate) speed_tests: Arc<Mutex<std::collections::HashMap<uuid::Uuid, crate::speed_test::SpeedTestState>>>,
+    pub(crate) speed_tests:
+        Arc<Mutex<std::collections::HashMap<uuid::Uuid, crate::speed_test::SpeedTestState>>>,
     /// Clipboard apply policy (timeline-first vs auto-apply).
     pub(crate) apply_policy: Arc<Mutex<ClipboardApplyPolicy>>,
     /// Settings snapshot for policy decisions (updated lazily).
@@ -569,9 +569,20 @@ pub(crate) struct EngineShared {
     /// Active QR authentication token (short-lived)
     pub qr_auth_token: Arc<Mutex<Option<String>>>,
     /// Waiters for remote files queries (`query_remote_files_sync`). Keyed by `request_id`.
-    pub(crate) remote_file_waiters: Arc<Mutex<std::collections::HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<RemoteFilesResult>>>>,
+    pub(crate) remote_file_waiters: Arc<
+        Mutex<
+            std::collections::HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<RemoteFilesResult>>,
+        >,
+    >,
     /// Waiters for remote thumbnail requests (`request_remote_thumbnail_sync`). Keyed by `request_id`.
-    pub(crate) remote_thumb_waiters: Arc<Mutex<std::collections::HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<RemoteThumbnailResult>>>>,
+    pub(crate) remote_thumb_waiters: Arc<
+        Mutex<
+            std::collections::HashMap<
+                uuid::Uuid,
+                tokio::sync::oneshot::Sender<RemoteThumbnailResult>,
+            >,
+        >,
+    >,
 }
 
 #[derive(Clone)]
@@ -726,7 +737,8 @@ impl Engine {
                         if !ip.is_unspecified() {
                             tracing::info!(
                                 "discovery retry #{}: network ready at {}, starting mDNS",
-                                attempt, ip
+                                attempt,
+                                ip
                             );
                             let _ = retry_tx
                                 .send(DiscoveryCommand::Restart {
@@ -851,12 +863,16 @@ impl Engine {
                         // initiate the connection to THEM instead.
                         if text.starts_with("DESKDROP_CONNECTBACK:") {
                             let parts: Vec<&str> = text.splitn(4, ':').collect();
-                            if parts.len() < 3 { continue; }
+                            if parts.len() < 3 {
+                                continue;
+                            }
                             let peer_id = match uuid::Uuid::parse_str(parts[1]) {
                                 Ok(id) => id,
                                 Err(_) => continue,
                             };
-                            if peer_id == shared.config.device_id { continue; }
+                            if peer_id == shared.config.device_id {
+                                continue;
+                            }
                             let peer_port = match parts[2].parse::<u16>() {
                                 Ok(p) => p,
                                 Err(_) => continue,
@@ -870,7 +886,8 @@ impl Engine {
 
                             tracing::info!(
                                 "UDP CONNECTBACK: peer {} at {} is asking us to connect to them",
-                                peer_id, peer_addr
+                                peer_id,
+                                peer_addr
                             );
                             let shared_clone = shared.clone();
                             tokio::spawn(async move {
@@ -880,7 +897,9 @@ impl Engine {
                                     Some(peer_id),
                                     DiscoverySource::UdpBeacon,
                                     false,
-                                ).await {
+                                )
+                                .await
+                                {
                                     tracing::warn!(
                                         peer_id = %peer_id,
                                         error = %err,
@@ -983,17 +1002,13 @@ impl Engine {
                             if !shared.peer_manager.is_connected(peer_id) {
                                 let connectback = format!(
                                     "DESKDROP_CONNECTBACK:{}:{}",
-                                    shared.config.device_id,
-                                    shared.config.port,
+                                    shared.config.device_id, shared.config.port,
                                 );
                                 let target = SocketAddr::new(
                                     addr.ip(),
                                     47824, // UDP beacon port
                                 );
-                                let _ = socket.send_to(
-                                    connectback.as_bytes(),
-                                    target,
-                                ).await;
+                                let _ = socket.send_to(connectback.as_bytes(), target).await;
                             }
 
                             let shared_clone = shared.clone();
@@ -1013,17 +1028,13 @@ impl Engine {
                                     if !shared_clone.peer_manager.is_connected(peer_id) {
                                         let connectback = format!(
                                             "DESKDROP_CONNECTBACK:{}:{}",
-                                            shared_clone.config.device_id,
-                                            shared_clone.config.port,
+                                            shared_clone.config.device_id, shared_clone.config.port,
                                         );
-                                        let target = SocketAddr::new(
-                                            beacon_source_addr.ip(),
-                                            47824,
-                                        );
-                                        let _ = socket_clone.send_to(
-                                            connectback.as_bytes(),
-                                            target,
-                                        ).await;
+                                        let target =
+                                            SocketAddr::new(beacon_source_addr.ip(), 47824);
+                                        let _ = socket_clone
+                                            .send_to(connectback.as_bytes(), target)
+                                            .await;
                                     }
                                 }
                             });
@@ -1265,7 +1276,9 @@ impl Engine {
         if let Some(tx) = self.shared.peer_manager.file_sender(device_id) {
             {
                 let mut tests = self.shared.speed_tests.lock().await;
-                let entry = tests.entry(device_id).or_insert_with(|| crate::speed_test::SpeedTestState::new(tx.clone()));
+                let entry = tests
+                    .entry(device_id)
+                    .or_insert_with(|| crate::speed_test::SpeedTestState::new(tx.clone()));
                 // We'll mark it as Idle but store the test_id and duration so the response matches
                 entry.test_id = Some(test_id);
                 entry.duration_secs = duration_secs;
@@ -2098,16 +2111,38 @@ impl Engine {
     ) -> Result<RemoteFilesResult> {
         let request_id = Uuid::new_v4();
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.shared.remote_file_waiters.lock().await.insert(request_id, tx);
-        self.send_remote_files_query(target_device, request_id, summary_only, category, source, search_query, offset, limit).await;
+        self.shared
+            .remote_file_waiters
+            .lock()
+            .await
+            .insert(request_id, tx);
+        self.send_remote_files_query(
+            target_device,
+            request_id,
+            summary_only,
+            category,
+            source,
+            search_query,
+            offset,
+            limit,
+        )
+        .await;
         match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), rx).await {
             Ok(Ok(res)) => Ok(res),
             Ok(Err(_)) => {
-                self.shared.remote_file_waiters.lock().await.remove(&request_id);
+                self.shared
+                    .remote_file_waiters
+                    .lock()
+                    .await
+                    .remove(&request_id);
                 anyhow::bail!("Remote files query channel closed unexpectedly")
             }
             Err(_) => {
-                self.shared.remote_file_waiters.lock().await.remove(&request_id);
+                self.shared
+                    .remote_file_waiters
+                    .lock()
+                    .await
+                    .remove(&request_id);
                 anyhow::bail!("Remote files query timed out after {}s", timeout_secs)
             }
         }
@@ -2122,16 +2157,29 @@ impl Engine {
     ) -> Result<RemoteThumbnailResult> {
         let request_id = Uuid::new_v4();
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.shared.remote_thumb_waiters.lock().await.insert(request_id, tx);
-        self.send_remote_thumbnail_request(target_device, request_id, file_id, size_px).await;
+        self.shared
+            .remote_thumb_waiters
+            .lock()
+            .await
+            .insert(request_id, tx);
+        self.send_remote_thumbnail_request(target_device, request_id, file_id, size_px)
+            .await;
         match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), rx).await {
             Ok(Ok(res)) => Ok(res),
             Ok(Err(_)) => {
-                self.shared.remote_thumb_waiters.lock().await.remove(&request_id);
+                self.shared
+                    .remote_thumb_waiters
+                    .lock()
+                    .await
+                    .remove(&request_id);
                 anyhow::bail!("Remote thumbnail request channel closed unexpectedly")
             }
             Err(_) => {
-                self.shared.remote_thumb_waiters.lock().await.remove(&request_id);
+                self.shared
+                    .remote_thumb_waiters
+                    .lock()
+                    .await
+                    .remove(&request_id);
                 anyhow::bail!("Remote thumbnail request timed out after {}s", timeout_secs)
             }
         }
@@ -3639,9 +3687,7 @@ fn register_session(
                     })
                     .await;
             }
-            if let Some((images, videos, apps, free, total)) =
-                *sh.local_storage.lock().await
-            {
+            if let Some((images, videos, apps, free, total)) = *sh.local_storage.lock().await {
                 let _ = outbox
                     .send(AppMessage::StorageStatus {
                         images_bytes: images,
@@ -3787,7 +3833,10 @@ fn register_session(
                                 filter_chain.run(&content)
                             {
                                 tracing::warn!(peer_id = %peer_id, reason, "inbound clipboard payload denied by filter");
-                                shared.congestion_controller.on_congestion(&shared.throttle).await;
+                                shared
+                                    .congestion_controller
+                                    .on_congestion(&shared.throttle)
+                                    .await;
                                 continue;
                             }
 
@@ -3888,7 +3937,10 @@ fn register_session(
                             let _ = rx_session_outbox_tx
                                 .send(AppMessage::ClipboardAck { seq })
                                 .await;
-                            shared.congestion_controller.on_success(&shared.throttle).await;
+                            shared
+                                .congestion_controller
+                                .on_success(&shared.throttle)
+                                .await;
 
                             // Persist the incoming item to history.
                             {
@@ -4093,8 +4145,11 @@ fn register_session(
                                     if next_chunk >= total_chunks {
                                         break 'outer;
                                     }
-                                    if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 64u32 {
-                                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                                    if next_chunk > 0
+                                        && next_chunk.saturating_sub(last_acked) > 64u32
+                                    {
+                                        tokio::time::sleep(std::time::Duration::from_millis(15))
+                                            .await;
                                         continue;
                                     }
                                     let (batch, progs) = match read_outbound_chunks(
@@ -4589,8 +4644,11 @@ fn register_session(
                                     if next_chunk >= total_chunks {
                                         break 'outer;
                                     }
-                                    if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 64u32 {
-                                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                                    if next_chunk > 0
+                                        && next_chunk.saturating_sub(last_acked) > 64u32
+                                    {
+                                        tokio::time::sleep(std::time::Duration::from_millis(15))
+                                            .await;
                                         continue;
                                     }
                                     let (batch, progs) = match read_outbound_chunks(
@@ -4653,30 +4711,50 @@ fn register_session(
                             });
                         }
                     }
-                    Ok(AppMessage::SpeedTestRequest { test_id, duration_secs }) => {
+                    Ok(AppMessage::SpeedTestRequest {
+                        test_id,
+                        duration_secs,
+                    }) => {
                         touch_last_seen();
-                        if !shared.peer_manager.get(peer_id).map(|p| p.trusted).unwrap_or(false) {
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
                             continue;
                         }
-                        
+
                         let mut can_accept = false;
                         {
                             let mut tests = shared.speed_tests.lock().await;
                             // Accept if we aren't already running a test with this peer
-                            let entry = tests.entry(peer_id).or_insert_with(|| crate::speed_test::SpeedTestState::new(session_outbox_tx.clone()));
+                            let entry = tests.entry(peer_id).or_insert_with(|| {
+                                crate::speed_test::SpeedTestState::new(session_outbox_tx.clone())
+                            });
                             if entry.phase == crate::speed_test::SpeedTestPhase::Idle {
                                 entry.start_receiving(test_id, duration_secs);
                                 can_accept = true;
                             }
                         }
-                        
-                        let _ = session_outbox_tx.send(AppMessage::SpeedTestResponse {
-                            test_id,
-                            accepted: can_accept,
-                            reason: if can_accept { None } else { Some("Busy".into()) },
-                        }).await;
+
+                        let _ = session_outbox_tx
+                            .send(AppMessage::SpeedTestResponse {
+                                test_id,
+                                accepted: can_accept,
+                                reason: if can_accept {
+                                    None
+                                } else {
+                                    Some("Busy".into())
+                                },
+                            })
+                            .await;
                     }
-                    Ok(AppMessage::SpeedTestResponse { test_id, accepted, reason: _ }) => {
+                    Ok(AppMessage::SpeedTestResponse {
+                        test_id,
+                        accepted,
+                        reason: _,
+                    }) => {
                         touch_last_seen();
                         if accepted {
                             let mut tests = shared.speed_tests.lock().await;
@@ -4692,22 +4770,35 @@ fn register_session(
                                     state.reset();
                                 }
                             }
-                            let _ = shared.event_tx.send(EngineEvent::SpeedTestComplete { test_id, peer_id }).await;
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::SpeedTestComplete { test_id, peer_id })
+                                .await;
                         }
                     }
-                    Ok(AppMessage::SpeedTestData { test_id, seq: _, data }) => {
+                    Ok(AppMessage::SpeedTestData {
+                        test_id,
+                        seq: _,
+                        data,
+                    }) => {
                         touch_last_seen();
                         let send_stats = {
                             let mut tests = shared.speed_tests.lock().await;
                             if let Some(state) = tests.get_mut(&peer_id) {
-                                if state.test_id == Some(test_id) && state.phase == crate::speed_test::SpeedTestPhase::Receiving {
+                                if state.test_id == Some(test_id)
+                                    && state.phase == crate::speed_test::SpeedTestPhase::Receiving
+                                {
                                     state.handle_chunk(data.len());
-                                    
+
                                     // Should we emit stats back to sender?
                                     if let Some(last_tick) = state.last_tick_time {
                                         if last_tick.elapsed().as_millis() >= 500 {
                                             state.last_tick_time = Some(std::time::Instant::now());
-                                            Some(state.bytes_transferred.load(std::sync::atomic::Ordering::Relaxed))
+                                            Some(
+                                                state
+                                                    .bytes_transferred
+                                                    .load(std::sync::atomic::Ordering::Relaxed),
+                                            )
                                         } else {
                                             None
                                         }
@@ -4721,47 +4812,62 @@ fn register_session(
                                 None
                             }
                         };
-                        
+
                         if let Some(bytes) = send_stats {
-                            let _ = session_outbox_tx.send(AppMessage::SpeedTestStats {
-                                test_id,
-                                received_bytes: bytes,
-                            }).await;
+                            let _ = session_outbox_tx
+                                .send(AppMessage::SpeedTestStats {
+                                    test_id,
+                                    received_bytes: bytes,
+                                })
+                                .await;
 
                             let duration_secs = {
                                 let tests = shared.speed_tests.lock().await;
                                 tests.get(&peer_id).map(|s| s.duration_secs)
                             };
                             if let Some(dur) = duration_secs {
-                                let _ = shared.event_tx.send(EngineEvent::SpeedTestProgress {
-                                    test_id,
-                                    peer_id,
-                                    direction: "download".to_string(),
-                                    bytes_transferred: bytes,
-                                    duration_secs: dur,
-                                }).await;
+                                let _ = shared
+                                    .event_tx
+                                    .send(EngineEvent::SpeedTestProgress {
+                                        test_id,
+                                        peer_id,
+                                        direction: "download".to_string(),
+                                        bytes_transferred: bytes,
+                                        duration_secs: dur,
+                                    })
+                                    .await;
                             }
                         }
                     }
-                    Ok(AppMessage::SpeedTestStats { test_id, received_bytes }) => {
+                    Ok(AppMessage::SpeedTestStats {
+                        test_id,
+                        received_bytes,
+                    }) => {
                         touch_last_seen();
                         let duration_secs = {
                             let tests = shared.speed_tests.lock().await;
                             if let Some(state) = tests.get(&peer_id) {
                                 if state.test_id == Some(test_id) {
                                     Some(state.duration_secs)
-                                } else { None }
-                            } else { None }
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
                         };
-                        
+
                         if let Some(dur) = duration_secs {
-                            let _ = shared.event_tx.send(EngineEvent::SpeedTestProgress {
-                                test_id,
-                                peer_id,
-                                direction: "upload".to_string(),
-                                bytes_transferred: received_bytes,
-                                duration_secs: dur,
-                            }).await;
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::SpeedTestProgress {
+                                    test_id,
+                                    peer_id,
+                                    direction: "upload".to_string(),
+                                    bytes_transferred: received_bytes,
+                                    duration_secs: dur,
+                                })
+                                .await;
                         }
                     }
                     Ok(AppMessage::SpeedTestComplete { test_id }) => {
@@ -4772,7 +4878,10 @@ fn register_session(
                                 state.reset();
                             }
                         }
-                        let _ = shared.event_tx.send(EngineEvent::SpeedTestComplete { test_id, peer_id }).await;
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::SpeedTestComplete { test_id, peer_id })
+                            .await;
                     }
                     Ok(AppMessage::HistoryMetadata { entry }) => {
                         touch_last_seen();
@@ -4872,9 +4981,13 @@ fn register_session(
                         // Re-emit PairingRequested with the REAL name and PIN so the UI updates
                         let pin = rx_session_pin
                             .clone()
-                            .or_else(|| shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin))
+                            .or_else(|| {
+                                shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin)
+                            })
                             .unwrap_or_else(|| "------".to_string());
-                        let _ = shared.peer_manager.set_pairing_pin(peer_id, Some(pin.clone()));
+                        let _ = shared
+                            .peer_manager
+                            .set_pairing_pin(peer_id, Some(pin.clone()));
                         let _ = shared
                             .event_tx
                             .send(EngineEvent::PairingRequested {
@@ -5242,9 +5355,10 @@ fn register_session(
                         origin_device: _,
                         origin_device_name: _,
                     }) => {
-                        let _ = shared.event_tx.send(EngineEvent::Warning(
-                            format!("{}: {}", feature, message)
-                        )).await;
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::Warning(format!("{}: {}", feature, message)))
+                            .await;
                     }
                     Ok(AppMessage::NotificationRelay {
                         id,
@@ -5408,7 +5522,9 @@ fn register_session(
                         error,
                     }) => {
                         touch_last_seen();
-                        if let Some(tx) = shared.remote_file_waiters.lock().await.remove(&request_id) {
+                        if let Some(tx) =
+                            shared.remote_file_waiters.lock().await.remove(&request_id)
+                        {
                             let _ = tx.send(RemoteFilesResult {
                                 summary: summary.clone(),
                                 files: files.clone(),
@@ -5460,7 +5576,9 @@ fn register_session(
                         error,
                     }) => {
                         touch_last_seen();
-                        if let Some(tx) = shared.remote_thumb_waiters.lock().await.remove(&request_id) {
+                        if let Some(tx) =
+                            shared.remote_thumb_waiters.lock().await.remove(&request_id)
+                        {
                             let _ = tx.send(RemoteThumbnailResult {
                                 file_id,
                                 data: data.clone(),
@@ -5654,7 +5772,10 @@ fn register_session(
             .mark_disconnected_if_current(peer_id, session_id, reason.clone())
         {
             Ok(Some(connected_at)) => {
-                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
                 let duration = now.saturating_sub(connected_at);
                 if duration < 15 {
                     let _ = shared.event_tx.send(EngineEvent::Warning(

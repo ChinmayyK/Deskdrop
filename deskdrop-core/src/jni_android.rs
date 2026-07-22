@@ -750,7 +750,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferProgressPercen
     }
 }
 
-
 // ── eventSpeedTest ───────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -759,11 +758,18 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSpeedTestBytes(
     _class: JClass,
     event: jlong,
 ) -> jlong {
-    if event == 0 { return -1; }
+    if event == 0 {
+        return -1;
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::SpeedTestProgress { bytes_transferred, .. } = ev {
+    if let crate::engine::EngineEvent::SpeedTestProgress {
+        bytes_transferred, ..
+    } = ev
+    {
         *bytes_transferred as jlong
-    } else { -1 }
+    } else {
+        -1
+    }
 }
 
 #[no_mangle]
@@ -772,11 +778,15 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSpeedTestDuration(
     _class: JClass,
     event: jlong,
 ) -> jint {
-    if event == 0 { return -1; }
+    if event == 0 {
+        return -1;
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     if let crate::engine::EngineEvent::SpeedTestProgress { duration_secs, .. } = ev {
         *duration_secs as jint
-    } else { -1 }
+    } else {
+        -1
+    }
 }
 
 #[no_mangle]
@@ -785,13 +795,17 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSpeedTestPhase(
     _class: JClass,
     event: jlong,
 ) -> jstring {
-    if event == 0 { return std::ptr::null_mut(); }
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     let phase_str = match ev {
         crate::engine::EngineEvent::SpeedTestProgress { direction, .. } => direction.as_str(),
         _ => return std::ptr::null_mut(),
     };
-    env.new_string(phase_str).unwrap_or_else(|_| env.new_string("").unwrap()).into_raw()
+    env.new_string(phase_str)
+        .unwrap_or_else(|_| env.new_string("").unwrap())
+        .into_raw()
 }
 
 // ── eventTransferBytesReceived ───────────────────────────────────────────────
@@ -944,7 +958,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_startSpeedTest(
         Ok(u) => u,
         Err(_) => return 0,
     };
-    
+
     let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
     match rt().block_on(h.engine.start_speed_test(target_uuid, duration_secs as u32)) {
         Ok(_) => 1,
@@ -984,7 +998,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendPermissionError<'local>
     };
 
     let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
-    
+
     // We send a generic AppMessage::PermissionError
     let msg = crate::protocol::AppMessage::PermissionError {
         feature: feature_str,
@@ -998,7 +1012,6 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendPermissionError<'local>
         Err(_) => 0,
     }
 }
-
 
 // ── trustPeer / rejectPeer ───────────────────────────────────────────────────
 
@@ -1828,7 +1841,13 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSummaryOnly(
     use crate::engine::EngineEvent::*;
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     match ev {
-        RemoteFilesQueryReceived { summary_only, .. } => if *summary_only { 1 } else { 0 },
+        RemoteFilesQueryReceived { summary_only, .. } => {
+            if *summary_only {
+                1
+            } else {
+                0
+            }
+        }
         _ => 0,
     }
 }

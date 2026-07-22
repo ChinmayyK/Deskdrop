@@ -230,14 +230,14 @@ pub enum RemoteFileSource {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteFileEntry {
-    pub file_id: u64,           // MediaStore _ID
-    pub display_name: String,   // _DISPLAY_NAME
-    pub size_bytes: u64,        // _SIZE
-    pub mime_type: String,      // MIME_TYPE
-    pub date_modified: u64,     // DATE_MODIFIED (epoch seconds)
+    pub file_id: u64,         // MediaStore _ID
+    pub display_name: String, // _DISPLAY_NAME
+    pub size_bytes: u64,      // _SIZE
+    pub mime_type: String,    // MIME_TYPE
+    pub date_modified: u64,   // DATE_MODIFIED (epoch seconds)
     pub category: RemoteFileCategory,
     pub source: RemoteFileSource,
-    pub content_uri: String,    // Content URI (e.g. "content://media/external/file/1234")
+    pub content_uri: String, // Content URI (e.g. "content://media/external/file/1234")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -379,9 +379,8 @@ pub enum AppMessage {
     FileTransferResume {
         transfer_id: [u8; 16],
     },
-    
+
     // ── Speed Test Messages ──────────────────────────────────────────────────
-    
     /// Request to begin a speed test.
     SpeedTestRequest {
         test_id: Uuid,

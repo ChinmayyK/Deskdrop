@@ -120,8 +120,16 @@ fn four_device_mesh_respects_pause() {
         .unwrap();
         let (tx, _) = mpsc::channel(4);
         let (stop, _) = oneshot::channel();
-        mgr.replace_live_session(Uuid::nil(), id, true, addr(30 + i as u8), tx.clone(), tx, stop)
-            .unwrap();
+        mgr.replace_live_session(
+            Uuid::nil(),
+            id,
+            true,
+            addr(30 + i as u8),
+            tx.clone(),
+            tx,
+            stop,
+        )
+        .unwrap();
     }
 
     assert_eq!(mgr.active_senders().len(), 4);

@@ -122,7 +122,10 @@ impl UtmStripperTransformer {
         let mut output = String::with_capacity(text.len());
         let mut remaining = text;
 
-        while let Some(pos) = remaining.find("http://").or_else(|| remaining.find("https://")) {
+        while let Some(pos) = remaining
+            .find("http://")
+            .or_else(|| remaining.find("https://"))
+        {
             output.push_str(&remaining[..pos]);
             let url_start = &remaining[pos..];
             let end_idx = url_start
@@ -218,11 +221,15 @@ mod tests {
 
     #[test]
     fn utm_stripper_pure_tracking_url() {
-        let mut content =
-            ClipboardContent::Text("https://shop.com/deal?utm_campaign=spring&fbclid=abc_123".into());
+        let mut content = ClipboardContent::Text(
+            "https://shop.com/deal?utm_campaign=spring&fbclid=abc_123".into(),
+        );
         let transformer = UtmStripperTransformer;
         assert!(transformer.transform(&mut content));
-        assert_eq!(content, ClipboardContent::Text("https://shop.com/deal".into()));
+        assert_eq!(
+            content,
+            ClipboardContent::Text("https://shop.com/deal".into())
+        );
     }
 
     #[test]
@@ -230,14 +237,15 @@ mod tests {
         let mut content = ClipboardContent::Text("let x = 10;   \r\nlet y = 20;\t\r\n".into());
         let transformer = WhitespaceCleanerTransformer;
         assert!(transformer.transform(&mut content));
-        assert_eq!(content, ClipboardContent::Text("let x = 10;\nlet y = 20;".into()));
+        assert_eq!(
+            content,
+            ClipboardContent::Text("let x = 10;\nlet y = 20;".into())
+        );
     }
 
     #[test]
     fn default_pipeline_runs_both() {
-        let mut content = ClipboardContent::Text(
-            "https://test.org?utm_source=ad   \r\n".into()
-        );
+        let mut content = ClipboardContent::Text("https://test.org?utm_source=ad   \r\n".into());
         let pipeline = TransformerPipeline::default_pipeline();
         assert!(pipeline.transform(&mut content));
         assert_eq!(content, ClipboardContent::Text("https://test.org".into()));

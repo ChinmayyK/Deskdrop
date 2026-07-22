@@ -138,7 +138,11 @@ pub(crate) async fn read_outbound_chunks(
                         if do_compress {
                             let compressed = lz4_flex::compress_prepend_size(&buf);
                             if compressed.len() < buf.len() {
-                                chunk_data.push((chunk_index, bytes::Bytes::from(compressed), true));
+                                chunk_data.push((
+                                    chunk_index,
+                                    bytes::Bytes::from(compressed),
+                                    true,
+                                ));
                             } else {
                                 chunk_data.push((chunk_index, bytes::Bytes::from(buf), false));
                             }
@@ -213,11 +217,40 @@ fn should_try_compress(file_name: &str) -> bool {
         .to_ascii_lowercase();
     !matches!(
         ext.as_str(),
-        "jpg" | "jpeg" | "png" | "gif" | "webp" | "avif" | "heic" | "heif"
-            | "mp4" | "mkv" | "mov" | "avi" | "webm"
-            | "mp3" | "aac" | "ogg" | "opus" | "flac" | "m4a" | "wma"
-            | "zip" | "gz" | "bz2" | "xz" | "zst" | "lz4" | "7z" | "rar" | "tar.gz" | "tgz"
-            | "apk" | "ipa" | "dmg" | "iso"
+        "jpg"
+            | "jpeg"
+            | "png"
+            | "gif"
+            | "webp"
+            | "avif"
+            | "heic"
+            | "heif"
+            | "mp4"
+            | "mkv"
+            | "mov"
+            | "avi"
+            | "webm"
+            | "mp3"
+            | "aac"
+            | "ogg"
+            | "opus"
+            | "flac"
+            | "m4a"
+            | "wma"
+            | "zip"
+            | "gz"
+            | "bz2"
+            | "xz"
+            | "zst"
+            | "lz4"
+            | "7z"
+            | "rar"
+            | "tar.gz"
+            | "tgz"
+            | "apk"
+            | "ipa"
+            | "dmg"
+            | "iso"
             | "pdf"
     )
 }

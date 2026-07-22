@@ -268,9 +268,12 @@ async fn recv_encrypted(
         .await
         .context("timeout waiting for encrypted frame length")?
         .context("reading encrypted frame length")?;
-    
+
     let len = u32::from_le_bytes(len_buf);
-    anyhow::ensure!((16..=MAX_FRAME_SIZE).contains(&len), "encrypted frame length invalid: {len}");
+    anyhow::ensure!(
+        (16..=MAX_FRAME_SIZE).contains(&len),
+        "encrypted frame length invalid: {len}"
+    );
 
     let mut cipher_buffer = Vec::with_capacity(std::cmp::min(len as usize, 64 * 1024));
     tokio::time::timeout(
@@ -287,7 +290,7 @@ async fn recv_encrypted(
         cipher_buffer.len(),
         len
     );
-        
+
     session
         .decrypt_in_place(&mut cipher_buffer)
         .context("decrypting")?;

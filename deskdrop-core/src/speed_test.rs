@@ -64,7 +64,8 @@ impl SpeedTestState {
 
     pub fn handle_chunk(&mut self, data_len: usize) {
         if self.phase == SpeedTestPhase::Receiving {
-            self.bytes_transferred.fetch_add(data_len as u64, Ordering::Relaxed);
+            self.bytes_transferred
+                .fetch_add(data_len as u64, Ordering::Relaxed);
         }
     }
 
@@ -77,7 +78,7 @@ impl SpeedTestState {
 
         let tx = self.tx_msg.clone();
         let bytes_transferred = self.bytes_transferred.clone();
-        
+
         let handle = tokio::spawn(async move {
             let buffer = vec![0u8; CHUNK_SIZE]; // pre-allocate
             let mut seq = 0;
@@ -88,16 +89,16 @@ impl SpeedTestState {
                 let msg = AppMessage::SpeedTestData {
                     test_id,
                     seq,
-                    data: buffer.clone(), 
+                    data: buffer.clone(),
                 };
-                
+
                 if tx.send(msg).await.is_err() {
                     break;
                 }
-                
+
                 seq += 1;
                 bytes_transferred.fetch_add(CHUNK_SIZE as u64, Ordering::Relaxed);
-                
+
                 tokio::task::yield_now().await;
             }
 

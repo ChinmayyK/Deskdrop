@@ -699,7 +699,9 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::CancelPairingRequest { device_id } => {
-            let _ = state.engine.set_outgoing_pairing_waiting(parse_uuid(&device_id)?, false);
+            let _ = state
+                .engine
+                .set_outgoing_pairing_waiting(parse_uuid(&device_id)?, false);
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::RespondToPairing {
@@ -1334,7 +1336,16 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             free_bytes,
             total_bytes,
         } => {
-            state.engine.push_storage_status(images_bytes, videos_bytes, apps_bytes, free_bytes, total_bytes).await;
+            state
+                .engine
+                .push_storage_status(
+                    images_bytes,
+                    videos_bytes,
+                    apps_bytes,
+                    free_bytes,
+                    total_bytes,
+                )
+                .await;
             Ok(IpcResponse::ok_empty())
         }
         IpcRequest::RemoteFilesQuery {
@@ -1347,11 +1358,24 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             limit,
         } => {
             let target_uuid = parse_uuid(&target_device)?;
-            let cat = category.as_deref().and_then(deskdrop_core::ipc::parse_remote_file_category);
-            let src = source.as_deref().and_then(deskdrop_core::ipc::parse_remote_file_source);
+            let cat = category
+                .as_deref()
+                .and_then(deskdrop_core::ipc::parse_remote_file_category);
+            let src = source
+                .as_deref()
+                .and_then(deskdrop_core::ipc::parse_remote_file_source);
             let res = state
                 .engine
-                .query_remote_files_sync(target_uuid, summary_only, cat, src, search_query, offset, limit, 12)
+                .query_remote_files_sync(
+                    target_uuid,
+                    summary_only,
+                    cat,
+                    src,
+                    search_query,
+                    offset,
+                    limit,
+                    12,
+                )
                 .await?;
             Ok(IpcResponse::ok(res))
         }
@@ -1373,20 +1397,40 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "error": res.error,
             })))
         }
-        IpcRequest::RemoteFilePullRequest { target_device, file_id } => {
+        IpcRequest::RemoteFilePullRequest {
+            target_device,
+            file_id,
+        } => {
             let target_uuid = parse_uuid(&target_device)?;
             let request_id = uuid::Uuid::new_v4();
-            state.engine.send_remote_file_pull_request(target_uuid, request_id, file_id).await;
+            state
+                .engine
+                .send_remote_file_pull_request(target_uuid, request_id, file_id)
+                .await;
             Ok(IpcResponse::ok_empty())
         }
-        IpcRequest::RemoteFileActionRequest { target_device, file_id, action, new_name } => {
+        IpcRequest::RemoteFileActionRequest {
+            target_device,
+            file_id,
+            action,
+            new_name,
+        } => {
             let target_uuid = parse_uuid(&target_device)?;
-            state.engine.send_remote_file_action_request(target_uuid, action, file_id, new_name).await;
+            state
+                .engine
+                .send_remote_file_action_request(target_uuid, action, file_id, new_name)
+                .await;
             Ok(IpcResponse::ok_empty())
         }
-        IpcRequest::StartSpeedTest { device_id, duration_secs } => {
+        IpcRequest::StartSpeedTest {
+            device_id,
+            duration_secs,
+        } => {
             let target_uuid = parse_uuid(&device_id)?;
-            state.engine.start_speed_test(target_uuid, duration_secs).await?;
+            state
+                .engine
+                .start_speed_test(target_uuid, duration_secs)
+                .await?;
             Ok(IpcResponse::ok_empty())
         }
 

@@ -67,7 +67,13 @@ impl CapabilityProfile {
     }
 
     /// Check whether a payload of a given content type and size is allowed by this profile.
-    pub fn allows_payload(&self, is_text: bool, is_image: bool, is_file: bool, payload_size: usize) -> Result<(), &'static str> {
+    pub fn allows_payload(
+        &self,
+        is_text: bool,
+        is_image: bool,
+        is_file: bool,
+        payload_size: usize,
+    ) -> Result<(), &'static str> {
         if let Some(limit) = self.max_payload_bytes {
             if payload_size > limit {
                 return Err("payload exceeds peer capability size limit");
@@ -374,9 +380,11 @@ impl TrustStore {
     }
 
     pub fn capability_profile(&self, device_id: Uuid) -> Option<CapabilityProfile> {
-        self.data.devices.get(&device_id).map(|record| record.capability_profile)
+        self.data
+            .devices
+            .get(&device_id)
+            .map(|record| record.capability_profile)
     }
-
 
     pub fn get(&self, device_id: Uuid) -> Option<&TrustRecord> {
         self.data.devices.get(&device_id)
@@ -649,7 +657,9 @@ mod tests {
         assert!(text_only.allows_payload(true, false, false, 100).is_ok());
         assert!(text_only.allows_payload(false, true, false, 100).is_err());
         assert!(text_only.allows_payload(false, false, true, 100).is_err());
-        assert!(text_only.allows_payload(true, false, false, 2 * 1024 * 1024).is_err());
+        assert!(text_only
+            .allows_payload(true, false, false, 2 * 1024 * 1024)
+            .is_err());
     }
 
     #[test]
@@ -659,12 +669,20 @@ mod tests {
         let id = Uuid::new_v4();
         store.observe_peer(id, "iPad".into(), &[8u8; 32]).unwrap();
 
-        let updated = store.set_capability_profile(id, CapabilityProfile::text_only()).unwrap();
+        let updated = store
+            .set_capability_profile(id, CapabilityProfile::text_only())
+            .unwrap();
         assert!(updated.is_some());
-        assert_eq!(store.capability_profile(id), Some(CapabilityProfile::text_only()));
+        assert_eq!(
+            store.capability_profile(id),
+            Some(CapabilityProfile::text_only())
+        );
 
         // Verify persistence across reload
         let store2 = TrustStore::load(file.path()).unwrap();
-        assert_eq!(store2.capability_profile(id), Some(CapabilityProfile::text_only()));
+        assert_eq!(
+            store2.capability_profile(id),
+            Some(CapabilityProfile::text_only())
+        );
     }
 }

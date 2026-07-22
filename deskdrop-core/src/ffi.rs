@@ -261,7 +261,11 @@ pub struct PbEvent {
 impl PbEvent {
     fn cache_str(&mut self, s: impl Into<Vec<u8>>) -> *const c_char {
         let bytes = s.into();
-        if let Some(existing) = self.cached_strings.iter().find(|cs| cs.as_bytes() == bytes.as_slice()) {
+        if let Some(existing) = self
+            .cached_strings
+            .iter()
+            .find(|cs| cs.as_bytes() == bytes.as_slice())
+        {
             return existing.as_ptr();
         }
         let cs = CString::new(bytes).unwrap_or_default();
@@ -377,22 +381,33 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
         EngineEvent::NetworkStateChanged { network_type, .. } => Some(network_type.clone()),
         EngineEvent::ActivityFeedUpdated { entries, .. } => serde_json::to_string(entries).ok(),
-        EngineEvent::RemoteFilesResponseReceived { summary, files, total_matching, error, .. } => {
-            serde_json::to_string(&json!({
-                "summary": summary,
-                "files": files,
-                "total_matching": total_matching,
-                "error": error,
-            })).ok()
-        }
-        EngineEvent::RemoteThumbnailResponseReceived { file_id, data, error, .. } => {
+        EngineEvent::RemoteFilesResponseReceived {
+            summary,
+            files,
+            total_matching,
+            error,
+            ..
+        } => serde_json::to_string(&json!({
+            "summary": summary,
+            "files": files,
+            "total_matching": total_matching,
+            "error": error,
+        }))
+        .ok(),
+        EngineEvent::RemoteThumbnailResponseReceived {
+            file_id,
+            data,
+            error,
+            ..
+        } => {
             use base64::Engine as _;
             let base64_str = base64::engine::general_purpose::STANDARD.encode(data);
             serde_json::to_string(&json!({
                 "file_id": file_id,
                 "data_base64": base64_str,
                 "error": error,
-            })).ok()
+            }))
+            .ok()
         }
         _ => None,
     };
@@ -582,10 +597,18 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
         EngineEvent::BatteryStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::NetworkStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::RemoteFilesQueryReceived { from_device, .. } => Some(from_device.to_string()),
-        EngineEvent::RemoteThumbnailRequestReceived { from_device, .. } => Some(from_device.to_string()),
-        EngineEvent::RemoteFilePullRequestReceived { from_device, .. } => Some(from_device.to_string()),
-        EngineEvent::RemoteFilesResponseReceived { from_device, .. } => Some(from_device.to_string()),
-        EngineEvent::RemoteThumbnailResponseReceived { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::RemoteThumbnailRequestReceived { from_device, .. } => {
+            Some(from_device.to_string())
+        }
+        EngineEvent::RemoteFilePullRequestReceived { from_device, .. } => {
+            Some(from_device.to_string())
+        }
+        EngineEvent::RemoteFilesResponseReceived { from_device, .. } => {
+            Some(from_device.to_string())
+        }
+        EngineEvent::RemoteThumbnailResponseReceived { from_device, .. } => {
+            Some(from_device.to_string())
+        }
         EngineEvent::SpeedTestProgress { peer_id, .. } => Some(peer_id.to_string()),
         EngineEvent::SpeedTestComplete { peer_id, .. } => Some(peer_id.to_string()),
         _ => None,
@@ -603,7 +626,10 @@ pub unsafe extern "C" fn deskdrop_event_speed_test_bytes(event: *const PbEvent) 
     if event.is_null() {
         return -1;
     }
-    if let EngineEvent::SpeedTestProgress { bytes_transferred, .. } = &(*event).inner {
+    if let EngineEvent::SpeedTestProgress {
+        bytes_transferred, ..
+    } = &(*event).inner
+    {
         *bytes_transferred as i64
     } else {
         -1
@@ -631,9 +657,7 @@ pub unsafe extern "C" fn deskdrop_event_speed_test_phase(event: *mut PbEvent) ->
     }
     let e = &mut *event;
     let phase_str: Option<String> = match &e.inner {
-        EngineEvent::SpeedTestProgress { direction, .. } => {
-            Some(direction.as_str().to_string())
-        }
+        EngineEvent::SpeedTestProgress { direction, .. } => Some(direction.as_str().to_string()),
         _ => None,
     };
     if let Some(s) = phase_str {
@@ -972,9 +996,8 @@ pub unsafe extern "C" fn deskdrop_send_call_action(
     0
 }
 
-
-pub type DeskdropEventCallback = extern "C" fn(event: *mut PbEvent, user_data: *mut std::ffi::c_void);
-
+pub type DeskdropEventCallback =
+    extern "C" fn(event: *mut PbEvent, user_data: *mut std::ffi::c_void);
 
 /// Register a callback to be invoked on a background thread when events occur.
 /// This consumes the internal event receiver; `deskdrop_poll_event` will subsequently return NULL.
@@ -989,7 +1012,7 @@ pub unsafe extern "C" fn deskdrop_register_event_callback(
         return;
     }
     let h = &mut *handle;
-    
+
     let mut rx_opt = h.event_rx.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(mut rx) = rx_opt.take() {
         let ud_addr = user_data as usize;
@@ -1046,12 +1069,22 @@ pub unsafe extern "C" fn deskdrop_send_remote_files_query(
         None
     } else {
         match CStr::from_ptr(category).to_str() {
-            Ok("Images") | Ok("images") | Ok("image") => Some(crate::protocol::RemoteFileCategory::Images),
-            Ok("Videos") | Ok("videos") | Ok("video") => Some(crate::protocol::RemoteFileCategory::Videos),
+            Ok("Images") | Ok("images") | Ok("image") => {
+                Some(crate::protocol::RemoteFileCategory::Images)
+            }
+            Ok("Videos") | Ok("videos") | Ok("video") => {
+                Some(crate::protocol::RemoteFileCategory::Videos)
+            }
             Ok("Audio") | Ok("audio") => Some(crate::protocol::RemoteFileCategory::Audio),
-            Ok("Documents") | Ok("documents") | Ok("document") => Some(crate::protocol::RemoteFileCategory::Documents),
-            Ok("APKs") | Ok("Apks") | Ok("apks") | Ok("apk") => Some(crate::protocol::RemoteFileCategory::Apks),
-            Ok("Archives") | Ok("archives") | Ok("archive") => Some(crate::protocol::RemoteFileCategory::Archives),
+            Ok("Documents") | Ok("documents") | Ok("document") => {
+                Some(crate::protocol::RemoteFileCategory::Documents)
+            }
+            Ok("APKs") | Ok("Apks") | Ok("apks") | Ok("apk") => {
+                Some(crate::protocol::RemoteFileCategory::Apks)
+            }
+            Ok("Archives") | Ok("archives") | Ok("archive") => {
+                Some(crate::protocol::RemoteFileCategory::Archives)
+            }
             Ok("Other") | Ok("other") => Some(crate::protocol::RemoteFileCategory::Other),
             _ => None,
         }
@@ -1072,7 +1105,10 @@ pub unsafe extern "C" fn deskdrop_send_remote_files_query(
     let query_opt = if search_query.is_null() {
         None
     } else {
-        CStr::from_ptr(search_query).to_str().ok().map(|s| s.to_string())
+        CStr::from_ptr(search_query)
+            .to_str()
+            .ok()
+            .map(|s| s.to_string())
     };
 
     runtime().block_on(h.engine.send_remote_files_query(
@@ -1154,11 +1190,10 @@ pub unsafe extern "C" fn deskdrop_send_remote_file_pull_request(
         Err(_) => return 0,
     };
 
-    runtime().block_on(h.engine.send_remote_file_pull_request(
-        target_uuid,
-        req_uuid,
-        file_id,
-    ));
+    runtime().block_on(
+        h.engine
+            .send_remote_file_pull_request(target_uuid, req_uuid, file_id),
+    );
     1
 }
 
@@ -1168,9 +1203,15 @@ pub unsafe extern "C" fn deskdrop_event_remote_request_id(event: *mut PbEvent) -
     let s = match &e.inner {
         EngineEvent::RemoteFilesQueryReceived { request_id, .. } => Some(request_id.to_string()),
         EngineEvent::RemoteFilesResponseReceived { request_id, .. } => Some(request_id.to_string()),
-        EngineEvent::RemoteThumbnailRequestReceived { request_id, .. } => Some(request_id.to_string()),
-        EngineEvent::RemoteThumbnailResponseReceived { request_id, .. } => Some(request_id.to_string()),
-        EngineEvent::RemoteFilePullRequestReceived { request_id, .. } => Some(request_id.to_string()),
+        EngineEvent::RemoteThumbnailRequestReceived { request_id, .. } => {
+            Some(request_id.to_string())
+        }
+        EngineEvent::RemoteThumbnailResponseReceived { request_id, .. } => {
+            Some(request_id.to_string())
+        }
+        EngineEvent::RemoteFilePullRequestReceived { request_id, .. } => {
+            Some(request_id.to_string())
+        }
         _ => None,
     };
     if let Some(str_val) = s {
@@ -1183,7 +1224,10 @@ pub unsafe extern "C" fn deskdrop_event_remote_request_id(event: *mut PbEvent) -
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_remote_summary_json(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
-    if let EngineEvent::RemoteFilesResponseReceived { summary: Some(s), .. } = &e.inner {
+    if let EngineEvent::RemoteFilesResponseReceived {
+        summary: Some(s), ..
+    } = &e.inner
+    {
         if let Ok(json) = serde_json::to_string(s) {
             return e.cache_str(json);
         }

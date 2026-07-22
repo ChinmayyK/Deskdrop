@@ -524,7 +524,11 @@ pub async fn spawn_multicast_listener(
     cancel: CancellationToken,
 ) -> Result<(), anyhow::Error> {
     let multicast_addr = config.multicast_addr;
-    let socket = create_multicast_recv_socket(multicast_addr, config.multicast_port, config.bind_interface.as_deref())?;
+    let socket = create_multicast_recv_socket(
+        multicast_addr,
+        config.multicast_port,
+        config.bind_interface.as_deref(),
+    )?;
 
     info!(
         "udp multicast listener: joined {}:{} on all interfaces",
@@ -613,15 +617,16 @@ pub fn should_bind_interface(iface: &if_addrs::Interface, bind_interface: Option
         return false;
     }
     match bind_interface {
-        Some(target) => {
-            iface.name.eq_ignore_ascii_case(target) || iface.ip().to_string() == target
-        }
+        Some(target) => iface.name.eq_ignore_ascii_case(target) || iface.ip().to_string() == target,
         None => true,
     }
 }
 
 /// Create a UDP socket suitable for sending broadcast packets.
-fn create_broadcast_send_socket(bind_ip: Option<Ipv4Addr>, _port: u16) -> Result<UdpSocket, anyhow::Error> {
+fn create_broadcast_send_socket(
+    bind_ip: Option<Ipv4Addr>,
+    _port: u16,
+) -> Result<UdpSocket, anyhow::Error> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
 
     // Allow sending to broadcast addresses.
@@ -651,7 +656,10 @@ fn create_broadcast_send_socket(bind_ip: Option<Ipv4Addr>, _port: u16) -> Result
 }
 
 /// Create a UDP socket suitable for receiving broadcast packets.
-fn create_broadcast_recv_socket(bind_ip: Option<Ipv4Addr>, port: u16) -> Result<UdpSocket, anyhow::Error> {
+fn create_broadcast_recv_socket(
+    bind_ip: Option<Ipv4Addr>,
+    port: u16,
+) -> Result<UdpSocket, anyhow::Error> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
 
     socket.set_broadcast(true)?;

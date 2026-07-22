@@ -138,7 +138,11 @@ pub struct OutboundTransfer {
 }
 
 impl OutboundTransfer {
-    pub fn new(data: impl Into<Bytes>, meta: FileTransferMetadata, target_device: Option<Uuid>) -> Self {
+    pub fn new(
+        data: impl Into<Bytes>,
+        meta: FileTransferMetadata,
+        target_device: Option<Uuid>,
+    ) -> Self {
         let total_chunks = chunk_count(meta.size_bytes).unwrap_or(u32::MAX);
 
         Self {
@@ -305,8 +309,12 @@ impl OutboundTransfer {
         let bytes_sent = if self.status == TransferStatus::Complete {
             self.meta.size_bytes
         } else {
-            let sent = ((self.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
-            if sent >= self.meta.size_bytes && self.meta.size_bytes > 0 && self.last_acked_chunk + 1 < self.total_chunks {
+            let sent =
+                ((self.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
+            if sent >= self.meta.size_bytes
+                && self.meta.size_bytes > 0
+                && self.last_acked_chunk + 1 < self.total_chunks
+            {
                 self.meta.size_bytes.saturating_sub(1)
             } else {
                 sent
@@ -434,18 +442,19 @@ impl InboundTransfer {
         );
 
         std::fs::create_dir_all(save_dir).context("creating save dir")?;
-        
+
         if let Some(free_bytes) = get_available_disk_space(save_dir) {
             anyhow::ensure!(
                 free_bytes > self.meta.size_bytes + 50 * 1024 * 1024,
                 "insufficient disk space: need {} bytes, but only {} bytes are free",
-                self.meta.size_bytes, free_bytes
+                self.meta.size_bytes,
+                free_bytes
             );
         }
 
         let (dest, file) = create_unique_file(save_dir, &safe_name)
             .with_context(|| "creating destination file atomically")?;
-        
+
         self.dest_path = Some(dest);
         self.file_handle = Some(BufWriter::with_capacity(8 * 1024 * 1024, file));
         self.status = TransferStatus::Transferring;
@@ -853,13 +862,17 @@ impl FileTransferManager {
 
     pub fn pause_all_for_device(&mut self, peer_id: Uuid) {
         for t in self.inbound.values_mut() {
-            if t.from_device == peer_id && (t.status == TransferStatus::Transferring || t.status == TransferStatus::Pending) {
+            if t.from_device == peer_id
+                && (t.status == TransferStatus::Transferring || t.status == TransferStatus::Pending)
+            {
                 t.status = TransferStatus::Pending;
                 t.file_handle = None;
             }
         }
         for t in self.outbound.values_mut() {
-            if t.target_device == Some(peer_id) && (t.status == TransferStatus::Transferring || t.status == TransferStatus::Pending) {
+            if t.target_device == Some(peer_id)
+                && (t.status == TransferStatus::Transferring || t.status == TransferStatus::Pending)
+            {
                 t.status = TransferStatus::Pending;
                 // No file handle to clear for outbound currently.
             }
@@ -963,8 +976,12 @@ impl FileTransferManager {
             let bytes_sent = if t.status == TransferStatus::Complete {
                 t.meta.size_bytes
             } else {
-                let sent = ((t.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(t.meta.size_bytes);
-                if sent >= t.meta.size_bytes && t.meta.size_bytes > 0 && t.last_acked_chunk + 1 < t.total_chunks {
+                let sent =
+                    ((t.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(t.meta.size_bytes);
+                if sent >= t.meta.size_bytes
+                    && t.meta.size_bytes > 0
+                    && t.last_acked_chunk + 1 < t.total_chunks
+                {
                     t.meta.size_bytes.saturating_sub(1)
                 } else {
                     sent
@@ -1060,7 +1077,12 @@ pub fn sanitize_file_name(name: &str) -> String {
         "CON" | "PRN" | "AUX" | "NUL" => true,
         s if (s.len() == 4
             && (s.starts_with("COM") || s.starts_with("LPT"))
-            && s.chars().nth(3).map_or(false, |c| c.is_ascii_digit() && c != '0')) => true,
+            && s.chars()
+                .nth(3)
+                .map_or(false, |c| c.is_ascii_digit() && c != '0')) =>
+        {
+            true
+        }
         _ => false,
     };
 
@@ -1117,7 +1139,7 @@ fn create_unique_file(dir: &Path, file_name: &str) -> Result<(PathBuf, File)> {
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or("");
-        
+
     for i in 0..=999 {
         let name = if i == 0 {
             file_name.to_string()
@@ -1127,19 +1149,25 @@ fn create_unique_file(dir: &Path, file_name: &str) -> Result<(PathBuf, File)> {
             format!("{} ({}).{}", stem, i, ext)
         };
         let candidate = dir.join(&name);
-        
-        match OpenOptions::new().write(true).create_new(true).open(&candidate) {
+
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
             Ok(file) => return Ok((candidate, file)),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(e.into()),
         }
     }
-    
+
     let fallback = dir.join(format!("{}_{}_{}", stem, now_unix(), ext));
-    let file = OpenOptions::new().write(true).create_new(true).open(&fallback)?;
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&fallback)?;
     Ok((fallback, file))
 }
-
 
 #[allow(dead_code)]
 fn unique_dest_path(dir: &Path, file_name: &str) -> PathBuf {
@@ -1190,11 +1218,7 @@ fn chunk_count(size_bytes: u64) -> Result<u32> {
     u32::try_from(chunks).context("file is too large to address with 32-bit chunk indices")
 }
 
-fn read_file_chunk_from_file(
-    file: &mut File,
-    chunk_index: u32,
-    total_bytes: u64,
-) -> Result<Bytes> {
+fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64) -> Result<Bytes> {
     let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
     let remaining = total_bytes.saturating_sub(offset);
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
