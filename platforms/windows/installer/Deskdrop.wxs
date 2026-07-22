@@ -13,7 +13,7 @@
   <Package
     Name="Deskdrop"
     Manufacturer="Deskdrop"
-    Version="1.2.1"
+    Version="1.2.4"
     UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479"
     Scope="perMachine">
 
@@ -114,7 +114,7 @@
           Root="HKMU"
           Key="Software\Deskdrop"
           Name="Version"
-          Value="1.2.1"
+          Value="1.2.4"
           Type="string"
           KeyPath="yes" />
       </Component>
