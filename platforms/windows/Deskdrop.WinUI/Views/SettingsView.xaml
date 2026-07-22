@@ -1,0 +1,173 @@
+<Page
+    x:Class="Deskdrop.WinUI.Views.SettingsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Deskdrop.WinUI.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Background="#FFFFFF">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="320"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- CENTER SETTINGS CONTENT (`input_file_2.png`) -->
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="40,28,40,40">
+            <StackPanel Spacing="0">
+                <TextBlock Text="Settings" FontSize="28" FontWeight="Bold" Foreground="#1D1D1F" CharacterSpacing="-10" Margin="0,0,0,20"/>
+
+                <!-- Top Segmented Tab Bar (`input_file_2.png`) -->
+                <Border Background="#F8F9FB" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="12" Padding="4" HorizontalAlignment="Left" Margin="0,0,0,32">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Background="#0A84FF" CornerRadius="8" Padding="16,8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="🎛️" FontSize="14"/>
+                                <TextBlock Text="General" FontSize="13.5" FontWeight="SemiBold" Foreground="#FFFFFF"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Padding="16,8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="🔄" FontSize="14"/>
+                                <TextBlock Text="Sync" FontSize="13.5" FontWeight="SemiBold" Foreground="#6E6E73"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Padding="16,8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="🌐" FontSize="14"/>
+                                <TextBlock Text="Network" FontSize="13.5" FontWeight="SemiBold" Foreground="#6E6E73"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Padding="16,8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="🛡️" FontSize="14"/>
+                                <TextBlock Text="Security" FontSize="13.5" FontWeight="SemiBold" Foreground="#6E6E73"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- IDENTITY Section -->
+                <TextBlock Text="🎙️ IDENTITY" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" CharacterSpacing="60" Margin="0,0,0,12"/>
+                <Border Background="#F5F5F7" CornerRadius="16" Padding="20,6" Margin="0,0,0,28">
+                    <StackPanel Spacing="0">
+                        <Grid Padding="0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="3">
+                                <TextBlock Text="Device name" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                                <TextBlock Text="How this Mac appears to other Deskdrop peers." FontSize="12" Foreground="#6E6E73"/>
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="#FFFFFF" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="8" Padding="14,6">
+                                <TextBlock Text="MacBook Pro" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                            </Border>
+                        </Grid>
+
+                        <Border Height="1" Background="#E5E5EA"/>
+
+                        <Grid Padding="0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="3">
+                                <TextBlock Text="Start on login" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                                <TextBlock Text="Launch Deskdrop automatically at login." FontSize="12" Foreground="#6E6E73"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsOn="False" MinWidth="0"/>
+                        </Grid>
+
+                        <Border Height="1" Background="#E5E5EA"/>
+
+                        <Grid Padding="0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="3">
+                                <TextBlock Text="Onboarding" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                                <TextBlock Text="View the welcome tour again." FontSize="12" Foreground="#6E6E73"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Replay Tour" Background="#FFFFFF" BorderBrush="#E5E5EA" Foreground="#1D1D1F" CornerRadius="8"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- AMBIENT CONTINUITY Section -->
+                <TextBlock Text="⭐ AMBIENT CONTINUITY" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" CharacterSpacing="60" Margin="0,0,0,12"/>
+                <Border Background="#F5F5F7" CornerRadius="16" Padding="20,16" Margin="0,0,0,40">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Spacing="3">
+                            <TextBlock Text="Screenshot Sync" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                            <TextBlock Text="Instantly sends Mac screenshots to connected Android devices." FontSize="12" Foreground="#6E6E73"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" IsChecked="True" MinWidth="0"/>
+                    </Grid>
+                </Border>
+
+                <!-- Bottom Action Buttons (`input_file_2.png`) -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
+                    <Button Content="Revert" Background="#FFFFFF" BorderBrush="#E5E5EA" Foreground="#1D1D1F" CornerRadius="8" Padding="18,8"/>
+                    <Button Content="Save Changes" Background="#0A84FF" Foreground="#FFFFFF" BorderThickness="0" CornerRadius="8" Padding="18,8"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- RIGHT INSPECTOR PANEL (`input_file_2.png`) -->
+        <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
+            <StackPanel Spacing="28">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="OnePlus Nord 4" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Width="8" Height="8" CornerRadius="4" Background="#34C759" VerticalAlignment="Center"/>
+                        <TextBlock Text="Connected - Wi-Fi 6 · 192.168.x.x" FontSize="13" Foreground="#6E6E73"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <Grid>
+                        <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
+                        <TextBlock Text="51%" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
+                        <Border Width="138" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <Grid>
+                        <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
+                        <TextBlock Text="112.9 GB / 219.5 GB" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
+                        <Grid>
+                            <Border Width="40" Height="8" CornerRadius="4,0,0,4" Background="#FF9500" HorizontalAlignment="Left"/>
+                            <Border Width="95" Height="8" Background="#AF52DE" HorizontalAlignment="Left" Margin="40,0,0,0"/>
+                        </Grid>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#FF9500"/>
+                            <TextBlock Text="Images" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#AF52DE"/>
+                            <TextBlock Text="Videos" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#E5E5EA"/>
+                            <TextBlock Text="Other" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Page>
