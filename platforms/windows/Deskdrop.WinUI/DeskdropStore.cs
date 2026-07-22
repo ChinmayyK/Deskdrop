@@ -301,6 +301,17 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(ShowConnectButton));
             OnPropertyChanged(nameof(ShowForgetButton));
         }
+
+        public void NotifyAll()
+        {
+            NotifyPeerStateProperties();
+            NotifyStorageProperties();
+            OnPropertyChanged(nameof(DisplayName));
+            OnPropertyChanged(nameof(ShowBattery));
+            OnPropertyChanged(nameof(BatteryIcon));
+            OnPropertyChanged(nameof(BatteryColor));
+            OnPropertyChanged(nameof(pairingPin));
+        }
     }
 
     public class FileTransferState : BaseViewModel
@@ -516,6 +527,13 @@ namespace Deskdrop.WinUI
             set { _connectedPeers = value; OnPropertyChanged(); }
         }
 
+        private PeerViewModel? _selectedPeer;
+        public PeerViewModel? SelectedPeer
+        {
+            get => _selectedPeer;
+            set { if (SetProperty(ref _selectedPeer, value)) _selectedPeer?.NotifyAll(); }
+        }
+
         private ObservableCollection<HistoryItem> _history = null!;
         public ObservableCollection<HistoryItem> History
         {
@@ -590,6 +608,8 @@ namespace Deskdrop.WinUI
         public bool HasActiveSpeedTests => ActiveSpeedTests.Count > 0;
         private bool _otpShieldEnabled = true;
         public bool OtpShieldEnabled { get => _otpShieldEnabled; set => SetProperty(ref _otpShieldEnabled, value); }
+        private bool _syncEnabled = true;
+        public bool SyncEnabled { get => _syncEnabled; set { if (SetProperty(ref _syncEnabled, value)) DaemonClient.SetSyncEnabled(value); } }
         public string DaemonStatusText => IsDaemonRunning ? "Running" : "Stopped";
         public string HeaderStatusText
         {
@@ -622,6 +642,31 @@ namespace Deskdrop.WinUI
         public void RespondToPairing(string deviceId, bool accepted)
         {
             DaemonClient.RespondToPairing(deviceId, accepted);
+        }
+
+        public void DisconnectPeer(string deviceId)
+        {
+            DaemonClient.RevokeTrustedDevice(deviceId);
+        }
+
+        public void ForgetPeer(string deviceId)
+        {
+            DaemonClient.ForgetDevice(deviceId);
+        }
+
+        public void AcceptTransfer(string transferId)
+        {
+            DaemonClient.AcceptFileTransfer(transferId);
+        }
+
+        public void RejectTransfer(string transferId)
+        {
+            DaemonClient.RejectFileTransfer(transferId, "user_declined");
+        }
+
+        public void ApplyClipboardItem(string contentHash)
+        {
+            DaemonClient.ApplyClipboard(contentHash);
         }
 
         public void SendPushText(string text, string toDeviceId)
@@ -954,6 +999,12 @@ namespace Deskdrop.WinUI
 
         private void NotifyPeerMetrics()
         {
+            if (SelectedPeer == null && Peers.Count > 0)
+            {
+                SelectedPeer = Peers.FirstOrDefault(p => p.IsConnected) ?? Peers.FirstOrDefault();
+            }
+            OnPropertyChanged(nameof(SelectedPeer));
+            SelectedPeer?.NotifyAll();
             OnPropertyChanged(nameof(ConnectedCount));
             OnPropertyChanged(nameof(TrustedCount));
             OnPropertyChanged(nameof(AttentionCount));

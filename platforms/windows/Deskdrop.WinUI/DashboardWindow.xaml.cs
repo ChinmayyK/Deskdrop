@@ -6,8 +6,11 @@ namespace Deskdrop.WinUI
 {
     public sealed partial class DashboardWindow : Window
     {
+        public static DashboardWindow? Current { get; private set; }
+
         public DashboardWindow()
         {
+            Current = this;
             this.InitializeComponent();
 
             ExtendsContentIntoTitleBar = true;
@@ -59,6 +62,18 @@ namespace Deskdrop.WinUI
                     case "Activity":
                         ContentFrame.Navigate(typeof(ActivityView));
                         break;
+                }
+            }
+        }
+
+        public void NavigateTo(string tag)
+        {
+            foreach (var item in NavView.MenuItems)
+            {
+                if (item is NavigationViewItem navItem && navItem.Tag as string == tag)
+                {
+                    NavView.SelectedItem = navItem;
+                    break;
                 }
             }
         }
