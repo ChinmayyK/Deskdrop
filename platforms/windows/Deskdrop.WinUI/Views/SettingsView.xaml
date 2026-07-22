@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Deskdrop.WinUI.Views"
+    xmlns:winui="using:Deskdrop.WinUI"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -13,12 +14,12 @@
             <ColumnDefinition Width="320"/>
         </Grid.ColumnDefinitions>
 
-        <!-- CENTER SETTINGS CONTENT (`input_file_2.png`) -->
+        <!-- CENTER SETTINGS CONTENT -->
         <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="40,28,40,40">
             <StackPanel Spacing="0">
                 <TextBlock Text="Settings" FontSize="28" FontWeight="Bold" Foreground="#1D1D1F" CharacterSpacing="-10" Margin="0,0,0,20"/>
 
-                <!-- Top Segmented Tab Bar (`input_file_2.png`) -->
+                <!-- Top Segmented Tab Bar -->
                 <Border Background="#F8F9FB" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="12" Padding="4" HorizontalAlignment="Left" Margin="0,0,0,32">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Border Background="#0A84FF" CornerRadius="8" Padding="16,8">
@@ -59,10 +60,10 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Spacing="3">
                                 <TextBlock Text="Device name" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                <TextBlock Text="How this Mac appears to other Deskdrop peers." FontSize="12" Foreground="#6E6E73"/>
+                                <TextBlock Text="How this PC appears to other Deskdrop peers." FontSize="12" Foreground="#6E6E73"/>
                             </StackPanel>
                             <Border Grid.Column="1" Background="#FFFFFF" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="8" Padding="14,6">
-                                <TextBlock Text="MacBook Pro" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                                <TextBlock Text="{x:Bind DeviceName, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F"/>
                             </Border>
                         </Grid>
 
@@ -75,9 +76,9 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Spacing="3">
                                 <TextBlock Text="Start on login" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                <TextBlock Text="Launch Deskdrop automatically at login." FontSize="12" Foreground="#6E6E73"/>
+                                <TextBlock Text="Launch Deskdrop automatically when Windows starts." FontSize="12" Foreground="#6E6E73"/>
                             </StackPanel>
-                            <ToggleSwitch Grid.Column="1" IsOn="False" MinWidth="0"/>
+                            <ToggleSwitch Grid.Column="1" IsOn="True" MinWidth="0" Toggled="OnStartupToggled"/>
                         </Grid>
 
                         <Border Height="1" Background="#E5E5EA"/>
@@ -88,10 +89,10 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Spacing="3">
-                                <TextBlock Text="Onboarding" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                <TextBlock Text="View the welcome tour again." FontSize="12" Foreground="#6E6E73"/>
+                                <TextBlock Text="Rescan Network" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                                <TextBlock Text="Force discovery of nearby Deskdrop devices over Wi-Fi." FontSize="12" Foreground="#6E6E73"/>
                             </StackPanel>
-                            <Button Grid.Column="1" Content="Replay Tour" Background="#FFFFFF" BorderBrush="#E5E5EA" Foreground="#1D1D1F" CornerRadius="8"/>
+                            <Button Grid.Column="1" Content="Rescan Now" Background="#FFFFFF" BorderBrush="#E5E5EA" Foreground="#0A84FF" CornerRadius="8" Click="OnRescanClicked"/>
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -105,46 +106,49 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Spacing="3">
-                            <TextBlock Text="Screenshot Sync" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                            <TextBlock Text="Instantly sends Mac screenshots to connected Android devices." FontSize="12" Foreground="#6E6E73"/>
+                            <TextBlock Text="Screenshot &amp; Clipboard Sync" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                            <TextBlock Text="Instantly sync clipboard and screenshots across connected devices." FontSize="12" Foreground="#6E6E73"/>
                         </StackPanel>
-                        <CheckBox Grid.Column="1" IsChecked="True" MinWidth="0"/>
+                        <CheckBox Grid.Column="1" IsChecked="{x:Bind mgr.SyncEnabled, Mode=TwoWay}" MinWidth="0"/>
                     </Grid>
                 </Border>
 
-                <!-- Bottom Action Buttons (`input_file_2.png`) -->
+                <!-- Bottom Action Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
-                    <Button Content="Revert" Background="#FFFFFF" BorderBrush="#E5E5EA" Foreground="#1D1D1F" CornerRadius="8" Padding="18,8"/>
-                    <Button Content="Save Changes" Background="#0A84FF" Foreground="#FFFFFF" BorderThickness="0" CornerRadius="8" Padding="18,8"/>
+                    <Button Content="Revert" Background="#FFFFFF" BorderBrush="#E5E5EA" Foreground="#1D1D1F" CornerRadius="8" Padding="18,8" Click="OnRevertClicked"/>
+                    <Button Content="Save Changes" Background="#0A84FF" Foreground="#FFFFFF" BorderThickness="0" CornerRadius="8" Padding="18,8" Click="OnSaveClicked"/>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
-        <!-- RIGHT INSPECTOR PANEL (`input_file_2.png`) -->
+        <!-- RIGHT INSPECTOR PANEL (`#FAFAFC`) -->
         <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
             <StackPanel Spacing="28">
+                <!-- Device Header -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="OnePlus Nord 4" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
+                    <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay, FallbackValue='No Device Selected'}" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Border Width="8" Height="8" CornerRadius="4" Background="#34C759" VerticalAlignment="Center"/>
-                        <TextBlock Text="Connected - Wi-Fi 6 · 192.168.x.x" FontSize="13" Foreground="#6E6E73"/>
+                        <Border Width="8" Height="8" CornerRadius="4" Background="{x:Bind mgr.SelectedPeer.ConnectionColor, Mode=OneWay, FallbackValue='#8E8E93'}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{x:Bind mgr.SelectedPeer.ConnectionText, Mode=OneWay, FallbackValue='Offline'}" FontSize="13" Foreground="#6E6E73"/>
                     </StackPanel>
                 </StackPanel>
 
+                <!-- Battery Section -->
                 <StackPanel Spacing="8">
                     <Grid>
                         <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="51%" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{x:Bind mgr.SelectedPeer.BatteryLevel, Mode=OneWay, FallbackValue='--'}" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
                     </Grid>
                     <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Border Width="138" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
+                        <Border Width="100" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
                     </Border>
                 </StackPanel>
 
+                <!-- Storage Section -->
                 <StackPanel Spacing="8">
                     <Grid>
                         <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="112.9 GB / 219.5 GB" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{x:Bind mgr.SelectedPeer.StorageFreeText, Mode=OneWay, FallbackValue='--'}" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
                     </Grid>
                     <Border Height="8" CornerRadius="4" Background="#E5E5EA">
                         <Grid>
