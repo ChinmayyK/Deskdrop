@@ -551,6 +551,7 @@ pub(crate) struct EngineShared {
     /// Cache of local battery state to push to newly connected peers.
     pub(crate) local_battery: Arc<Mutex<Option<(u8, bool)>>>,
     /// Cache of local storage state to push to newly connected peers.
+    #[allow(clippy::type_complexity)]
     pub(crate) local_storage: Arc<Mutex<Option<(u64, u64, u64, u64, u64)>>>,
     /// Cache of local network state to push to newly connected peers.
     local_network: Arc<Mutex<Option<String>>>,
@@ -1951,6 +1952,7 @@ impl Engine {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_remote_files_query(
         &self,
         target_device: Uuid,
@@ -2098,6 +2100,7 @@ impl Engine {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn query_remote_files_sync(
         &self,
         target_device: Uuid,

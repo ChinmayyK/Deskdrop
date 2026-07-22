@@ -496,6 +496,7 @@ impl PeerManager {
         Ok(true)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn replace_live_session(
         &self,
         local_device_id: Uuid,

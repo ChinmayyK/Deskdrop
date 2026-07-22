@@ -1079,7 +1079,7 @@ pub fn sanitize_file_name(name: &str) -> String {
             && (s.starts_with("COM") || s.starts_with("LPT"))
             && s.chars()
                 .nth(3)
-                .map_or(false, |c| c.is_ascii_digit() && c != '0')) =>
+                .is_some_and(|c| c.is_ascii_digit() && c != '0')) =>
         {
             true
         }
@@ -1104,6 +1104,7 @@ fn get_available_disk_space(path: &Path) -> Option<u64> {
         };
         let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
         if unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) } == 0 {
+            #[allow(clippy::unnecessary_cast)]
             return Some((stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64));
         }
     }

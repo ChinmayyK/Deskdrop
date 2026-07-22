@@ -90,8 +90,7 @@
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+    <PublishTrimmed>False</PublishTrimmed>
     <_WarnAboutWindowsFormsOrWpfWithTrimming>false</_WarnAboutWindowsFormsOrWpfWithTrimming>
     <SuppressTrimAnalysis>true</SuppressTrimAnalysis>
     <NoWarn>$(NoWarn);NETSDK1175;IL2026;IL2037;IL2057</NoWarn>
