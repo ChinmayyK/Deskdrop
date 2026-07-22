@@ -11,30 +11,41 @@ namespace Deskdrop.WinUI.Views
         public ActivityView()
         {
             this.InitializeComponent();
-            
-            DeskdropStore.Shared.PropertyChanged += (s, e) => {
-                if (e.PropertyName == nameof(DeskdropStore.Shared.History))
-                {
-                    DispatcherQueue.TryEnqueue(() => {
-                        TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList();
-                    });
-                }
+            DeskdropStore.Shared.PropertyChanged += OnStorePropertyChanged;
+            this.Unloaded += (s, e) => {
+                try { DeskdropStore.Shared.PropertyChanged -= OnStorePropertyChanged; } catch { }
             };
+            try { TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList(); } catch { }
+        }
 
-            TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList();
+        private void OnStorePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(DeskdropStore.Shared.History))
+            {
+                DispatcherQueue?.TryEnqueue(() => {
+                    try { TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList(); } catch { }
+                });
+            }
         }
 
         private void TxtSearch_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         {
-            var text = sender.Text.ToLower();
-            if (string.IsNullOrWhiteSpace(text))
+            try
             {
-                TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList();
+                var text = sender.Text?.ToLowerInvariant() ?? "";
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList();
+                }
+                else
+                {
+                    var snapshot = DeskdropStore.Shared.History.ToList();
+                    TimelineList.ItemsSource = snapshot.Where(h => 
+                        (h.display_text?.ToLowerInvariant().Contains(text) == true) || 
+                        (h.path?.ToLowerInvariant().Contains(text) == true)).ToList();
+                }
             }
-            else
-            {
-                TimelineList.ItemsSource = DeskdropStore.Shared.History.Where(h => h.display_text.ToLower().Contains(text) || h.path.ToLower().Contains(text)).ToList();
-            }
+            catch { }
         }
 
         private void HistoryItem_Click(object sender, RoutedEventArgs e)
@@ -60,24 +71,33 @@ namespace Deskdrop.WinUI.Views
 
         private void BtnPinItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is HistoryItem item)
+            try
             {
-                item.IsPinned = !item.IsPinned;
-                TimelineList.ItemsSource = DeskdropStore.Shared.History
-                    .OrderByDescending(h => h.IsPinned)
-                    .ThenByDescending(h => h.Time)
-                    .ToList();
+                if (sender is Button btn && btn.DataContext is HistoryItem item)
+                {
+                    item.IsPinned = !item.IsPinned;
+                    var snapshot = DeskdropStore.Shared.History.ToList();
+                    TimelineList.ItemsSource = snapshot
+                        .OrderByDescending(h => h.IsPinned)
+                        .ThenByDescending(h => h.Time)
+                        .ToList();
+                }
             }
+            catch { }
         }
 
         private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is HistoryItem item)
+            try
             {
-                DeskdropStore.Shared.History.Remove(item);
-                App.Clipboard?.History.Remove(item);
-                TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList();
+                if (sender is Button btn && btn.DataContext is HistoryItem item)
+                {
+                    DeskdropStore.Shared.History.Remove(item);
+                    App.Clipboard?.History.Remove(item);
+                    TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList();
+                }
             }
+            catch { }
         }
     }
 }

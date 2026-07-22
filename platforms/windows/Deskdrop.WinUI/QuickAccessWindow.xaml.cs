@@ -84,40 +84,54 @@ namespace Deskdrop.WinUI
 
         private void TxtSearch_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         {
-            var query = TxtSearch.Text.ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(query))
+            try
             {
-                TimelineList.ItemsSource = DeskdropStore.Shared.History;
+                var query = TxtSearch?.Text?.ToLowerInvariant() ?? "";
+                var snapshot = DeskdropStore.Shared.History.ToList();
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    TimelineList.ItemsSource = snapshot;
+                }
+                else
+                {
+                    TimelineList.ItemsSource = snapshot
+                        .Where(h => (h.display_text?.ToLowerInvariant().Contains(query) == true) || 
+                                    (h.path?.ToLowerInvariant().Contains(query) == true))
+                        .ToList();
+                }
             }
-            else
-            {
-                TimelineList.ItemsSource = DeskdropStore.Shared.History
-                    .Where(h => (h.display_text?.ToLowerInvariant().Contains(query) == true) || 
-                                (h.path?.ToLowerInvariant().Contains(query) == true))
-                    .ToList();
-            }
+            catch { }
         }
 
         private void BtnPinItem_Click(object sender, RoutedEventArgs e)
         {
-            if (((FrameworkElement)sender).DataContext is HistoryItem item)
+            try
             {
-                item.IsPinned = !item.IsPinned;
-                TimelineList.ItemsSource = DeskdropStore.Shared.History
-                    .OrderByDescending(h => h.IsPinned)
-                    .ThenByDescending(h => h.Time)
-                    .ToList();
+                if (((FrameworkElement)sender).DataContext is HistoryItem item)
+                {
+                    item.IsPinned = !item.IsPinned;
+                    var snapshot = DeskdropStore.Shared.History.ToList();
+                    TimelineList.ItemsSource = snapshot
+                        .OrderByDescending(h => h.IsPinned)
+                        .ThenByDescending(h => h.Time)
+                        .ToList();
+                }
             }
+            catch { }
         }
 
         private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
         {
-            if (((FrameworkElement)sender).DataContext is HistoryItem item)
+            try
             {
-                DeskdropStore.Shared.History.Remove(item);
-                App.Clipboard?.History.Remove(item);
-                DeskdropStore.Shared.TriggerHistoryUpdate();
+                if (((FrameworkElement)sender).DataContext is HistoryItem item)
+                {
+                    DeskdropStore.Shared.History.Remove(item);
+                    App.Clipboard?.History.Remove(item);
+                    DeskdropStore.Shared.TriggerHistoryUpdate();
+                }
             }
+            catch { }
         }
 
         private void HistoryItem_Click(object sender, RoutedEventArgs e)

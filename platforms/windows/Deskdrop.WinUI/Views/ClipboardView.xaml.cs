@@ -16,34 +16,47 @@ namespace Deskdrop.WinUI.Views
         public ClipboardView()
         {
             this.InitializeComponent();
-            mgr.ActivityFeed.CollectionChanged += (s, e) => UpdateFilter();
+            mgr.ActivityFeed.CollectionChanged += OnActivityFeedChanged;
+            this.Unloaded += (s, e) => {
+                try { mgr.ActivityFeed.CollectionChanged -= OnActivityFeedChanged; } catch { }
+            };
+            UpdateFilter();
+        }
+
+        private void OnActivityFeedChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
             UpdateFilter();
         }
 
         private void UpdateFilter()
         {
-            var query = SearchBox?.Text?.Trim() ?? "";
-            var items = mgr.ActivityFeed.AsEnumerable();
-
-            if (!string.IsNullOrEmpty(query))
+            try
             {
-                items = items.Where(i => (i.Title?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                                         (i.Source?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                                         (i.TypeLabel?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false));
-            }
+                var query = SearchBox?.Text?.Trim() ?? "";
+                var snapshot = mgr.ActivityFeed.ToList();
+                var items = snapshot.AsEnumerable();
 
-            if (_activeFilter != "All")
-            {
-                items = items.Where(i => string.Equals(i.TypeLabel, _activeFilter, StringComparison.OrdinalIgnoreCase) ||
-                                         (_activeFilter == "File" && (i.TypeLabel == "File" || i.TypeLabel == "Applied")) ||
-                                         (_activeFilter == "Text" && i.TypeLabel == "Clipboard"));
-            }
+                if (!string.IsNullOrEmpty(query))
+                {
+                    items = items.Where(i => (i.Title?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                                             (i.Source?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                                             (i.TypeLabel?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false));
+                }
 
-            FilteredFeed.Clear();
-            foreach (var item in items)
-            {
-                FilteredFeed.Add(item);
+                if (_activeFilter != "All")
+                {
+                    items = items.Where(i => string.Equals(i.TypeLabel, _activeFilter, StringComparison.OrdinalIgnoreCase) ||
+                                             (_activeFilter == "File" && (i.TypeLabel == "File" || i.TypeLabel == "Applied")) ||
+                                             (_activeFilter == "Text" && i.TypeLabel == "Clipboard"));
+                }
+
+                FilteredFeed.Clear();
+                foreach (var item in items)
+                {
+                    FilteredFeed.Add(item);
+                }
             }
+            catch { }
         }
 
         private void OnSearchTextChanged(object sender, TextChangedEventArgs e)

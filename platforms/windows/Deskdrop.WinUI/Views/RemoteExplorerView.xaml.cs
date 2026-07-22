@@ -52,14 +52,17 @@ namespace Deskdrop.WinUI.Views
                         resp = JsonSerializer.Deserialize<RemoteFileListResponse>(dataEl.GetRawText(), options);
                     }
                     
-                    RemoteFiles.Clear();
-                    if (resp != null && resp.files != null)
+                    global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
                     {
-                        foreach (var f in resp.files)
+                        RemoteFiles.Clear();
+                        if (resp != null && resp.files != null)
                         {
-                            RemoteFiles.Add(f);
+                            foreach (var f in resp.files)
+                            {
+                                RemoteFiles.Add(f);
+                            }
                         }
-                    }
+                    });
                 }
             }
             catch (Exception)

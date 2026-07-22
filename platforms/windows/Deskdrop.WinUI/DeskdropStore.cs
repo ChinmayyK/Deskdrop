@@ -1071,16 +1071,16 @@ namespace Deskdrop.WinUI
         {
             try
             {
+                if (App.MainWindow == null) return;
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                if (hwnd == IntPtr.Zero) return;
+
                 var picker = new Windows.Storage.Pickers.FileOpenPicker();
                 picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
                 picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
                 picker.FileTypeFilter.Add("*");
 
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                if (hwnd != IntPtr.Zero)
-                {
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                }
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
                 var files = await picker.PickMultipleFilesAsync();
                 if (files != null && files.Count > 0)

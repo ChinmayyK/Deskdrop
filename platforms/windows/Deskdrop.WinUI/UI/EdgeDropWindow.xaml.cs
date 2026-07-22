@@ -60,26 +60,22 @@ namespace Deskdrop.WinUI.UI
             ExpandedCard.Opacity = 0;
             try
             {
+                var peers = System.Linq.Enumerable.ToList(DeskdropStore.Shared.Peers);
+                var target = peers.Count > 0 ? peers[0].device_id : "";
+                if (string.IsNullOrEmpty(target)) return;
+
                 if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
                 {
                     var items = await e.DataView.GetStorageItemsAsync();
                     if (items.Count > 0 && items[0] is Windows.Storage.StorageFile file)
                     {
-                        var target = DeskdropStore.Shared.Peers.Count > 0 ? DeskdropStore.Shared.Peers[0].device_id : "";
-                        if (!string.IsNullOrEmpty(target))
-                        {
-                            System.Threading.Tasks.Task.Run(() => DaemonClient.PushFile(target, file.Path));
-                        }
+                        System.Threading.Tasks.Task.Run(() => DaemonClient.PushFile(target, file.Path));
                     }
                 }
                 else if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
                 {
                     var text = await e.DataView.GetTextAsync();
-                    var target = DeskdropStore.Shared.Peers.Count > 0 ? DeskdropStore.Shared.Peers[0].device_id : "";
-                    if (!string.IsNullOrEmpty(target))
-                    {
-                        System.Threading.Tasks.Task.Run(() => DaemonClient.PushTextTo(text, target));
-                    }
+                    System.Threading.Tasks.Task.Run(() => DaemonClient.PushTextTo(text, target));
                 }
             }
             catch { }
