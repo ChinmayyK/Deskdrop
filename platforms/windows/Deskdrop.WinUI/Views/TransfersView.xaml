@@ -7,19 +7,74 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+    <Grid Background="#FFFFFF">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="320"/>
+        </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,24">
-            <TextBlock Text="File Transfers" FontSize="28" FontWeight="Bold" Margin="0,0,0,8"/>
-            <TextBlock Text="Active and recent file transfers across your devices." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="14"/>
-        </StackPanel>
+        <!-- CENTER TRANSFERS CONTENT -->
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="40,28,40,40">
+            <StackPanel Spacing="0">
+                <TextBlock Text="Transfers" FontSize="28" FontWeight="Bold" Foreground="#1D1D1F" CharacterSpacing="-10" Margin="0,0,0,6"/>
+                <TextBlock Text="Manage active files and view recent history" FontSize="14" Foreground="#6E6E73" Margin="0,0,0,32"/>
 
-        <ScrollViewer Grid.Row="1">
-            <TextBlock Text="No active transfers." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,64,0,0"/>
+                <TextBlock Text="ACTIVE" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" CharacterSpacing="60" Margin="0,0,0,12"/>
+                <TextBlock Text="No active transfers" FontSize="14" Foreground="#8E8E93" Margin="0,0,0,36"/>
+
+                <TextBlock Text="RECENT HISTORY" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" CharacterSpacing="60" Margin="0,0,0,12"/>
+                <TextBlock Text="No recent file transfers" FontSize="14" Foreground="#8E8E93"/>
+            </StackPanel>
         </ScrollViewer>
+
+        <!-- RIGHT INSPECTOR PANEL -->
+        <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
+            <StackPanel Spacing="28">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="OnePlus Nord 4" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Width="8" Height="8" CornerRadius="4" Background="#34C759" VerticalAlignment="Center"/>
+                        <TextBlock Text="Connected - Wi-Fi 6 · 192.168.x.x" FontSize="13" Foreground="#6E6E73"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <Grid>
+                        <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
+                        <TextBlock Text="50%" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
+                        <Border Width="135" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <Grid>
+                        <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
+                        <TextBlock Text="112.9 GB / 219.5 GB" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
+                        <Grid>
+                            <Border Width="40" Height="8" CornerRadius="4,0,0,4" Background="#FF9500" HorizontalAlignment="Left"/>
+                            <Border Width="95" Height="8" Background="#AF52DE" HorizontalAlignment="Left" Margin="40,0,0,0"/>
+                        </Grid>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#FF9500"/>
+                            <TextBlock Text="Images" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#AF52DE"/>
+                            <TextBlock Text="Videos" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="#E5E5EA"/>
+                            <TextBlock Text="Other" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
     </Grid>
 </Page>
