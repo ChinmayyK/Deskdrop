@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Deskdrop.WinUI.Views"
+    xmlns:winui="using:Deskdrop.WinUI"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -13,14 +14,14 @@
             <ColumnDefinition Width="320"/>
         </Grid.ColumnDefinitions>
 
-        <!-- CENTER REMOTE EXPLORER CONTENT (`input_file_3.png`) -->
+        <!-- CENTER REMOTE EXPLORER CONTENT -->
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Top Header Bar (`input_file_3.png`) -->
+            <!-- Top Header Bar -->
             <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="#E5E5EA" Padding="28,16">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -29,22 +30,30 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock Text="&lt;" FontSize="16" FontWeight="Bold" Foreground="#1D1D1F"/>
-                        <TextBlock Text="OnePlus Nord 4" FontSize="16" FontWeight="Bold" Foreground="#1D1D1F"/>
-                        <Border Width="6" Height="6" CornerRadius="3" Background="#34C759" VerticalAlignment="Center"/>
+                    <!-- Back button and Device Title -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Content="&lt;" Background="#F2F2F7" BorderThickness="0" CornerRadius="8" Padding="12,6" Click="OnBackClicked"/>
+                        <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay, FallbackValue='No Device'}" FontSize="16" FontWeight="Bold" Foreground="#1D1D1F" VerticalAlignment="Center"/>
+                        <Border Width="6" Height="6" CornerRadius="3" Background="{x:Bind mgr.SelectedPeer.ConnectionColor, Mode=OneWay, FallbackValue='#8E8E93'}" VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <Border Grid.Column="1" Background="#F2F2F7" CornerRadius="8" Padding="12,6" MaxWidth="320" HorizontalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE721;" FontSize="13" Foreground="#6E6E73"/>
-                            <TextBox PlaceholderText="Search files, extensions, dates..." BorderThickness="0" Background="Transparent" Foreground="#1D1D1F" FontSize="13"/>
-                        </StackPanel>
+                    <!-- Path Bar / Search -->
+                    <Border Grid.Column="1" Background="#F2F2F7" CornerRadius="8" Padding="12,6" Margin="24,0" VerticalAlignment="Center">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE8DA;" FontSize="13" Foreground="#6E6E73" Grid.Column="0"/>
+                            <TextBox x:Name="PathBox" Text="/" BorderThickness="0" Background="Transparent" Foreground="#1D1D1F" FontSize="13" Grid.Column="1" Margin="8,0,0,0" KeyDown="OnPathKeyDown"/>
+                            <Button Grid.Column="2" Content="Go" Background="Transparent" Foreground="#0A84FF" BorderThickness="0" Padding="8,2" Click="OnGoClicked"/>
+                        </Grid>
                     </Border>
 
+                    <!-- Transfer Action -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <TextBlock Text="✓ Select" FontSize="13" FontWeight="SemiBold" Foreground="#6E6E73" VerticalAlignment="Center"/>
-                        <Button Content="📁 Import Mac Files..." Background="#0A84FF" Foreground="#FFFFFF" BorderThickness="0" CornerRadius="8" Padding="14,6"/>
+                        <Button Content="📁 Send Files to Device..." Background="#0A84FF" Foreground="#FFFFFF" BorderThickness="0" CornerRadius="8" Padding="14,6" Click="OnSendFilesClicked"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -56,166 +65,102 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Left Library / Locations Sub-Sidebar (`input_file_3.png`) -->
+                <!-- Left Library / Shortcuts Sub-Sidebar -->
                 <Border Grid.Column="0" Background="#FAFAFC" BorderThickness="0,0,1,0" BorderBrush="#E5E5EA" Padding="12,20">
                     <StackPanel Spacing="6">
-                        <TextBlock Text="Library" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" Margin="6,0,0,4"/>
+                        <TextBlock Text="Quick Shortcuts" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" Margin="6,0,0,4"/>
                         
-                        <Border Background="#0A84FF" CornerRadius="8" Padding="10,8">
-                            <Grid>
-                                <TextBlock Text="All Files" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Left"/>
-                                <TextBlock Text="8,607" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </Border>
-                        <Border Padding="10,6">
-                            <Grid>
-                                <TextBlock Text="Images" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                                <TextBlock Text="3,941" FontSize="12" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </Border>
-                        <Border Padding="10,6">
-                            <Grid>
-                                <TextBlock Text="Videos" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                                <TextBlock Text="128" FontSize="12" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </Border>
-                        <Border Padding="10,6">
-                            <Grid>
-                                <TextBlock Text="Audio" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                                <TextBlock Text="690" FontSize="12" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </Border>
-                        <Border Padding="10,6">
-                            <Grid>
-                                <TextBlock Text="Documents" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                                <TextBlock Text="3,132" FontSize="12" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </Border>
-                        <Border Padding="10,6">
-                            <Grid>
-                                <TextBlock Text="APKs &amp; Apps" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                                <TextBlock Text="23" FontSize="12" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </Border>
-
-                        <TextBlock Text="Locations" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" Margin="6,16,0,4"/>
-                        <Border Background="#E6F2FF" CornerRadius="8" Padding="10,8">
-                            <TextBlock Text="All Locations" FontSize="13" FontWeight="SemiBold" Foreground="#0A84FF"/>
-                        </Border>
-                        <Border Padding="10,6">
-                            <Grid>
-                                <TextBlock Text="Downloads" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                                <TextBlock Text="3,545" FontSize="12" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </Border>
-                        <Border Padding="10,6">
-                            <Grid>
-                                <TextBlock Text="WhatsApp" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                                <TextBlock Text="2,534" FontSize="12" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </Border>
+                        <Button Content="Root Directory (/)" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="#E6F2FF" Foreground="#0A84FF" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutRootClicked"/>
+                        <Button Content="DCIM / Camera" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Foreground="#1D1D1F" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutDCIMClicked"/>
+                        <Button Content="Pictures" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Foreground="#1D1D1F" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutPicturesClicked"/>
+                        <Button Content="Downloads" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Foreground="#1D1D1F" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutDownloadsClicked"/>
+                        <Button Content="Documents" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Foreground="#1D1D1F" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutDocumentsClicked"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Center Grid Area (`input_file_3.png`) -->
+                <!-- Center Files Area -->
                 <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="28,20">
                     <StackPanel Spacing="16">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Today" FontSize="14" FontWeight="Bold" Foreground="#1D1D1F"/>
-                            <TextBlock Text="5 items" FontSize="13" Foreground="#6E6E73"/>
+                            <TextBlock Text="Contents" FontSize="14" FontWeight="Bold" Foreground="#1D1D1F"/>
+                            <TextBlock Text="{x:Bind RemoteFiles.Count, Mode=OneWay}" FontSize="13" Foreground="#6E6E73"/>
+                            <TextBlock Text="items" FontSize="13" Foreground="#6E6E73"/>
                         </StackPanel>
 
-                        <!-- 4-Column Grid of Thumbnails -->
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                        <ItemsControl ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <Grid/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="winui:RemoteFile">
+                                    <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="#EBF4FF" Margin="0,0,14,0">
+                                                <FontIcon Glyph="&#xE8B7;" FontSize="20" Foreground="{x:Bind IconColor, Mode=OneWay}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="{x:Bind display_name, Mode=OneWay}" FontSize="14.5" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{x:Bind IconKind, Mode=OneWay}" FontSize="12.5" Foreground="#6E6E73"/>
+                                                    <TextBlock Text="·" FontSize="12.5" Foreground="#6E6E73"/>
+                                                    <TextBlock Text="{x:Bind FormattedSize, Mode=OneWay}" FontSize="12.5" Foreground="#6E6E73"/>
+                                                    <TextBlock Text="·" FontSize="12.5" Foreground="#6E6E73"/>
+                                                    <TextBlock Text="{x:Bind FormattedDate, Mode=OneWay}" FontSize="12.5" Foreground="#8E8E93"/>
+                                                </StackPanel>
+                                            </StackPanel>
 
-                            <!-- Thumb 1 -->
-                            <Border Grid.Column="0" Background="#F5F5F7" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="12" Margin="0,0,8,0" Overflow="Hidden">
-                                <StackPanel>
-                                    <Border Height="140" Background="#111827" CornerRadius="12,12,0,0">
-                                        <TextBlock Text="📱" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FFFFFF"/>
+                                            <!-- Open folder button OR download file button -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                <Button Content="Open" Background="#0A84FF" Foreground="#FFFFFF" CornerRadius="8" Padding="14,6" Click="OnItemClicked"/>
+                                                <Button Content="Download" Background="#34C759" Foreground="#FFFFFF" CornerRadius="8" Padding="14,6" Click="OnDownloadClicked"/>
+                                            </StackPanel>
+                                        </Grid>
                                     </Border>
-                                    <StackPanel Padding="10,8">
-                                        <TextBlock Text="Screenshot...efd7459.jpg" FontSize="12.5" FontWeight="SemiBold" Foreground="#1D1D1F" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="372 KB" FontSize="11" Foreground="#6E6E73"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Thumb 2 -->
-                            <Border Grid.Column="1" Background="#F5F5F7" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="12" Margin="4,0,4,0" Overflow="Hidden">
-                                <StackPanel>
-                                    <Border Height="140" Background="#065F46" CornerRadius="12,12,0,0">
-                                        <TextBlock Text="📱" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FFFFFF"/>
-                                    </Border>
-                                    <StackPanel Padding="10,8">
-                                        <TextBlock Text="Screenshot...efd7459.jpg" FontSize="12.5" FontWeight="SemiBold" Foreground="#1D1D1F" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="337 KB" FontSize="11" Foreground="#6E6E73"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Thumb 3 -->
-                            <Border Grid.Column="2" Background="#F5F5F7" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="12" Margin="4,0,4,0" Overflow="Hidden">
-                                <StackPanel>
-                                    <Border Height="140" Background="#15803D" CornerRadius="12,12,0,0">
-                                        <TextBlock Text="⚽" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FFFFFF"/>
-                                    </Border>
-                                    <StackPanel Padding="10,8">
-                                        <TextBlock Text="“This wasn’...(1) (1).mp4" FontSize="12.5" FontWeight="SemiBold" Foreground="#1D1D1F" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="12.6 MB" FontSize="11" Foreground="#6E6E73"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Thumb 4 -->
-                            <Border Grid.Column="3" Background="#F5F5F7" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="12" Margin="8,0,0,0" Overflow="Hidden">
-                                <StackPanel>
-                                    <Border Height="140" Background="#F3F4F6" CornerRadius="12,12,0,0">
-                                        <TextBlock Text="📄" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#4B5563"/>
-                                    </Border>
-                                    <StackPanel Padding="10,8">
-                                        <TextBlock Text="Chinmay_K...Resume.pdf" FontSize="12.5" FontWeight="SemiBold" Foreground="#1D1D1F" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="214 KB" FontSize="11" Foreground="#6E6E73"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-                        </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
         </Grid>
 
-        <!-- RIGHT INSPECTOR PANEL (`input_file_3.png`) -->
+        <!-- RIGHT INSPECTOR PANEL (`#FAFAFC`) -->
         <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
             <StackPanel Spacing="28">
+                <!-- Device Header -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="OnePlus Nord 4" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
+                    <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay, FallbackValue='No Device Selected'}" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Border Width="8" Height="8" CornerRadius="4" Background="#34C759" VerticalAlignment="Center"/>
-                        <TextBlock Text="Connected - Wi-Fi 6 · 192.168.x.x" FontSize="13" Foreground="#6E6E73"/>
+                        <Border Width="8" Height="8" CornerRadius="4" Background="{x:Bind mgr.SelectedPeer.ConnectionColor, Mode=OneWay, FallbackValue='#8E8E93'}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{x:Bind mgr.SelectedPeer.ConnectionText, Mode=OneWay, FallbackValue='Offline'}" FontSize="13" Foreground="#6E6E73"/>
                     </StackPanel>
                 </StackPanel>
 
+                <!-- Battery Section -->
                 <StackPanel Spacing="8">
                     <Grid>
                         <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="51%" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{x:Bind mgr.SelectedPeer.BatteryLevel, Mode=OneWay, FallbackValue='--'}" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
                     </Grid>
                     <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Border Width="138" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
+                        <Border Width="100" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
                     </Border>
                 </StackPanel>
 
+                <!-- Storage Section -->
                 <StackPanel Spacing="8">
                     <Grid>
                         <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="112.9 GB / 219.5 GB" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{x:Bind mgr.SelectedPeer.StorageFreeText, Mode=OneWay, FallbackValue='--'}" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
                     </Grid>
                     <Border Height="8" CornerRadius="4" Background="#E5E5EA">
                         <Grid>
