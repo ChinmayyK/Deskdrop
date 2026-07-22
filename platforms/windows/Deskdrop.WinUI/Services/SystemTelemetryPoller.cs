@@ -63,8 +63,15 @@ namespace Deskdrop.WinUI.Services
                     Console.WriteLine($"Error polling telemetry: {ex.Message}");
                 }
                 
-                // Poll every 60 seconds
-                await Task.Delay(TimeSpan.FromSeconds(60), token);
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(60), token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch { }
             }
         }
 

@@ -11,7 +11,15 @@ namespace Deskdrop.WinUI
         {
             this.InitializeComponent();
 
-            this.SystemBackdrop = new MicaBackdrop();
+            if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+            }
+            else if (Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported())
+            {
+                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+            }
+
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
@@ -24,8 +32,12 @@ namespace Deskdrop.WinUI
 
         private void BtnShowQRCode_Click(object sender, RoutedEventArgs e)
         {
-            var qr = new QRPairingWindow();
-            qr.Activate();
+            try
+            {
+                var qr = new QRPairingWindow();
+                qr.Activate();
+            }
+            catch { }
         }
 
         private void BtnFooterLeft_Click(object sender, RoutedEventArgs e)

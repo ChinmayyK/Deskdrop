@@ -42,14 +42,22 @@ namespace Deskdrop.WinUI
 
         private void PairDevice_Click(object sender, RoutedEventArgs e)
         {
-            var qrWindow = new QRPairingWindow();
-            qrWindow.Activate();
+            try
+            {
+                var qrWindow = new QRPairingWindow();
+                qrWindow.Activate();
+            }
+            catch { }
         }
 
         private void BtnOpenDashboard_Click(object sender, RoutedEventArgs e)
         {
-            var dashboard = new DashboardWindow();
-            dashboard.Activate();
+            try
+            {
+                var dashboard = new DashboardWindow();
+                dashboard.Activate();
+            }
+            catch { }
         }
     }
 }

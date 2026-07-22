@@ -25,49 +25,58 @@ namespace Deskdrop.WinUI.Services
             }
         }
 
-        private FileSystemWatcher SetupWatcher(string path)
+        private FileSystemWatcher? SetupWatcher(string path)
         {
-            var watcher = new FileSystemWatcher(path)
+            try
             {
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
-                Filter = "*.*",
-                EnableRaisingEvents = true
-            };
-            watcher.Created += OnFileCreated;
-            return watcher;
+                if (!Directory.Exists(path)) return null;
+                var watcher = new FileSystemWatcher(path)
+                {
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
+                    Filter = "*.*",
+                    EnableRaisingEvents = true
+                };
+                watcher.Created += OnFileCreated;
+                return watcher;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private void OnFileCreated(object sender, FileSystemEventArgs e)
         {
-            string ext = Path.GetExtension(e.FullPath).ToLower();
-            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
+            try
             {
-                bool isScreenshotFolder = e.FullPath.Contains("Screenshots", StringComparison.OrdinalIgnoreCase);
-                string name = Path.GetFileNameWithoutExtension(e.FullPath).ToLower();
-                
-                // If it's in the screenshots folder, we assume any new image is a screenshot.
-                // If it's on the desktop, we enforce that the filename must contain "screenshot".
-                if (isScreenshotFolder || name.Contains("screenshot") || name.Contains("screen shot"))
+                if (string.IsNullOrEmpty(e.FullPath)) return;
+                string ext = Path.GetExtension(e.FullPath)?.ToLowerInvariant() ?? "";
+                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                 {
-                    // Delay slightly to ensure the screenshot is completely written to disk by the OS
-                    Task.Delay(1000).ContinueWith(_ =>
+                    bool isScreenshotFolder = e.FullPath.Contains("Screenshots", StringComparison.OrdinalIgnoreCase);
+                    string name = Path.GetFileNameWithoutExtension(e.FullPath)?.ToLowerInvariant() ?? "";
+                    
+                    if (isScreenshotFolder || name.Contains("screenshot") || name.Contains("screen shot"))
                     {
-                        try
+                        Task.Delay(1000).ContinueWith(_ =>
                         {
-                            if (File.Exists(e.FullPath))
+                            try
                             {
-                                // Sync the screenshot to the connected phone
-                                _clipboardManager.PushFile(e.FullPath);
-                                
-                                App.MainWindow?.DispatcherQueue?.TryEnqueue(() => {
-                                    NotificationHelper.ShowToast("Screenshot Synced", "Sent screenshot to your device.");
-                                });
+                                if (File.Exists(e.FullPath))
+                                {
+                                    _clipboardManager.PushFile(e.FullPath);
+                                    
+                                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() => {
+                                        NotificationHelper.ShowToast("Screenshot Synced", "Sent screenshot to your device.");
+                                    });
+                                }
                             }
-                        }
-                        catch { } 
-                    });
+                            catch { } 
+                        });
+                    }
                 }
             }
+            catch { }
         }
 
         public void Dispose()

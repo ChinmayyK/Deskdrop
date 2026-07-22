@@ -43,72 +43,82 @@ namespace Deskdrop.WinUI.Services
 
         private void OnTick(object? sender, object e)
         {
-            // VK_LBUTTON is 0x01
-            bool isLeftButtonDown = (GetAsyncKeyState(0x01) & 0x8000) != 0;
-
-            if (isLeftButtonDown && _wasLeftButtonDown)
+            try
             {
-                // User is dragging. Are they at the edge?
-                if (GetCursorPos(out POINT p))
+                // VK_LBUTTON is 0x01
+                bool isLeftButtonDown = (GetAsyncKeyState(0x01) & 0x8000) != 0;
+
+                if (isLeftButtonDown && _wasLeftButtonDown)
                 {
-                    double screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                    
-                    // If they are on the right edge
-                    if (p.X >= screenWidth - _edgeThreshold)
+                    // User is dragging. Are they at the edge?
+                    if (GetCursorPos(out POINT p))
                     {
-                        if (_dropZoneWindow == null) // WinUI 3 Window doesn't have IsLoaded
+                        double screenWidth = GetSystemMetrics(SM_CXSCREEN);
+                        
+                        // If they are on the right edge
+                        if (p.X >= screenWidth - _edgeThreshold)
                         {
-                            ShowDropZone();
+                            if (_dropZoneWindow == null) // WinUI 3 Window doesn't have IsLoaded
+                            {
+                                ShowDropZone();
+                            }
+                        }
+                        else if (p.X < screenWidth - 300 - _edgeThreshold) // Hardcoding width since WinUI 3 Window.Bounds is tricky
+                        {
+                            // Move away from edge
                         }
                     }
-                    else if (p.X < screenWidth - 300 - _edgeThreshold) // Hardcoding width since WinUI 3 Window.Bounds is tricky
-                    {
-                        // If they move away from the window, we shouldn't hide it immediately because they might be trying to drop ON the window.
-                        // We will rely on MouseLeave event of DropZoneWindow or letting the Drop handler close it.
-                    }
                 }
-            }
-            else if (!isLeftButtonDown && _wasLeftButtonDown)
-            {
-                // User released the drag. Delay close slightly to allow drop event to process
-                System.Threading.Tasks.Task.Delay(500).ContinueWith(_ =>
+                else if (!isLeftButtonDown && _wasLeftButtonDown)
                 {
-                    App.MainWindow?.DispatcherQueue?.TryEnqueue(HideDropZone);
-                });
-            }
+                    // User released the drag. Delay close slightly to allow drop event to process
+                    System.Threading.Tasks.Task.Delay(500).ContinueWith(_ =>
+                    {
+                        App.MainWindow?.DispatcherQueue?.TryEnqueue(HideDropZone);
+                    });
+                }
 
-            _wasLeftButtonDown = isLeftButtonDown;
+                _wasLeftButtonDown = isLeftButtonDown;
+            }
+            catch { }
         }
 
         private void ShowDropZone()
         {
-            if (_dropZoneWindow != null) return;
-            
-            _dropZoneWindow = new UI.EdgeDropWindow();
-            
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_dropZoneWindow);
-            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
-            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-            
-            int screenW = GetSystemMetrics(SM_CXSCREEN);
-            int screenH = GetSystemMetrics(SM_CYSCREEN);
-            
-            // Approximate width/height of the EdgeDropWindow
-            int w = 350;
-            int h = screenH;
-            
-            appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - w, 0, w, h));
-            
-            _dropZoneWindow.Activate();
+            try
+            {
+                if (_dropZoneWindow != null) return;
+                
+                _dropZoneWindow = new UI.EdgeDropWindow();
+                
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_dropZoneWindow);
+                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+                
+                int screenW = GetSystemMetrics(SM_CXSCREEN);
+                int screenH = GetSystemMetrics(SM_CYSCREEN);
+                
+                int w = 350;
+                int h = screenH;
+                
+                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - w, 0, w, h));
+                
+                _dropZoneWindow.Activate();
+            }
+            catch { }
         }
 
         private void HideDropZone()
         {
-            if (_dropZoneWindow != null)
+            try
             {
-                _dropZoneWindow.Close();
-                _dropZoneWindow = null;
+                if (_dropZoneWindow != null)
+                {
+                    _dropZoneWindow.Close();
+                    _dropZoneWindow = null;
+                }
             }
+            catch { }
         }
 
         public void Dispose()
