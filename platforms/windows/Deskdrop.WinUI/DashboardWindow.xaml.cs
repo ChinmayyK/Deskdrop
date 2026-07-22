@@ -30,6 +30,20 @@ namespace Deskdrop.WinUI
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
 
+            appWindow.Closing += (s, e) =>
+            {
+                if (!App.IsShuttingDown)
+                {
+                    e.Cancel = true;
+                    appWindow.Hide();
+                }
+            };
+
+            this.Closed += (s, e) =>
+            {
+                if (Current == this) Current = null;
+            };
+
             // Default to exact 3-panel Devices/Launchpad view matching macOS
             NavView.Loaded += (s, e) =>
             {

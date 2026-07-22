@@ -39,20 +39,27 @@ namespace Deskdrop.WinUI
             TimelineList.ItemsSource = DeskdropStore.Shared.History;
             if (DeviceTargetsList != null) DeviceTargetsList.ItemsSource = DeskdropStore.Shared.Peers;
             DeskdropStore.Shared.PropertyChanged += OnStoreChanged;
+            this.Closed += (s, e) => {
+                DeskdropStore.Shared.PropertyChanged -= OnStoreChanged;
+            };
         }
 
         private void OnStoreChanged(object sender, PropertyChangedEventArgs e)
         {
-            DispatcherQueue.TryEnqueue(() => {
-                if (e.PropertyName == nameof(DeskdropStore.History))
+            DispatcherQueue?.TryEnqueue(() => {
+                try
                 {
-                    if (string.IsNullOrWhiteSpace(TxtSearch.Text))
-                        TimelineList.ItemsSource = DeskdropStore.Shared.History;
+                    if (e.PropertyName == nameof(DeskdropStore.History))
+                    {
+                        if (string.IsNullOrWhiteSpace(TxtSearch?.Text))
+                            TimelineList.ItemsSource = DeskdropStore.Shared.History;
+                    }
+                    else if (e.PropertyName == nameof(DeskdropStore.Peers) && DeviceTargetsList != null)
+                    {
+                        DeviceTargetsList.ItemsSource = DeskdropStore.Shared.Peers;
+                    }
                 }
-                else if (e.PropertyName == nameof(DeskdropStore.Peers) && DeviceTargetsList != null)
-                {
-                    DeviceTargetsList.ItemsSource = DeskdropStore.Shared.Peers;
-                }
+                catch { }
             });
         }
 
@@ -64,7 +71,15 @@ namespace Deskdrop.WinUI
 
         private void BtnHeaderQuit_Click(object sender, RoutedEventArgs e)
         {
-            Application.Current.Exit();
+            if (Application.Current is App app)
+            {
+                app.ExitApplicationCommand.Execute(null);
+            }
+            else
+            {
+                Application.Current.Exit();
+                Environment.Exit(0);
+            }
         }
 
         private void TxtSearch_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)

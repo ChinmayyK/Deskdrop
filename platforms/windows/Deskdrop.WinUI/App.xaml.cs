@@ -22,6 +22,8 @@ public partial class App : Application
     
     // Tray Icon Properties
     public H.NotifyIcon.TaskbarIcon? TrayIcon { get; private set; }
+    public static Microsoft.UI.Dispatching.DispatcherQueue? MainDispatcherQueue { get; private set; }
+    public static bool IsShuttingDown { get; private set; } = false;
     
     // Commands
     public System.Windows.Input.ICommand ShowMainWindowCommand { get; }
@@ -34,6 +36,7 @@ public partial class App : Application
 
     public App()
     {
+        MainDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
         
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App constructor started\n");
@@ -44,22 +47,60 @@ public partial class App : Application
         
         ShowMainWindowCommand = new RelayCommand(() =>
         {
-            if (MainWindow == null)
+            var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            queue?.TryEnqueue(() =>
             {
-                MainWindow = new DashboardWindow();
-            }
-            MainWindow.Activate();
+                try
+                {
+                    if (MainWindow == null || DashboardWindow.Current == null)
+                    {
+                        MainWindow = new DashboardWindow();
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
+                            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+                            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+                            appWindow.Show();
+                        }
+                        catch
+                        {
+                            MainWindow = new DashboardWindow();
+                        }
+                    }
+                    _window = MainWindow;
+                    MainWindow.Activate();
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        MainWindow = new DashboardWindow();
+                        _window = MainWindow;
+                        MainWindow.Activate();
+                    }
+                    catch { }
+                }
+            });
         });
         
         ExitApplicationCommand = new RelayCommand(() =>
         {
-            TrayIcon?.Dispose();
-            if (_engineHandle != IntPtr.Zero)
+            IsShuttingDown = true;
+            var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            queue?.TryEnqueue(() =>
             {
-                try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch { }
-            }
-            try { GlobalHotKeyManager.Shared.Dispose(); } catch { }
-            Application.Current.Exit();
+                try { TrayIcon?.Dispose(); } catch { }
+                if (_engineHandle != IntPtr.Zero)
+                {
+                    try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch { }
+                }
+                try { GlobalHotKeyManager.Shared.Dispose(); } catch { }
+                try { Application.Current.Exit(); } catch { }
+                Environment.Exit(0);
+            });
         });
     }
 
@@ -82,12 +123,15 @@ public partial class App : Application
 
             Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
 
+            MainDispatcherQueue ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
             // Initialize the Tray Icon entirely in C# to avoid x:Bind issues in App.xaml
             TrayIcon = new H.NotifyIcon.TaskbarIcon
             {
                 ToolTipText = "Deskdrop",
                 IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
-                LeftClickCommand = ShowMainWindowCommand
+                LeftClickCommand = ShowMainWindowCommand,
+                DoubleClickCommand = ShowMainWindowCommand
             };
 
             var menu = new MenuFlyout();
