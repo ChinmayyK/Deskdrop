@@ -28,7 +28,7 @@ namespace Deskdrop.WinUI
         public static bool ContainsFileDropList() { return false; }
         public static StringCollection GetFileDropList() { return new StringCollection(); }
         public static bool ContainsImage() { return false; }
-        public static object GetImage() { return null; }
+        public static object? GetImage() { return null; }
     }
 
     public static class Dispatcher

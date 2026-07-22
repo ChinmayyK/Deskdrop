@@ -516,6 +516,7 @@ dependencies = [
  "deskdrop-core",
  "dirs",
  "image 0.25.10",
+ "libc",
  "tokio",
  "tracing",
  "tracing-subscriber",

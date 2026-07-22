@@ -1066,6 +1066,33 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(PendingClipboardCount));
             OnPropertyChanged(nameof(HasPendingClipboards));
         }
+
+        public async void PickAndSendFiles(string targetDeviceId)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+                picker.FileTypeFilter.Add("*");
+
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                if (hwnd != IntPtr.Zero)
+                {
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                }
+
+                var files = await picker.PickMultipleFilesAsync();
+                if (files != null && files.Count > 0)
+                {
+                    foreach (var f in files)
+                    {
+                        System.Threading.Tasks.Task.Run(() => DaemonClient.PushFile(targetDeviceId, f.Path));
+                    }
+                }
+            }
+            catch { }
+        }
     }
 
     public class RatioToStarConverter : Microsoft.UI.Xaml.Data.IValueConverter

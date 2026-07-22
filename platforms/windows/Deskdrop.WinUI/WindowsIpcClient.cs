@@ -43,6 +43,12 @@ namespace Deskdrop.WinUI
             return Send(new { cmd = "send_file_path", path = path, name = name, mime = mime, target_device = targetDevice });
         }
 
+        public static JsonDocument? PushFile(string targetDevice, string path)
+        {
+            var fileName = System.IO.Path.GetFileName(path);
+            return SendFilePath(path, fileName, "application/octet-stream", string.IsNullOrEmpty(targetDevice) ? null : targetDevice);
+        }
+
         // ── Security ────────────────────────────────────────────────────────────
 
         /// <summary>

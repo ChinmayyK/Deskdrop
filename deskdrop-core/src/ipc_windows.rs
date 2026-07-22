@@ -26,7 +26,7 @@ const MAX_INSTANCES: usize = 8;
 
 fn get_pipe_name() -> String {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "default".to_string());
-    let sanitized = local_app_data.replace('\\', "_").replace(':', "_");
+    let sanitized = local_app_data.replace(['\\', ':'], "_");
     format!(r"\\.\pipe\deskdrop_{}", sanitized)
 }
 

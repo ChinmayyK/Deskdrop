@@ -27,7 +27,7 @@ namespace Deskdrop.WinUI.Views
             if (PathBox != null) PathBox.Text = _currentPath;
 
             var peer = mgr.SelectedPeer;
-            if (peer == null || string.IsNullOrEmpty(peer.peer_id)) return;
+            if (peer == null || string.IsNullOrEmpty(peer.device_id)) return;
 
             try
             {
@@ -38,7 +38,7 @@ namespace Deskdrop.WinUI.Views
                 else if (_currentPath.StartsWith("/source/", StringComparison.OrdinalIgnoreCase))
                     source = _currentPath.Substring("/source/".Length);
 
-                var doc = await DaemonClient.RemoteFilesQueryAsync(peer.peer_id, summaryOnly: false, category: category, source: source);
+                var doc = await DaemonClient.RemoteFilesQueryAsync(peer.device_id, summaryOnly: false, category: category, source: source);
                 if (doc != null && doc.RootElement.ValueKind != JsonValueKind.Null)
                 {
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -72,7 +72,7 @@ namespace Deskdrop.WinUI.Views
         {
             if (_currentPath == "/" || string.IsNullOrEmpty(_currentPath))
             {
-                DashboardWindow.Current?.NavigateTo(typeof(DevicesView));
+                DashboardWindow.Current?.NavigateTo("Devices");
                 return;
             }
 
@@ -109,7 +109,7 @@ namespace Deskdrop.WinUI.Views
             var peer = mgr.SelectedPeer;
             if (peer != null)
             {
-                mgr.PickAndSendFiles(peer.peer_id);
+                mgr.PickAndSendFiles(peer.device_id);
             }
         }
 
@@ -139,9 +139,9 @@ namespace Deskdrop.WinUI.Views
                 if (peer != null)
                 {
                     if (item.file_id > 0)
-                        DaemonClient.RemoteFilePullRequest(peer.peer_id, item.file_id);
+                        DaemonClient.RemoteFilePullRequest(peer.device_id, item.file_id);
                     else if (ulong.TryParse(item.id, out var fid))
-                        DaemonClient.RemoteFilePullRequest(peer.peer_id, fid);
+                        DaemonClient.RemoteFilePullRequest(peer.device_id, fid);
                 }
             }
         }
