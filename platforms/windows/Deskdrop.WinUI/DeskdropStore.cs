@@ -423,26 +423,70 @@ namespace Deskdrop.WinUI
     }
     public class RemoteFile : BaseViewModel
     {
+        [JsonPropertyName("file_id")]
+        public ulong file_id { get; set; }
+        
+        [JsonPropertyName("id")]
         public string id { get; set; } = "";
+        
+        [JsonPropertyName("name")]
         public string name { get; set; } = "";
+        
+        [JsonPropertyName("display_name")]
         public string display_name { get; set; } = "";
+        
+        [JsonPropertyName("is_dir")]
         public bool is_dir { get; set; }
+        
+        [JsonPropertyName("size_bytes")]
+        public long size_bytes { get; set; }
+        
+        [JsonPropertyName("size")]
         public long size { get; set; }
+        
+        [JsonPropertyName("date_modified")]
+        public ulong date_modified { get; set; }
+        
+        [JsonPropertyName("modified_ms")]
         public ulong modified_ms { get; set; }
+
+        [JsonPropertyName("mime_type")]
+        public string mime_type { get; set; } = "";
+
+        [JsonPropertyName("category")]
+        public string category { get; set; } = "";
+
+        [JsonPropertyName("source")]
+        public string source { get; set; } = "";
+
+        [JsonPropertyName("content_uri")]
+        public string content_uri { get; set; } = "";
         
         private bool _isSelected;
         public bool IsSelected { get => _isSelected; set => SetProperty(ref _isSelected, value); }
         
-        public string FormattedSize => is_dir ? "--" : DeskdropFormatting.FormatBytes(size);
-        public string FormattedDate => modified_ms == 0 ? "--" : DateTimeOffset.FromUnixTimeMilliseconds((long)modified_ms).ToLocalTime().ToString("MMM dd, yyyy HH:mm");
+        public long EffectiveSize => size_bytes > 0 ? size_bytes : size;
+        public ulong EffectiveDate => date_modified > 0 ? (date_modified > 100000000000 ? date_modified : date_modified * 1000) : modified_ms;
+        
+        public string FormattedSize => is_dir ? "--" : DeskdropFormatting.FormatBytes(EffectiveSize);
+        public string FormattedDate => EffectiveDate == 0 ? "--" : DateTimeOffset.FromUnixTimeMilliseconds((long)EffectiveDate).ToLocalTime().ToString("MMM dd, yyyy HH:mm");
         public string IconKind => is_dir ? "Folder" : "File";
         public string IconColor => is_dir ? "#0055CC" : "#555555";
     }
 
     public class RemoteFileListResponse
     {
+        [JsonPropertyName("path")]
         public string path { get; set; } = "";
+        
+        [JsonPropertyName("files")]
         public List<RemoteFile> files { get; set; } = new();
+        
+        [JsonPropertyName("total_matching")]
+        public uint total_matching { get; set; }
+        
+        [JsonPropertyName("error")]
+        public string? error { get; set; }
     }
 
 
@@ -646,7 +690,7 @@ namespace Deskdrop.WinUI
 
         public void DisconnectPeer(string deviceId)
         {
-            DaemonClient.RevokeTrustedDevice(deviceId);
+            DaemonClient.DisconnectPeer(deviceId);
         }
 
         public void ForgetPeer(string deviceId)

@@ -198,7 +198,15 @@ namespace Deskdrop.WinUI
         public static JsonDocument? StartSpeedTest(string deviceId, int durationSecs = 10) => Send(new { cmd = "start_speed_test", device_id = deviceId, duration_secs = durationSecs });
 
         // ── Device Management ─────────────────────────────────────────────────
-        public static JsonDocument? DisconnectAllPeers() => Send(new { cmd = "disconnect_all_peers" });
+        public static JsonDocument? DisconnectPeer(string deviceId) => Send(new { cmd = "disconnect_peer", device_id = deviceId });
+        public static JsonDocument? DisconnectAllPeers()
+        {
+            foreach (var p in DeskdropStore.Shared.Peers)
+            {
+                DisconnectPeer(p.device_id);
+            }
+            return null;
+        }
         public static JsonDocument? RescanPeers() => Send(new { cmd = "rescan_peers" });
         public static JsonDocument? RenameTrustedDevice(string deviceId, string displayName) => Send(new { cmd = "rename_trusted_device", device_id = deviceId, display_name = displayName });
         public static JsonDocument? PauseSyncPeer(string deviceId) => Send(new { cmd = "pause_sync_peer", device_id = deviceId });
@@ -214,11 +222,37 @@ namespace Deskdrop.WinUI
         public static JsonDocument? GetMetrics() => Send(new { cmd = "get_metrics" });
 
         // ── Remote File Explorer ──────────────────────────────────────────────
-        public static async Task<JsonDocument?> RemoteFileListRequestAsync(string deviceId, string path) =>
-            await SendAsync(new { cmd = "remote_file_list_request", target_device = deviceId, path = path });
+        public static async Task<JsonDocument?> RemoteFilesQueryAsync(string deviceId, bool summaryOnly = false, string? category = null, string? source = null, string? searchQuery = null, uint offset = 0, uint limit = 100)
+        {
+            var req = new System.Collections.Generic.Dictionary<string, object>
+            {
+                ["cmd"] = "remote_files_query",
+                ["target_device"] = deviceId,
+                ["summary_only"] = summaryOnly,
+                ["offset"] = offset,
+                ["limit"] = limit
+            };
+            if (!string.IsNullOrEmpty(category)) req["category"] = category;
+            if (!string.IsNullOrEmpty(source)) req["source"] = source;
+            if (!string.IsNullOrEmpty(searchQuery)) req["search_query"] = searchQuery;
+            return await SendAsync(req);
+        }
             
-        public static JsonDocument? RemoteFileActionRequest(string deviceId, string action, string path) =>
-            Send(new { cmd = "remote_file_action_request", target_device = deviceId, action = action, path = path });
+        public static JsonDocument? RemoteFilePullRequest(string deviceId, ulong fileId) =>
+            Send(new { cmd = "remote_file_pull_request", target_device = deviceId, file_id = fileId });
+
+        public static JsonDocument? RemoteFileActionRequest(string deviceId, ulong fileId, string action, string? newName = null)
+        {
+            var req = new System.Collections.Generic.Dictionary<string, object>
+            {
+                ["cmd"] = "remote_file_action_request",
+                ["target_device"] = deviceId,
+                ["file_id"] = fileId,
+                ["action"] = action
+            };
+            if (!string.IsNullOrEmpty(newName)) req["new_name"] = newName;
+            return Send(req);
+        }
 
         public static JsonDocument? Shutdown() => Send(new { cmd = "shutdown" });
         

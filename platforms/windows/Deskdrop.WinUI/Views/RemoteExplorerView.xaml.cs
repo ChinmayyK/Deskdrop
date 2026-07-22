@@ -31,7 +31,14 @@ namespace Deskdrop.WinUI.Views
 
             try
             {
-                var doc = await DaemonClient.RemoteFileListRequestAsync(peer.peer_id, _currentPath);
+                string? category = null;
+                string? source = null;
+                if (_currentPath.StartsWith("/category/", StringComparison.OrdinalIgnoreCase))
+                    category = _currentPath.Substring("/category/".Length);
+                else if (_currentPath.StartsWith("/source/", StringComparison.OrdinalIgnoreCase))
+                    source = _currentPath.Substring("/source/".Length);
+
+                var doc = await DaemonClient.RemoteFilesQueryAsync(peer.peer_id, summaryOnly: false, category: category, source: source);
                 if (doc != null && doc.RootElement.ValueKind != JsonValueKind.Null)
                 {
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -39,6 +46,10 @@ namespace Deskdrop.WinUI.Views
                     if (doc.RootElement.TryGetProperty("files", out _))
                     {
                         resp = JsonSerializer.Deserialize<RemoteFileListResponse>(doc.RootElement.GetRawText(), options);
+                    }
+                    else if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("files", out _))
+                    {
+                        resp = JsonSerializer.Deserialize<RemoteFileListResponse>(dataEl.GetRawText(), options);
                     }
                     
                     RemoteFiles.Clear();
@@ -124,11 +135,13 @@ namespace Deskdrop.WinUI.Views
         {
             if ((sender as FrameworkElement)?.DataContext is RemoteFile item)
             {
-                var fullPath = _currentPath.TrimEnd('/') + "/" + item.name;
                 var peer = mgr.SelectedPeer;
                 if (peer != null)
                 {
-                    DaemonClient.RemoteFileActionRequest(peer.peer_id, "download", fullPath);
+                    if (item.file_id > 0)
+                        DaemonClient.RemoteFilePullRequest(peer.peer_id, item.file_id);
+                    else if (ulong.TryParse(item.id, out var fid))
+                        DaemonClient.RemoteFilePullRequest(peer.peer_id, fid);
                 }
             }
         }
