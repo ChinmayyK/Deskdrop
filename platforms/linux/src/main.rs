@@ -186,7 +186,6 @@ fn main() {
         }
 
         tracing::info!("Cleaning up resources...");
-        let _ = engine_ev.stop().await;
         let _ = std::fs::remove_file(deskdrop_core::ipc::socket_path());
     });
 }

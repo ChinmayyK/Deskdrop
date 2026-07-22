@@ -54,6 +54,8 @@ platforms/android/local.properties
 *.key
 *.p12
 *.pfx
+*.keystore
+*.jks
 trust.json
 settings.json
 

@@ -6,7 +6,7 @@ namespace Deskdrop.WinUI
 {
     public sealed partial class DashboardWindow : Window
     {
-        public static DashboardWindow? Current { get; private set; }
+        public static new DashboardWindow? Current { get; private set; }
 
         public DashboardWindow()
         {
