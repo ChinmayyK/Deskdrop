@@ -17,6 +17,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Deskdrop</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,11 +38,17 @@
 
   <ItemGroup>
     <!-- Native Rust DLL built by cargo build (release) or pre-built -->
-    <None Include="..\..\..\target\release\deskdrop_core.dll" Condition="Exists('..\..\..\target\release\deskdrop_core.dll')">
+    <None Include="deskdrop_core.dll" Condition="Exists('deskdrop_core.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>deskdrop_core.dll</Link>
     </None>
-    <None Include="..\..\..\release\windows\deskdrop_core.dll" Condition="Exists('..\..\..\release\windows\deskdrop_core.dll')">
+    <None Include="..\..\..\target\release\deskdrop_core.dll" Condition="!Exists('deskdrop_core.dll') and Exists('..\..\..\target\release\deskdrop_core.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>deskdrop_core.dll</Link>
+    </None>
+    <None Include="..\..\..\release\windows\deskdrop_core.dll" Condition="!Exists('deskdrop_core.dll') and !Exists('..\..\..\target\release\deskdrop_core.dll') and Exists('..\..\..\release\windows\deskdrop_core.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>deskdrop_core.dll</Link>
     </None>
   </ItemGroup>
 
