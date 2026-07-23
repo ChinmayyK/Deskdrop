@@ -459,6 +459,18 @@ struct SidebarRowView: View {
                     .frame(width: rect.width, height: rect.height)
                     .position(x: rect.midX, y: rect.midY)
             }
+            
+            // Floating Batch Action Bar
+            if !selectedFiles.isEmpty {
+                VStack {
+                    Spacer()
+                    batchActionBar
+                        .padding(.bottom, 32)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.95)))
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedFiles.isEmpty)
+                .zIndex(100)
+            }
         }
         .coordinateSpace(name: "CanvasSpace")
         .contentShape(Rectangle()) // Make empty areas draggable
@@ -624,12 +636,23 @@ struct SidebarRowView: View {
                                 }
                                 
                                 // Multi-select Checkbox
-                                if !selectedFiles.isEmpty {
-                                    Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : Color.white.opacity(0.8))
-                                        .background(Circle().fill(Color.black.opacity(0.3)).frame(width: 18, height: 18))
-                                        .padding(8)
+                                if !selectedFiles.isEmpty || hoveredFileId == file.file_id {
+                                    Button {
+                                        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                            if selectedFiles.contains(file.file_id) {
+                                                selectedFiles.remove(file.file_id)
+                                            } else {
+                                                selectedFiles.insert(file.file_id)
+                                            }
+                                        }
+                                    } label: {
+                                        Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : Color.white.opacity(0.8))
+                                            .background(Circle().fill(Color.black.opacity(0.3)).frame(width: 18, height: 18))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(8)
                                 }
                             }
                         }
@@ -746,10 +769,22 @@ struct SidebarRowView: View {
             handleFileSelection(file)
         } label: {
             HStack(spacing: 16) {
-                if !selectedFiles.isEmpty {
-                    Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : CRTheme.inkSubtle)
+                if !selectedFiles.isEmpty || hoveredFileId == file.file_id {
+                    Button {
+                        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                            if selectedFiles.contains(file.file_id) {
+                                selectedFiles.remove(file.file_id)
+                            } else {
+                                selectedFiles.insert(file.file_id)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : CRTheme.inkSubtle)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
                 
                 Image(systemName: iconForMime(file.mime_type, cat: file.category))
@@ -778,6 +813,10 @@ struct SidebarRowView: View {
             .background(isSelected(file) ? CRTheme.brandElectric.opacity(0.12) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .onHover { isHovered in
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    if isHovered { hoveredFileId = file.file_id }
+                    else if hoveredFileId == file.file_id { hoveredFileId = nil }
+                }
                 if isHovered && !isSelected(file) {
                     NSCursor.pointingHand.push()
                 } else {
@@ -1102,7 +1141,7 @@ struct SidebarRowView: View {
         let isCmd = NSEvent.modifierFlags.contains(.command)
         let isShift = NSEvent.modifierFlags.contains(.shift)
         
-        if isCmd || isShift {
+        if isCmd || isShift || !selectedFiles.isEmpty {
             // First time migrating from single select to multi-select
             if selectedFiles.isEmpty, let single = selectedFile {
                 selectedFiles.insert(single.file_id)
@@ -1397,6 +1436,58 @@ struct SidebarRowView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Batch Action Bar
+    private var batchActionBar: some View {
+        HStack(spacing: 16) {
+            Text("\(selectedFiles.count) selected")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(CRTheme.ink)
+            
+            Divider()
+                .frame(height: 20)
+                .background(CRTheme.stroke)
+            
+            Button {
+                let selected = result?.files.filter { selectedFiles.contains($0.file_id) } ?? []
+                for file in selected { pullFile(file) }
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle.fill")
+                    .font(.system(size: 13, weight: .bold))
+            }
+            .buttonStyle(PBPrimaryButtonStyle(tint: CRTheme.brandElectric))
+            
+            Button {
+                isDeletingBatch = true
+            } label: {
+                Label("Delete", systemImage: "trash.fill")
+                    .font(.system(size: 13, weight: .bold))
+            }
+            .buttonStyle(PBPrimaryButtonStyle(tint: CRTheme.accentRed))
+            
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    selectedFiles.removeAll()
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(CRTheme.inkSubtle)
+                    .padding(4)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .background(CRTheme.surface.opacity(0.85))
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(CRTheme.stroke.opacity(0.8), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.12), radius: 24, x: 0, y: 12)
     }
 }
 
