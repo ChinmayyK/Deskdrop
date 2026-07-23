@@ -440,7 +440,9 @@ struct SidebarRowView: View {
             if let rect = dragRect {
                 Rectangle()
                     .fill(CRTheme.brandElectric.opacity(0.15))
-                    .strokeBorder(CRTheme.brandElectric.opacity(0.6), lineWidth: 1)
+                    .overlay(
+                        Rectangle().stroke(CRTheme.brandElectric.opacity(0.6), lineWidth: 1)
+                    )
                     .frame(width: rect.width, height: rect.height)
                     .position(x: rect.midX, y: rect.midY)
             }
