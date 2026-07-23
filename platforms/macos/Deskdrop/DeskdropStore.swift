@@ -57,6 +57,9 @@ final class DeskdropStore: ObservableObject {
     @Published var peerBatteries: [DeviceBatteryState] = []
     @Published var peerNetworks: [DeviceNetworkState] = []
     @Published var peerStorages: [DeviceStorageState] = []
+    
+    // Cache for Remote File Explorer to prevent re-fetching on navigation
+    @Published var remoteFilesCache: [String: IpcRemoteFilesResult] = [:]
 
     private var lastActivityId: Int64 = 0
     private var lastMirroredAutoAppliedEntryId: Int64 = 0

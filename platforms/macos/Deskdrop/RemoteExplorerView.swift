@@ -252,6 +252,19 @@ struct RemoteExplorerView: View {
                 }
                 // View Mode Segmented Control
                 HStack(spacing: 2) {
+                    Button {
+                        loadFiles(forceRefresh: true)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(CRTheme.ink)
+                            .frame(width: 32, height: 28)
+                            .background(CRTheme.surfaceStrong)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 8)
+                    
                     ForEach(ExplorerViewMode.allCases, id: \.self) { mode in
                         Button {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
@@ -1166,14 +1179,25 @@ struct SidebarRowView: View {
         return order.map { key in FileDateGroup(id: key, title: key, files: dict[key] ?? []) }
     }
     
-    private func loadFiles() {
-        isLoading = true
-        errorMessage = nil
+    private func loadFiles(forceRefresh: Bool = false) {
         let target = device.id
         let cat = selectedCategory
         let src = selectedSource
         let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespaces)
         let query = trimmedQuery.isEmpty ? nil : trimmedQuery
+        
+        let cacheKey = "\(target)_\(cat ?? "all")_\(src ?? "all")_\(query ?? "")"
+        
+        if !forceRefresh, let cached = store.remoteFilesCache[cacheKey] {
+            self.result = cached
+            if self.selectedFile == nil || !cached.files.contains(where: { $0.file_id == self.selectedFile?.file_id }) {
+                self.selectedFile = cached.files.first
+            }
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
         
         Task {
             do {
@@ -1183,6 +1207,7 @@ struct SidebarRowView: View {
                 )
                 _ = await MainActor.run {
                     self.result = res
+                    self.store.remoteFilesCache[cacheKey] = res
                     self.isLoading = false
                     if let err = res.error, !err.isEmpty { self.errorMessage = err }
                     if self.selectedFile == nil || !res.files.contains(where: { $0.file_id == self.selectedFile?.file_id }) {
