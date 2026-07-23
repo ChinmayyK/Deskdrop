@@ -65,6 +65,8 @@ enum class BackgroundSyncMode {
 
 
 class DeskdropService : Service() {
+    private val backgroundExecutor = java.util.concurrent.Executors.newCachedThreadPool()
+
 
     companion object {
         private const val TAG = "Deskdrop"
@@ -320,11 +322,11 @@ class DeskdropService : Service() {
                     handler.post {
                         val h = engineHandle
                         if (h != 0L) {
-                            Thread { DeskdropJni.notifySleepState(h, false) }.start()
+                            backgroundExecutor.execute { DeskdropJni.notifySleepState(h, false) }
                         }
                         restartDiscoveryNow()
                         if (h != 0L) {
-                            Thread { DeskdropJni.notifyNetworkRestored(h) }.start()
+                            backgroundExecutor.execute { DeskdropJni.notifyNetworkRestored(h) }
                         }
                     }
                 }
@@ -332,7 +334,7 @@ class DeskdropService : Service() {
                     Log.i(TAG, "Screen OFF: Notifying Rust engine to relax heartbeats")
                     val h = engineHandle
                     if (h != 0L) {
-                        Thread { DeskdropJni.notifySleepState(h, true) }.start()
+                        backgroundExecutor.execute { DeskdropJni.notifySleepState(h, true) }
                     }
                 }
                 android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> {
@@ -342,7 +344,7 @@ class DeskdropService : Service() {
                             restartDiscoveryNow()
                             val h = engineHandle
                             if (h != 0L) {
-                                Thread { DeskdropJni.notifyNetworkRestored(h) }.start()
+                                backgroundExecutor.execute { DeskdropJni.notifyNetworkRestored(h) }
                             }
                         }
                     }
@@ -725,9 +727,9 @@ class DeskdropService : Service() {
                     } else if (targetDeviceId != null && !isPeerConnected(targetDeviceId)) {
                         Log.w(TAG, "PUSH_SHARED_URI ignored: target peer is no longer connected")
                     } else {
-                        Thread {
+                        backgroundExecutor.execute {
                             sendSharedUris(uriStrings, preferredName, targetDeviceId)
-                        }.start()
+                        }
                     }
                 }
             }
@@ -1412,14 +1414,14 @@ class DeskdropService : Service() {
                 val offset = DeskdropJni.eventOffset(ev)
                 val limit = DeskdropJni.eventLimit(ev)
 
-                Thread {
+                backgroundExecutor.execute {
                     if (!hasFilePermissions()) {
                         Log.w(TAG, "Storage permission missing for RemoteFilesQuery")
                         showPermissionRequiredNotification()
                         DeskdropJni.sendRemoteFilesResponse(
                             engineHandle, requestId, targetDeviceId, null, null, 0, "Permission Denied: Please grant storage permission on your Android device to browse files."
                         )
-                        return@Thread
+                        return@execute
                     }
 
                     try {
@@ -1447,7 +1449,7 @@ class DeskdropService : Service() {
                             engineHandle, requestId, targetDeviceId, null, null, 0, e.message ?: "Query error"
                         )
                     }
-                }.start()
+                }
             }
 
             DeskdropJni.CR_EVENT_REMOTE_THUMBNAIL_REQUEST -> {
@@ -1456,12 +1458,12 @@ class DeskdropService : Service() {
                 val fileId = DeskdropJni.eventFileId(ev)
                 val sizePx = DeskdropJni.eventThumbnailSizePx(ev).let { if (it <= 0) 256 else it }
 
-                Thread {
+                backgroundExecutor.execute {
                     if (!hasFilePermissions()) {
                         DeskdropJni.sendRemoteThumbnailResponse(
                             engineHandle, requestId, targetDeviceId, fileId, null, "Permission Denied"
                         )
-                        return@Thread
+                        return@execute
                     }
                     try {
                         val thumbnailBytes = RemoteFileManager.getThumbnail(applicationContext, fileId, sizePx)
@@ -1480,7 +1482,7 @@ class DeskdropService : Service() {
                             engineHandle, requestId, targetDeviceId, fileId, null, e.message ?: "Thumbnail error"
                         )
                     }
-                }.start()
+                }
             }
 
             DeskdropJni.CR_EVENT_REMOTE_FILE_PULL_REQUEST -> {
@@ -1488,11 +1490,11 @@ class DeskdropService : Service() {
                 val targetDeviceId = DeskdropJni.eventDeviceId(ev) ?: return
                 val fileId = DeskdropJni.eventFileId(ev)
 
-                Thread {
+                backgroundExecutor.execute {
                     if (!hasFilePermissions()) {
                         Log.w(TAG, "Storage permission missing for RemoteFilePullRequest")
                         showPermissionRequiredNotification()
-                        return@Thread
+                        return@execute
                     }
                     try {
                         val resolved = RemoteFileManager.resolveFilePathAndMeta(applicationContext, fileId)
@@ -1506,7 +1508,7 @@ class DeskdropService : Service() {
                     } catch (e: Exception) {
                         Log.e(TAG, "Error handling RemoteFilePullRequest", e)
                     }
-                }.start()
+                }
             }
 
             DeskdropJni.CR_EVENT_REMOTE_FILE_ACTION_REQUEST -> {
@@ -1515,11 +1517,11 @@ class DeskdropService : Service() {
                 val action = DeskdropJni.eventText(ev) ?: return
                 val newName = DeskdropJni.eventSearchQuery(ev)
 
-                Thread {
+                backgroundExecutor.execute {
                     if (!hasFilePermissions()) {
                         Log.w(TAG, "Storage permission missing for RemoteFileActionRequest")
                         showPermissionRequiredNotification()
-                        return@Thread
+                        return@execute
                     }
                     try {
                         Log.i(TAG, "Executing remote file action: $action on file $fileId (new name: $newName)")
@@ -1527,7 +1529,7 @@ class DeskdropService : Service() {
                     } catch (e: Exception) {
                         Log.e(TAG, "Error executing remote file action", e)
                     }
-                }.start()
+                }
             }
         }
     }
@@ -1896,7 +1898,7 @@ class DeskdropService : Service() {
 
         val clipboardMime = contentResolver.getType(uri).orEmpty()
         if (!clipboardMime.startsWith("image/")) {
-            Thread {
+            backgroundExecutor.execute {
                 val staged = stageSharedUri(uri, preferredName = null, fallbackIndex = 1)
                 if (staged != null) {
                     lastClipboardSignature = sig
@@ -1920,7 +1922,7 @@ class DeskdropService : Service() {
                         broadcastStatus()
                     }
                 }
-            }.start()
+            }
             return
         }
 
@@ -2580,7 +2582,7 @@ class DeskdropService : Service() {
             override fun run() {
                 val h = engineHandle
                 if (h != 0L) {
-                    Thread {
+                    backgroundExecutor.execute {
                         try {
                             val path = android.os.Environment.getExternalStorageDirectory()
                             val stat = android.os.StatFs(path.path)
@@ -2623,7 +2625,7 @@ class DeskdropService : Service() {
                         } catch (e: Exception) {
                             Log.e(TAG, "Storage telemetry failed", e)
                         }
-                    }.start()
+                    }
                 }
                 handler.postDelayed(this, 60_000L) // every 60s
             }
@@ -3015,9 +3017,9 @@ class DeskdropService : Service() {
                         // Immediately tell the Rust engine to reconnect all known peers.
                         val h = engineHandle
                         if (h != 0L) {
-                            Thread {
+                            backgroundExecutor.execute {
                                 DeskdropJni.notifyNetworkRestored(h)
-                            }.start()
+                            }
                         }
                     }
                     delayedNetworkAction = action
@@ -3034,7 +3036,7 @@ class DeskdropService : Service() {
                 Log.i(TAG, "Network: default network lost — stopping discovery, scheduling retry")
                 val h = engineHandle
                 if (h != 0L) {
-                    Thread { DeskdropJni.notifyNetworkRestored(h) }.start()
+                    backgroundExecutor.execute { DeskdropJni.notifyNetworkRestored(h) }
                 }
                 handler.post {
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }
