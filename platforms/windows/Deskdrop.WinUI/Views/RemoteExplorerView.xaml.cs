@@ -13,6 +13,7 @@ namespace Deskdrop.WinUI.Views
         public DeskdropStore mgr => DeskdropStore.Shared;
         public ObservableCollection<RemoteFile> RemoteFiles { get; } = new ObservableCollection<RemoteFile>();
         private string _currentPath = "/";
+        private static readonly System.Collections.Generic.Dictionary<string, JsonDocument> _cache = new();
 
         public RemoteExplorerView()
         {
@@ -20,7 +21,7 @@ namespace Deskdrop.WinUI.Views
             this.Loaded += (s, e) => LoadRemoteDirectory("/");
         }
 
-        private async void LoadRemoteDirectory(string path)
+        private async void LoadRemoteDirectory(string path, bool forceRefresh = false)
         {
             if (string.IsNullOrEmpty(path)) path = "/";
             _currentPath = path;
@@ -38,7 +39,22 @@ namespace Deskdrop.WinUI.Views
                 else if (_currentPath.StartsWith("/source/", StringComparison.OrdinalIgnoreCase))
                     source = _currentPath.Substring("/source/".Length);
 
-                var doc = await DaemonClient.RemoteFilesQueryAsync(peer.device_id, summaryOnly: false, category: category, source: source);
+                string cacheKey = $"{peer.device_id}_{_currentPath}";
+                JsonDocument? doc = null;
+
+                if (!forceRefresh && _cache.TryGetValue(cacheKey, out var cachedDoc))
+                {
+                    doc = cachedDoc;
+                }
+                else
+                {
+                    doc = await DaemonClient.RemoteFilesQueryAsync(peer.device_id, summaryOnly: false, category: category, source: source);
+                    if (doc != null)
+                    {
+                        _cache[cacheKey] = doc;
+                    }
+                }
+
                 if (doc != null && doc.RootElement.ValueKind != JsonValueKind.Null)
                 {
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -114,6 +130,11 @@ namespace Deskdrop.WinUI.Views
             {
                 mgr.PickAndSendFiles(peer.device_id);
             }
+        }
+
+        private void OnRefreshClicked(object sender, RoutedEventArgs e)
+        {
+            LoadRemoteDirectory(_currentPath, true);
         }
 
         private void OnShortcutRootClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/");

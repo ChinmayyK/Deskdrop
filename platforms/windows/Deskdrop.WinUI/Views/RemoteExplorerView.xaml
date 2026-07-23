@@ -53,6 +53,7 @@
 
                     <!-- Transfer Action -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                        <Button Content="&#xE149;" FontFamily="Segoe MDL2 Assets" Foreground="#6E6E73" Background="Transparent" BorderThickness="0" Padding="8" ToolTipService.ToolTip="Refresh" Click="OnRefreshClicked"/>
                         <Button Content="📁 Send Files to Device..." Background="#0A84FF" Foreground="#FFFFFF" BorderThickness="0" CornerRadius="8" Padding="14,6" Click="OnSendFilesClicked"/>
                     </StackPanel>
                 </Grid>
