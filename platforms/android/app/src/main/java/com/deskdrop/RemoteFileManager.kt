@@ -67,7 +67,7 @@ object RemoteFileManager {
                 projection,
                 selection,
                 null,
-                "${MediaStore.Files.FileColumns.DATE_MODIFIED} DESC"
+                null
             )?.use { cursor ->
                 val idIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns._ID)
                 val nameIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME)
@@ -139,6 +139,7 @@ object RemoteFileManager {
         limit: Int
     ): Pair<String, Int> {
         val matchingList = mutableListOf<FileMeta>()
+        var totalMatching = 0
 
         val projection = arrayOf(
             MediaStore.Files.FileColumns._ID,
@@ -168,12 +169,11 @@ object RemoteFileManager {
                 val dataIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
 
                 while (cursor.moveToNext()) {
-                    val id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L
-                    val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
                     val size = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L
                     if (size <= 0L) continue
+                    
+                    val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
                     val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) ?: "" else ""
-                    val dateMod = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
                     val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
 
                     val cat = getCategory(mime, name)
@@ -182,20 +182,26 @@ object RemoteFileManager {
                     val src = getSource(dataPath)
 
                     if (matchesFilters(name, cat, src, categoryFilter, sourceFilter, searchQuery)) {
-                        val contentUri = ContentUris.withAppendedId(uri, id).toString()
-                        matchingList.add(
-                            FileMeta(
-                                fileId = id,
-                                displayName = name,
-                                sizeBytes = size,
-                                mimeType = mime.ifEmpty { "application/octet-stream" },
-                                dateModified = dateMod,
-                                category = cat,
-                                source = src,
-                                contentUri = contentUri,
-                                dataPath = dataPath
+                        if (totalMatching >= offset && totalMatching < offset + limit) {
+                            val id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L
+                            val dateMod = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
+                            val contentUri = ContentUris.withAppendedId(uri, id).toString()
+                            
+                            matchingList.add(
+                                FileMeta(
+                                    fileId = id,
+                                    displayName = name,
+                                    sizeBytes = size,
+                                    mimeType = mime.ifEmpty { "application/octet-stream" },
+                                    dateModified = dateMod,
+                                    category = cat,
+                                    source = src,
+                                    contentUri = contentUri,
+                                    dataPath = dataPath
+                                )
                             )
-                        )
+                        }
+                        totalMatching++
                     }
                 }
             }
@@ -203,15 +209,8 @@ object RemoteFileManager {
             Log.e(TAG, "Error querying files list", e)
         }
 
-        val totalMatching = matchingList.size
-        val pagedList = if (offset >= matchingList.size) {
-            emptyList()
-        } else {
-            matchingList.subList(offset, (offset + limit).coerceAtMost(matchingList.size))
-        }
-
         val jsonArray = JSONArray()
-        for (item in pagedList) {
+        for (item in matchingList) {
             val obj = JSONObject().apply {
                 put("file_id", item.fileId)
                 put("display_name", item.displayName)
@@ -304,33 +303,30 @@ object RemoteFileManager {
     }
 
     private fun getCategory(mime: String, name: String): String {
-        val lowerMime = mime.lowercase()
-        val lowerName = name.lowercase()
         return when {
-            lowerMime.startsWith("image/") -> "Images"
-            lowerMime.startsWith("video/") -> "Videos"
-            lowerMime.startsWith("audio/") -> "Audio"
-            lowerMime == "application/vnd.android.package-archive" || lowerName.endsWith(".apk") -> "Apks"
-            lowerMime in listOf(
-                "application/zip", "application/x-zip-compressed", "application/x-tar",
-                "application/gzip", "application/x-rar-compressed", "application/x-7z-compressed"
-            ) || lowerName.endsWith(".zip") || lowerName.endsWith(".tar") || lowerName.endsWith(".gz") ||
-                    lowerName.endsWith(".rar") || lowerName.endsWith(".7z") -> "Archives"
-            lowerMime == "application/pdf" || lowerMime.startsWith("text/") ||
-                    lowerName.endsWith(".pdf") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx") ||
-                    lowerName.endsWith(".xls") || lowerName.endsWith(".xlsx") || lowerName.endsWith(".ppt") ||
-                    lowerName.endsWith(".pptx") || lowerName.endsWith(".txt") || lowerName.endsWith(".csv") ||
-                    lowerName.endsWith(".md") -> "Documents"
+            mime.startsWith("image/", ignoreCase = true) -> "Images"
+            mime.startsWith("video/", ignoreCase = true) -> "Videos"
+            mime.startsWith("audio/", ignoreCase = true) -> "Audio"
+            mime.equals("application/vnd.android.package-archive", ignoreCase = true) || name.endsWith(".apk", ignoreCase = true) -> "Apks"
+            mime.equals("application/zip", ignoreCase = true) || mime.equals("application/x-zip-compressed", ignoreCase = true) || 
+            mime.equals("application/x-tar", ignoreCase = true) || mime.equals("application/gzip", ignoreCase = true) || 
+            mime.equals("application/x-rar-compressed", ignoreCase = true) || mime.equals("application/x-7z-compressed", ignoreCase = true) || 
+            name.endsWith(".zip", ignoreCase = true) || name.endsWith(".tar", ignoreCase = true) || name.endsWith(".gz", ignoreCase = true) ||
+            name.endsWith(".rar", ignoreCase = true) || name.endsWith(".7z", ignoreCase = true) -> "Archives"
+            mime.equals("application/pdf", ignoreCase = true) || mime.startsWith("text/", ignoreCase = true) ||
+            name.endsWith(".pdf", ignoreCase = true) || name.endsWith(".doc", ignoreCase = true) || name.endsWith(".docx", ignoreCase = true) ||
+            name.endsWith(".xls", ignoreCase = true) || name.endsWith(".xlsx", ignoreCase = true) || name.endsWith(".ppt", ignoreCase = true) ||
+            name.endsWith(".pptx", ignoreCase = true) || name.endsWith(".txt", ignoreCase = true) || name.endsWith(".csv", ignoreCase = true) ||
+            name.endsWith(".md", ignoreCase = true) -> "Documents"
             else -> "Other"
         }
     }
 
     private fun getSource(dataPath: String): String {
-        val lower = dataPath.lowercase()
         return when {
-            lower.contains("whatsapp") -> "WhatsApp"
-            lower.contains("download") -> "Downloads"
-            lower.contains("dcim") || lower.contains("camera") -> "Camera"
+            dataPath.contains("whatsapp", ignoreCase = true) -> "WhatsApp"
+            dataPath.contains("download", ignoreCase = true) -> "Downloads"
+            dataPath.contains("dcim", ignoreCase = true) || dataPath.contains("camera", ignoreCase = true) -> "Camera"
             else -> "All"
         }
     }
