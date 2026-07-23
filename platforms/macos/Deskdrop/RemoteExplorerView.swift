@@ -40,9 +40,13 @@ struct RemoteExplorerView: View {
     @State private var searchQuery: String = ""
     @State private var viewMode: ExplorerViewMode = .dateGrouped
     @State private var showInspector: Bool = false // Now hidden by default per redesign
-    @State private var isMultiSelect: Bool = false
     @State private var selectedFiles: Set<UInt64> = []
     @State private var selectedFile: IpcRemoteFileEntry? = nil
+    
+    // Marquee Selection State
+    @State private var fileFrames: [UInt64: CGRect] = [:]
+    @State private var dragRect: CGRect? = nil
+    @State private var dragStart: CGPoint? = nil
     
     @State private var thumbnailCache: [UInt64: NSImage] = [:]
     @State private var pullingFiles: Set<UInt64> = []
@@ -246,25 +250,6 @@ struct RemoteExplorerView: View {
                 if isLoading {
                     ProgressView().controlSize(.small)
                 }
-                
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        isMultiSelect.toggle()
-                        if !isMultiSelect {
-                            selectedFiles.removeAll()
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle")
-                        Text(isMultiSelect ? "Done" : "Select")
-                    }
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isMultiSelect ? CRTheme.brandElectric : CRTheme.ink)
-                }
-                .buttonStyle(.plain)
-                .padding(.trailing, 4)
-                
                 // View Mode Segmented Control
                 HStack(spacing: 2) {
                     ForEach(ExplorerViewMode.allCases, id: \.self) { mode in
@@ -447,9 +432,59 @@ struct SidebarRowView: View {
                     .padding(24) // Generous macOS 24px padding
                     .padding(.bottom, selectedFiles.isEmpty ? 24 : 100)
                 }
-            } else if isLoading {
                 ProgressView("Fetching index from \(device.name)...")
                     .controlSize(.regular)
+            }
+            
+            // Marquee Drag Overlay
+            if let rect = dragRect {
+                Rectangle()
+                    .fill(CRTheme.brandElectric.opacity(0.15))
+                    .strokeBorder(CRTheme.brandElectric.opacity(0.6), lineWidth: 1)
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+            }
+        }
+        .coordinateSpace(name: "CanvasSpace")
+        .contentShape(Rectangle()) // Make empty areas draggable
+        .gesture(
+            DragGesture(minimumDistance: 3, coordinateSpace: .named("CanvasSpace"))
+                .onChanged { value in
+                    if dragStart == nil {
+                        dragStart = value.startLocation
+                        selectedFiles.removeAll() // Clear selection on new drag (optional, macOS finder clears unless shift is held)
+                    }
+                    let start = dragStart ?? value.startLocation
+                    let current = value.location
+                    
+                    let minX = min(start.x, current.x)
+                    let minY = min(start.y, current.y)
+                    let width = abs(current.x - start.x)
+                    let height = abs(current.y - start.y)
+                    
+                    let currentRect = CGRect(x: minX, y: minY, width: width, height: height)
+                    self.dragRect = currentRect
+                    
+                    // Intersection Logic
+                    var newSelection: Set<UInt64> = []
+                    for (id, frame) in fileFrames {
+                        if currentRect.intersects(frame) {
+                            newSelection.insert(id)
+                        }
+                    }
+                    
+                    if selectedFiles != newSelection {
+                        selectedFiles = newSelection
+                    }
+                }
+                .onEnded { _ in
+                    dragStart = nil
+                    dragRect = nil
+                }
+        )
+        .onPreferenceChange(FileFramePreferenceKey.self) { frames in
+            for data in frames {
+                self.fileFrames[data.id] = data.rect
             }
         }
     }
@@ -574,7 +609,7 @@ struct SidebarRowView: View {
                                 }
                                 
                                 // Multi-select Checkbox
-                                if isMultiSelect {
+                                if !selectedFiles.isEmpty {
                                     Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
                                         .font(.system(size: 18, weight: .semibold))
                                         .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : Color.white.opacity(0.8))
@@ -621,6 +656,15 @@ struct SidebarRowView: View {
                 .padding(.horizontal, 2)
             }
             .contentShape(Rectangle())
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(
+                            key: FileFramePreferenceKey.self,
+                            value: [FileFrameData(id: file.file_id, rect: geo.frame(in: .named("CanvasSpace")))]
+                        )
+                }
+            )
         }
         .buttonStyle(.plain)
         .onHover { isHovered in
@@ -687,7 +731,7 @@ struct SidebarRowView: View {
             handleFileSelection(file)
         } label: {
             HStack(spacing: 16) {
-                if isMultiSelect {
+                if !selectedFiles.isEmpty {
                     Image(systemName: selectedFiles.contains(file.file_id) ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(selectedFiles.contains(file.file_id) ? CRTheme.brandElectric : CRTheme.inkSubtle)
@@ -725,6 +769,15 @@ struct SidebarRowView: View {
                     NSCursor.pop()
                 }
             }
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(
+                            key: FileFramePreferenceKey.self,
+                            value: [FileFrameData(id: file.file_id, rect: geo.frame(in: .named("CanvasSpace")))]
+                        )
+                }
+            )
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -1026,18 +1079,28 @@ struct SidebarRowView: View {
     // MARK: - Helpers & Actions
     
     private func isSelected(_ file: IpcRemoteFileEntry) -> Bool {
-        if isMultiSelect { return selectedFiles.contains(file.file_id) }
+        if !selectedFiles.isEmpty { return selectedFiles.contains(file.file_id) }
         return selectedFile?.file_id == file.file_id
     }
     
     private func handleFileSelection(_ file: IpcRemoteFileEntry) {
-        if isMultiSelect {
+        let isCmd = NSEvent.modifierFlags.contains(.command)
+        let isShift = NSEvent.modifierFlags.contains(.shift)
+        
+        if isCmd || isShift {
+            // First time migrating from single select to multi-select
+            if selectedFiles.isEmpty, let single = selectedFile {
+                selectedFiles.insert(single.file_id)
+                selectedFile = nil
+            }
+            
             if selectedFiles.contains(file.file_id) {
                 selectedFiles.remove(file.file_id)
             } else {
                 selectedFiles.insert(file.file_id)
             }
         } else {
+            selectedFiles.removeAll()
             selectedFile = file
             showInspector = true
         }
@@ -1307,5 +1370,18 @@ struct SidebarRowView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Marquee Selection Preference Key
+struct FileFrameData: Equatable {
+    let id: UInt64
+    let rect: CGRect
+}
+
+struct FileFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [FileFrameData] = []
+    static func reduce(value: inout [FileFrameData], nextValue: () -> [FileFrameData]) {
+        value.append(contentsOf: nextValue())
     }
 }
