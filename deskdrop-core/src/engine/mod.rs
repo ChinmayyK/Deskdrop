@@ -2601,6 +2601,8 @@ impl Engine {
     fn spawn_sensitive_history_pruner(&self) {
         let history = self.shared.history.clone();
         let settings = self.shared.settings.clone();
+        // Only prune the cache directory, leaving user's downloaded files safely intact.
+        let cache_dir = self.shared.config.data_dir.join("cache");
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(5));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -2608,12 +2610,36 @@ impl Engine {
                 interval.tick().await;
                 let mut hist = history.lock().await;
                 if let Err(err) = hist.purge_expired_sensitive_entries() {
-                    warn!(error = %err, "sensitive history pruning failed");
+                    tracing::warn!(error = %err, "sensitive history pruning failed");
                 }
                 let retention_days = settings.lock().await.history_retention_days;
                 if retention_days > 0 {
                     if let Err(err) = hist.purge_expired_retention(retention_days) {
-                        warn!(error = %err, "retention history pruning failed");
+                        tracing::warn!(error = %err, "retention history pruning failed");
+                    }
+                    
+                    // Also prune hoarded transferred cache files older than retention_days
+                    let cutoff = std::time::SystemTime::now()
+                        .checked_sub(Duration::from_secs(retention_days * 86400));
+                        
+                    if let Some(cutoff_time) = cutoff {
+                        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+                            for entry in entries.flatten() {
+                                if let Ok(meta) = entry.metadata() {
+                                    if meta.is_file() {
+                                        if let Ok(modified) = meta.modified() {
+                                            if modified < cutoff_time {
+                                                if let Err(e) = std::fs::remove_file(entry.path()) {
+                                                    tracing::warn!("Failed to prune old file {:?}: {}", entry.path(), e);
+                                                } else {
+                                                    tracing::info!("Pruned old hoarded file {:?}", entry.path());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

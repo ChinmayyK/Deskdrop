@@ -2450,73 +2450,69 @@ class DeskdropService : Service() {
 
     @Suppress("DEPRECATION")
     private fun handleRemoteCallAction(action: String) {
+        var handled = false
         if (action == "accept" || action == "decline") {
-            Log.i(TAG, "Attempting remote call action '$action' via NotificationListener...")
-            if (DeskdropNotificationListener.triggerCallAction(action)) {
-                Log.i(TAG, "Remote call action '$action' successfully triggered via NotificationListener!")
-                return
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val tm = getSystemService(TELECOM_SERVICE) as? android.telecom.TelecomManager
+                if (tm != null && checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    if (action == "accept") {
+                        runCatching { 
+                            tm.acceptRingingCall() 
+                        }.onSuccess { 
+                            Log.i(TAG, "Remote accept: call accepted via TelecomManager")
+                            handled = true
+                        }.onFailure { Log.w(TAG, "Remote accept failed via TelecomManager", it) }
+                    } else if (action == "decline") {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                            runCatching { 
+                                tm.endCall() 
+                            }.onSuccess { 
+                                Log.i(TAG, "Remote decline: call ended via TelecomManager")
+                                handled = true
+                            }.onFailure { Log.w(TAG, "Remote decline failed via TelecomManager", it) }
+                        } else {
+                            Log.i(TAG, "TelecomManager.endCall() not supported on this Android version")
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "ANSWER_PHONE_CALLS permission not granted or TelecomManager unavailable")
+                }
             }
-            Log.i(TAG, "NotificationListener could not handle call action '$action' (maybe not enabled or call notif not found), falling back to TelecomManager...")
+            
+            if (!handled) {
+                Log.i(TAG, "Attempting remote call action '$action' via NotificationListener as fallback...")
+                if (DeskdropNotificationListener.triggerCallAction(action)) {
+                    Log.i(TAG, "Remote call action '$action' successfully triggered via NotificationListener!")
+                } else {
+                    Log.w(TAG, "NotificationListener could not handle call action '$action'")
+                }
+            }
+            return
         }
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val tm = getSystemService(TELECOM_SERVICE) as? android.telecom.TelecomManager ?: return
-            when (action) {
-                "accept" -> {
-                    if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                        // TODO: Migrate to TelecomManager.acceptRingingCall() via InCallService when minSdk >= 26
-                        @Suppress("DEPRECATION")
-                        runCatching { 
-                            tm.acceptRingingCall()
-                        }
-                            .onSuccess { Log.i(TAG, "Remote accept: call accepted") }
-                            .onFailure { Log.w(TAG, "Remote accept failed", it) }
-                    } else {
-                        Log.w(TAG, "Remote accept: ANSWER_PHONE_CALLS permission not granted")
-                    }
-                }
-                "decline" -> {
-                    if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        // TODO: Migrate to TelecomManager.endCall() via InCallService when minSdk >= 26
-                        @Suppress("DEPRECATION")
-                        runCatching { tm.endCall() }
-                            .onSuccess { Log.i(TAG, "Remote decline: call ended") }
-                            .onFailure { Log.w(TAG, "Remote decline failed", it) }
-                    } else {
-                        Log.i(TAG, "Remote decline not supported on this Android version")
-                    }
-                    } else {
-                        Log.w(TAG, "Remote decline: ANSWER_PHONE_CALLS permission not granted")
-                    }
-                }
-                "audio_earpiece" -> {
-                    val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                    am?.isSpeakerphoneOn = false
-                    am?.stopBluetoothSco()
-                    am?.isBluetoothScoOn = false
-                    Log.i(TAG, "Remote audio route: Earpiece")
-                }
-                "audio_speaker" -> {
-                    val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                    am?.isSpeakerphoneOn = true
-                    am?.stopBluetoothSco()
-                    am?.isBluetoothScoOn = false
-                    Log.i(TAG, "Remote audio route: Speaker")
-                }
-                "audio_bluetooth" -> {
-                    val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                    am?.isSpeakerphoneOn = false
-                    am?.startBluetoothSco()
-                    am?.isBluetoothScoOn = true
-                    Log.i(TAG, "Remote audio route: Bluetooth")
-                }
-                else -> Log.w(TAG, "Unknown remote call action: $action")
+        when (action) {
+            "audio_earpiece" -> {
+                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                am?.isSpeakerphoneOn = false
+                am?.stopBluetoothSco()
+                am?.isBluetoothScoOn = false
+                Log.i(TAG, "Remote audio route: Earpiece")
             }
-        } else {
-            Log.w(TAG, "Remote call actions require API 26+")
+            "audio_speaker" -> {
+                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                am?.isSpeakerphoneOn = true
+                am?.stopBluetoothSco()
+                am?.isBluetoothScoOn = false
+                Log.i(TAG, "Remote audio route: Speaker")
+            }
+            "audio_bluetooth" -> {
+                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                am?.isSpeakerphoneOn = false
+                am?.startBluetoothSco()
+                am?.isBluetoothScoOn = true
+                Log.i(TAG, "Remote audio route: Bluetooth")
+            }
+            else -> Log.w(TAG, "Unknown remote call action: $action")
         }
     }
 

@@ -9,7 +9,7 @@
     mc:Ignorable="d"
     Title="DeskDrop Dashboard">
 
-    <Grid Background="#F8F9FB">
+    <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -69,7 +69,7 @@
             </NavigationView.MenuItems>
 
             <!-- Main center + right inspector area inside clean white surface -->
-            <Grid Background="#FFFFFF" BorderBrush="#E5E5EA" BorderThickness="1,0,0,0">
+            <Grid Background="Transparent" BorderBrush="#E5E5EA" BorderThickness="1,0,0,0">
                 <Frame x:Name="ContentFrame" Background="Transparent" />
             </Grid>
         </NavigationView>
