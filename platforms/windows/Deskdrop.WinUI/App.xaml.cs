@@ -20,6 +20,13 @@ public partial class App : Application
     public static Window MainWindow { get; private set; }
     private Window? _window;
     
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_RESTORE = 9;
+
     // Tray Icon Properties
     public H.NotifyIcon.TaskbarIcon? TrayIcon { get; private set; }
     public static Microsoft.UI.Dispatching.DispatcherQueue? MainDispatcherQueue { get; private set; }
@@ -59,9 +66,12 @@ public partial class App : Application
         InitializeComponent();
         
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App InitializeComponent finished\n");
-        
+
         ShowMainWindowCommand = new RelayCommand(() =>
         {
+            var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ShowMainWindowCommand invoked\n"); } catch { }
+
             var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             queue?.TryEnqueue(() =>
             {
@@ -79,6 +89,8 @@ public partial class App : Application
                             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
                             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
                             appWindow.Show();
+                            ShowWindow(hwnd, SW_RESTORE);
+                            SetForegroundWindow(hwnd);
                         }
                         catch
                         {
@@ -87,6 +99,13 @@ public partial class App : Application
                     }
                     _window = MainWindow;
                     MainWindow.Activate();
+                    try
+                    {
+                        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
+                        ShowWindow(hwnd, SW_RESTORE);
+                        SetForegroundWindow(hwnd);
+                    }
+                    catch { }
                 }
                 catch (Exception ex)
                 {
@@ -144,10 +163,10 @@ public partial class App : Application
             TrayIcon = new H.NotifyIcon.TaskbarIcon
             {
                 ToolTipText = "Deskdrop",
-                IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
-                LeftClickCommand = ShowMainWindowCommand,
-                DoubleClickCommand = ShowMainWindowCommand
+                IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico"))
             };
+            TrayIcon.TrayLeftMouseUp += (s, e) => ShowMainWindowCommand?.Execute(null);
+            TrayIcon.TrayMouseDoubleClick += (s, e) => ShowMainWindowCommand?.Execute(null);
 
             var menu = new MenuFlyout();
             var openItem = new MenuFlyoutItem { Text = "Open Deskdrop", Command = ShowMainWindowCommand };
