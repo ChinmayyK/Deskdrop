@@ -163,10 +163,10 @@ public partial class App : Application
             TrayIcon = new H.NotifyIcon.TaskbarIcon
             {
                 ToolTipText = "Deskdrop",
-                IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico"))
+                IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
+                LeftClickCommand = ShowMainWindowCommand,
+                DoubleClickCommand = ShowMainWindowCommand
             };
-            TrayIcon.TrayLeftMouseUp += (s, e) => ShowMainWindowCommand?.Execute(null);
-            TrayIcon.TrayMouseDoubleClick += (s, e) => ShowMainWindowCommand?.Execute(null);
 
             var menu = new MenuFlyout();
             var openItem = new MenuFlyoutItem { Text = "Open Deskdrop", Command = ShowMainWindowCommand };
