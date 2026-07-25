@@ -51,6 +51,7 @@ struct CommandCenterRootView: View {
                 .frame(width: 320)
                 .background(CRTheme.surfaceElevated)
         }
+        .ignoresSafeArea(.all, edges: .top)
         .frame(minWidth: 1100, minHeight: 700)
         .background(CRTheme.surfaceStrong.ignoresSafeArea())
         .sheet(item: $renameTarget) { device in
@@ -220,7 +221,7 @@ struct CommandCenterView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
                 
                 // Global Search Placeholder
                 HStack {
@@ -230,12 +231,12 @@ struct CommandCenterView: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 15))
                 }
-                .padding(16)
+                .padding(14)
                 .background(CRTheme.surfaceStrong)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CRTheme.stroke, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(CRTheme.stroke, lineWidth: 1))
                 .padding(.horizontal, 40)
-                .padding(.top, 24)
+                .padding(.top, 16)
                 
                 // Dynamic Hero Header
                 DynamicHeroHeaderView(store: store)
@@ -581,7 +582,9 @@ struct LiveDevicePanel: View {
                         }
                     }
                 }
-                .padding(24)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+                .padding(.top, 24)
             } else {
                 // Not Connected State
                 VStack(spacing: 16) {

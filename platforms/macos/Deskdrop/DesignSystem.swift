@@ -120,10 +120,10 @@ enum CRDensityMode {
 // MARK: - Animation
 
 extension Animation {
-    static let crSpring = Animation.interactiveSpring(response: 0.28, dampingFraction: 0.65, blendDuration: 0.25)
-    static let crFast   = Animation.interactiveSpring(response: 0.20, dampingFraction: 0.70, blendDuration: 0.25)
-    static let crSlow   = Animation.spring(response: 0.45, dampingFraction: 0.85)
-    static let crBounce = Animation.interactiveSpring(response: 0.35, dampingFraction: 0.55, blendDuration: 0.25)
+    static let crSpring = Animation.interactiveSpring(response: 0.20, dampingFraction: 0.80, blendDuration: 0.1)
+    static let crFast   = Animation.interactiveSpring(response: 0.14, dampingFraction: 0.85, blendDuration: 0.1)
+    static let crSlow   = Animation.spring(response: 0.35, dampingFraction: 0.85)
+    static let crBounce = Animation.interactiveSpring(response: 0.25, dampingFraction: 0.65, blendDuration: 0.1)
 }
 
 // MARK: - NSVisualEffectView Wrappers

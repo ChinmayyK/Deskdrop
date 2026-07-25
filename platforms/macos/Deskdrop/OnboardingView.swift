@@ -15,6 +15,7 @@ struct RootContainerView: View {
             }
         }
         .frame(minWidth: 1200, minHeight: 760)
+        .ignoresSafeArea(.all, edges: .top)
     }
 }
 

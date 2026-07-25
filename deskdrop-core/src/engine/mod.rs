@@ -2384,47 +2384,45 @@ impl Engine {
                 let addrs = peer.socket_addrs();
                 if !addrs.is_empty() {
                     let shared = self.shared.clone();
-                    tokio::spawn(async move {
-                        if let Ok(()) = connect_loop(
-                            shared.clone(),
-                            addrs,
-                            Some(target_device),
-                            DiscoverySource::Manual,
-                        )
-                        .await
+                    if let Ok(()) = connect_loop(
+                        self.shared.clone(),
+                        addrs,
+                        Some(target_device),
+                        DiscoverySource::Manual,
+                    )
+                    .await
+                    {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        let peers = self.shared.peer_manager.all_connected_senders();
+                        if let Some(tx) = peers
+                            .into_iter()
+                            .find(|(id, _)| *id == target_device)
+                            .map(|(_, tx)| tx)
                         {
-                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                            let peers = shared.peer_manager.all_connected_senders();
-                            if let Some(tx) = peers
-                                .into_iter()
-                                .find(|(id, _)| *id == target_device)
-                                .map(|(_, tx)| tx)
-                            {
-                                let _ = tx.send(msg).await;
+                            let _ = tx.send(msg).await;
 
-                                let pin = shared
-                                    .peer_manager
-                                    .get(target_device)
-                                    .and_then(|p| p.pairing_pin.clone())
-                                    .unwrap_or_else(|| "------".to_string());
+                            let pin = self.shared
+                                .peer_manager
+                                .get(target_device)
+                                .and_then(|p| p.pairing_pin.clone())
+                                .unwrap_or_else(|| "------".to_string());
 
-                                let device_name = shared
-                                    .peer_manager
-                                    .get(target_device)
-                                    .map(|p| p.friendly_name.clone())
-                                    .unwrap_or_else(|| "Unknown device".to_string());
+                            let device_name = self.shared
+                                .peer_manager
+                                .get(target_device)
+                                .map(|p| p.friendly_name.clone())
+                                .unwrap_or_else(|| "Unknown device".to_string());
 
-                                let _ = shared
-                                    .event_tx
-                                    .send(EngineEvent::OutgoingPairingWaiting {
-                                        device_id: target_device,
-                                        device_name,
-                                        pin,
-                                    })
-                                    .await;
-                            }
+                            let _ = self.shared
+                                .event_tx
+                                .send(EngineEvent::OutgoingPairingWaiting {
+                                    device_id: target_device,
+                                    device_name,
+                                    pin,
+                                })
+                                .await;
                         }
-                    });
+                    }
                 }
             }
         }

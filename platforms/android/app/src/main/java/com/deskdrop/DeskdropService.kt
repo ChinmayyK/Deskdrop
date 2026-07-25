@@ -2581,8 +2581,18 @@ class DeskdropService : Service() {
                     backgroundExecutor.execute {
                         try {
                             val storageManager = getSystemService(android.content.Context.STORAGE_STATS_SERVICE) as android.app.usage.StorageStatsManager
-                            val totalBytes = storageManager.getTotalBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+                            val rawTotalBytes = storageManager.getTotalBytes(android.os.storage.StorageManager.UUID_DEFAULT)
                             val freeBytes = storageManager.getFreeBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+
+                            val GB = 1_000_000_000L
+                            val tiers = longArrayOf(16 * GB, 32 * GB, 64 * GB, 128 * GB, 256 * GB, 512 * GB, 1000 * GB, 2000 * GB)
+                            var totalBytes = rawTotalBytes
+                            for (tier in tiers) {
+                                if (rawTotalBytes <= tier) {
+                                    totalBytes = tier
+                                    break
+                                }
+                            }
 
                             var imgSize = 0L
                             var vidSize = 0L
