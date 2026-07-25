@@ -1586,7 +1586,7 @@ impl Engine {
                         let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
                             if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                (t.next_chunk, t.last_acked_chunk, t.total_chunks)
+                                (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
                             } else {
                                 break 'outer;
                             }
@@ -4340,7 +4340,7 @@ fn register_session(
                                     let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
                                         if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                            (t.next_chunk, t.last_acked_chunk, t.total_chunks)
+                                            (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
                                         } else {
                                             break 'outer;
                                         }
@@ -4695,7 +4695,7 @@ fn register_session(
                                     let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
                                         if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                            (t.next_chunk, t.last_acked_chunk, t.total_chunks)
+                                            (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
                                         } else {
                                             break 'outer;
                                         }

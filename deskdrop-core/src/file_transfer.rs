@@ -45,7 +45,7 @@ pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chu
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16; // ACK every 16 MB — reduces cross-talk overhead
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 4; // ACK every 4 MB
 
 pub type TransferId = [u8; 16];
 
@@ -127,9 +127,10 @@ pub struct OutboundTransfer {
     source: OutboundSource,
     pub total_chunks: u32,
     pub next_chunk: u32,
-    pub last_acked_chunk: u32,
+    pub last_acked_chunk: Option<u32>,
     pub status: TransferStatus,
     pub created_at: Instant,
+    pub started_at: Option<Instant>,
     pub last_active_at: Instant,
     pub target_device: Option<Uuid>,
     pub paused: bool,
@@ -152,9 +153,10 @@ impl OutboundTransfer {
             source: OutboundSource::Memory(data.into()),
             total_chunks,
             next_chunk: 0,
-            last_acked_chunk: 0,
+            last_acked_chunk: None,
             status: TransferStatus::Pending,
             created_at: Instant::now(),
+            started_at: None,
             last_active_at: Instant::now(),
             target_device,
             paused: false,
@@ -174,9 +176,10 @@ impl OutboundTransfer {
             source: OutboundSource::FilePath(path, None),
             total_chunks,
             next_chunk: 0,
-            last_acked_chunk: 0,
+            last_acked_chunk: None,
             status: TransferStatus::Pending,
             created_at: Instant::now(),
+            started_at: None,
             last_active_at: Instant::now(),
             target_device,
             paused: false,
@@ -268,7 +271,8 @@ impl OutboundTransfer {
         if max_batch <= 1 {
             return 1;
         }
-        let in_flight = self.next_chunk.saturating_sub(self.last_acked_chunk);
+        let last_acked = self.last_acked_chunk.unwrap_or(0);
+        let in_flight = self.next_chunk.saturating_sub(last_acked);
         if in_flight < 16 {
             max_batch
         } else if in_flight < 48 {
@@ -308,11 +312,12 @@ impl OutboundTransfer {
         let bytes_sent = if self.status == TransferStatus::Complete {
             self.meta.size_bytes
         } else {
+            let acked_count = self.last_acked_chunk.map(|idx| idx + 1).unwrap_or(0);
             let sent =
-                ((self.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
+                ((acked_count as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
             if sent >= self.meta.size_bytes
                 && self.meta.size_bytes > 0
-                && self.last_acked_chunk + 1 < self.total_chunks
+                && acked_count < self.total_chunks
             {
                 self.meta.size_bytes.saturating_sub(1)
             } else {
@@ -331,7 +336,7 @@ impl OutboundTransfer {
             0
         };
 
-        let elapsed_secs = self.created_at.elapsed().as_secs_f64();
+        let elapsed_secs = self.started_at.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0);
         let speed_bps = if elapsed_secs > 0.05 && bytes_sent > 0 {
             Some((bytes_sent as f64 / elapsed_secs) as u64)
         } else {
@@ -358,13 +363,16 @@ impl OutboundTransfer {
     /// Called when receiver acks chunks up to `last_confirmed`.
     pub fn on_chunk_ack(&mut self, last_confirmed: u32) {
         self.last_active_at = Instant::now();
-        self.last_acked_chunk = last_confirmed;
+        self.last_acked_chunk = Some(last_confirmed);
     }
 
     /// Resume from the given chunk (skip already-delivered ones).
     pub fn resume_from(&mut self, chunk_index: u32) {
+        if self.started_at.is_none() {
+            self.started_at = Some(Instant::now());
+        }
         self.next_chunk = chunk_index;
-        self.last_acked_chunk = chunk_index.saturating_sub(1);
+        self.last_acked_chunk = if chunk_index > 0 { Some(chunk_index - 1) } else { None };
         self.status = TransferStatus::Transferring;
     }
 
@@ -982,31 +990,9 @@ impl FileTransferManager {
             }));
         }
         for t in self.outbound.values() {
-            let bytes_sent = if t.status == TransferStatus::Complete {
-                t.meta.size_bytes
-            } else {
-                let sent =
-                    ((t.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(t.meta.size_bytes);
-                if sent >= t.meta.size_bytes
-                    && t.meta.size_bytes > 0
-                    && t.last_acked_chunk + 1 < t.total_chunks
-                {
-                    t.meta.size_bytes.saturating_sub(1)
-                } else {
-                    sent
-                }
-            };
-            let percent = if t.total_chunks == 0 {
-                100
-            } else if t.meta.size_bytes > 0 {
-                if bytes_sent == t.meta.size_bytes {
-                    100
-                } else {
-                    ((bytes_sent as f64 / t.meta.size_bytes as f64) * 100.0).min(99.0) as u8
-                }
-            } else {
-                0
-            };
+            let prog = t.progress();
+            let bytes_sent = prog.bytes_received;
+            let percent = prog.percent;
             let status_str = match t.status {
                 TransferStatus::Pending => "transferring", // Remote hasn't accepted yet, but from our end it's outgoing
                 TransferStatus::Verifying => "verifying",
