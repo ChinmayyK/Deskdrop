@@ -106,6 +106,13 @@ struct DynamicHeroHeaderView: View {
                 Text("Waiting for \(device.name)...")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
                     .foregroundStyle(CRTheme.ink)
+                
+                if let pin = device.pairingPin {
+                    Text("Verify code: \(pin)")
+                        .font(.system(size: 18, weight: .medium, design: .monospaced))
+                        .foregroundStyle(CRTheme.brandElectric)
+                }
+
                 HStack(spacing: 8) {
                     ProgressView().scaleEffect(0.6)
                     Text("Accept the request on your device.")
