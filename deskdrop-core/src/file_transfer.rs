@@ -270,11 +270,11 @@ impl OutboundTransfer {
             return 1;
         }
         let in_flight = self.next_chunk.saturating_sub(self.last_acked_chunk);
-        if in_flight < 2 {
+        if in_flight < 16 {
             max_batch
-        } else if in_flight < 6 {
+        } else if in_flight < 48 {
             (max_batch / 2).max(1)
-        } else if in_flight < 12 {
+        } else if in_flight < 96 {
             2.min(max_batch)
         } else {
             1

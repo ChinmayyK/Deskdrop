@@ -1594,7 +1594,7 @@ impl Engine {
                         if next_chunk >= total_chunks {
                             break 'outer;
                         }
-                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 32u32 {
+                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 128u32 {
                             tokio::time::sleep(std::time::Duration::from_millis(15)).await;
                             continue;
                         }
@@ -4184,7 +4184,7 @@ fn register_session(
                                         break 'outer;
                                     }
                                     if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 32u32
+                                        && next_chunk.saturating_sub(last_acked) > 128u32
                                     {
                                         tokio::time::sleep(std::time::Duration::from_millis(15))
                                             .await;
@@ -4683,7 +4683,7 @@ fn register_session(
                                         break 'outer;
                                     }
                                     if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 32u32
+                                        && next_chunk.saturating_sub(last_acked) > 128u32
                                     {
                                         tokio::time::sleep(std::time::Duration::from_millis(15))
                                             .await;
