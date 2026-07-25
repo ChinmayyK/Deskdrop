@@ -16,12 +16,14 @@
 
   <table>
     <tr>
-      <td align="center"><b>macOS Desktop Client</b></td>
+      <td align="center"><b>macOS Menu Bar Dropzone</b></td>
+      <td align="center"><b>macOS Activity Dashboard</b></td>
       <td align="center"><b>Android Client & Timeline</b></td>
     </tr>
     <tr>
-      <td><img src="assets/screenshots/macos_menubar_card.png" width="400" alt="macOS Menu Bar and Transfer Interface" /></td>
-      <td><img src="assets/screenshots/mobile_dashboard.jpg" width="220" alt="Android Dashboard" /> &nbsp; <img src="assets/screenshots/mobile_activity_feed.jpg" width="220" alt="Android Activity Feed" /></td>
+      <td align="center"><img src="assets/screenshots/macos_menubar_card.png" width="300" alt="macOS Menu Bar Dropzone" /></td>
+      <td align="center"><img src="assets/screenshots/macos_dashboard.png" width="360" alt="macOS Activity Dashboard" /></td>
+      <td align="center"><img src="assets/screenshots/mobile_dashboard.jpg" width="180" alt="Android Dashboard" /> &nbsp; <img src="assets/screenshots/mobile_activity_feed.jpg" width="180" alt="Android Activity Feed" /></td>
     </tr>
   </table>
 
