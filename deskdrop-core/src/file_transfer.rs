@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks reduce
+pub const FILE_CHUNK_SIZE: usize = 512 * 1024; // 512 KB per chunk (smooths out UI progress updates)
                                                     // encrypt/serialize/frame overhead per byte.
                                                     // 4× bigger = 4× fewer mutex locks, syscalls,
                                                     // and encrypt/serialize round-trips.
@@ -310,7 +310,7 @@ impl OutboundTransfer {
             self.meta.size_bytes
         } else {
             let sent =
-                ((self.last_acked_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
+                ((self.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
             if sent >= self.meta.size_bytes
                 && self.meta.size_bytes > 0
                 && self.last_acked_chunk + 1 < self.total_chunks
