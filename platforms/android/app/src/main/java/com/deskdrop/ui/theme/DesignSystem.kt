@@ -146,8 +146,8 @@ fun Modifier.crPressScale(
 
 
 object CRMotion {
-    val snappy = spring<Float>(dampingRatio = 0.8f, stiffness = 400f)
-    val fluid = spring<Float>(dampingRatio = 0.7f, stiffness = 200f)
+    val snappy = spring<Float>(dampingRatio = 0.95f, stiffness = 800f)
+    val fluid = spring<Float>(dampingRatio = 0.85f, stiffness = 600f)
 }
 
 @Language("AGSL")

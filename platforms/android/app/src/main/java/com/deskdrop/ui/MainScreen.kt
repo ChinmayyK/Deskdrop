@@ -148,6 +148,25 @@ fun MainScreen(
     onReplayOnboarding: () -> Unit = {}
 ) {
     var currentTab by rememberSaveable { mutableStateOf(AppTab.Home) }
+    val tabs = AppTab.values()
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = tabs.indexOf(currentTab),
+        pageCount = { tabs.size }
+    )
+
+    LaunchedEffect(currentTab) {
+        val targetPage = tabs.indexOf(currentTab)
+        if (pagerState.currentPage != targetPage) {
+            pagerState.animateScrollToPage(targetPage, animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+        }
+    }
+
+    LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
+        if (!pagerState.isScrollInProgress) {
+            currentTab = tabs[pagerState.currentPage]
+        }
+    }
+
     val hasConnectedDevices = peers.any { it.isConnected }
 
     CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices) {
@@ -156,25 +175,11 @@ fun MainScreen(
 
                 
                 Box(modifier = Modifier.weight(1f)) {
-                    AnimatedContent(
-                        targetState = currentTab,
-                        transitionSpec = {
-                            val targetIndex = AppTab.values().indexOf(targetState)
-                            val initialIndex = AppTab.values().indexOf(initialState)
-                            val direction = if (targetIndex > initialIndex) 1 else -1
-                            
-                            androidx.compose.animation.slideInHorizontally(
-                                animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                                initialOffsetX = { fullWidth -> direction * fullWidth / 4 }
-                            ) + fadeIn(animationSpec = tween(400)) togetherWith 
-                            androidx.compose.animation.slideOutHorizontally(
-                                animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                                targetOffsetX = { fullWidth -> -direction * fullWidth / 4 }
-                            ) + fadeOut(animationSpec = tween(400))
-                        },
-                        label = "tab_content"
-                    ) { tab ->
-                        when (tab) {
+                    androidx.compose.foundation.pager.HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        when (tabs[page]) {
                             AppTab.Home -> HomeTab(
                                 isDark = isDark,
                                 peers = peers,
@@ -370,7 +375,7 @@ fun HomeTab(
     ) {
         val hasConnectedPeers = peers.any { it.isConnected || it.trusted }
         
-        Spacer(modifier = Modifier.height(24.dp)) // Contextual gap from Status Strip
+        Spacer(modifier = Modifier.height(12.dp)) // Tighter gap from Status Strip
         
         if (activeTransfers.isNotEmpty()) {
             Text(
