@@ -73,7 +73,7 @@ struct CommandSidebarView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(CRTheme.inkSubtle)
                     .padding(.horizontal, 16)
-                    .padding(.top, 24)
+                    .padding(.top, 40)
                     .padding(.bottom, 4)
                 
                 ForEach([DashboardSection.devices, .clipboard, .transfers, .settings], id: \.self) { section in
@@ -234,7 +234,7 @@ struct CommandCenterView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(CRTheme.stroke, lineWidth: 1))
                 .padding(.horizontal, 40)
-                .padding(.top, 24)
+                .padding(.top, 40)
                 
                 // Dynamic Hero Header
                 DynamicHeroHeaderView(store: store)
@@ -627,7 +627,7 @@ struct LiveDevicePanel: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
-                .padding(.top, 24)
+                .padding(.top, 40)
             } else {
                 // Not Connected State
                 VStack(spacing: 16) {
