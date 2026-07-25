@@ -7,7 +7,7 @@ import SwiftUI
 // MARK: - Dashboard Navigation
 
 enum DashboardSection: String, CaseIterable, Identifiable {
-    case devices, clipboard, transfers, remoteControl, settings
+    case devices, clipboard, transfers, settings
 
     var id: String { rawValue }
 
@@ -16,7 +16,6 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         case .devices:       return "Devices"
         case .clipboard:     return "Clipboard"
         case .transfers:     return "Transfers"
-        case .remoteControl: return "Remote control"
         case .settings:      return "Settings"
         }
     }
@@ -26,7 +25,6 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         case .devices:       return "list.bullet.rectangle"
         case .clipboard:     return "doc.on.clipboard"
         case .transfers:     return "folder"
-        case .remoteControl: return "display"
         case .settings:      return "gearshape"
         }
     }
@@ -36,7 +34,6 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         case .devices:       return "Overview"
         case .clipboard:     return "Activity"
         case .transfers:     return "Files"
-        case .remoteControl: return "Control"
         case .settings:      return "Configuration"
         }
     }
@@ -49,8 +46,6 @@ enum DashboardSection: String, CaseIterable, Identifiable {
             return "Cross-device clipboard history."
         case .transfers:
             return "Recent file transfers."
-        case .remoteControl:
-            return "Control devices remotely."
         case .settings:
             return "Configure your workspace."
         }

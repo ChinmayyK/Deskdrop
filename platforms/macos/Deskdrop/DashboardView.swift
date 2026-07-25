@@ -158,7 +158,6 @@ struct DetailContent: View {
                     case .devices: DeviceCentricDashboardView(store: store)
                     case .clipboard: TimelineSectionView(store: store, density: density)
                     case .transfers: TransfersDashboardView(store: store)
-                    case .remoteControl: Text("Remote Control Area (Coming Soon)").frame(maxWidth: .infinity, maxHeight: .infinity).foregroundStyle(Color.secondary)
                     case .settings: PreferencesView(store: store)
                     }
                 }

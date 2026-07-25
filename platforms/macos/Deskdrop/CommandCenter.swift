@@ -30,8 +30,6 @@ struct CommandCenterRootView: View {
                         TimelineSectionView(store: store, density: density)
                     case .transfers: 
                         TransfersDashboardView(store: store)
-                    case .remoteControl: 
-                        Text("Remote Control Area (Coming Soon)").foregroundStyle(Color.secondary)
                     case .settings: 
                         PreferencesView(store: store)
                     }
@@ -221,7 +219,7 @@ struct CommandCenterView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 24) {
                 
                 // Global Search Placeholder
                 HStack {
@@ -236,7 +234,7 @@ struct CommandCenterView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(CRTheme.stroke, lineWidth: 1))
                 .padding(.horizontal, 40)
-                .padding(.top, 16)
+                .padding(.top, 24)
                 
                 // Dynamic Hero Header
                 DynamicHeroHeaderView(store: store)
@@ -248,35 +246,46 @@ struct CommandCenterView: View {
                         .foregroundStyle(CRTheme.ink)
                         .padding(.horizontal, 40)
                     
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20), count: 3), spacing: 20) {
-                        LaunchpadTile(title: "Transfer Files", icon: "paperplane.fill", color: CRTheme.brandElectric) {
-                            if let first = store.connectedDevices.first {
-                                pendingFileTarget = first
-                                showingFilePicker = true
+                    ViewThatFits(in: .horizontal) {
+                        // Wide (3-2)
+                        VStack(spacing: 20) {
+                            HStack(spacing: 20) {
+                                transferTile
+                                browseTile
+                                clipboardTile
+                            }
+                            HStack(spacing: 20) {
+                                speedTestTile
+                                settingsTile
                             }
                         }
-                        LaunchpadTile(title: "Browse Device", icon: "internaldrive.fill", color: CRTheme.brandViolet) {
-                            if store.connectedDevices.first != nil {
-                                showingRemoteExplorer = true
+                        
+                        // Medium (2-2-1)
+                        VStack(spacing: 20) {
+                            HStack(spacing: 20) {
+                                transferTile
+                                browseTile
+                            }
+                            HStack(spacing: 20) {
+                                clipboardTile
+                                speedTestTile
+                            }
+                            HStack(spacing: 20) {
+                                settingsTile
                             }
                         }
-                        LaunchpadTile(title: "Clipboard", icon: "doc.on.clipboard.fill", color: CRTheme.accentPink) {
-                            withAnimation { store.selectedSection = .clipboard }
-                        }
-                        LaunchpadTile(title: "Speed Test", icon: "gauge.with.dots.needle.bottom.50percent", color: CRTheme.brandCyan) {
-                            if let first = store.connectedDevices.first {
-                                store.startSpeedTest(deviceId: first.id)
-                                withAnimation { store.selectedSection = .transfers }
-                            }
-                        }
-                        LaunchpadTile(title: "Remote Control", icon: "cursorarrow.rays", color: CRTheme.accentOrange) {
-                            withAnimation { store.selectedSection = .remoteControl }
-                        }
-                        LaunchpadTile(title: "Settings", icon: "gearshape.fill", color: CRTheme.inkSubtle) {
-                            withAnimation { store.selectedSection = .settings }
+                        
+                        // Narrow (1 col)
+                        VStack(spacing: 20) {
+                            transferTile
+                            browseTile
+                            clipboardTile
+                            speedTestTile
+                            settingsTile
                         }
                     }
                     .padding(.horizontal, 40)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
                 
                 // 4. Recent Activity
@@ -327,6 +336,41 @@ struct CommandCenterView: View {
         }
     }
     
+    // MARK: Launchpad Tile Definitions
+    private var transferTile: some View {
+        LaunchpadTile(title: "Transfer Files", icon: "paperplane.fill", color: CRTheme.brandElectric) {
+            if let first = store.connectedDevices.first {
+                pendingFileTarget = first
+                showingFilePicker = true
+            }
+        }
+    }
+    private var browseTile: some View {
+        LaunchpadTile(title: "Browse Device", icon: "internaldrive.fill", color: CRTheme.brandViolet) {
+            if store.connectedDevices.first != nil {
+                showingRemoteExplorer = true
+            }
+        }
+    }
+    private var clipboardTile: some View {
+        LaunchpadTile(title: "Clipboard", icon: "doc.on.clipboard.fill", color: CRTheme.accentPink) {
+            withAnimation(.crSpring) { store.selectedSection = .clipboard }
+        }
+    }
+    private var speedTestTile: some View {
+        LaunchpadTile(title: "Speed Test", icon: "gauge.with.dots.needle.bottom.50percent", color: CRTheme.brandCyan) {
+            if let first = store.connectedDevices.first {
+                store.startSpeedTest(deviceId: first.id)
+                withAnimation(.crSpring) { store.selectedSection = .transfers }
+            }
+        }
+    }
+    private var settingsTile: some View {
+        LaunchpadTile(title: "Settings", icon: "gearshape.fill", color: CRTheme.inkSubtle) {
+            withAnimation(.crSpring) { store.selectedSection = .settings }
+        }
+    }
+    
     private func iconFor(kind: String) -> String {
         switch kind {
         case "clipboard": return "doc.on.clipboard"
@@ -359,8 +403,7 @@ struct LaunchpadTile: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(CRTheme.ink)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
+            .frame(width: 160, height: 140)
             .background(CRTheme.surfaceStrong)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CRTheme.stroke.opacity(0.5), lineWidth: 1))
@@ -369,7 +412,7 @@ struct LaunchpadTile: View {
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
-        .animation(.crSpring, value: hovered)
+        .animation(.crFast, value: hovered)
     }
 }
 
@@ -600,7 +643,7 @@ struct LiveDevicePanel: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(32)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, minHeight: 600, maxHeight: .infinity, alignment: .center)
             }
         }
     }

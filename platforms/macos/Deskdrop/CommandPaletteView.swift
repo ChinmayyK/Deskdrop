@@ -44,10 +44,7 @@ struct CommandPaletteView: View {
                     tint: CRTheme.accentOrange, shortcut: "⌘3")
                 { store.selectedSection = .transfers },
 
-                cmd(id: "nav.remote", icon: "macwindow",
-                    label: "Remote Control", hint: "Screen sharing and control",
-                    tint: CRTheme.accentPurple, shortcut: "⌘4")
-                { store.selectedSection = .remoteControl },
+
 
                 cmd(id: "nav.settings", icon: "slider.horizontal.3",
                     label: "Settings", hint: "Tune sync and network options",
