@@ -2580,14 +2580,9 @@ class DeskdropService : Service() {
                 if (h != 0L) {
                     backgroundExecutor.execute {
                         try {
-                            val path = android.os.Environment.getExternalStorageDirectory()
-                            val stat = android.os.StatFs(path.path)
-                            val blockSize = stat.blockSizeLong
-                            val totalBlocks = stat.blockCountLong
-                            val availableBlocks = stat.availableBlocksLong
-                            
-                            val totalBytes = totalBlocks * blockSize
-                            val freeBytes = availableBlocks * blockSize
+                            val storageManager = getSystemService(android.content.Context.STORAGE_STATS_SERVICE) as android.app.usage.StorageStatsManager
+                            val totalBytes = storageManager.getTotalBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+                            val freeBytes = storageManager.getFreeBytes(android.os.storage.StorageManager.UUID_DEFAULT)
 
                             var imgSize = 0L
                             var vidSize = 0L

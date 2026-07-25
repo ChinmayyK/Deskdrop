@@ -72,9 +72,6 @@ struct CommandSidebarView: View {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(CRTheme.brandElectric)
-                Text("DeskDrop")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(CRTheme.ink)
             }
             .padding(.horizontal, 16)
             .padding(.top, 24)
