@@ -332,11 +332,18 @@ impl OutboundTransfer {
             0
         };
 
-        let elapsed = self.created_at.elapsed();
-        let speed_bps = bytes_sent.checked_div(elapsed.as_secs().max(1));
+        let elapsed_secs = self.created_at.elapsed().as_secs_f64();
+        let speed_bps = if elapsed_secs > 0.05 && bytes_sent > 0 {
+            Some((bytes_sent as f64 / elapsed_secs) as u64)
+        } else {
+            None
+        };
         let eta_secs = speed_bps.and_then(|spd| {
-            let remaining = self.meta.size_bytes.saturating_sub(bytes_sent);
-            remaining.checked_div(spd)
+            if spd > 0 {
+                Some(self.meta.size_bytes.saturating_sub(bytes_sent) / spd)
+            } else {
+                None
+            }
         });
 
         TransferProgress {
@@ -621,15 +628,18 @@ impl InboundTransfer {
         } else {
             ((self.received_chunk_count as f64 / self.total_chunks as f64) * 100.0) as u8
         };
-        let elapsed = self.started_at.map(|s| s.elapsed()).unwrap_or_default();
-        let speed_bps = if elapsed.as_secs() > 0 {
-            Some(self.bytes_received / elapsed.as_secs())
+        let elapsed_secs = self.started_at.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0);
+        let speed_bps = if elapsed_secs > 0.05 && self.bytes_received > 0 {
+            Some((self.bytes_received as f64 / elapsed_secs) as u64)
         } else {
             None
         };
         let eta_secs = speed_bps.and_then(|spd| {
-            let remaining = self.meta.size_bytes.saturating_sub(self.bytes_received);
-            remaining.checked_div(spd)
+            if spd > 0 {
+                Some(self.meta.size_bytes.saturating_sub(self.bytes_received) / spd)
+            } else {
+                None
+            }
         });
 
         TransferProgress {

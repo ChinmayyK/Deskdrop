@@ -186,21 +186,15 @@ async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream, max_size: u32) 
         max_size
     );
 
-    let mut buf = Vec::with_capacity(std::cmp::min(len as usize, 64 * 1024));
+    let mut buf = vec![0u8; len as usize];
     tokio::time::timeout(
         Duration::from_secs(10),
-        stream.take(len as u64).read_to_end(&mut buf),
+        stream.read_exact(&mut buf),
     )
     .await
     .context("timeout waiting for frame body")?
     .context("reading frame body")?;
 
-    anyhow::ensure!(
-        buf.len() == len as usize,
-        "incomplete frame body: got {}, expected {}",
-        buf.len(),
-        len
-    );
     bincode::deserialize(&buf).context("deserializing frame")
 }
 
@@ -275,21 +269,14 @@ async fn recv_encrypted(
         "encrypted frame length invalid: {len}"
     );
 
-    let mut cipher_buffer = Vec::with_capacity(std::cmp::min(len as usize, 64 * 1024));
+    let mut cipher_buffer = vec![0u8; len as usize];
     tokio::time::timeout(
         Duration::from_secs(30),
-        stream.take(len as u64).read_to_end(&mut cipher_buffer),
+        stream.read_exact(&mut cipher_buffer),
     )
     .await
     .context("timeout waiting for encrypted frame body")?
     .context("reading encrypted frame body")?;
-
-    anyhow::ensure!(
-        cipher_buffer.len() == len as usize,
-        "incomplete frame body: got {}, expected {}",
-        cipher_buffer.len(),
-        len
-    );
 
     session
         .decrypt_in_place(&mut cipher_buffer)
