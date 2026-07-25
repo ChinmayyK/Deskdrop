@@ -67,21 +67,14 @@ struct CommandSidebarView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // App Branding
-            HStack(spacing: 12) {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(CRTheme.brandElectric)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
-            
+            // App Branding removed
             // Main Navigation
             VStack(alignment: .leading, spacing: 6) {
                 Text("WORKSPACE")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(CRTheme.inkSubtle)
                     .padding(.horizontal, 16)
+                    .padding(.top, 24)
                     .padding(.bottom, 4)
                 
                 ForEach([DashboardSection.devices, .clipboard, .transfers, .settings], id: \.self) { section in
