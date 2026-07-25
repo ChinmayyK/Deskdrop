@@ -84,6 +84,7 @@ val CRTheme.accentAmber get() = Color(0xFFF59E0B)
 
 enum class AppTab { Home, Activity, Devices, Settings }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     isDark: Boolean,
