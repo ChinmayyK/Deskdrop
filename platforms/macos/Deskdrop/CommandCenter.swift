@@ -510,8 +510,8 @@ struct LiveDevicePanel: View {
                                     .font(.system(size: 13, weight: .semibold))
                                 Spacer()
                                 let used = storage.totalBytes - storage.freeBytes
-                                let usedGb = Double(used) / 1_073_741_824.0
-                                let totalGb = Double(storage.totalBytes) / 1_073_741_824.0
+                                let usedGb = Double(used) / 1_000_000_000.0
+                                let totalGb = Double(storage.totalBytes) / 1_000_000_000.0
                                 Text("\(String(format: "%.1f", usedGb)) GB / \(String(format: "%.1f", totalGb)) GB")
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundStyle(CRTheme.inkSoft)
