@@ -1594,8 +1594,8 @@ impl Engine {
                         if next_chunk >= total_chunks {
                             break 'outer;
                         }
-                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 256u32 {
-                            tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 128u32 {
+                            tokio::time::sleep(std::time::Duration::from_millis(15)).await;
                             continue;
                         }
                         let (batch, progs) = match read_outbound_chunks(
@@ -3794,6 +3794,173 @@ fn register_session(
         let rx_peer_id = peer_id;
         let rx_session_pin = session_pin.clone();
 
+        enum DiskTaskMsg {
+            Chunk {
+                transfer_id: [u8; 16],
+                chunk_index: u32,
+                offset: u64,
+                padding: usize,
+                data: bytes::Bytes,
+            },
+            Complete {
+                transfer_id: [u8; 16],
+                sha256_checksum: String,
+            },
+        }
+
+        let (disk_tx, mut disk_rx) = tokio::sync::mpsc::channel::<DiskTaskMsg>(128);
+
+        let dw_shared = shared.clone();
+        let dw_event_tx = shared.event_tx.clone();
+        let dw_outbox_tx = session_outbox_tx.clone();
+        let dw_peer_id = peer_id;
+        let dw_peer_name = peer_name.clone();
+        tokio::spawn(async move {
+            while let Some(msg) = disk_rx.recv().await {
+                match msg {
+                    DiskTaskMsg::Chunk { transfer_id, chunk_index, offset, padding, data } => {
+                        let io_ctx = {
+                            let mut mgr = dw_shared.file_transfers.lock().await;
+                            if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                t.take_io_context()
+                            } else {
+                                None
+                            }
+                        };
+                        
+                        if let Some((mut file, mut hasher)) = io_ctx {
+                            let data_len = data.len();
+                            let res = tokio::task::spawn_blocking(move || {
+                                use sha2::Digest;
+                                use std::io::{Seek, SeekFrom, Write};
+                                let current_pos = file.stream_position().unwrap_or(u64::MAX);
+                                if current_pos != offset {
+                                    if let Err(e) = file.seek(SeekFrom::Start(offset)) {
+                                        return Err(anyhow::anyhow!("seek error: {}", e));
+                                    }
+                                }
+                                if let Err(e) = file.write_all(&data) {
+                                    return Err(anyhow::anyhow!("write error: {}", e));
+                                }
+                                hasher.update(&data);
+                                if padding > 0 {
+                                    hasher.update(vec![0u8; padding]);
+                                }
+                                Ok::<_, anyhow::Error>((file, hasher))
+                            }).await.unwrap();
+                            
+                            match res {
+                                Ok((file, hasher)) => {
+                                    let mut mgr = dw_shared.file_transfers.lock().await;
+                                    if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                        t.restore_io_context(file, hasher);
+                                        let prog = t.commit_chunk(chunk_index, data_len);
+                                        let should_ack = t.should_ack();
+                                        let file_name = t.meta.file_name.clone();
+                                        drop(mgr);
+                                        
+                                        let _ = dw_event_tx.send(EngineEvent::FileTransferProgress {
+                                            transfer_id,
+                                            from_device: dw_peer_id,
+                                            file_name,
+                                            percent: prog.percent,
+                                            bytes_received: prog.bytes_received,
+                                            total_bytes: prog.total_bytes,
+                                            speed_bps: prog.speed_bps,
+                                            eta_secs: prog.eta_secs,
+                                        }).await;
+                                        
+                                        if should_ack {
+                                            let _ = dw_outbox_tx.send(AppMessage::FileChunkAck {
+                                                transfer_id,
+                                                last_confirmed_chunk: chunk_index,
+                                            }).await;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Disk I/O error: {}", e);
+                                    let mut mgr = dw_shared.file_transfers.lock().await;
+                                    mgr.cancel_inbound(&transfer_id, "disk i/o error");
+                                }
+                            }
+                        } else {
+                            tracing::error!("Missing io_ctx for chunk {} of transfer {:?}", chunk_index, transfer_id);
+                        }
+                    }
+                    DiskTaskMsg::Complete { transfer_id, sha256_checksum } => {
+                        let result = {
+                            let mut mgr = dw_shared.file_transfers.lock().await;
+                            if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
+                                let file_name = transfer.meta.file_name.clone();
+                                let file_bytes = transfer.meta.size_bytes;
+                                match transfer.finalize(sha256_checksum.clone()) {
+                                    Ok(dest) => Ok((dest, file_name, file_bytes)),
+                                    Err(e) => Err(e.to_string()),
+                                }
+                            } else {
+                                Err("transfer not found".into())
+                            }
+                        };
+                        match result {
+                            Ok((dest, file_name, file_bytes)) => {
+                                dw_shared.file_transfers.lock().await.remove_inbound(&transfer_id);
+                                let hex_tid = hex::encode(transfer_id);
+                                let dest_path_str = dest.to_string_lossy().to_string();
+                                dw_shared.activity.lock().await.record_file_transfer_complete(
+                                    dw_peer_id,
+                                    dw_peer_name.clone(),
+                                    file_name.clone(),
+                                    file_bytes,
+                                    hex_tid,
+                                    Some(dest_path_str),
+                                );
+                                let _ = dw_outbox_tx.send(AppMessage::FileTransferCompleteAck {
+                                    transfer_id,
+                                    success: true,
+                                    error: None,
+                                }).await;
+                                let _ = dw_event_tx.send(EngineEvent::FileTransferComplete {
+                                    transfer_id,
+                                    from_device: dw_peer_id,
+                                    from_name: dw_peer_name.clone(),
+                                    file_name,
+                                    dest_path: dest,
+                                }).await;
+                            }
+                            Err(e) => {
+                                {
+                                    let mut mgr = dw_shared.file_transfers.lock().await;
+                                    if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                        t.status = crate::file_transfer::TransferStatus::Failed;
+                                    }
+                                }
+                                let hex_tid = hex::encode(transfer_id);
+                                dw_shared.activity.lock().await.record_file_transfer_failed(
+                                    dw_peer_id,
+                                    dw_peer_name.clone(),
+                                    None,
+                                    hex_tid,
+                                    e.clone(),
+                                );
+                                let _ = dw_outbox_tx.send(AppMessage::FileTransferCompleteAck {
+                                    transfer_id,
+                                    success: false,
+                                    error: Some(e.clone()),
+                                }).await;
+                                let _ = dw_event_tx.send(EngineEvent::FileTransferFailed {
+                                    transfer_id,
+                                    from_device: dw_peer_id,
+                                    reason: e,
+                                }).await;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        let mut rx_disk_tx = disk_tx.clone();
         let mut rx_task = tokio::spawn(async move {
             let touch_last_seen = || {
                 rx_last_seen.store(
@@ -4182,9 +4349,9 @@ fn register_session(
                                         break 'outer;
                                     }
                                     if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 256u32
+                                        && next_chunk.saturating_sub(last_acked) > 128u32
                                     {
-                                        tokio::time::sleep(std::time::Duration::from_millis(2))
+                                        tokio::time::sleep(std::time::Duration::from_millis(15))
                                             .await;
                                         continue;
                                     }
@@ -4276,164 +4443,61 @@ fn register_session(
                             payload
                         };
 
-                        // --- Phase 2: Pipelined receiver ---
-                        // Instead of blocking the network loop on disk I/O, we validate
-                        // the chunk metadata inline (fast, no I/O), then dispatch the
-                        // actual write+hash work to a dedicated disk-writer task via
-                        // a bounded channel. The network loop never waits for disk.
-
-                        let (validation, io_ctx) = {
+                        let validation = {
                             let mut mgr = shared.file_transfers.lock().await;
                             if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
                                 if transfer.from_device != peer_id {
-                                    (Err(anyhow::anyhow!("peer mismatch")), None)
+                                    Err(anyhow::anyhow!("peer mismatch"))
                                 } else {
-                                    match transfer.validate_chunk(chunk_index, data.len()) {
-                                        Ok((offset, padding, is_duplicate)) => {
-                                            if is_duplicate {
-                                                (Ok((offset, padding, true)), None)
-                                            } else {
-                                                let ctx = transfer.take_io_context();
-                                                (Ok((offset, padding, false)), ctx)
-                                            }
-                                        }
-                                        Err(e) => (Err(e), None),
-                                    }
+                                    transfer.validate_chunk(chunk_index, data.len())
                                 }
                             } else {
-                                (Err(anyhow::anyhow!("unknown transfer")), None)
+                                Err(anyhow::anyhow!("unknown transfer"))
                             }
                         };
 
-                        let progress_and_ack = match validation {
+                        match validation {
                             Ok((offset, padding, is_duplicate)) => {
                                 if is_duplicate {
                                     let mut mgr = shared.file_transfers.lock().await;
                                     if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                        Some((
-                                            t.progress_snapshot(),
-                                            t.should_ack(),
-                                            t.meta.file_name.clone(),
-                                            t.last_confirmed_chunk,
-                                        ))
-                                    } else {
-                                        None
-                                    }
-                                } else if let Some((file, hasher)) = io_ctx {
-                                    let data_len = data.len();
-                                    // Fire-and-forget: spawn a task for disk I/O so the
-                                    // network read loop can immediately proceed to the
-                                    // next chunk. The task writes to disk, updates the
-                                    // hasher, then restores IO context and commits.
-                                    let write_shared = shared.clone();
-                                    let write_event_tx = shared.event_tx.clone();
-                                    let write_outbox_tx = rx_session_outbox_tx.clone();
-                                    tokio::task::spawn(async move {
-                                        let res = tokio::task::spawn_blocking(move || {
-                                            use sha2::Digest;
-                                            use std::io::{Seek, SeekFrom, Write};
-                                            let mut file = file;
-                                            let mut hasher = hasher;
-                                            let current_pos =
-                                                file.stream_position().unwrap_or(u64::MAX);
-                                            if current_pos != offset {
-                                                if let Err(e) = file.seek(SeekFrom::Start(offset)) {
-                                                    return Err(anyhow::anyhow!("seek error: {}", e));
-                                                }
-                                            }
-                                            if let Err(e) = file.write_all(&data) {
-                                                return Err(anyhow::anyhow!("write error: {}", e));
-                                            }
-                                            hasher.update(&data);
-                                            if padding > 0 {
-                                                hasher.update(vec![0u8; padding]);
-                                            }
-                                            Ok::<_, anyhow::Error>((file, hasher))
-                                        })
-                                        .await
-                                        .unwrap();
-
-                                        match res {
-                                            Ok((file, hasher)) => {
-                                                let mut mgr = write_shared.file_transfers.lock().await;
-                                                if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                                    t.restore_io_context(file, hasher);
-                                                    let prog = t.commit_chunk(chunk_index, data_len);
-                                                    let should_ack = t.should_ack();
-                                                    let file_name = t.meta.file_name.clone();
-                                                    let last_confirmed = t.last_confirmed_chunk;
-                                                    drop(mgr);
-
-                                                    let _ = write_event_tx
-                                                        .send(EngineEvent::FileTransferProgress {
-                                                            transfer_id,
-                                                            from_device: peer_id,
-                                                            file_name,
-                                                            percent: prog.percent,
-                                                            bytes_received: prog.bytes_received,
-                                                            total_bytes: prog.total_bytes,
-                                                            speed_bps: prog.speed_bps,
-                                                            eta_secs: prog.eta_secs,
-                                                        })
-                                                        .await;
-
-                                                    if should_ack {
-                                                        let _ = write_outbox_tx
-                                                            .send(AppMessage::FileChunkAck {
-                                                                transfer_id,
-                                                                last_confirmed_chunk: last_confirmed,
-                                                            })
-                                                            .await;
-                                                    }
-                                                }
-                                            }
-                                            Err(e) => {
-                                                tracing::error!("Disk I/O error: {}", e);
-                                            }
+                                        let prog = t.progress_snapshot();
+                                        let should_ack = t.should_ack();
+                                        let file_name = t.meta.file_name.clone();
+                                        let last_confirmed = t.last_confirmed_chunk;
+                                        drop(mgr);
+                                        
+                                        let _ = shared.event_tx.send(EngineEvent::FileTransferProgress {
+                                            transfer_id,
+                                            from_device: peer_id,
+                                            file_name,
+                                            percent: prog.percent,
+                                            bytes_received: prog.bytes_received,
+                                            total_bytes: prog.total_bytes,
+                                            speed_bps: prog.speed_bps,
+                                            eta_secs: prog.eta_secs,
+                                        }).await;
+                                        if should_ack {
+                                            let _ = rx_session_outbox_tx.send(AppMessage::FileChunkAck {
+                                                transfer_id,
+                                                last_confirmed_chunk: last_confirmed,
+                                            }).await;
                                         }
-                                    });
-
-                                    // Network loop continues immediately — no waiting for disk.
-                                    // Progress/ACK handled inside the spawned task above.
-                                    continue;
+                                    }
                                 } else {
-                                    tracing::error!("Transfer accepted but missing file handle");
-                                    None
+                                    let _ = disk_tx.send(DiskTaskMsg::Chunk {
+                                        transfer_id,
+                                        chunk_index,
+                                        offset,
+                                        padding,
+                                        data,
+                                    }).await;
                                 }
                             }
                             Err(e) => {
                                 tracing::error!("Failed to validate chunk: {:?}", e);
-                                None
                             }
                         };
-
-                        // Only reached for duplicate chunks (progress already known inline)
-                        if let Some((prog, should_ack, file_name, last_confirmed)) =
-                            progress_and_ack
-                        {
-                            let _ = shared
-                                .event_tx
-                                .send(EngineEvent::FileTransferProgress {
-                                    transfer_id,
-                                    from_device: peer_id,
-                                    file_name,
-                                    percent: prog.percent,
-                                    bytes_received: prog.bytes_received,
-                                    total_bytes: prog.total_bytes,
-                                    speed_bps: prog.speed_bps,
-                                    eta_secs: prog.eta_secs,
-                                })
-                                .await;
-
-                            if should_ack {
-                                let _ = rx_session_outbox_tx
-                                    .send(AppMessage::FileChunkAck {
-                                        transfer_id,
-                                        last_confirmed_chunk: last_confirmed,
-                                    })
-                                    .await;
-                            }
-                        }
                     }
                     Ok(AppMessage::FileChunkAck {
                         transfer_id,
@@ -4475,90 +4539,10 @@ fn register_session(
                             continue;
                         }
                         // Finalize: verify SHA-256 and write to disk.
-                        let result = {
-                            let mut mgr = shared.file_transfers.lock().await;
-                            if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
-                                if transfer.from_device != peer_id {
-                                    Err("transfer not from this peer".into())
-                                } else {
-                                    let file_name = transfer.meta.file_name.clone();
-                                    let file_bytes = transfer.meta.size_bytes;
-                                    match transfer.finalize(sha256_checksum.clone()) {
-                                        Ok(dest) => Ok((dest, file_name, file_bytes)),
-                                        Err(e) => Err(e.to_string()),
-                                    }
-                                }
-                            } else {
-                                Err("transfer not found".into())
-                            }
-                        };
-                        match result {
-                            Ok((dest, file_name, file_bytes)) => {
-                                shared
-                                    .file_transfers
-                                    .lock()
-                                    .await
-                                    .remove_inbound(&transfer_id);
-                                let hex_tid = hex::encode(transfer_id);
-                                let dest_path_str = dest.to_string_lossy().to_string();
-                                shared.activity.lock().await.record_file_transfer_complete(
-                                    peer_id,
-                                    peer_name.clone(),
-                                    file_name.clone(),
-                                    file_bytes,
-                                    hex_tid,
-                                    Some(dest_path_str),
-                                );
-                                let _ = rx_session_outbox_tx
-                                    .send(AppMessage::FileTransferCompleteAck {
-                                        transfer_id,
-                                        success: true,
-                                        error: None,
-                                    })
-                                    .await;
-                                let _ = shared
-                                    .event_tx
-                                    .send(EngineEvent::FileTransferComplete {
-                                        transfer_id,
-                                        from_device: peer_id,
-                                        from_name: peer_name.clone(),
-                                        file_name,
-                                        dest_path: dest,
-                                    })
-                                    .await;
-                            }
-                            Err(e) => {
-                                {
-                                    let mut mgr = shared.file_transfers.lock().await;
-                                    if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                        t.status = crate::file_transfer::TransferStatus::Failed;
-                                    }
-                                }
-                                let hex_tid = hex::encode(transfer_id);
-                                shared.activity.lock().await.record_file_transfer_failed(
-                                    peer_id,
-                                    peer_name.clone(),
-                                    None,
-                                    hex_tid,
-                                    e.clone(),
-                                );
-                                let _ = rx_session_outbox_tx
-                                    .send(AppMessage::FileTransferCompleteAck {
-                                        transfer_id,
-                                        success: false,
-                                        error: Some(e.clone()),
-                                    })
-                                    .await;
-                                let _ = shared
-                                    .event_tx
-                                    .send(EngineEvent::FileTransferFailed {
-                                        transfer_id,
-                                        from_device: peer_id,
-                                        reason: e,
-                                    })
-                                    .await;
-                            }
-                        }
+                        let _ = rx_disk_tx.send(DiskTaskMsg::Complete {
+                            transfer_id,
+                            sha256_checksum,
+                        }).await;
                     }
                     Ok(AppMessage::FileTransferCompleteAck {
                         transfer_id,
@@ -4720,9 +4704,9 @@ fn register_session(
                                         break 'outer;
                                     }
                                     if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 256u32
+                                        && next_chunk.saturating_sub(last_acked) > 128u32
                                     {
-                                        tokio::time::sleep(std::time::Duration::from_millis(2))
+                                        tokio::time::sleep(std::time::Duration::from_millis(15))
                                             .await;
                                         continue;
                                     }

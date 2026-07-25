@@ -392,6 +392,7 @@ pub struct InboundTransfer {
     pub transfer_id: TransferId,
     pub meta: FileTransferMetadata,
     pub total_chunks: u32,
+    pub queued_chunk_count: u32,
     pub received_chunk_count: u32,
     pub last_confirmed_chunk: u32,
     pub status: TransferStatus,
@@ -418,6 +419,7 @@ impl InboundTransfer {
             transfer_id: meta.transfer_id,
             meta,
             total_chunks,
+            queued_chunk_count: 0,
             received_chunk_count: 0,
             last_confirmed_chunk: 0,
             status: TransferStatus::Pending,
@@ -500,13 +502,15 @@ impl InboundTransfer {
             anyhow::ensure!(data_len == FILE_CHUNK_SIZE, "non-final chunk size mismatch");
         }
 
-        if chunk_index < self.received_chunk_count {
+        if chunk_index < self.queued_chunk_count {
             return Ok((0, 0, true)); // duplicate
         }
         anyhow::ensure!(
-            chunk_index == self.received_chunk_count,
+            chunk_index == self.queued_chunk_count,
             "out-of-order chunk"
         );
+        
+        self.queued_chunk_count += 1;
 
         let offset = (chunk_index as u64) * (FILE_CHUNK_SIZE as u64);
         let mut padding = 0;
