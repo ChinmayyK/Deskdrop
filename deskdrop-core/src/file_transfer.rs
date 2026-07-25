@@ -310,7 +310,7 @@ impl OutboundTransfer {
             self.meta.size_bytes
         } else {
             let sent =
-                ((self.next_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
+                ((self.last_acked_chunk as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
             if sent >= self.meta.size_bytes
                 && self.meta.size_bytes > 0
                 && self.last_acked_chunk + 1 < self.total_chunks
