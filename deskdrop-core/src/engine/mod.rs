@@ -1594,7 +1594,7 @@ impl Engine {
                         if next_chunk >= total_chunks {
                             break 'outer;
                         }
-                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 64u32 {
+                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 32u32 {
                             tokio::time::sleep(std::time::Duration::from_millis(15)).await;
                             continue;
                         }
@@ -2606,40 +2606,49 @@ impl Engine {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(5));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut disk_prune_counter = 0;
             loop {
                 interval.tick().await;
                 let mut hist = history.lock().await;
                 if let Err(err) = hist.purge_expired_sensitive_entries() {
                     tracing::warn!(error = %err, "sensitive history pruning failed");
                 }
-                let retention_days = settings.lock().await.history_retention_days;
-                if retention_days > 0 {
-                    if let Err(err) = hist.purge_expired_retention(retention_days) {
-                        tracing::warn!(error = %err, "retention history pruning failed");
-                    }
-                    
-                    // Also prune hoarded transferred cache files older than retention_days
-                    let cutoff = std::time::SystemTime::now()
-                        .checked_sub(Duration::from_secs(retention_days * 86400));
+                
+                disk_prune_counter += 1;
+                // Run the expensive filesystem scan only once every 10 minutes (120 ticks of 5s)
+                if disk_prune_counter >= 120 {
+                    disk_prune_counter = 0;
+                    let retention_days = settings.lock().await.history_retention_days;
+                    if retention_days > 0 {
+                        if let Err(err) = hist.purge_expired_retention(retention_days) {
+                            tracing::warn!(error = %err, "retention history pruning failed");
+                        }
                         
-                    if let Some(cutoff_time) = cutoff {
-                        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
-                            for entry in entries.flatten() {
-                                if let Ok(meta) = entry.metadata() {
-                                    if meta.is_file() {
-                                        if let Ok(modified) = meta.modified() {
-                                            if modified < cutoff_time {
-                                                if let Err(e) = std::fs::remove_file(entry.path()) {
-                                                    tracing::warn!("Failed to prune old file {:?}: {}", entry.path(), e);
-                                                } else {
-                                                    tracing::info!("Pruned old hoarded file {:?}", entry.path());
+                        let cache_dir_clone = cache_dir.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let cutoff = std::time::SystemTime::now()
+                                .checked_sub(Duration::from_secs(retention_days * 86400));
+                                
+                            if let Some(cutoff_time) = cutoff {
+                                if let Ok(entries) = std::fs::read_dir(&cache_dir_clone) {
+                                    for entry in entries.flatten() {
+                                        if let Ok(meta) = entry.metadata() {
+                                            if meta.is_file() {
+                                                if let Ok(modified) = meta.modified() {
+                                                    if modified < cutoff_time {
+                                                        if let Err(e) = std::fs::remove_file(entry.path()) {
+                                                            tracing::warn!("Failed to prune old file {:?}: {}", entry.path(), e);
+                                                        } else {
+                                                            tracing::info!("Pruned old hoarded file {:?}", entry.path());
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
+                        });
                     }
                 }
             }
@@ -3636,7 +3645,7 @@ fn register_session(
     // If the network is slower than disk I/O, this applies backpressure to the
     // file reading loop so we don't blow up Android's memory limits.
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(64);
-    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(128);
+    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(32);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
     match shared
         .peer_manager
@@ -4175,7 +4184,7 @@ fn register_session(
                                         break 'outer;
                                     }
                                     if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 64u32
+                                        && next_chunk.saturating_sub(last_acked) > 32u32
                                     {
                                         tokio::time::sleep(std::time::Duration::from_millis(15))
                                             .await;
@@ -4674,7 +4683,7 @@ fn register_session(
                                         break 'outer;
                                     }
                                     if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 64u32
+                                        && next_chunk.saturating_sub(last_acked) > 32u32
                                     {
                                         tokio::time::sleep(std::time::Duration::from_millis(15))
                                             .await;
