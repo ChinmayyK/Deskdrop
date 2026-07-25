@@ -1581,7 +1581,7 @@ impl Engine {
                 let bg_transfer_id = transfer_id;
                 let bg_peer_id = peer_id;
                 tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 8;
+                    const BATCH_SIZE: usize = 2;
                     'outer: loop {
                         let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
@@ -1594,8 +1594,8 @@ impl Engine {
                         if next_chunk >= total_chunks {
                             break 'outer;
                         }
-                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 128u32 {
-                            tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 256u32 {
+                            tokio::time::sleep(std::time::Duration::from_millis(2)).await;
                             continue;
                         }
                         let (batch, progs) = match read_outbound_chunks(
@@ -3643,7 +3643,7 @@ fn register_session(
     // If the network is slower than disk I/O, this applies backpressure to the
     // file reading loop so we don't blow up Android's memory limits.
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(64);
-    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(32);
+    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(128);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
     match shared
         .peer_manager
@@ -4168,7 +4168,7 @@ fn register_session(
                             let bg_transfer_id = transfer_id;
                             let bg_peer_id = peer_id;
                             tokio::spawn(async move {
-                                const BATCH_SIZE: usize = 8;
+                                const BATCH_SIZE: usize = 2;
                                 'outer: loop {
                                     let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
@@ -4182,9 +4182,9 @@ fn register_session(
                                         break 'outer;
                                     }
                                     if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 128u32
+                                        && next_chunk.saturating_sub(last_acked) > 256u32
                                     {
-                                        tokio::time::sleep(std::time::Duration::from_millis(15))
+                                        tokio::time::sleep(std::time::Duration::from_millis(2))
                                             .await;
                                         continue;
                                     }
@@ -4276,6 +4276,12 @@ fn register_session(
                             payload
                         };
 
+                        // --- Phase 2: Pipelined receiver ---
+                        // Instead of blocking the network loop on disk I/O, we validate
+                        // the chunk metadata inline (fast, no I/O), then dispatch the
+                        // actual write+hash work to a dedicated disk-writer task via
+                        // a bounded channel. The network loop never waits for disk.
+
                         let (validation, io_ctx) = {
                             let mut mgr = shared.file_transfers.lock().await;
                             if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
@@ -4313,51 +4319,83 @@ fn register_session(
                                     } else {
                                         None
                                     }
-                                } else if let Some((mut file, mut hasher)) = io_ctx {
+                                } else if let Some((file, hasher)) = io_ctx {
                                     let data_len = data.len();
-                                    let res = tokio::task::spawn_blocking(move || {
-                                        use sha2::Digest;
-                                        use std::io::{Seek, SeekFrom, Write};
-                                        let current_pos =
-                                            file.stream_position().unwrap_or(u64::MAX);
-                                        if current_pos != offset {
-                                            if let Err(e) = file.seek(SeekFrom::Start(offset)) {
-                                                return Err(anyhow::anyhow!("seek error: {}", e));
+                                    // Fire-and-forget: spawn a task for disk I/O so the
+                                    // network read loop can immediately proceed to the
+                                    // next chunk. The task writes to disk, updates the
+                                    // hasher, then restores IO context and commits.
+                                    let write_shared = shared.clone();
+                                    let write_event_tx = shared.event_tx.clone();
+                                    let write_outbox_tx = rx_session_outbox_tx.clone();
+                                    tokio::task::spawn(async move {
+                                        let res = tokio::task::spawn_blocking(move || {
+                                            use sha2::Digest;
+                                            use std::io::{Seek, SeekFrom, Write};
+                                            let mut file = file;
+                                            let mut hasher = hasher;
+                                            let current_pos =
+                                                file.stream_position().unwrap_or(u64::MAX);
+                                            if current_pos != offset {
+                                                if let Err(e) = file.seek(SeekFrom::Start(offset)) {
+                                                    return Err(anyhow::anyhow!("seek error: {}", e));
+                                                }
                                             }
-                                        }
-                                        if let Err(e) = file.write_all(&data) {
-                                            return Err(anyhow::anyhow!("write error: {}", e));
-                                        }
-                                        hasher.update(&data);
-                                        if padding > 0 {
-                                            hasher.update(vec![0u8; padding]);
-                                        }
-                                        Ok::<_, anyhow::Error>((file, hasher))
-                                    })
-                                    .await
-                                    .unwrap();
+                                            if let Err(e) = file.write_all(&data) {
+                                                return Err(anyhow::anyhow!("write error: {}", e));
+                                            }
+                                            hasher.update(&data);
+                                            if padding > 0 {
+                                                hasher.update(vec![0u8; padding]);
+                                            }
+                                            Ok::<_, anyhow::Error>((file, hasher))
+                                        })
+                                        .await
+                                        .unwrap();
 
-                                    match res {
-                                        Ok((file, hasher)) => {
-                                            let mut mgr = shared.file_transfers.lock().await;
-                                            if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                                t.restore_io_context(file, hasher);
-                                                let prog = t.commit_chunk(chunk_index, data_len);
-                                                Some((
-                                                    prog,
-                                                    t.should_ack(),
-                                                    t.meta.file_name.clone(),
-                                                    t.last_confirmed_chunk,
-                                                ))
-                                            } else {
-                                                None
+                                        match res {
+                                            Ok((file, hasher)) => {
+                                                let mut mgr = write_shared.file_transfers.lock().await;
+                                                if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
+                                                    t.restore_io_context(file, hasher);
+                                                    let prog = t.commit_chunk(chunk_index, data_len);
+                                                    let should_ack = t.should_ack();
+                                                    let file_name = t.meta.file_name.clone();
+                                                    let last_confirmed = t.last_confirmed_chunk;
+                                                    drop(mgr);
+
+                                                    let _ = write_event_tx
+                                                        .send(EngineEvent::FileTransferProgress {
+                                                            transfer_id,
+                                                            from_device: peer_id,
+                                                            file_name,
+                                                            percent: prog.percent,
+                                                            bytes_received: prog.bytes_received,
+                                                            total_bytes: prog.total_bytes,
+                                                            speed_bps: prog.speed_bps,
+                                                            eta_secs: prog.eta_secs,
+                                                        })
+                                                        .await;
+
+                                                    if should_ack {
+                                                        let _ = write_outbox_tx
+                                                            .send(AppMessage::FileChunkAck {
+                                                                transfer_id,
+                                                                last_confirmed_chunk: last_confirmed,
+                                                            })
+                                                            .await;
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("Disk I/O error: {}", e);
                                             }
                                         }
-                                        Err(e) => {
-                                            tracing::error!("Disk I/O error: {}", e);
-                                            None
-                                        }
-                                    }
+                                    });
+
+                                    // Network loop continues immediately — no waiting for disk.
+                                    // Progress/ACK handled inside the spawned task above.
+                                    continue;
                                 } else {
                                     tracing::error!("Transfer accepted but missing file handle");
                                     None
@@ -4369,6 +4407,7 @@ fn register_session(
                             }
                         };
 
+                        // Only reached for duplicate chunks (progress already known inline)
                         if let Some((prog, should_ack, file_name, last_confirmed)) =
                             progress_and_ack
                         {
@@ -4667,7 +4706,7 @@ fn register_session(
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_peer_id = peer_id;
                             tokio::spawn(async move {
-                                const BATCH_SIZE: usize = 8;
+                                const BATCH_SIZE: usize = 2;
                                 'outer: loop {
                                     let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
@@ -4681,9 +4720,9 @@ fn register_session(
                                         break 'outer;
                                     }
                                     if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 128u32
+                                        && next_chunk.saturating_sub(last_acked) > 256u32
                                     {
-                                        tokio::time::sleep(std::time::Duration::from_millis(15))
+                                        tokio::time::sleep(std::time::Duration::from_millis(2))
                                             .await;
                                         continue;
                                     }
@@ -5778,7 +5817,7 @@ fn register_session(
                     if let Err(err) = sess_tx.send_no_flush(&msg).await {
                         break format!("send failed: {err}");
                     }
-                    for _ in 0..7 {
+                    for _ in 0..31 {
                         match file_outbox_rx.try_recv() {
                             Ok(next_msg) => {
                                 if let Err(_err) = sess_tx.send_no_flush(&next_msg).await {
