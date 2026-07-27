@@ -1581,7 +1581,7 @@ impl Engine {
                 let bg_transfer_id = transfer_id;
                 let bg_peer_id = peer_id;
                 tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 2;
+                    const BATCH_SIZE: usize = 16;
                     'outer: loop {
                         let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
@@ -3828,13 +3828,13 @@ fn register_session(
                             }
                         };
                         
-                        if let Some((mut file, mut hasher)) = io_ctx {
+                        if let Some((mut file, mut hasher, last_offset)) = io_ctx {
                             let data_len = data.len();
                             let res = tokio::task::spawn_blocking(move || {
                                 use sha2::Digest;
                                 use std::io::{Seek, SeekFrom, Write};
-                                let current_pos = file.stream_position().unwrap_or(u64::MAX);
-                                if current_pos != offset {
+                                
+                                if last_offset != offset {
                                     if let Err(e) = file.seek(SeekFrom::Start(offset)) {
                                         return Err(anyhow::anyhow!("seek error: {}", e));
                                     }
@@ -3846,14 +3846,15 @@ fn register_session(
                                 if padding > 0 {
                                     hasher.update(vec![0u8; padding]);
                                 }
-                                Ok::<_, anyhow::Error>((file, hasher))
+                                let new_offset = offset + data.len() as u64;
+                                Ok::<_, anyhow::Error>((file, hasher, new_offset))
                             }).await.unwrap();
                             
                             match res {
-                                Ok((file, hasher)) => {
+                                Ok((file, hasher, new_offset)) => {
                                     let mut mgr = dw_shared.file_transfers.lock().await;
                                     if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                        t.restore_io_context(file, hasher);
+                                        t.restore_io_context(file, hasher, new_offset);
                                         let prog = t.commit_chunk(chunk_index, data_len);
                                         let should_ack = t.should_ack();
                                         let file_name = t.meta.file_name.clone();
@@ -4335,7 +4336,7 @@ fn register_session(
                             let bg_transfer_id = transfer_id;
                             let bg_peer_id = peer_id;
                             tokio::spawn(async move {
-                                const BATCH_SIZE: usize = 2;
+                                const BATCH_SIZE: usize = 16;
                                 'outer: loop {
                                     let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
@@ -4522,6 +4523,22 @@ fn register_session(
                                 || transfer.target_device.is_none()
                             {
                                 transfer.on_chunk_ack(last_confirmed_chunk);
+                                let prog = transfer.progress();
+                                let fname = transfer.meta.file_name.clone();
+                                let event_tx = shared.event_tx.clone();
+                                let tid = transfer_id;
+                                tokio::spawn(async move {
+                                    let _ = event_tx.send(EngineEvent::FileTransferProgress {
+                                        transfer_id: tid,
+                                        from_device: peer_id,
+                                        file_name: fname,
+                                        percent: prog.percent,
+                                        bytes_received: prog.bytes_received,
+                                        total_bytes: prog.total_bytes,
+                                        speed_bps: prog.speed_bps,
+                                        eta_secs: prog.eta_secs,
+                                    }).await;
+                                });
                             }
                         }
                     }
@@ -4690,7 +4707,7 @@ fn register_session(
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_peer_id = peer_id;
                             tokio::spawn(async move {
-                                const BATCH_SIZE: usize = 2;
+                                const BATCH_SIZE: usize = 16;
                                 'outer: loop {
                                     let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;

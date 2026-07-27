@@ -408,6 +408,7 @@ pub struct InboundTransfer {
     pub started_at: Option<Instant>,
     pub last_active_at: Instant,
     pub bytes_received: u64,
+    pub last_written_offset: u64,
     /// Temp file path for streaming writes.
 
     /// Persistent file handle to avoid re-opening on every chunk.
@@ -435,7 +436,7 @@ impl InboundTransfer {
             started_at: None,
             last_active_at: Instant::now(),
             bytes_received: 0,
-
+            last_written_offset: 0,
             file_handle: None,
             dest_path: None,
             from_device,
@@ -474,18 +475,23 @@ impl InboundTransfer {
         Ok(())
     }
 
-    pub fn take_io_context(&mut self) -> Option<(BufWriter<std::fs::File>, sha2::Sha256)> {
+    pub fn take_io_context(&mut self) -> Option<(BufWriter<std::fs::File>, sha2::Sha256, u64)> {
         if let Some(file) = self.file_handle.take() {
-            let hasher = std::mem::replace(&mut self.hasher, sha2::Sha256::new());
-            Some((file, hasher))
+            Some((file, self.hasher.clone(), self.last_written_offset))
         } else {
             None
         }
     }
 
-    pub fn restore_io_context(&mut self, file: BufWriter<std::fs::File>, hasher: sha2::Sha256) {
+    pub fn restore_io_context(
+        &mut self,
+        file: BufWriter<std::fs::File>,
+        hasher: sha2::Sha256,
+        new_offset: u64,
+    ) {
         self.file_handle = Some(file);
         self.hasher = hasher;
+        self.last_written_offset = new_offset;
     }
 
     pub fn validate_chunk(
