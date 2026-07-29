@@ -1580,7 +1580,8 @@ impl Engine {
                 let bg_event_tx = self.shared.event_tx.clone();
                 let bg_transfer_id = transfer_id;
                 let bg_peer_id = peer_id;
-                tokio::spawn(async move {
+                let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> = std::collections::HashMap::new();
+                            tokio::spawn(async move {
                     const BATCH_SIZE: usize = 16;
                     'outer: loop {
                         let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
@@ -1609,20 +1610,26 @@ impl Engine {
                             None => break 'outer,
                         };
 
-                        if let Some((prog, fname)) = progs.last() {
-                            let _ = bg_event_tx
-                                .send(EngineEvent::FileTransferProgress {
-                                    transfer_id: bg_transfer_id,
-                                    from_device: bg_peer_id,
-                                    file_name: fname.clone(),
-                                    percent: prog.percent,
-                                    bytes_received: prog.bytes_received,
-                                    total_bytes: prog.total_bytes,
-                                    speed_bps: prog.speed_bps,
-                                    eta_secs: prog.eta_secs,
-                                })
-                                .await;
-                        }
+                        
+                                    if let Some((prog, fname)) = progs.last() {
+                                        let now = std::time::Instant::now();
+                                        let last = bg_last_prog_emit.get(&bg_transfer_id).copied().unwrap_or_else(|| now.checked_sub(std::time::Duration::from_secs(1)).unwrap());
+                                        if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                                            bg_last_prog_emit.insert(bg_transfer_id, now);
+                                            let _ = bg_event_tx
+                                                .send(EngineEvent::FileTransferProgress {
+                                                    transfer_id: bg_transfer_id,
+                                                    from_device: bg_peer_id,
+                                                    file_name: fname.clone(),
+                                                    percent: prog.percent,
+                                                    bytes_received: prog.bytes_received,
+                                                    total_bytes: prog.total_bytes,
+                                                    speed_bps: prog.speed_bps,
+                                                    eta_secs: prog.eta_secs,
+                                                })
+                                                .await;
+                                        }
+                                    }
 
                         if batch.is_empty() {
                             break;
@@ -3809,6 +3816,7 @@ fn register_session(
         }
 
         let (disk_tx, mut disk_rx) = tokio::sync::mpsc::channel::<DiskTaskMsg>(128);
+        let mut last_disk_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> = std::collections::HashMap::new();
 
         let dw_shared = shared.clone();
         let dw_event_tx = shared.event_tx.clone();
@@ -3860,16 +3868,22 @@ fn register_session(
                                         let file_name = t.meta.file_name.clone();
                                         drop(mgr);
                                         
-                                        let _ = dw_event_tx.send(EngineEvent::FileTransferProgress {
-                                            transfer_id,
-                                            from_device: dw_peer_id,
-                                            file_name,
-                                            percent: prog.percent,
-                                            bytes_received: prog.bytes_received,
-                                            total_bytes: prog.total_bytes,
-                                            speed_bps: prog.speed_bps,
-                                            eta_secs: prog.eta_secs,
-                                        }).await;
+                                        
+                                        let now = std::time::Instant::now();
+                                        let last = last_disk_prog_emit.get(&transfer_id).copied().unwrap_or_else(|| now.checked_sub(std::time::Duration::from_secs(1)).unwrap());
+                                        if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                                            last_disk_prog_emit.insert(transfer_id, now);
+                                            let _ = dw_event_tx.send(EngineEvent::FileTransferProgress {
+                                                transfer_id,
+                                                from_device: dw_peer_id,
+                                                file_name,
+                                                percent: prog.percent,
+                                                bytes_received: prog.bytes_received,
+                                                total_bytes: prog.total_bytes,
+                                                speed_bps: prog.speed_bps,
+                                                eta_secs: prog.eta_secs,
+                                            }).await;
+                                        }
                                         
                                         if should_ack {
                                             let _ = dw_outbox_tx.send(AppMessage::FileChunkAck {
@@ -4335,6 +4349,7 @@ fn register_session(
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_transfer_id = transfer_id;
                             let bg_peer_id = peer_id;
+                            let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> = std::collections::HashMap::new();
                             tokio::spawn(async move {
                                 const BATCH_SIZE: usize = 16;
                                 'outer: loop {
@@ -4367,19 +4382,25 @@ fn register_session(
                                         None => break 'outer,
                                     };
 
+                                    
                                     if let Some((prog, fname)) = progs.last() {
-                                        let _ = bg_event_tx
-                                            .send(EngineEvent::FileTransferProgress {
-                                                transfer_id: bg_transfer_id,
-                                                from_device: bg_peer_id,
-                                                file_name: fname.clone(),
-                                                percent: prog.percent,
-                                                bytes_received: prog.bytes_received,
-                                                total_bytes: prog.total_bytes,
-                                                speed_bps: prog.speed_bps,
-                                                eta_secs: prog.eta_secs,
-                                            })
-                                            .await;
+                                        let now = std::time::Instant::now();
+                                        let last = bg_last_prog_emit.get(&bg_transfer_id).copied().unwrap_or_else(|| now.checked_sub(std::time::Duration::from_secs(1)).unwrap());
+                                        if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                                            bg_last_prog_emit.insert(bg_transfer_id, now);
+                                            let _ = bg_event_tx
+                                                .send(EngineEvent::FileTransferProgress {
+                                                    transfer_id: bg_transfer_id,
+                                                    from_device: bg_peer_id,
+                                                    file_name: fname.clone(),
+                                                    percent: prog.percent,
+                                                    bytes_received: prog.bytes_received,
+                                                    total_bytes: prog.total_bytes,
+                                                    speed_bps: prog.speed_bps,
+                                                    eta_secs: prog.eta_secs,
+                                                })
+                                                .await;
+                                        }
                                     }
 
                                     if batch.is_empty() {
@@ -4706,6 +4727,7 @@ fn register_session(
                             let bg_transfer_id = transfer_id;
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_peer_id = peer_id;
+                            let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> = std::collections::HashMap::new();
                             tokio::spawn(async move {
                                 const BATCH_SIZE: usize = 16;
                                 'outer: loop {
@@ -4738,20 +4760,25 @@ fn register_session(
                                         None => break 'outer,
                                     };
 
-                                    // Send progress updates
-                                    for (prog, fname) in progs {
-                                        let _ = bg_event_tx
-                                            .send(EngineEvent::FileTransferProgress {
-                                                transfer_id: bg_transfer_id,
-                                                from_device: bg_peer_id,
-                                                file_name: fname,
-                                                percent: prog.percent,
-                                                bytes_received: prog.bytes_received,
-                                                total_bytes: prog.total_bytes,
-                                                speed_bps: prog.speed_bps,
-                                                eta_secs: prog.eta_secs,
-                                            })
-                                            .await;
+                                    
+                                    if let Some((prog, fname)) = progs.last() {
+                                        let now = std::time::Instant::now();
+                                        let last = bg_last_prog_emit.get(&bg_transfer_id).copied().unwrap_or_else(|| now.checked_sub(std::time::Duration::from_secs(1)).unwrap());
+                                        if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                                            bg_last_prog_emit.insert(bg_transfer_id, now);
+                                            let _ = bg_event_tx
+                                                .send(EngineEvent::FileTransferProgress {
+                                                    transfer_id: bg_transfer_id,
+                                                    from_device: bg_peer_id,
+                                                    file_name: fname.clone(),
+                                                    percent: prog.percent,
+                                                    bytes_received: prog.bytes_received,
+                                                    total_bytes: prog.total_bytes,
+                                                    speed_bps: prog.speed_bps,
+                                                    eta_secs: prog.eta_secs,
+                                                })
+                                                .await;
+                                        }
                                     }
 
                                     if batch.is_empty() {
