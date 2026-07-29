@@ -37,13 +37,15 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub const FILE_CHUNK_SIZE: usize = 2 * 1024 * 1024; // 2 MB per chunk — larger chunks reduce per-chunk protocol framing overhead
+pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chunks reduce per-chunk
+                                                    // overhead (mutex locks, syscalls, encrypt/serialize
+                                                    // round-trips) by 2× vs 512 KB.
 
 /// Maximum transfer size (4 GB). Rejects announced transfers exceeding this
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 8; // ACK every 16 MB (8 chunks * 2 MB)
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 4; // ACK every 4 MB
 
 pub type TransferId = [u8; 16];
 
@@ -133,6 +135,9 @@ pub struct OutboundTransfer {
     pub target_device: Option<Uuid>,
     pub paused: bool,
     pub hasher: Option<Sha256>,
+    pub last_speed_calc_at: Option<Instant>,
+    pub last_speed_calc_bytes: u64,
+    pub current_speed_bps: Option<u64>,
 }
 
 impl OutboundTransfer {
@@ -159,6 +164,9 @@ impl OutboundTransfer {
             target_device,
             paused: false,
             hasher: Some(Sha256::new()),
+            last_speed_calc_at: None,
+            last_speed_calc_bytes: 0,
+            current_speed_bps: None,
         }
     }
 
@@ -182,6 +190,9 @@ impl OutboundTransfer {
             target_device,
             paused: false,
             hasher: Some(Sha256::new()),
+            last_speed_calc_at: None,
+            last_speed_calc_bytes: 0,
+            current_speed_bps: None,
         })
     }
 
@@ -271,14 +282,14 @@ impl OutboundTransfer {
         }
         let last_acked = self.last_acked_chunk.unwrap_or(0);
         let in_flight = self.next_chunk.saturating_sub(last_acked);
-        if in_flight < 128 {
+        if in_flight < 16 {
             max_batch
-        } else if in_flight < 256 {
-            (max_batch / 2).max(4)
-        } else if in_flight < 512 {
-            4.min(max_batch)
+        } else if in_flight < 48 {
+            (max_batch / 2).max(1)
+        } else if in_flight < 96 {
+            2.min(max_batch)
         } else {
-            2
+            1
         }
     }
 
@@ -306,7 +317,7 @@ impl OutboundTransfer {
         }
     }
 
-    pub fn progress(&self) -> TransferProgress {
+    pub fn progress(&mut self) -> TransferProgress {
         let bytes_sent = if self.status == TransferStatus::Complete {
             self.meta.size_bytes
         } else {
@@ -334,12 +345,23 @@ impl OutboundTransfer {
             0
         };
 
-        let elapsed_secs = self.started_at.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0);
-        let speed_bps = if elapsed_secs > 0.05 && bytes_sent > 0 {
-            Some((bytes_sent as f64 / elapsed_secs) as u64)
+        let now = Instant::now();
+        if let Some(last_calc) = self.last_speed_calc_at {
+            let elapsed = now.duration_since(last_calc).as_secs_f64();
+            if elapsed >= 0.5 {
+                if bytes_sent >= self.last_speed_calc_bytes {
+                    let diff = bytes_sent - self.last_speed_calc_bytes;
+                    self.current_speed_bps = Some((diff as f64 / elapsed) as u64);
+                }
+                self.last_speed_calc_at = Some(now);
+                self.last_speed_calc_bytes = bytes_sent;
+            }
         } else {
-            None
-        };
+            self.last_speed_calc_at = Some(now);
+            self.last_speed_calc_bytes = bytes_sent;
+        }
+
+        let speed_bps = self.current_speed_bps;
         let eta_secs = speed_bps.and_then(|spd| {
             if spd > 0 {
                 Some(self.meta.size_bytes.saturating_sub(bytes_sent) / spd)
@@ -417,6 +439,9 @@ pub struct InboundTransfer {
     pub from_device_name: String,
     pub paused: bool,
     hasher: Sha256,
+    pub last_speed_calc_at: Option<Instant>,
+    pub last_speed_calc_bytes: u64,
+    pub current_speed_bps: Option<u64>,
 }
 
 impl InboundTransfer {
@@ -441,6 +466,9 @@ impl InboundTransfer {
             from_device_name,
             paused: false,
             hasher: Sha256::new(),
+            last_speed_calc_at: None,
+            last_speed_calc_bytes: 0,
+            current_speed_bps: None,
         }
     }
 
@@ -637,18 +665,30 @@ impl InboundTransfer {
         Ok(())
     }
 
-    pub fn progress_snapshot(&self) -> TransferProgress {
+    pub fn progress_snapshot(&mut self) -> TransferProgress {
         let percent = if self.total_chunks == 0 {
             100
         } else {
             ((self.received_chunk_count as f64 / self.total_chunks as f64) * 100.0) as u8
         };
-        let elapsed_secs = self.started_at.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0);
-        let speed_bps = if elapsed_secs > 0.05 && self.bytes_received > 0 {
-            Some((self.bytes_received as f64 / elapsed_secs) as u64)
+        
+        let now = Instant::now();
+        if let Some(last_calc) = self.last_speed_calc_at {
+            let elapsed = now.duration_since(last_calc).as_secs_f64();
+            if elapsed >= 0.5 {
+                if self.bytes_received >= self.last_speed_calc_bytes {
+                    let diff = self.bytes_received - self.last_speed_calc_bytes;
+                    self.current_speed_bps = Some((diff as f64 / elapsed) as u64);
+                }
+                self.last_speed_calc_at = Some(now);
+                self.last_speed_calc_bytes = self.bytes_received;
+            }
         } else {
-            None
-        };
+            self.last_speed_calc_at = Some(now);
+            self.last_speed_calc_bytes = self.bytes_received;
+        }
+
+        let speed_bps = self.current_speed_bps;
         let eta_secs = speed_bps.and_then(|spd| {
             if spd > 0 {
                 Some(self.meta.size_bytes.saturating_sub(self.bytes_received) / spd)
@@ -961,9 +1001,9 @@ impl FileTransferManager {
             .collect()
     }
 
-    pub fn active_transfers(&self) -> Vec<serde_json::Value> {
+    pub fn active_transfers(&mut self) -> Vec<serde_json::Value> {
         let mut transfers = Vec::new();
-        for t in self.inbound.values() {
+        for t in self.inbound.values_mut() {
             let percent = if t.meta.size_bytes > 0 {
                 (t.bytes_received as f64 / t.meta.size_bytes as f64 * 100.0) as u8
             } else {
@@ -993,7 +1033,7 @@ impl FileTransferManager {
                 "status": status_str
             }));
         }
-        for t in self.outbound.values() {
+        for t in self.outbound.values_mut() {
             let prog = t.progress();
             let bytes_sent = prog.bytes_received;
             let percent = prog.percent;
