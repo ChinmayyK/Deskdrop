@@ -47,11 +47,16 @@ fun OnboardingScreen(
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     val currentStep = when {
-        forceCompletion -> 3
+        forceCompletion -> 1
         selectedPeer == null -> 0
         !selectedPeer.trusted -> 1
-        selectedPeer.lastSyncSecs != null && selectedPeer.lastSyncSecs > sessionStartTimeSecs -> 3
-        else -> 2
+        else -> 1 // Handled by LaunchedEffect
+    }
+
+    LaunchedEffect(selectedPeer?.trusted) {
+        if (selectedPeer?.trusted == true) {
+            onComplete()
+        }
     }
 
     CRBackground(isDark = isDark) {
@@ -62,18 +67,6 @@ fun OnboardingScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Pagination
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 16.dp)) {
-                repeat(4) { step ->
-                    Box(
-                        modifier = Modifier
-                            .size(if (step == currentStep) 10.dp else 8.dp)
-                            .clip(CircleShape)
-                            .background(if (step == currentStep) CRTheme.blueSoft else CRTheme.stroke(isDark))
-                    )
-                }
-            }
-
             Spacer(modifier = Modifier.height(32.dp))
 
             Box(modifier = Modifier.weight(1f)) {
@@ -85,43 +78,19 @@ fun OnboardingScreen(
                             onConnectPeer(it)
                         })
                         1 -> StepTwoPairing(isDark, selectedPeer, onCancel = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); selectedPeerId = null })
-                        2 -> StepThreeSendSample(isDark, selectedPeer, onSend = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            if (it != null) onSendSampleText(it)
-                            forceCompletion = true
-                        }, onSkip = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            forceCompletion = true
-                        })
-                        3 -> StepFourCompletion(isDark)
                     }
                 }
             }
 
-            // Footer
+            // Footer (Simplified)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (currentStep == 0) {
-                    TextButton(onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); onComplete() }) {
-                        Text("SKIP FOR NOW", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
-                    }
-                } else if (currentStep > 0 && currentStep < 3) {
+                if (currentStep == 1) {
                     TextButton(onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); selectedPeerId = null }) {
                         Text("CANCEL", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    Spacer(modifier = Modifier.width(64.dp))
-                }
-
-                if (currentStep == 3) {
-                    Button(
-                        onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); onComplete() },
-                        colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft)
-                    ) {
-                        Text("GET STARTED", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -290,66 +259,6 @@ private fun StepTwoPairing(isDark: Boolean, selectedPeer: PeerSnapshot?, onCance
     }
 }
 
-@Composable
-private fun StepThreeSendSample(isDark: Boolean, selectedPeer: PeerSnapshot?, onSend: (PeerSnapshot?) -> Unit, onSkip: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Text("Test Connection", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Let's make sure it works. Click below to send a sample message.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Button(
-            onClick = { onSend(selectedPeer) },
-            colors = ButtonDefaults.buttonColors(containerColor = CRTheme.blueSoft),
-            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
-        ) {
-            Icon(Icons.Rounded.Send, contentDescription = "Send", tint = CRTheme.bg(isDark))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("SEND TEST MESSAGE", color = CRTheme.bg(isDark), fontWeight = FontWeight.Bold)
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        TextButton(
-            onClick = onSkip,
-            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
-        ) {
-            Text("SKIP TEST", color = CRTheme.textMedium(isDark), fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun StepFourCompletion(isDark: Boolean) {
-    val scale = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        scale.animateTo(
-            targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessLow
-            )
-        )
-    }
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .scale(scale.value)
-                .clip(CircleShape)
-                .background(CRTheme.statusGreen.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Rounded.CheckCircle, contentDescription = "Success", tint = CRTheme.statusGreen, modifier = Modifier.size(48.dp))
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("You're all set!", style = CRTypography.h1, color = CRTheme.textHigh(isDark))
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Received files will automatically appear here.\nClipboard text will be instantly available to paste.", style = CRTypography.bodyMedium, color = CRTheme.textMedium(isDark), textAlign = TextAlign.Center)
-    }
-}
 
 @Composable
 fun RadarAnimation(isDark: Boolean) {

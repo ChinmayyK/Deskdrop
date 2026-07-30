@@ -44,6 +44,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -566,10 +568,11 @@ fun HomeTab(
             isDark = isDark,
             enabled = hasConnectedPeers,
             lastSyncSecs = maxSyncSecs,
+            feed = feed,
             onActionPushClipboard = onActionPushClipboard,
             onActionSendFiles = { onActionSendFiles(null) },
             onActionStreamCamera = onActionStreamCamera,
-            onActionLinks = {}
+            onApplyClipboard = onApplyClipboard
         )
         
         Spacer(modifier = Modifier.height(32.dp)) // Contextual gap
@@ -628,30 +631,72 @@ fun QuickActionsGrid(
     isDark: Boolean,
     enabled: Boolean,
     lastSyncSecs: Long?,
+    feed: List<ActivityEntry>,
     onActionPushClipboard: () -> Unit,
     onActionSendFiles: () -> Unit,
     onActionStreamCamera: () -> Unit,
-    onActionLinks: () -> Unit
+    onApplyClipboard: (ActivityEntry) -> Unit
 ) {
     Column(
         modifier = Modifier.padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Large Primary Action
-        QuickActionCardPrimary(
-            isDark = isDark,
-            enabled = enabled,
-            icon = Icons.Default.ContentCopy,
-            title = "Clipboard Sync",
-            subtitle = if (lastSyncSecs != null) {
-                val diff = (System.currentTimeMillis() / 1000) - lastSyncSecs
-                if (diff < 60) "Last synced just now"
-                else if (diff < 3600) "Last synced ${diff / 60}m ago"
-                else "Last synced ${diff / 3600}h ago"
-            } else "Send copied text & images",
-            color = CRTheme.brandElectric,
-            onClick = onActionPushClipboard
-        )
+        val recentClipboards = feed.filter { it.kind == ActivityKind.CLIPBOARD_TEXT || it.kind == ActivityKind.CLIPBOARD_IMAGE }.take(5)
+        
+        if (recentClipboards.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(if (isDark) Color(0xFF1E1E1E) else Color(0xFFF5F5F5))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Clipboard History", style = CRTypography.h2, color = CRTheme.textHigh(isDark))
+                    Box(modifier = Modifier.clickable { onActionPushClipboard() }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Push", tint = CRTheme.brandElectric)
+                    }
+                }
+                
+                recentClipboards.forEachIndexed { index, entry ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (index == 0) CRTheme.brandElectric.copy(alpha=0.1f) else Color.Transparent)
+                            .clickable { onApplyClipboard(entry) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = entry.preview,
+                            style = CRTypography.bodyMedium,
+                            color = if (index == 0) CRTheme.brandElectric else CRTheme.textMedium(isDark),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = CRTheme.textMedium(isDark).copy(alpha=0.5f), modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        } else {
+            // Large Primary Action fallback
+            QuickActionCardPrimary(
+                isDark = isDark,
+                enabled = enabled,
+                icon = Icons.Default.ContentCopy,
+                title = "Clipboard Sync",
+                subtitle = "Send copied text & images",
+                color = CRTheme.brandElectric,
+                onClick = onActionPushClipboard
+            )
+        }
         
         // Smaller Secondary Actions
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -680,7 +725,7 @@ fun QuickActionsGrid(
                 icon = Icons.Default.Link,
                 label = "Links",
                 color = CRTheme.brandPink,
-                onClick = onActionLinks
+                onClick = {}
             )
         }
     }
@@ -701,32 +746,44 @@ fun ActiveTransferCard(
             .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
             .padding(24.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+            val scale by infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = if (transfer.isPaused) 1f else 1.15f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "iconScale"
+            )
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.15f,
+                targetValue = if (transfer.isPaused) 0.15f else 0.35f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "iconAlpha"
+            )
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(CRTheme.brandCyan.copy(alpha = 0.15f), CircleShape),
+                    .size(44.dp)
+                    .background(CRTheme.brandCyan.copy(alpha = alpha), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Folder,
+                    imageVector = Icons.Default.CloudDownload,
                     contentDescription = null,
                     tint = CRTheme.brandCyan,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp).graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                val exactRatio = if (transfer.totalBytes > 0L) {
-                    (transfer.bytesReceived.toDouble() / transfer.totalBytes.toDouble()).coerceIn(0.0, 1.0)
-                } else {
-                    transfer.percent / 100.0
-                }
-                val exactPercentText = if (transfer.totalBytes > 0L) {
-                    String.format("%.1f%%", exactRatio * 100.0)
-                } else {
-                    "${transfer.percent}%"
-                }
                 Text(
                     text = transfer.fileName,
                     style = CRTypography.label,
@@ -734,85 +791,109 @@ fun ActiveTransferCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = if (transfer.isPaused) "Paused" else "$exactPercentText • " + 
-                           if (transfer.speedBps > 0) "${transfer.speedBps / 1024 / 1024} MB/s" else "Calculating...",
-                    style = CRTypography.caption,
-                    color = CRTheme.textMedium(isDark),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                AnimatedContent(targetState = if (transfer.isPaused) "Paused" else if (transfer.speedBps > 0) "${transfer.speedBps / 1024 / 1024} MB/s" else "Calculating...", label = "speed_anim") { speedText ->
+                    Text(
+                        text = speedText,
+                        style = CRTypography.caption,
+                        color = CRTheme.textMedium(isDark),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            
+            Row(
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .crGlassCard(isDark = isDark, cornerRadius = 18.dp, onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (transfer.isPaused) onResume() else onPause()
+                        }),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (transfer.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        contentDescription = if (transfer.isPaused) "Resume" else "Pause",
+                        tint = CRTheme.textHigh(isDark),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .crGlassCard(isDark = isDark, cornerRadius = 18.dp, onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onCancel()
+                        }),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Cancel",
+                        tint = CRTheme.accentRed,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
         
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
         
         val exactRatio = if (transfer.totalBytes > 0L) {
             (transfer.bytesReceived.toDouble() / transfer.totalBytes.toDouble()).coerceIn(0.0, 1.0)
         } else {
             transfer.percent / 100.0
         }
+        val exactPercentText = if (transfer.totalBytes > 0L) {
+            String.format("%.1f%%", exactRatio * 100.0)
+        } else {
+            "${transfer.percent}%"
+        }
+        
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            val downloadedMB = transfer.bytesReceived / 1024 / 1024
+            val totalMB = transfer.totalBytes / 1024 / 1024
+            val sizeText = if (transfer.totalBytes > 0) "${downloadedMB} MB / ${totalMB} MB" else "${downloadedMB} MB"
+            
+            Text(
+                text = exactPercentText,
+                style = CRTypography.caption,
+                color = CRTheme.textHigh(isDark)
+            )
+            Text(
+                text = sizeText,
+                style = CRTypography.caption,
+                color = CRTheme.textMedium(isDark)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
         val animatedRatio by animateFloatAsState(
             targetValue = exactRatio.toFloat(),
             animationSpec = tween(durationMillis = 150, easing = LinearEasing),
             label = "progressBar"
         )
-        // Progress Bar
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f), RoundedCornerShape(3.dp))
+                .height(10.dp)
+                .background(CRTheme.textMedium(isDark).copy(alpha = 0.2f), RoundedCornerShape(5.dp))
         ) {
+            val gradient = Brush.horizontalGradient(
+                colors = listOf(CRTheme.brandCyan, Color(0xFF32ADE6))
+            )
             Box(
                 modifier = Modifier
                     .fillMaxWidth(animatedRatio)
-                    .height(6.dp)
-                    .background(if (transfer.isPaused) CRTheme.accentAmber else CRTheme.brandCyan, RoundedCornerShape(3.dp))
+                    .height(10.dp)
+                    .background(if (transfer.isPaused) Brush.horizontalGradient(listOf(CRTheme.accentAmber, CRTheme.accentAmber)) else gradient, RoundedCornerShape(5.dp))
             )
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Action Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        if (transfer.isPaused) onResume() else onPause()
-                    }),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (transfer.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                    contentDescription = if (transfer.isPaused) "Resume" else "Pause",
-                    tint = CRTheme.textHigh(isDark),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .crGlassCard(isDark = isDark, cornerRadius = 24.dp, onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onCancel()
-                    }),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Cancel",
-                    tint = CRTheme.accentRed,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
         }
     }
 }

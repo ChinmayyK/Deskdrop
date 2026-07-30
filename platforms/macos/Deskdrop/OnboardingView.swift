@@ -31,10 +31,7 @@ struct OnboardingView: View {
     private var currentStep: Int {
         guard let peer = selectedPeer else { return 0 }
         if !peer.trusted { return 1 }
-        if let lastSync = peer.lastSync, lastSync > sessionStartTime {
-            return 3
-        }
-        return 2
+        return 1 // We handle the trusted state via onChange now
     }
 
     let onComplete: () -> Void
@@ -44,18 +41,6 @@ struct OnboardingView: View {
             CRFluidBackgroundView().ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header (Pagination)
-                HStack(spacing: 8) {
-                    ForEach(0..<4) { step in
-                        Circle()
-                            .fill(step == currentStep ? CRTheme.brandElectric : CRTheme.strokeSoft)
-                            .frame(width: 8, height: 8)
-                            .scaleEffect(step == currentStep ? 1.2 : 1.0)
-                            .animation(.crSpring, value: currentStep)
-                    }
-                }
-                .padding(.top, 40)
-                
                 Spacer()
 
                 ZStack {
@@ -65,48 +50,32 @@ struct OnboardingView: View {
                     } else if currentStep == 1 {
                         StepTwoVerify(store: store, selectedPeer: selectedPeer, onCancel: { selectedPeerId = nil })
                             .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
-                    } else if currentStep == 2 {
-                        StepThreeSendSample(store: store, selectedPeer: selectedPeer)
-                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
-                    } else if currentStep == 3 {
-                        StepFourCompletion(onComplete: onComplete)
-                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                     }
                 }
                 .animation(.crSpring, value: currentStep)
                 
                 Spacer()
                 
-                // Footer Navigation
+                // Footer Navigation (Simplified)
                 HStack {
-                    if currentStep == 0 {
-                        Button("Skip for now") {
-                            onComplete()
-                        }
-                        .buttonStyle(CRSecondaryButtonStyle())
-                    } else if currentStep > 0 {
+                    if currentStep > 0 {
                         Button("Cancel") {
                             withAnimation(.crSpring) { selectedPeerId = nil }
                         }
                         .buttonStyle(CRSecondaryButtonStyle())
-                    } else {
-                        Spacer().frame(width: 80)
                     }
-                    
                     Spacer()
-                    
-                    if currentStep == 3 {
-                        Button("Get Started") {
-                            onComplete()
-                        }
-                        .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-                    }
                 }
                 .padding(.horizontal, 40)
                 .padding(.bottom, 40)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: selectedPeer?.trusted) { trusted in
+            if trusted == true {
+                onComplete()
+            }
+        }
     }
 }
 
@@ -237,75 +206,6 @@ private struct StepTwoVerify: View {
     }
 }
 
-private struct StepThreeSendSample: View {
-    @ObservedObject var store: DeskdropStore
-    var selectedPeer: PeerViewModel?
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            Text("Step 3: Send Sample Text")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-            
-            Text("Let's make sure it works. Click the button below to send 'Hello from Mac' to your device.")
-                .foregroundStyle(CRTheme.inkSoft)
-                .multilineTextAlignment(.center)
-                .frame(width: 400)
-            
-            Button("Send 'Hello from Mac'") {
-                if let peer = selectedPeer {
-                    store.sendPushText("Hello from Mac", to: ManagedDevice(peer: peer))
-                }
-            }
-            .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
-        }
-    }
-}
-
-private struct StepFourCompletion: View {
-    var onComplete: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            ZStack {
-                Circle().fill(CRTheme.accentGreen.opacity(0.1))
-                    .frame(width: 100, height: 100)
-                    .scaleEffect(isAppeared ? 1 : 0.5)
-                    .opacity(isAppeared ? 1 : 0)
-                if #available(macOS 14.0, *) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 40, weight: .bold))
-                        .foregroundStyle(CRTheme.accentGreen)
-                        .symbolEffect(.bounce, value: isAppeared)
-                } else {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 40, weight: .bold))
-                        .foregroundStyle(CRTheme.accentGreen)
-                }
-            }
-            .onAppear {
-                withAnimation(.crSpring.delay(0.1)) {
-                    isAppeared = true
-                }
-            }
-            
-            Text("You're all set!")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .opacity(isAppeared ? 1 : 0)
-                .offset(y: isAppeared ? 0 : 10)
-                .animation(.crSpring.delay(0.2), value: isAppeared)
-            
-            Text("Received files will automatically land in your Downloads folder.\nClipboard text will be instantly available to paste.")
-                .foregroundStyle(CRTheme.inkSoft)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .opacity(isAppeared ? 1 : 0)
-                .offset(y: isAppeared ? 0 : 10)
-                .animation(.crSpring.delay(0.3), value: isAppeared)
-        }
-    }
-    
-    @State private var isAppeared = false
-}
 
 private struct RadarPulseView: View {
     @State private var isPulsing = false

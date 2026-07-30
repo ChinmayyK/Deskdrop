@@ -281,8 +281,9 @@ struct FileShareCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CRTheme.surfaceStrong)
         .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: hovered, accent: CRTheme.brandElectric)
+        .scaleEffect(hovered ? 1.02 : 1.0)
         .onHover { hovered = $0 }
-        .animation(.crFast, value: hovered)
+        .animation(.crSpring, value: hovered)
     }
 }
 
@@ -895,8 +896,9 @@ struct MagicLinkPairingCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CRTheme.surfaceStrong)
         .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: hovered, accent: CRTheme.brandElectric)
+        .scaleEffect(hovered ? 1.02 : 1.0)
         .onHover { hovered = $0 }
-        .animation(.crFast, value: hovered)
+        .animation(.crSpring, value: hovered)
         .sheet(isPresented: $showingQR) {
             QRCodeSheetView(store: store)
         }

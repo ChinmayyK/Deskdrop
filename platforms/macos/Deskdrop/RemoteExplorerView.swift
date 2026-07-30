@@ -445,6 +445,14 @@ struct SidebarRowView: View {
                     .padding(24) // Generous macOS 24px padding
                     .padding(.bottom, selectedFiles.isEmpty ? 24 : 100)
                 }
+                if isLoading {
+                    ProgressView("Updating index from \(device.name)...")
+                        .controlSize(.regular)
+                        .padding(24)
+                        .background(.regularMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+            } else if isLoading {
                 ProgressView("Fetching index from \(device.name)...")
                     .controlSize(.regular)
             }

@@ -108,6 +108,31 @@ enum CRTheme {
 
 typealias PBTheme = CRTheme
 
+// MARK: - Typography
+
+enum CRFont {
+    static func outfit(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .custom("Outfit-\(weightString(weight))", size: size)
+    }
+    static func inter(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .custom("Inter-\(weightString(weight))", size: size)
+    }
+    
+    private static func weightString(_ weight: Font.Weight) -> String {
+        switch weight {
+        case .black: return "Black"
+        case .heavy: return "ExtraBold"
+        case .bold: return "Bold"
+        case .semibold: return "SemiBold"
+        case .medium: return "Medium"
+        case .regular: return "Regular"
+        case .light: return "Light"
+        case .thin: return "Thin"
+        default: return "Regular"
+        }
+    }
+}
+
 // MARK: - Density Mode
 
 enum CRDensityMode {
