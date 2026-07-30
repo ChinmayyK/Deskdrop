@@ -2,7 +2,7 @@
 //!
 //! All messages are length-prefixed (u32 LE) + bincode-encoded.
 //! After the handshake, every frame is AEAD-encrypted with a
-//! per-session ChaCha20-Poly1305 key derived via X25519 ECDH + HKDF.
+//! per-session AES-256-GCM key derived via X25519 ECDH + HKDF.
 
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
