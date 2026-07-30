@@ -89,24 +89,22 @@ fn apply_socket_buffers(stream: &TcpStream) -> Result<()> {
     use socket2::SockRef;
 
     let sock_ref = SockRef::from(stream);
+    // On Linux and macOS, manually setting SO_RCVBUF locks the buffer and disables OS kernel
+    // TCP window autotuning (Dynamic Receive Buffering). Setting send buffer capacity ensures
+    // large outbound bursts while allowing kernel TCP window autotuning to scale to max link speed.
     let candidate_sizes = [
         SOCKET_BUFFER_PREFERRED,
         SOCKET_BUFFER_MIN,
         4 * 1024 * 1024,
         2 * 1024 * 1024,
         1024 * 1024,
-        512 * 1024,
-        256 * 1024,
     ];
 
     for &target in &candidate_sizes {
-        let send_res = sock_ref.set_send_buffer_size(target);
-        let recv_res = sock_ref.set_recv_buffer_size(target);
-        if send_res.is_ok() && recv_res.is_ok() {
-            return Ok(());
+        if sock_ref.set_send_buffer_size(target).is_ok() {
+            break;
         }
     }
-    // If all custom sizes fail due to strict kernel limits, keep OS defaults without dropping connection.
     Ok(())
 }
 
