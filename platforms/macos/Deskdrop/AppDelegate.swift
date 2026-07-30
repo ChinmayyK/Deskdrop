@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         registerHotKeys()
         registerSleepWakeObservers()
         registerStoreNotifications()
+        
+        // Register as macOS Service Provider for right-click Finder menu
+        NSApp.servicesProvider = self
+        
         // Request permission for system notifications (device-connected alerts)
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -125,6 +129,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         diagnosticsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: - Finder Service
+    @objc func handleDropService(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        guard store.connectedCount > 0 else {
+            store.showToast(title: "No Devices Connected", body: "Connect a device to send files.", tint: CRTheme.inkSoft, systemImage: "wifi.slash")
+            return
+        }
+        
+        if let urls = pboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            let targetId = store.defaultTargetDevice?.id
+            for url in urls {
+                Task {
+                    store.sendFile(url: url, toPeer: targetId)
+                    store.showToast(title: "Sending to device", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
+                }
+            }
+        }
     }
 
     // MARK: - Single instance guard
@@ -1218,12 +1240,28 @@ extension AppDelegate: MenuBarDropViewDelegate {
     
     private func handleNewScreenshot(url: URL) {
         let isEnabled = UserDefaults.standard.object(forKey: "autoForwardMacScreenshots") as? Bool ?? false
-        guard isEnabled else { return }
-        
-        NSLog("Deskdrop: Auto-syncing Mac screenshot -> Android: \(url.path)")
-        Task { @MainActor [weak self] in
-            self?.store.sendFile(url: url)
+        if isEnabled {
+            NSLog("Deskdrop: Auto-syncing Mac screenshot -> Android: \(url.path)")
+            Task { @MainActor [weak self] in self?.store.sendFile(url: url) }
+            return
         }
+        
+        let deviceName = store.defaultTargetDevice?.name ?? "Phone"
+        
+        // Show an elegant floating notification
+        store.showToast(
+            title: "Screenshot Detected",
+            body: "Send to \(deviceName)?",
+            tint: CRTheme.accentPurple,
+            systemImage: "macwindow",
+            ttl: 8.0,
+            primaryAction: ToastAction(title: "Send", role: .primary) { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.store.sendFile(url: url)
+                    self?.store.showToast(title: "Sent", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
+                }
+            }
+        )
     }
 }
 

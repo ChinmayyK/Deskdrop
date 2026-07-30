@@ -338,11 +338,15 @@ impl OutboundTransfer {
         let now = Instant::now();
         if let Some(last_calc) = self.last_speed_calc_at {
             let elapsed = now.duration_since(last_calc).as_secs_f64();
-            if elapsed >= 0.5 {
-                if bytes_sent >= self.last_speed_calc_bytes {
+            if bytes_sent > self.last_speed_calc_bytes {
+                if elapsed >= 0.25 {
                     let diff = bytes_sent - self.last_speed_calc_bytes;
                     self.current_speed_bps = Some((diff as f64 / elapsed) as u64);
+                    self.last_speed_calc_at = Some(now);
+                    self.last_speed_calc_bytes = bytes_sent;
                 }
+            } else if elapsed >= 2.0 {
+                self.current_speed_bps = Some(0);
                 self.last_speed_calc_at = Some(now);
                 self.last_speed_calc_bytes = bytes_sent;
             }
@@ -668,11 +672,15 @@ impl InboundTransfer {
         let now = Instant::now();
         if let Some(last_calc) = self.last_speed_calc_at {
             let elapsed = now.duration_since(last_calc).as_secs_f64();
-            if elapsed >= 0.5 {
-                if self.bytes_received >= self.last_speed_calc_bytes {
+            if self.bytes_received > self.last_speed_calc_bytes {
+                if elapsed >= 0.25 {
                     let diff = self.bytes_received - self.last_speed_calc_bytes;
                     self.current_speed_bps = Some((diff as f64 / elapsed) as u64);
+                    self.last_speed_calc_at = Some(now);
+                    self.last_speed_calc_bytes = self.bytes_received;
                 }
+            } else if elapsed >= 2.0 {
+                self.current_speed_bps = Some(0);
                 self.last_speed_calc_at = Some(now);
                 self.last_speed_calc_bytes = self.bytes_received;
             }
@@ -997,11 +1005,8 @@ impl FileTransferManager {
     pub fn active_transfers(&mut self) -> Vec<serde_json::Value> {
         let mut transfers = Vec::new();
         for t in self.inbound.values_mut() {
-            let percent = if t.meta.size_bytes > 0 {
-                (t.bytes_received as f64 / t.meta.size_bytes as f64 * 100.0) as u8
-            } else {
-                0
-            };
+            let prog = t.progress_snapshot();
+            let percent = prog.percent;
             let status_str = match t.status {
                 TransferStatus::Pending => "incoming",
                 TransferStatus::Verifying => "verifying",
@@ -1023,6 +1028,8 @@ impl FileTransferManager {
                 "bytes_total": t.meta.size_bytes,
                 "bytes_received": t.bytes_received,
                 "percent": percent,
+                "speed_bps": prog.speed_bps,
+                "eta_secs": prog.eta_secs,
                 "status": status_str
             }));
         }
@@ -1051,6 +1058,8 @@ impl FileTransferManager {
                 "bytes_total": t.meta.size_bytes,
                 "bytes_received": bytes_sent.min(t.meta.size_bytes),
                 "percent": percent,
+                "speed_bps": prog.speed_bps,
+                "eta_secs": prog.eta_secs,
                 "status": status_str
             }));
         }
