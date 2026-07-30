@@ -13,10 +13,11 @@
 //! during TOFU (Trust On First Use) verification.
 
 use anyhow::{Context, Result};
-use chacha20poly1305::{
+use aes_gcm::{
     aead::{Aead, KeyInit},
-    ChaCha20Poly1305, Key, Nonce,
+    Aes256Gcm, Key,
 };
+type Nonce = aes_gcm::aead::Nonce<Aes256Gcm>;
 use hkdf::Hkdf;
 use hmac::Mac;
 use rand::RngCore;
@@ -164,7 +165,7 @@ impl EphemeralKeypair {
             .map_err(|_| anyhow::anyhow!("HKDF expand failed"))?;
 
         let key = SessionKey {
-            cipher: ChaCha20Poly1305::new(Key::from_slice(&okm)),
+            cipher: Aes256Gcm::new(Key::<aes_gcm::aes::Aes256>::from_slice(&okm)),
             send_counter: 0,
             recv_counter: 0,
         };
@@ -199,7 +200,7 @@ impl EphemeralKeypair {
 
 #[derive(Clone)]
 pub struct SessionKey {
-    cipher: ChaCha20Poly1305,
+    cipher: Aes256Gcm,
     send_counter: u64,
     recv_counter: u64,
 }
@@ -238,7 +239,7 @@ impl SessionKey {
     /// auth tag is appended to it.
     /// Returns the 12-byte nonce used, which must be sent alongside the ciphertext.
     pub fn encrypt_in_place(&mut self, buffer: &mut Vec<u8>) -> Result<Nonce> {
-        use chacha20poly1305::aead::AeadInPlace;
+        use aes_gcm::aead::AeadInPlace;
         let nonce = counter_nonce(self.send_counter);
         self.send_counter = self
             .send_counter
@@ -297,7 +298,7 @@ impl SessionKey {
     /// Decrypt a frame in-place. The first 12 bytes of the buffer must be the nonce,
     /// followed by the ciphertext. Upon success, the buffer is shrunk to just the plaintext.
     pub fn decrypt_in_place(&mut self, buffer: &mut Vec<u8>) -> Result<()> {
-        use chacha20poly1305::aead::AeadInPlace;
+        use aes_gcm::aead::AeadInPlace;
         anyhow::ensure!(
             buffer.len() >= 12 + 16,
             "frame too short (must have nonce and tag)"
