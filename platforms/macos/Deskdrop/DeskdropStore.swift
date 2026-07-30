@@ -173,6 +173,10 @@ final class DeskdropStore: ObservableObject {
         }
     }
 
+    // ── Analytics ─────────────────────────────────────────────────────────────
+    @AppStorage("totalBytesTransferred") public var totalBytesTransferred: Int = 0
+    @AppStorage("totalFilesTransferred") public var totalFilesTransferred: Int = 0
+
     // ── Clipboard watcher setup ───────────────────────────────────────────────
 
     private func startWatchingClipboard() {
@@ -192,6 +196,7 @@ final class DeskdropStore: ObservableObject {
     private func handleLocalClipboardText(_ text: String) {
         // Always update the quick-send strip (shown in history panel).
         quickSendContext = QuickSendContext(text: text, timestamp: Date())
+        guard UserDefaults.standard.bool(forKey: "magicClipboardEnabled") else { return }
         guard connectedCount > 0 else { return }
         Task { [weak self] in
             guard let self else { return }
@@ -202,6 +207,7 @@ final class DeskdropStore: ObservableObject {
     }
 
     private func handleLocalClipboardImage(_ data: Data, mimeType: String) {
+        guard UserDefaults.standard.bool(forKey: "magicClipboardEnabled") else { return }
         guard connectedCount > 0 else { return }
         Task { [weak self] in
             guard let self else { return }
@@ -214,6 +220,7 @@ final class DeskdropStore: ObservableObject {
     }
 
     private func handleLocalClipboardFiles(_ urls: [URL]) {
+        guard UserDefaults.standard.bool(forKey: "magicClipboardEnabled") else { return }
         guard connectedCount > 0 else { return }
         let readable = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !readable.isEmpty else { return }
@@ -906,6 +913,13 @@ final class DeskdropStore: ObservableObject {
                 // Local copies, peer connections, sync events, etc. are silently absorbed
                 // into the activity feed without triggering system notifications or toasts.
                 for entry in newEntries {
+                    if entry.kind == "file_transfer_complete" {
+                        if let bytes = entry.file_bytes {
+                            self.totalBytesTransferred += Int(bytes)
+                            self.totalFilesTransferred += 1
+                        }
+                    }
+                    
                     switch entry.kind {
                     case "remote_clipboard_available", "file_transfer_complete", "remote_notification":
                         NotificationCenter.default.post(name: NSNotification.Name("deskdropActivityReceived"), object: entry)

@@ -172,6 +172,17 @@
                 android:value="true" />
         </service>
 
+        <service
+            android:name=".PushClipboardTileService"
+            android:exported="true"
+            android:label="Push to Mac"
+            android:icon="@drawable/ic_baseline_content_paste_24"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- ── FileProvider — for sharing received files ──────────────── -->
         <provider
             android:name="androidx.core.content.FileProvider"

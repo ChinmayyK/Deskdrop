@@ -220,6 +220,7 @@ private struct GeneralPane: View {
     @AppStorage("cr_app_theme") private var appTheme: String = "system"
     @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
     @AppStorage("autoForwardMacScreenshots") private var autoForwardMacScreenshots: Bool = false
+    @AppStorage("magicClipboardEnabled") private var magicClipboardEnabled: Bool = false
 
     var body: some View {
         PrefsSection(title: "Identity", icon: "person.crop.circle.fill", tint: CRTheme.accentBlue) {
@@ -246,6 +247,11 @@ private struct GeneralPane: View {
             PrefsRow(icon: "camera.viewfinder", label: "Screenshot Sync",
                      description: "Instantly sends Mac screenshots to connected Android devices.") {
                 Toggle("", isOn: $autoForwardMacScreenshots).labelsHidden()
+            }
+            PrefsDivider()
+            PrefsRow(icon: "doc.on.clipboard.fill", label: "Magic Clipboard",
+                     description: "Silently auto-sync Mac clipboard to connected devices in the background.") {
+                Toggle("", isOn: $magicClipboardEnabled).labelsHidden()
             }
         }
 
