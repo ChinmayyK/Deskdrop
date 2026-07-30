@@ -1595,10 +1595,7 @@ impl Engine {
                         if next_chunk >= total_chunks {
                             break 'outer;
                         }
-                        if next_chunk > 0 && next_chunk.saturating_sub(last_acked) > 512u32 {
-                            tokio::time::sleep(std::time::Duration::from_millis(15)).await;
-                            continue;
-                        }
+
                         let (batch, progs) = match read_outbound_chunks(
                             bg_shared.clone(),
                             bg_transfer_id,
@@ -4364,13 +4361,7 @@ fn register_session(
                                     if next_chunk >= total_chunks {
                                         break 'outer;
                                     }
-                                    if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 512u32
-                                    {
-                                        tokio::time::sleep(std::time::Duration::from_millis(15))
-                                            .await;
-                                        continue;
-                                    }
+
                                     let (batch, progs) = match read_outbound_chunks(
                                         bg_shared.clone(),
                                         bg_transfer_id,
@@ -4742,13 +4733,7 @@ fn register_session(
                                     if next_chunk >= total_chunks {
                                         break 'outer;
                                     }
-                                    if next_chunk > 0
-                                        && next_chunk.saturating_sub(last_acked) > 512u32
-                                    {
-                                        tokio::time::sleep(std::time::Duration::from_millis(15))
-                                            .await;
-                                        continue;
-                                    }
+
                                     let (batch, progs) = match read_outbound_chunks(
                                         bg_shared.clone(),
                                         bg_transfer_id,

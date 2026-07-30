@@ -45,7 +45,7 @@ pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chu
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 4; // ACK every 4 MB
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16; // ACK every 16 MB
 
 pub type TransferId = [u8; 16];
 
@@ -280,17 +280,7 @@ impl OutboundTransfer {
         if max_batch <= 1 {
             return 1;
         }
-        let last_acked = self.last_acked_chunk.unwrap_or(0);
-        let in_flight = self.next_chunk.saturating_sub(last_acked);
-        if in_flight < 16 {
-            max_batch
-        } else if in_flight < 48 {
-            (max_batch / 2).max(1)
-        } else if in_flight < 96 {
-            2.min(max_batch)
-        } else {
-            1
-        }
+        max_batch
     }
 
     pub fn process_chunk_data(
@@ -495,7 +485,7 @@ impl InboundTransfer {
             .with_context(|| "creating destination file atomically")?;
 
         self.dest_path = Some(dest);
-        self.file_handle = Some(BufWriter::with_capacity(8 * 1024 * 1024, file));
+        self.file_handle = Some(BufWriter::with_capacity(32 * 1024 * 1024, file));
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
         Ok(())
@@ -652,10 +642,13 @@ impl InboundTransfer {
 
     fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
         if let Some(file) = &mut self.file_handle {
-            // Seek to the correct offset based on chunks received
+            // Seek to the correct offset based on chunks received, only if needed
             let offset = (self.received_chunk_count as u64) * (FILE_CHUNK_SIZE as u64);
-            file.seek(std::io::SeekFrom::Start(offset))
-                .context("seeking to chunk offset")?;
+            let current_pos = file.stream_position().unwrap_or(u64::MAX);
+            if current_pos != offset {
+                file.seek(std::io::SeekFrom::Start(offset))
+                    .context("seeking to chunk offset")?;
+            }
 
             file.write_all(data).context("writing chunk to temp file")?;
             self.hasher.update(data);
