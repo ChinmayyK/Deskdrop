@@ -1,5 +1,6 @@
 import SwiftUI
 
+
 struct CommandCenterRootView: View {
     @ObservedObject var store: DeskdropStore
     @State private var renameTarget: ManagedDevice?
@@ -51,7 +52,7 @@ struct CommandCenterRootView: View {
         }
         .ignoresSafeArea(.all, edges: .top)
         .frame(minWidth: 1100, minHeight: 700)
-        .background(CRTheme.surfaceStrong.ignoresSafeArea())
+        .background(CRVisualEffect(material: .underWindowBackground, blendingMode: .behindWindow).ignoresSafeArea())
         .sheet(item: $renameTarget) { device in
             // Fallback for store requirements
             Text("Rename \(device.name)")
@@ -204,7 +205,14 @@ struct SidebarNavItem: View {
             .padding(.horizontal, 12)
         }
         .buttonStyle(.plain)
-        .onHover { hovered = $0 }
+        .onHover { isHovered in
+            hovered = isHovered
+            if isHovered {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
         .animation(.crFast, value: hovered)
     }
 }
@@ -236,8 +244,17 @@ struct CommandCenterView: View {
                 .padding(.horizontal, 40)
                 .padding(.top, 40)
                 
-                // Dynamic Hero Header
-                DynamicHeroHeaderView(store: store)
+                if store.connectedCount == 0 && store.pendingDevices.isEmpty {
+                    RadarEmptyStateView()
+                        .padding(.top, 60)
+                } else {
+                    // Transfer Analytics "Wrapped" Widget
+                    TransferAnalyticsWidget(store: store)
+                        .padding(.horizontal, 40)
+                        .padding(.top, 16)
+                    
+                    // Dynamic Hero Header
+                    DynamicHeroHeaderView(store: store)
                 
                 // 2. Launchpad (Quick Actions)
                 VStack(alignment: .leading, spacing: 16) {
@@ -321,6 +338,7 @@ struct CommandCenterView: View {
                 }
                 
                 Spacer().frame(height: 60)
+                }
             }
         }
         .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
@@ -411,7 +429,14 @@ struct LaunchpadTile: View {
             .scaleEffect(hovered ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
-        .onHover { hovered = $0 }
+        .onHover { isHovered in
+            hovered = isHovered
+            if isHovered {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
         .animation(.crFast, value: hovered)
     }
 }
@@ -511,7 +536,7 @@ struct LiveDevicePanel: View {
                                 .foregroundStyle(CRTheme.inkSoft)
                             
                             Text("· \(dev.endpoint ?? "192.168.x.x")")
-                                .font(.system(size: 13))
+                                .font(.system(size: 13, design: .monospaced))
                                 .foregroundStyle(CRTheme.inkSoft)
                         }
                     }
@@ -525,7 +550,7 @@ struct LiveDevicePanel: View {
                                     .font(.system(size: 13, weight: .semibold))
                                 Spacer()
                                 Text("\(bat.level)%")
-                                    .font(.system(size: 13, weight: .bold))
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
                             }
                             GeometryReader { geo in
                                 ZStack(alignment: .leading) {
@@ -607,21 +632,40 @@ struct LiveDevicePanel: View {
                         }
                     }
 
-                    // Clipboard
-                    if let lastClipboard = store.activityFeed.first(where: { $0.kind == "clipboard" }), let text = lastClipboard.text_preview {
+                    // Clipboard History
+                    let recentClipboards = store.activityFeed.filter { $0.kind == "clipboard" || $0.kind == "remote_clipboard_available" }.prefix(5)
+                    if !recentClipboards.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Last Clipboard")
+                            Text("Clipboard History")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(CRTheme.inkSubtle)
                             
-                            Text(text)
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundStyle(CRTheme.brandElectric)
-                                .lineLimit(1)
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(CRTheme.brandElectric.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            VStack(spacing: 6) {
+                                ForEach(Array(recentClipboards.enumerated()), id: \.offset) { index, clip in
+                                    if let text = clip.text_preview {
+                                        Button {
+                                            NSPasteboard.general.clearContents()
+                                            NSPasteboard.general.setString(text, forType: .string)
+                                        } label: {
+                                            HStack {
+                                                Text(text)
+                                                    .font(.system(size: 13, design: .monospaced))
+                                                    .foregroundStyle(index == 0 ? CRTheme.brandElectric : CRTheme.inkSubtle)
+                                                    .lineLimit(1)
+                                                Spacer()
+                                                Image(systemName: "doc.on.clipboard")
+                                                    .font(.system(size: 10))
+                                                    .foregroundStyle(CRTheme.inkSubtle.opacity(0.5))
+                                            }
+                                            .padding(10)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(index == 0 ? CRTheme.brandElectric.opacity(0.1) : CRTheme.surfaceStrong)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -690,3 +734,130 @@ struct MetricCard: View {
 }
 
 
+
+struct TransferAnalyticsWidget: View {
+    @ObservedObject var store: DeskdropStore
+    
+    var timeSavedString: String {
+        // Assume 5 MB/s transfer speed for alternative (e.g. uploading/downloading from cloud)
+        // 5 MB = 5 * 1024 * 1024 bytes
+        let bytesPerSecond = 5.0 * 1024.0 * 1024.0
+        let secondsSaved = Double(store.totalBytesTransferred) / bytesPerSecond
+        if secondsSaved < 60 {
+            return "\(Int(secondsSaved)) sec"
+        } else if secondsSaved < 3600 {
+            return "\(Int(secondsSaved / 60)) min"
+        } else {
+            return String(format: "%.1f hrs", secondsSaved / 3600.0)
+        }
+    }
+    
+    var dataString: String {
+        let gb = Double(store.totalBytesTransferred) / (1024.0 * 1024.0 * 1024.0)
+        let mb = Double(store.totalBytesTransferred) / (1024.0 * 1024.0)
+        if gb >= 1.0 {
+            return String(format: "%.1f GB", gb)
+        } else {
+            return String(format: "%.1f MB", mb)
+        }
+    }
+    
+    var body: some View {
+        if store.totalBytesTransferred > 0 {
+            HStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Deskdrop Wrapped")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.8))
+                    Text("You've beamed \(dataString)")
+                        .font(.system(size: 20, weight: .heavy, design: .monospaced))
+                        .foregroundStyle(Color.white)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Time Saved")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.8))
+                    Text(timeSavedString)
+                        .font(.system(size: 20, weight: .heavy, design: .monospaced))
+                        .foregroundStyle(CRTheme.brandCyan)
+                }
+            }
+            .padding(20)
+            .background(
+                LinearGradient(colors: [CRTheme.accentPurple, CRTheme.brandElectric], startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: CRTheme.accentPurple.opacity(0.3), radius: 10, x: 0, y: 5)
+        }
+    }
+}
+
+
+struct RadarEmptyStateView: View {
+    @State private var rotation: Double = 0
+    @State private var opacityPulse: Double = 0.4
+    
+    var body: some View {
+        VStack(spacing: 32) {
+            ZStack {
+                // Radar Rings
+                ForEach(0..<4) { i in
+                    Circle()
+                        .strokeBorder(CRTheme.brandCyan.opacity(0.15 - Double(i) * 0.03), lineWidth: 1)
+                        .frame(width: CGFloat(100 + i * 80), height: CGFloat(100 + i * 80))
+                }
+                
+                // Sweeping Radar Line
+                Circle()
+                    .fill(
+                        AngularGradient(
+                            gradient: Gradient(colors: [CRTheme.brandElectric.opacity(0.0), CRTheme.brandElectric.opacity(0.6)]),
+                            center: .center,
+                            startAngle: .degrees(-90),
+                            endAngle: .degrees(0)
+                        )
+                    )
+                    .frame(width: 340, height: 340)
+                    .rotationEffect(.degrees(rotation))
+                    .mask(Circle().frame(width: 340, height: 340))
+                
+                // Core Node
+                Circle()
+                    .fill(CRTheme.brandElectric)
+                    .frame(width: 16, height: 16)
+                    .shadow(color: CRTheme.brandElectric.opacity(0.8), radius: 8)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.5), lineWidth: 2)
+                            .scaleEffect(1.5)
+                            .opacity(opacityPulse)
+                    )
+            }
+            .frame(height: 360)
+            
+            VStack(spacing: 8) {
+                Text("Scanning Mesh Network...")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(CRTheme.ink)
+                
+                Text("Make sure your phone is on the same Wi-Fi and Deskdrop is open.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(CRTheme.inkSoft)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+                rotation = 360
+            }
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                opacityPulse = 0.0
+            }
+        }
+    }
+}

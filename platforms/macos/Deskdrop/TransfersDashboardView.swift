@@ -137,30 +137,39 @@ struct TransfersDashboardView: View {
 struct ActiveTransferCard: View {
     let transfer: FileTransferState
     @ObservedObject var store: DeskdropStore
+    @State private var isPulsing = false
     
-    var progressColor: Color {
-        switch transfer.status {
-        case .paused: return CRTheme.stroke
-        case .failed: return CRTheme.accentRed
-        default: return CRTheme.brandElectric
+    var isTransferring: Bool {
+        if case .transferring = transfer.status { return true }
+        return false
+    }
+    
+    var progressGradient: LinearGradient {
+        if case .paused = transfer.status {
+            return LinearGradient(colors: [CRTheme.stroke, CRTheme.stroke], startPoint: .leading, endPoint: .trailing)
+        } else if case .failed = transfer.status {
+            return LinearGradient(colors: [CRTheme.accentRed, CRTheme.accentRed], startPoint: .leading, endPoint: .trailing)
         }
+        return LinearGradient(colors: [CRTheme.brandElectric, CRTheme.brandCyan], startPoint: .leading, endPoint: .trailing)
     }
     
     var statusText: String {
         switch transfer.status {
         case .incoming: return "Waiting for approval..."
         case .transferring:
-            var text = "\(transfer.formattedProgressSize)"
+            var text = ""
             if let speed = transfer.speedBps {
                 let mbps = Double(speed) / 1_048_576.0
-                if mbps >= 1.0 { text += String(format: " • %.1f MB/s", mbps) }
-                else { text += String(format: " • %.0f KB/s", Double(speed) / 1024.0) }
+                if mbps >= 1.0 { text += String(format: "%.1f MB/s", mbps) }
+                else { text += String(format: "%.0f KB/s", Double(speed) / 1024.0) }
+            } else {
+                text += "Calculating..."
             }
             if let eta = transfer.etaSecs, eta > 0 {
                 text += " • \(eta)s remaining"
             }
             return text
-        case .paused: return "Paused • \(transfer.formattedProgressSize)"
+        case .paused: return "Paused"
         case .verifying: return "Verifying..."
         case .complete: return "Complete"
         case .failed(let r): return "Failed: \(r)"
@@ -168,69 +177,151 @@ struct ActiveTransferCard: View {
         }
     }
     
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(CRTheme.surfaceStrong)
-                    .frame(width: 40, height: 40)
-                Image(systemName: "doc.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(CRTheme.inkSoft)
-            }
-            
-            // Details
-            VStack(alignment: .leading, spacing: 4) {
-                Text(transfer.fileName)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(CRTheme.ink)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                
-                if case .transferring = transfer.status {
-                    StopwatchSizeText(bytesReceived: Double(transfer.bytesReceived), totalBytes: transfer.totalBytes, speedBps: transfer.speedBps, etaSecs: transfer.etaSecs, isDashboard: true)
-                        .animation(.linear(duration: 0.25), value: transfer.bytesReceived)
-                } else {
-                    Text(statusText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(CRTheme.inkSoft)
-                }
-                
-                // Progress Bar
-                if case .incoming = transfer.status {
-                    // No progress bar for incoming
-                } else if case .failed = transfer.status {
-                    // No progress bar for failed
-                } else {
-                    let prog = transfer.exactRatio
-                    StopwatchProgressView(progress: prog, tint: progressColor)
-                        .animation(.linear(duration: 0.15), value: prog)
-                        .padding(.top, 4)
-                }
-            }
-            
-            Spacer(minLength: 16)
-            
-            // Actions
-            HStack(spacing: 8) {
-                if case .incoming = transfer.status {
-                    actionButton(icon: "checkmark", color: .green) { store.acceptFileTransfer(transfer) }
-                    actionButton(icon: "xmark", color: .red) { store.rejectFileTransfer(transfer) }
-                } else if case .transferring = transfer.status {
-                    actionButton(icon: "pause.fill") { store.pauseFileTransfer(transfer) }
-                    actionButton(icon: "xmark") { store.cancelFileTransfer(transfer) }
-                } else if case .paused = transfer.status {
-                    actionButton(icon: "play.fill") { store.resumeFileTransfer(transfer) }
-                    actionButton(icon: "xmark") { store.cancelFileTransfer(transfer) }
-                } else if case .complete = transfer.status {
-                    actionButton(icon: "checkmark", color: .green) { store.cancelFileTransfer(transfer) }
-                }
+    var sizeText: String {
+        let mbTotal = Double(transfer.totalBytes) / 1_048_576.0
+        let mbRecv = Double(transfer.bytesReceived) / 1_048_576.0
+        
+        if mbTotal >= 1.0 { 
+            return String(format: "%.2f / %.2f MB", mbRecv, mbTotal) 
+        } else {
+            let kbTotal = Double(transfer.totalBytes) / 1_024.0
+            let kbRecv = Double(transfer.bytesReceived) / 1_024.0
+            if kbTotal >= 1.0 { 
+                return String(format: "%.2f / %.2f KB", kbRecv, kbTotal) 
+            } else {
+                return String(format: "%.0f / %lld B", Double(transfer.bytesReceived), transfer.totalBytes)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .crCard(cornerRadius: 12)
+    }
+    
+    var percentText: String {
+        if transfer.totalBytes > 0 {
+            let ratio = max(0, min(1, Double(transfer.bytesReceived) / Double(transfer.totalBytes)))
+            return String(format: "%.1f%%", ratio * 100.0)
+        } else {
+            return "0.0%"
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 16) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(CRTheme.brandElectric.opacity(isPulsing && isTransferring ? 0.25 : 0.1))
+                        .frame(width: 44, height: 44)
+                        .scaleEffect(isPulsing && isTransferring ? 1.15 : 1.0)
+                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
+                    
+                    Image(systemName: "icloud.and.arrow.down.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(CRTheme.brandElectric)
+                        .scaleEffect(isPulsing && isTransferring ? 1.05 : 1.0)
+                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
+                }
+                .onAppear { isPulsing = true }
+                
+                // Details
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(transfer.fileName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(CRTheme.ink)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    
+                    if #available(macOS 13.0, *) {
+                        Text(statusText)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .contentTransition(.numericText())
+                            .animation(.linear(duration: 0.25), value: statusText)
+                    } else {
+                        Text(statusText)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+                
+                Spacer(minLength: 16)
+                
+                // Actions
+                HStack(spacing: 8) {
+                    if case .incoming = transfer.status {
+                        actionButton(icon: "checkmark", color: .green) { store.acceptFileTransfer(transfer) }
+                        actionButton(icon: "xmark", color: .red) { store.rejectFileTransfer(transfer) }
+                    } else if case .transferring = transfer.status {
+                        actionButton(icon: "pause.fill") { store.pauseFileTransfer(transfer) }
+                        actionButton(icon: "xmark") { store.cancelFileTransfer(transfer) }
+                    } else if case .paused = transfer.status {
+                        actionButton(icon: "play.fill") { store.resumeFileTransfer(transfer) }
+                        actionButton(icon: "xmark") { store.cancelFileTransfer(transfer) }
+                    } else if case .complete = transfer.status {
+                        actionButton(icon: "checkmark", color: .green) { store.cancelFileTransfer(transfer) }
+                    }
+                }
+            }
+            
+            // Progress Bar Section
+            if case .incoming = transfer.status {
+                // Hide for incoming
+            } else if case .failed = transfer.status {
+                // Hide for failed
+            } else {
+                VStack(spacing: 8) {
+                    HStack {
+                        if #available(macOS 13.0, *) {
+                            Text(percentText)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(CRTheme.ink)
+                                .contentTransition(.numericText())
+                                .animation(.linear(duration: 0.15), value: percentText)
+                            
+                            Spacer()
+                            
+                            Text(sizeText)
+                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .foregroundStyle(CRTheme.inkSoft)
+                                .contentTransition(.numericText())
+                                .animation(.linear(duration: 0.15), value: sizeText)
+                        } else {
+                            Text(percentText)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(CRTheme.ink)
+                            
+                            Spacer()
+                            
+                            Text(sizeText)
+                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .foregroundStyle(CRTheme.inkSoft)
+                        }
+                    }
+                    
+                    // Gradient Bar
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(CRTheme.inkSoft.opacity(0.1))
+                                .frame(height: 10)
+                            
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(progressGradient)
+                                .frame(width: max(0, geo.size.width * CGFloat(transfer.exactRatio)), height: 10)
+                                .animation(.linear(duration: 0.15), value: transfer.exactRatio)
+                        }
+                    }
+                    .frame(height: 10)
+                }
+                .padding(.top, 20)
+            }
+        }
+        .padding(24)
+        .background(CRTheme.surfaceStrong)
+        .crCard(cornerRadius: 24)
     }
     
     private func actionButton(icon: String, color: Color = CRTheme.inkSoft, action: @escaping () -> Void) -> some View {
@@ -238,7 +329,7 @@ struct ActiveTransferCard: View {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(color)
-                .frame(width: 28, height: 28)
+                .frame(width: 32, height: 32)
                 .background(Color.black.opacity(0.04))
                 .clipShape(Circle())
         }
