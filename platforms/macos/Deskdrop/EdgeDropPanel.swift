@@ -82,10 +82,16 @@ class EdgeDropWindowManager: NSObject {
     }
     
     func handleDrop(urls: [URL]) {
-        updatePosition(expanded: false, animated: true)
-        guard let store = store, !urls.isEmpty else { return }
+        guard let store = store, !urls.isEmpty else {
+            updatePosition(expanded: false, animated: true)
+            return
+        }
         
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        NSSound(named: "Glass")?.play()
+        
+        NotificationCenter.default.post(name: NSNotification.Name("deskdropTriggerParticles"), object: nil)
+        
         store.sendFiles(urls: urls, toPeer: nil)
         store.showToast(
             title: "Instant Portal Transfer (\(urls.count) file\(urls.count == 1 ? "" : "s"))",
@@ -94,6 +100,10 @@ class EdgeDropWindowManager: NSObject {
             systemImage: "arrow.right.to.line.compact",
             ttl: 3.5
         )
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.updatePosition(expanded: false, animated: true)
+        }
     }
 }
 
@@ -188,6 +198,7 @@ struct EdgeDropSwiftUIView: View {
     @ObservedObject var store: DeskdropStore
     @Binding var isTargeted: Bool
     @State private var pulse = false
+    @State private var triggerBurst = false
     
     private var connectedDevices: [ManagedDevice] {
         store.devices.filter { $0.isConnected }
@@ -255,6 +266,13 @@ struct EdgeDropSwiftUIView: View {
                             pulse = true
                         }
                     }
+                    
+                    ParticleEffectView(isTriggered: triggerBurst)
+                        .allowsHitTesting(false)
+                        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("deskdropTriggerParticles"))) { _ in
+                            triggerBurst = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { triggerBurst = false }
+                        }
                 } else {
                     // Resting Edge Sliver
                     HStack {
