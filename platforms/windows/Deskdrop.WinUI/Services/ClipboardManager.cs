@@ -71,7 +71,7 @@ namespace Deskdrop.WinUI.Services
                                         var package = new DataPackage();
                                         package.SetText(text);
                                         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-                                    } catch { }
+                                    } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                                     AddHistoryItem(text, from, "📝", text);
                                 });
                             }
@@ -99,7 +99,7 @@ namespace Deskdrop.WinUI.Services
                         {
                             var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                try { new IncomingCallBannerWindow().Activate(); } catch { }
+                                try { new IncomingCallBannerWindow().Activate(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                             });
                             break;
                         }
@@ -127,7 +127,7 @@ namespace Deskdrop.WinUI.Services
             };
             History.Insert(0, item);
             if (History.Count > 100) History.RemoveAt(History.Count - 1);
-            try { DeskdropStore.Shared.History.Insert(0, item); } catch { }
+            try { DeskdropStore.Shared.History.Insert(0, item); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         private async Task CheckClipboardAsync()
@@ -176,12 +176,12 @@ namespace Deskdrop.WinUI.Services
                                     DaemonClient.SendFilePath(file.Path, file.Name, "application/octet-stream");
                                 }
                                 AddHistoryItem(file.Name, "local", "📎", file.Path);
-                            } catch { }
+                            } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                         }
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         public void HandleIncomingData(System.Text.Json.JsonElement json)
@@ -218,7 +218,7 @@ namespace Deskdrop.WinUI.Services
                         DaemonClient.SendFilePath(path, name, "application/octet-stream", targetDevice);
                     }
                     _dispatcher.TryEnqueue(() => AddHistoryItem(name, "local", "📎", path));
-                } catch { }
+                } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
             }
         }
 

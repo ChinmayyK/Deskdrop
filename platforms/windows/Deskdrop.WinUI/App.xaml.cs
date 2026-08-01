@@ -44,23 +44,23 @@ public partial class App : Application
     public App()
     {
         MainDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-        var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+        var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
         
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App constructor started\n");
 
         this.UnhandledException += (s, e) =>
         {
             e.Handled = true;
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] WinUI UnhandledException: {e.Exception?.Message}\n{e.Exception?.StackTrace}\n"); } catch { }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] WinUI UnhandledException: {e.Exception?.Message}\n{e.Exception?.StackTrace}\n"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         };
         AppDomain.CurrentDomain.UnhandledException += (s, e) =>
         {
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] AppDomain UnhandledException: {(e.ExceptionObject as Exception)?.Message}\n"); } catch { }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] AppDomain UnhandledException: {(e.ExceptionObject as Exception)?.Message}\n"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         };
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) =>
         {
             e.SetObserved();
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] TaskScheduler UnobservedTaskException: {e.Exception?.Message}\n"); } catch { }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] TaskScheduler UnobservedTaskException: {e.Exception?.Message}\n"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         };
 
         InitializeComponent();
@@ -69,8 +69,8 @@ public partial class App : Application
 
         ShowMainWindowCommand = new RelayCommand(() =>
         {
-            var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ShowMainWindowCommand invoked\n"); } catch { }
+            var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ShowMainWindowCommand invoked\n"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
 
             var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             queue?.TryEnqueue(() =>
@@ -105,7 +105,7 @@ public partial class App : Application
                         ShowWindow(hwnd, SW_RESTORE);
                         SetForegroundWindow(hwnd);
                     }
-                    catch { }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 }
                 catch (Exception ex)
                 {
@@ -115,7 +115,7 @@ public partial class App : Application
                         _window = MainWindow;
                         MainWindow.Activate();
                     }
-                    catch { }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 }
             });
         });
@@ -126,13 +126,13 @@ public partial class App : Application
             var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             queue?.TryEnqueue(() =>
             {
-                try { TrayIcon?.Dispose(); } catch { }
+                try { TrayIcon?.Dispose(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 if (_engineHandle != IntPtr.Zero)
                 {
-                    try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch { }
+                    try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 }
-                try { GlobalHotKeyManager.Shared.Dispose(); } catch { }
-                try { Application.Current.Exit(); } catch { }
+                try { GlobalHotKeyManager.Shared.Dispose(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                try { Application.Current.Exit(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 Environment.Exit(0);
             });
         });
@@ -140,70 +140,30 @@ public partial class App : Application
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+        var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] OnLaunched started\n");
 
         try
         {
+            // SINGLE INSTANCE MANAGEMENT
+            var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("DeskdropMainInstance");
+            var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+
+            if (!mainInstance.IsCurrent)
+            {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Secondary instance detected. Redirecting to main instance...\n");
+                mainInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
+                Environment.Exit(0);
+                return;
+            }
+
+            // We are the main instance. Hook up to receive subsequent activations.
+            Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().Activated += OnAppActivated;
+
             Deskdrop.WinUI.Native.ContextMenuIntegration.RegisterContextMenu();
 
-            var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
-            if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
-            {
-                var protocolArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
-                var uri = protocolArgs?.Uri;
-                if (uri != null && uri.Scheme == "deskdrop")
-                {
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via protocol: " + uri.ToString() + "\n");
-                    var action = uri.Host; // "accept" or "reject"
-                    var id = uri.AbsolutePath.Trim('/');
-                    if (action == "accept" || action == "reject")
-                    {
-                        // In a real app we would call NativeCore.deskdrop_accept_file_transfer or deskdrop_reject_file_transfer
-                        // For now we just open the app
-                    }
-                }
-            }
-            else if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.CommandLineLaunch)
-            {
-                var cmdLineArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.ICommandLineActivatedEventArgs;
-                if (cmdLineArgs != null && cmdLineArgs.Operation.Arguments.Length > 0)
-                {
-                    // The first argument is usually the executable path, we want the subsequent ones.
-                    // But in Windows file association / shell context menu, the file path might be passed directly.
-                    string argsStr = cmdLineArgs.Operation.Arguments;
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via CommandLine: " + argsStr + "\n");
-                    
-                    // Simple parse: grab the last argument assuming it's a quoted path or a single unquoted path.
-                    // If we get activated from the context menu, "%1" passes the absolute path.
-                    string[] splitArgs = Environment.GetCommandLineArgs();
-                    if (splitArgs.Length >= 2)
-                    {
-                        string path = splitArgs[^1];
-                        if (System.IO.File.Exists(path) || System.IO.Directory.Exists(path))
-                        {
-                            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Context Menu Trigger: Sending " + path + "\n");
-                            
-                            // Send it after the daemon is initialized. We'll do a fire-and-forget task.
-                            System.Threading.Tasks.Task.Run(async () =>
-                            {
-                                await System.Threading.Tasks.Task.Delay(1000); // Wait for daemon & UI
-                                try
-                                {
-                                    if (Clipboard != null)
-                                    {
-                                        Clipboard.PushFile(path);
-                                    }
-                                }
-                                catch (Exception e)
-                                {
-                                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] Error pushing context menu file: {e.Message}\n");
-                                }
-                            });
-                        }
-                    }
-                }
-            }
+            // Process initial launch arguments
+            ProcessActivationArgs(activatedArgs);
 
             if (!DaemonClient.IsDaemonRunning())
             {
@@ -214,6 +174,7 @@ public partial class App : Application
                     System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ERROR: deskdrop_start returned null handle!\n");
                 }
             }
+
 
             Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
 
@@ -252,17 +213,67 @@ public partial class App : Application
             {
                 GlobalHotKeyManager.Shared.Register(true, true, false, false, 0x56, () => {
                     var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                    queue?.TryEnqueue(() => { try { new QuickAccessWindow().Activate(); } catch { } });
+                    queue?.TryEnqueue(() => { try { new QuickAccessWindow().Activate(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); } });
                 });
                 GlobalHotKeyManager.Shared.Register(true, false, false, false, 0x4B, () => {
                     ShowMainWindowCommand?.Execute(null);
                 });
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
         catch (Exception ex)
         {
             System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Exception in OnLaunched: " + ex.Message + "\n" + ex.StackTrace + "\n");
+        }
+    }
+    private void OnAppActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
+    {
+        ProcessActivationArgs(e);
+    }
+
+    private void ProcessActivationArgs(Microsoft.Windows.AppLifecycle.AppActivationArguments activatedArgs)
+    {
+        var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
+        if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
+        {
+            var protocolArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
+            var uri = protocolArgs?.Uri;
+            if (uri != null && uri.Scheme == "deskdrop")
+            {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via protocol: " + uri.ToString() + "\n");
+            }
+        }
+        else if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.CommandLineLaunch)
+        {
+            var cmdLineArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.ICommandLineActivatedEventArgs;
+            if (cmdLineArgs != null)
+            {
+                string argsStr = cmdLineArgs.Operation.Arguments;
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via CommandLine: " + argsStr + "\n");
+                
+                var matches = System.Text.RegularExpressions.Regex.Matches(argsStr, @"[\""].+?[\""]|[^ ]+");
+                if (matches.Count >= 2)
+                {
+                    string path = matches[matches.Count - 1].Value.Trim('"');
+                    if (System.IO.File.Exists(path) || System.IO.Directory.Exists(path))
+                    {
+                        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Context Menu Trigger: Sending " + path + "\n");
+                        
+                        System.Threading.Tasks.Task.Run(async () =>
+                        {
+                            while (Clipboard == null) await System.Threading.Tasks.Task.Delay(200);
+                            try
+                            {
+                                Clipboard.PushFile(path);
+                            }
+                            catch (Exception e)
+                            {
+                                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] Error pushing context menu file: {e.Message}\n");
+                            }
+                        });
+                    }
+                }
+            }
         }
     }
 }
