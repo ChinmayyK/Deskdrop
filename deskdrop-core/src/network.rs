@@ -3,8 +3,8 @@
 //! Wire format (per frame):
 //!   [u32 LE length][payload bytes]
 //!
-//! Handshake frames are bincode-encoded plaintext.
-//! Post-handshake frames are bincode-encoded then AEAD-encrypted.
+//! Handshake frames are postcard-encoded plaintext.
+//! Post-handshake frames are postcard-encoded then AEAD-encrypted.
 //!
 //! # Sub-500 ms propagation budget
 //! - mDNS resolution: ~10–50 ms (already running)
@@ -163,7 +163,7 @@ fn apply_keepalive(stream: &TcpStream) -> Result<()> {
 // ── Low-level framing ─────────────────────────────────────────────────────────
 
 async fn send_frame<T: Serialize>(stream: &mut TcpStream, value: &T) -> Result<()> {
-    let payload = bincode::serialize(value).context("serializing frame")?;
+    let payload = postcard::to_stdvec(value).context("serializing frame")?;
     let len = payload.len() as u32;
     stream.write_all(&len.to_le_bytes()).await?;
     stream.write_all(&payload).await?;
@@ -195,7 +195,7 @@ async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream, max_size: u32) 
     .context("timeout waiting for frame body")?
     .context("reading frame body")?;
 
-    bincode::deserialize(&buf).context("deserializing frame")
+    postcard::from_bytes(&buf).context("deserializing frame")
 }
 
 async fn send_encrypted(
@@ -203,7 +203,7 @@ async fn send_encrypted(
     session: &mut SessionKey,
     msg: &AppMessage,
 ) -> Result<()> {
-    let mut buffer = bincode::serialize(msg).context("serializing AppMessage")?;
+    let mut buffer = postcard::to_stdvec(msg).context("serializing AppMessage")?;
     let nonce = session
         .encrypt_in_place(&mut buffer)
         .context("encrypting")?;
@@ -232,7 +232,7 @@ async fn send_encrypted_no_flush(
     session: &mut SessionKey,
     msg: &AppMessage,
 ) -> Result<()> {
-    let mut buffer = bincode::serialize(msg).context("serializing AppMessage")?;
+    let mut buffer = postcard::to_stdvec(msg).context("serializing AppMessage")?;
     let nonce = session
         .encrypt_in_place(&mut buffer)
         .context("encrypting")?;
@@ -281,7 +281,7 @@ async fn recv_encrypted(
     session
         .decrypt_in_place(&mut cipher_buffer)
         .context("decrypting")?;
-    bincode::deserialize(&cipher_buffer).context("deserializing AppMessage")
+    postcard::from_bytes(&cipher_buffer).context("deserializing AppMessage")
 }
 
 // ── Handshake ─────────────────────────────────────────────────────────────────

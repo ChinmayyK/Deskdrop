@@ -74,9 +74,11 @@ pub fn bind_address(port: u16) -> Result<SocketAddr> {
 
 pub fn detect_android_hotspot_gateway(iface: &NetworkInterfaceInfo) -> Option<IpAddr> {
     // 1. Try to ask the OS for the actual default gateway
-    if let Ok(default_iface) = default_net::get_default_interface() {
+    if let Ok(default_iface) = netdev::get_default_interface() {
         if let Some(gateway) = default_iface.gateway {
-            return Some(gateway.ip_addr);
+            if let Some(gw_ip) = gateway.ipv4.first() {
+                return Some(std::net::IpAddr::V4(*gw_ip));
+            }
         }
     }
 
@@ -342,9 +344,15 @@ pub fn detect_hotspot_gateway_candidates(iface: &NetworkInterfaceInfo) -> Vec<Ip
     let mut candidates = Vec::new();
 
     // 1. Try the OS-reported default gateway
-    if let Ok(default_iface) = default_net::get_default_interface() {
-        if let Some(gateway) = default_iface.gateway {
-            candidates.push(gateway.ip_addr);
+    if let Ok(default_iface) = netdev::get_default_interface() {
+        tracing::debug!("Default interface found: {}", default_iface.name);
+        for ip in default_iface.ipv4 {
+            let addr = IpAddr::V4(ip.addr());
+            // It could be a VPN interface or a virtual one
+            if addr.is_loopback() {
+                continue;
+            }
+            candidates.push(addr);
         }
     }
 
@@ -516,7 +524,7 @@ mod tests {
             ip: IpAddr::V4(Ipv4Addr::new(192, 168, 43, 88)),
             is_primary: true,
         };
-        // Depending on host OS, default_net might return the real default gateway.
+        // Depending on host OS, netdev might return the real default gateway.
         // We assert that it returns *some* valid gateway IP for this interface.
         assert!(detect_android_hotspot_gateway(&iface).is_some());
     }
