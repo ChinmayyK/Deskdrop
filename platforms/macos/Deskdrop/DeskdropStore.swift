@@ -1067,8 +1067,24 @@ final class DeskdropStore: ObservableObject {
 
     @MainActor
     func upsertTransfer(_ t: FileTransferState) {
+        let isNew = !activeTransfers.contains(where: { $0.id == t.id })
         if let idx = activeTransfers.firstIndex(where: { $0.id == t.id }) { activeTransfers[idx] = t }
         else { activeTransfers.insert(t, at: 0) }
+        
+        if isNew {
+            TransferNotificationManager.shared.onTransferStarted(id: t.id, filename: t.fileName, totalBytes: t.totalBytes, deviceName: t.fromDeviceName)
+        } else {
+            TransferNotificationManager.shared.onProgressUpdated(id: t.id, progress: t.exactRatio, bytesPerSecond: t.speedBps ?? 0)
+        }
+        
+        switch t.status {
+        case .completed:
+            TransferNotificationManager.shared.onTransferCompleted(id: t.id, filename: t.fileName)
+        case .failed:
+            TransferNotificationManager.shared.onTransferFailed(id: t.id, filename: t.fileName, error: "Transfer Failed")
+        default:
+            break
+        }
     }
 
     @MainActor
@@ -1079,6 +1095,12 @@ final class DeskdropStore: ObservableObject {
                               totalBytes: t.totalBytes, bytesReceived: t.bytesReceived,
                               percent: t.percent, status: status)
         activeTransfers[idx] = t
+        
+        if status == .completed {
+            TransferNotificationManager.shared.onTransferCompleted(id: id, filename: t.fileName)
+        } else if status == .failed {
+            TransferNotificationManager.shared.onTransferFailed(id: id, filename: t.fileName, error: "Transfer Failed")
+        }
     }
 
     // MARK: - Toast system

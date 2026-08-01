@@ -49,10 +49,10 @@ final class DeskdropToastWindowManager: NSObject {
     @objc private func layoutPanel() {
         guard let screen = activeScreen else { return }
         let visible = screen.visibleFrame
-        let width: CGFloat = 400
-        let height: CGFloat = min(visible.height - 16, 400)
+        let width: CGFloat = 360
+        let height: CGFloat = min(visible.height - 24, 520)
         let frame = NSRect(
-            x: visible.minX + (visible.width - width) / 2, // Center horizontally
+            x: visible.maxX - width - 16, // Pinned to top-right
             y: visible.maxY - height - 12, // Pin to top
             width: width,
             height: height

@@ -95,14 +95,15 @@ struct PreferencesView: View {
 
     @ViewBuilder private var pane: some View {
         switch tab {
-        case .general:  GeneralPane(copy: $copy, virtualCamera: virtualCamera)
-        case .sync:     SyncPane(copy: $copy, patternDraft: $patternDraft)
-        case .network:  NetworkPane(store: store, copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
+        case .general:       GeneralPane(copy: $copy, virtualCamera: virtualCamera)
+        case .sync:          SyncPane(copy: $copy, patternDraft: $patternDraft)
+        case .notifications: TransferNotificationPreferencesView()
+        case .network:       NetworkPane(store: store, copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
                             .onChange(of: portString) { v in
                                 if let p = UInt16(v), p > 1024 { copy.port = p; portIsInvalid = false; isDirty = true }
                                 else { portIsInvalid = true }
                             }
-        case .security: SecurityPane(copy: $copy, store: store)
+        case .security:      SecurityPane(copy: $copy, store: store)
         }
     }
 }
@@ -110,23 +111,25 @@ struct PreferencesView: View {
 // MARK: - Tab Bar
 
 private enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, sync, network, security
+    case general, sync, notifications, network, security
     var id: String { rawValue }
     var label: String { rawValue.capitalized }
     var icon:  String {
         switch self {
-        case .general:  return "switch.2"
-        case .sync:     return "arrow.triangle.2.circlepath"
-        case .network:  return "network"
-        case .security: return "lock.shield"
+        case .general:       return "switch.2"
+        case .sync:          return "arrow.triangle.2.circlepath"
+        case .notifications: return "bell.badge"
+        case .network:       return "network"
+        case .security:      return "lock.shield"
         }
     }
     var tint: Color {
         switch self {
-        case .general:  return CRTheme.accentBlue
-        case .sync:     return CRTheme.accentGreen
-        case .network:  return CRTheme.accentIndigo
-        case .security: return CRTheme.accentOrange
+        case .general:       return CRTheme.accentBlue
+        case .sync:          return CRTheme.accentGreen
+        case .notifications: return CRTheme.accentPurple
+        case .network:       return CRTheme.accentIndigo
+        case .security:      return CRTheme.accentOrange
         }
     }
 }
