@@ -155,6 +155,7 @@ struct ActiveTransferCard: View {
     
     var statusText: String {
         switch transfer.status {
+        case .queued: return "Queued for transfer..."
         case .incoming: return "Waiting for approval..."
         case .transferring:
             var text = ""

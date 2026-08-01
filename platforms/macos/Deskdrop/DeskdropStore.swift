@@ -351,6 +351,8 @@ final class DeskdropStore: ObservableObject {
                 activeTransfers = ats.map { t in
                     let status: FileTransferStatus
                     switch t.status {
+                    case "pending": status = .incoming
+                    case "queued": status = .queued
                     case "paused": status = .paused
                     case "incoming": status = .incoming
                     case "verifying": status = .verifying

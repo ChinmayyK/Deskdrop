@@ -55,7 +55,7 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
-				<string>Drop to Phone</string>
+				<string>Send via Deskdrop</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>handleDropService</string>

@@ -177,13 +177,22 @@ private struct DynamicIslandTransferCard: View {
                         .lineLimit(1)
                 }
                 
-                Text("Receiving from \(transfer.fromDeviceName)")
-                    .font(.system(size: 12, weight: .medium, design: .default))
-                    .foregroundStyle(Color.primary.opacity(0.7))
-                    .lineLimit(1)
+                if case .queued = transfer.status {
+                    Text("Queued... (\(transfer.fromDeviceName))")
+                        .font(.system(size: 12, weight: .medium, design: .default))
+                        .foregroundStyle(Color.primary.opacity(0.7))
+                        .lineLimit(1)
+                } else {
+                    Text("Receiving from \(transfer.fromDeviceName)")
+                        .font(.system(size: 12, weight: .medium, design: .default))
+                        .foregroundStyle(Color.primary.opacity(0.7))
+                        .lineLimit(1)
+                }
 
                 if case .incoming = transfer.status {
                     // Waiting state
+                } else if case .queued = transfer.status {
+                    // Waiting in queue
                 } else if case .failed = transfer.status {
                     // Failed state
                 } else {

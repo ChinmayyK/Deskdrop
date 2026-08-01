@@ -591,6 +591,7 @@ struct FileTransferBanner: View {
     private var transferIcon: String {
         if transfer.isDirectory { return "folder.fill" }
         switch transfer.status {
+        case .queued:       return "hourglass"
         case .incoming:     return "arrow.down.circle"
         case .transferring: return "arrow.down.circle.fill"
         case .paused:       return "pause.circle.fill"

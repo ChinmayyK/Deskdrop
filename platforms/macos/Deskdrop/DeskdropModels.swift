@@ -222,7 +222,7 @@ struct FileTransferState: Identifiable {
 }
 
 enum FileTransferStatus {
-    case incoming, transferring, paused, verifying, complete(destPath: String), failed(reason: String), cancelled
+    case incoming, queued, transferring, paused, verifying, complete(destPath: String), failed(reason: String), cancelled
 }
 
 // ── Clipboard apply policy preference ────────────────────────────────────────
