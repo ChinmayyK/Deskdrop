@@ -82,9 +82,16 @@ namespace Deskdrop.WinUI.Services
                         {
                             var fileName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
                             var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                            var transferId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_id(ev)) ?? "";
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                 AddHistoryItem(fileName, from, "📎", fileName);
-                                try { new IncomingFileBannerWindow(fileName, from).Activate(); } catch { }
+                                NotificationHelper.ShowToastWithActions(
+                                    $"Incoming File from {from}",
+                                    fileName,
+                                    null,
+                                    $"deskdrop://accept/{transferId}",
+                                    $"deskdrop://reject/{transferId}"
+                                );
                             });
                             break;
                         }
@@ -177,15 +184,21 @@ namespace Deskdrop.WinUI.Services
             catch { }
         }
 
-        public void HandleIncomingData(JsonElement json)
+        public void HandleIncomingData(System.Text.Json.JsonElement json)
         {
             if (json.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "file")
             {
                 string name = json.GetProperty("name").GetString() ?? "Unknown";
                 string from = json.GetProperty("from").GetString() ?? "Unknown";
-                _dispatcher.TryEnqueue(() => {
+                _dispatcher?.TryEnqueue(() => {
                     AddHistoryItem(name, from, "📎", name);
-                    new IncomingFileBannerWindow(name, from).Activate();
+                    NotificationHelper.ShowToastWithActions(
+                        $"Incoming File from {from}",
+                        name,
+                        null,
+                        "deskdrop://accept/0",
+                        "deskdrop://reject/0"
+                    );
                 });
             }
         }

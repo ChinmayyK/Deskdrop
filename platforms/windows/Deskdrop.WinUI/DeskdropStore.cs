@@ -335,8 +335,14 @@ namespace Deskdrop.WinUI
         public long? speed_bps { get => _speed_bps; set { if (SetProperty(ref _speed_bps, value)) NotifyProgressProperties(); } }
         private long? _eta_secs;
         public long? eta_secs { get => _eta_secs; set { if (SetProperty(ref _eta_secs, value)) NotifyProgressProperties(); } }
+        private bool _is_directory;
+        public bool is_directory { get => _is_directory; set { if (SetProperty(ref _is_directory, value)) OnPropertyChanged(nameof(IsDirectory)); } }
+        private int _item_count = 1;
+        public int item_count { get => _item_count; set { if (SetProperty(ref _item_count, value)) OnPropertyChanged(nameof(ItemCount)); } }
 
         public string FileName => file_name;
+        public bool IsDirectory => is_directory;
+        public int ItemCount => item_count;
         public double PercentFloat => bytes_total > 0 ? ((double)bytes_received / bytes_total * 100) : 100.0;
         public int Percent => percent;
         public string PercentText => $"{PercentFloat:0.0}%";
@@ -395,6 +401,31 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(PrimaryBackground));
             OnPropertyChanged(nameof(PrimaryForeground));
             OnPropertyChanged(nameof(SecondaryVisible));
+
+            try
+            {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                if (status == "transferring" || status == "in_progress")
+                {
+                    TaskbarProgress.SetState(hwnd, TaskbarProgress.TaskbarStates.Normal);
+                    TaskbarProgress.SetValue(hwnd, bytes_received, bytes_total > 0 ? bytes_total : 1);
+                }
+                else if (status == "paused")
+                {
+                    TaskbarProgress.SetState(hwnd, TaskbarProgress.TaskbarStates.Paused);
+                    TaskbarProgress.SetValue(hwnd, bytes_received, bytes_total > 0 ? bytes_total : 1);
+                }
+                else if (status == "failed")
+                {
+                    TaskbarProgress.SetState(hwnd, TaskbarProgress.TaskbarStates.Error);
+                    TaskbarProgress.SetValue(hwnd, 100, 100);
+                }
+                else if (status == "complete" || status == "completed")
+                {
+                    TaskbarProgress.SetState(hwnd, TaskbarProgress.TaskbarStates.NoProgress);
+                }
+            }
+            catch { }
         }
     }
 

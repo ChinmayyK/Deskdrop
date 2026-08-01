@@ -145,6 +145,24 @@ public partial class App : Application
 
         try
         {
+            var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+            if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
+            {
+                var protocolArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
+                var uri = protocolArgs?.Uri;
+                if (uri != null && uri.Scheme == "deskdrop")
+                {
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via protocol: " + uri.ToString() + "\n");
+                    var action = uri.Host; // "accept" or "reject"
+                    var id = uri.AbsolutePath.Trim('/');
+                    if (action == "accept" || action == "reject")
+                    {
+                        // In a real app we would call NativeCore.deskdrop_accept_file_transfer or deskdrop_reject_file_transfer
+                        // For now we just open the app
+                    }
+                }
+            }
+
             if (!DaemonClient.IsDaemonRunning())
             {
                 System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Starting native engine via deskdrop_start...\n");

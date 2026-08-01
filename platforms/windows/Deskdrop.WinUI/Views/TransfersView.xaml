@@ -8,6 +8,13 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <winui:BoolToFolderIconConverter x:Key="BoolToFolderIconConverter"/>
+        <winui:BoolToItemCountDotConverter x:Key="BoolToItemCountDotConverter"/>
+        <winui:ItemCountTextConverter x:Key="ItemCountTextConverter"/>
+        <winui:BoolToVisibleConverter x:Key="BoolToVisibleConverter"/>
+    </Page.Resources>
+
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -40,7 +47,7 @@
 
                                     <!-- Icon -->
                                     <Border Grid.Row="0" Grid.Column="0" Width="44" Height="44" CornerRadius="22" Background="#E3F2FD" Margin="0,0,16,0">
-                                        <FontIcon Glyph="&#xE896;" FontSize="20" Foreground="#0A84FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <FontIcon Glyph="{x:Bind IsDirectory, Converter={StaticResource BoolToFolderIconConverter}, Mode=OneWay}" FontSize="20" Foreground="#0A84FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
 
                                     <!-- Details -->
@@ -50,6 +57,8 @@
                                             <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" FontSize="13" Foreground="#6E6E73"/>
                                             <TextBlock Text="·" FontSize="13" Foreground="#6E6E73"/>
                                             <TextBlock Text="{x:Bind SizeText, Mode=OneWay}" FontSize="13" Foreground="#6E6E73"/>
+                                            <TextBlock Text="{x:Bind IsDirectory, Converter={StaticResource BoolToItemCountDotConverter}, Mode=OneWay}" FontSize="13" Foreground="#6E6E73"/>
+                                            <TextBlock Text="{x:Bind ItemCount, Converter={StaticResource ItemCountTextConverter}, Mode=OneWay}" FontSize="13" Foreground="#6E6E73" Visibility="{x:Bind IsDirectory, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"/>
                                             <TextBlock Text="·" FontSize="13" Foreground="#6E6E73"/>
                                             <TextBlock Text="{x:Bind SpeedText, Mode=OneWay}" FontSize="13" Foreground="#0A84FF"/>
                                         </StackPanel>

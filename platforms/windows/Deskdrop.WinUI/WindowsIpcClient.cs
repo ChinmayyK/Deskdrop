@@ -34,13 +34,10 @@ namespace Deskdrop.WinUI
         private const int    TimeoutMs   = 1000;
 
 
-        public static JsonDocument? SendFilePath(string path, string name, string mime, string? targetDevice = null)
+        public static JsonDocument? SendFilePath(string path, string name, string mime, string? targetDevice = null, string? batchId = null, bool isDirectory = false, int itemCount = 1)
         {
-            if (targetDevice == null)
-            {
-                return Send(new { cmd = "send_file_path", path = path, name = name, mime = mime });
-            }
-            return Send(new { cmd = "send_file_path", path = path, name = name, mime = mime, target_device = targetDevice });
+            var req = new { cmd = "send_file_path", path = path, name = name, mime = mime, target_device = targetDevice, batch_id = batchId, is_directory = isDirectory, item_count = itemCount };
+            return Send(req);
         }
 
         public static JsonDocument? PushFile(string targetDevice, string path)
