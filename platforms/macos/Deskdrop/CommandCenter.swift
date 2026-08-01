@@ -766,34 +766,28 @@ struct TransferAnalyticsWidget: View {
                 HStack(spacing: 12) {
                     ZStack {
                         Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.white.opacity(0.25), Color.white.opacity(0.10)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .fill(Color(nsColor: .controlAccentColor).opacity(0.1))
                             .frame(width: 38, height: 38)
                         
                         Image(systemName: "sparkles")
                             .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(Color(nsColor: .controlAccentColor))
                     }
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text("DESKDROP WRAPPED")
                             .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(0.75))
+                            .foregroundStyle(Color.secondary)
                             .tracking(0.5)
                         
                         HStack(spacing: 5) {
                             Text("You've beamed")
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color.white.opacity(0.9))
+                                .foregroundStyle(Color.primary)
                             
                             Text(dataString)
                                 .font(.system(size: 16, weight: .heavy, design: .rounded))
-                                .foregroundStyle(Color.white)
+                                .foregroundStyle(Color.primary)
                         }
                     }
                 }
@@ -803,56 +797,42 @@ struct TransferAnalyticsWidget: View {
                 HStack(spacing: 8) {
                     Image(systemName: "bolt.shield.fill")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.35, green: 0.85, blue: 1.0))
+                        .foregroundStyle(Color(nsColor: .controlAccentColor))
                     
                     VStack(alignment: .leading, spacing: 0) {
                         Text("TIME SAVED")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(0.7))
+                            .foregroundStyle(Color.secondary)
                             .tracking(0.4)
                         
                         Text(timeSavedString)
                             .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(Color.primary)
                     }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.14))
+                        .fill(Color(nsColor: .windowBackgroundColor))
                         .overlay(
                             Capsule(style: .continuous)
-                                .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
                         )
                 )
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
             .background(
-                ZStack {
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.22, green: 0.36, blue: 0.96),
-                            Color(red: 0.42, green: 0.20, blue: 0.90)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.16), Color.clear],
-                        startPoint: .top,
-                        endPoint: .center
-                    )
-                }
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.05), lineWidth: 1)
             )
-            .shadow(color: Color(red: 0.25, green: 0.25, blue: 0.85).opacity(0.25), radius: 12, x: 0, y: 6)
+            .shadow(color: Color(nsColor: .controlAccentColor).opacity(0.08), radius: 12, x: 0, y: 4)
         }
     }
 }
