@@ -16,7 +16,7 @@ struct CommandCenterRootView: View {
             // Left Column: Navigation Sidebar (240px)
             CommandSidebarView(store: store)
                 .frame(width: 240)
-                .background(.regularMaterial)
+                .background(CRTheme.surfaceElevated)
             
             Divider().opacity(0.5)
             
