@@ -505,6 +505,12 @@ pub struct RemoteThumbnailResult {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct QrAuthToken {
+    pub token: String,
+    pub expires_at: std::time::Instant,
+}
+
 #[derive(Clone)]
 pub(crate) struct EngineShared {
     pub(crate) config: EngineConfig,
@@ -568,7 +574,7 @@ pub(crate) struct EngineShared {
     /// Cross-device duplicate prevention (mesh echo suppression).
     pub dedup: Arc<Mutex<crate::dedup::Deduplicator>>,
     /// Active QR authentication token (short-lived)
-    pub qr_auth_token: Arc<Mutex<Option<String>>>,
+    pub qr_auth_token: Arc<Mutex<Option<QrAuthToken>>>,
     /// Waiters for remote files queries (`query_remote_files_sync`). Keyed by `request_id`.
     pub(crate) remote_file_waiters: Arc<
         Mutex<
@@ -1365,36 +1371,42 @@ impl Engine {
         Ok(transfer_id)
     }
 
-    /// Accept an incoming file transfer.
     pub async fn accept_file_transfer(&self, transfer_id: [u8; 16]) -> Result<()> {
-        let resume_from = {
+        let _ = {
             let mut mgr = self.shared.file_transfers.lock().await;
-            mgr.accept_inbound_or_resume(&transfer_id)?
+            mgr.queue_inbound(&transfer_id)
         };
-        // Find which peer sent this transfer and reply.
-        let from_device = {
+        pump_transfer_queue(&self.shared).await;
+        Ok(())
+    }
+
+    pub async fn pump_transfer_queue(&self) {
+        let to_start = {
             let mgr = self.shared.file_transfers.lock().await;
-            mgr.all_inbound()
-                .iter()
-                .find(|t| t.transfer_id == transfer_id)
-                .map(|t| t.from_device)
+            mgr.get_inbound_to_start(5) // Max 5 active inbound transfers
         };
-        if let Some(from_device) = from_device {
+
+        for (tid, peer_id) in to_start {
+            let resume_from = {
+                let mut mgr = self.shared.file_transfers.lock().await;
+                mgr.accept_inbound_or_resume(&tid).unwrap_or(0)
+            };
+
             let accept_msg = AppMessage::FileTransferAccept {
-                transfer_id,
+                transfer_id: tid,
                 accepted: true,
                 resume_from_chunk: resume_from,
                 reject_reason: None,
             };
+
             let peers = self.shared.peer_manager.all_trusted_senders();
-            for (peer_id, tx) in peers {
-                if peer_id == from_device {
-                    let _ = tx.try_send(accept_msg);
+            for (p_id, tx) in peers {
+                if p_id == peer_id {
+                    let _ = tx.try_send(accept_msg.clone());
                     break;
                 }
             }
         }
-        Ok(())
     }
 
     async fn announce_outbound_file_transfer(
@@ -1941,7 +1953,10 @@ impl Engine {
         let mut bytes = [0u8; 16];
         rand::thread_rng().fill_bytes(&mut bytes);
         let token = hex::encode(bytes);
-        *self.shared.qr_auth_token.lock().await = Some(token.clone());
+        *self.shared.qr_auth_token.lock().await = Some(QrAuthToken {
+            token: token.clone(),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(60),
+        });
         token
     }
 
@@ -3969,6 +3984,7 @@ fn register_session(
                                 }).await;
                             }
                         }
+                        pump_transfer_queue(&dw_shared).await;
                     }
                 }
             }
@@ -4274,20 +4290,18 @@ fn register_session(
                                 || file_bytes <= settings.auto_accept_max_bytes);
 
                         if auto_accept {
-                            let resume_from = shared
+                            let _ = shared
                                 .file_transfers
                                 .lock()
                                 .await
-                                .accept_inbound_or_resume(&transfer_id)
-                                .unwrap_or(0);
-                            let _ = rx_session_outbox_tx
-                                .send(AppMessage::FileTransferAccept {
-                                    transfer_id,
-                                    accepted: true,
-                                    resume_from_chunk: resume_from,
-                                    reject_reason: None,
-                                })
-                                .await;
+                                .queue_inbound(&transfer_id);
+
+                            // Trigger the queue manager
+                            let bg_shared = shared.clone();
+                            tokio::spawn(async move {
+                                pump_transfer_queue(&bg_shared).await;
+                            });
+
                             // Record in feed.
                             shared.activity.lock().await.record_file_transfer_started(
                                 peer_id,
@@ -4661,6 +4675,7 @@ fn register_session(
                                 reason,
                             })
                             .await;
+                        pump_transfer_queue(&shared).await;
                     }
                     Ok(AppMessage::FileTransferPause { transfer_id }) => {
                         touch_last_seen();
@@ -5194,13 +5209,8 @@ fn register_session(
                     Ok(AppMessage::QrAuth { token }) => {
                         let valid = {
                             let mut stored = shared.qr_auth_token.lock().await;
-                            if let Some(t) = stored.as_ref() {
-                                if t == &token {
-                                    *stored = None; // Single-use token
-                                    true
-                                } else {
-                                    false
-                                }
+                            if let Some(t) = stored.take() {
+                                t.token == token && t.expires_at > std::time::Instant::now()
                             } else {
                                 false
                             }
@@ -5895,6 +5905,7 @@ fn register_session(
                     .await
                     .pause_all_for_device(peer_id);
                 shared.camera_frames.lock().await.remove(&peer_id);
+                pump_transfer_queue(&shared).await;
 
                 // FIX: Phantom Pairing Prompts. Clear incoming pairing state if connection drops.
                 let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
@@ -6037,4 +6048,33 @@ fn ensure_parent(path: &Path) -> Result<()> {
         std::fs::create_dir_all(parent).with_context(|| format!("creating {:?}", parent))?;
     }
     Ok(())
+}
+
+pub(crate) async fn pump_transfer_queue(shared: &EngineShared) {
+    let to_start = {
+        let mgr = shared.file_transfers.lock().await;
+        mgr.get_inbound_to_start(5) // Max 5 active inbound transfers
+    };
+
+    for (tid, peer_id) in to_start {
+        let resume_from = {
+            let mut mgr = shared.file_transfers.lock().await;
+            mgr.accept_inbound_or_resume(&tid).unwrap_or(0)
+        };
+
+        let accept_msg = AppMessage::FileTransferAccept {
+            transfer_id: tid,
+            accepted: true,
+            resume_from_chunk: resume_from,
+            reject_reason: None,
+        };
+
+        let peers = shared.peer_manager.all_trusted_senders();
+        for (p_id, tx) in peers {
+            if p_id == peer_id {
+                let _ = tx.try_send(accept_msg.clone());
+                break;
+            }
+        }
+    }
 }
