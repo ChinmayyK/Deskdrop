@@ -37,6 +37,37 @@ final class DeskdropStore: ObservableObject {
     // ── Activity feed ─────────────────────────────────────────────────────────
     @Published var activityFeed: [IpcActivityEntry] = []
     @Published var activeTransfers: [FileTransferState] = []
+    
+    var batchedTransfers: [FileTransferState] {
+        var batches: [String: FileTransferState] = [:]
+        var singles: [FileTransferState] = []
+        
+        for t in activeTransfers {
+            if let bid = t.batchId {
+                if var existing = batches[bid] {
+                    existing.bytesReceived += t.bytesReceived
+                    existing.totalBytes += t.totalBytes
+                    // Merge status (prioritize transferring/failed over pending/complete)
+                    if case .failed = t.status { existing.status = t.status }
+                    else if case .transferring = t.status, case .complete = existing.status { existing.status = .transferring }
+                    
+                    if existing.totalBytes > 0 {
+                        existing.percent = Int((Double(existing.bytesReceived) / Double(existing.totalBytes)) * 100.0)
+                    }
+                    batches[bid] = existing
+                } else {
+                    var initial = t
+                    // For the UI, the folder name is the first component of the relative path
+                    initial.fileName = t.fileName.components(separatedBy: "/").first ?? t.fileName
+                    batches[bid] = initial
+                }
+            } else {
+                singles.append(t)
+            }
+        }
+        
+        return singles + Array(batches.values).sorted(by: { $0.id < $1.id })
+    }
     @Published var activeSpeedTests: [SpeedTestState] = []
     @Published var clipboardPolicy = ClipboardPolicy()
 
@@ -333,6 +364,9 @@ final class DeskdropStore: ObservableObject {
                         fromDeviceName: t.from_device,
                         fileName: t.file_name,
                         totalBytes: t.bytes_total,
+                        isDirectory: t.is_directory ?? false,
+                        itemCount: t.item_count ?? 1,
+                        batchId: t.batch_id,
                         bytesReceived: t.bytes_received,
                         percent: t.percent,
                         status: status
@@ -616,7 +650,7 @@ final class DeskdropStore: ObservableObject {
         }
         Task {
             for url in urls {
-                _ = try? await ipc.sendFile(url: url, targetDeviceId: device?.id)
+                await processAndSend(url: url, targetDeviceId: device?.id)
             }
         }
     }
@@ -626,8 +660,43 @@ final class DeskdropStore: ObservableObject {
         }
         Task {
             for url in urls {
-                _ = try? await ipc.sendFile(url: url, targetDeviceId: deviceId)
+                await processAndSend(url: url, targetDeviceId: deviceId)
             }
+        }
+    }
+    
+    private func processAndSend(url: URL, targetDeviceId: String?) async {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return }
+        
+        if isDir.boolValue {
+            let batchId = UUID().uuidString
+            guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey]) else { return }
+            
+            var fileUrls: [URL] = []
+            if let urls = enumerator.allObjects as? [URL] {
+                for fileURL in urls {
+                    var isSubDir: ObjCBool = false
+                    if FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isSubDir) && !isSubDir.boolValue {
+                        fileUrls.append(fileURL)
+                    }
+                }
+            }
+            
+            let totalCount = fileUrls.count
+            for fileUrl in fileUrls {
+                let relativePath = url.lastPathComponent + "/" + fileUrl.path.replacingOccurrences(of: url.path + "/", with: "")
+                _ = try? await ipc.sendFile(
+                    url: fileUrl,
+                    targetDeviceId: targetDeviceId,
+                    relativePath: relativePath,
+                    batchId: batchId,
+                    isDirectory: true,
+                    itemCount: totalCount
+                )
+            }
+        } else {
+            _ = try? await ipc.sendFile(url: url, targetDeviceId: targetDeviceId)
         }
     }
 

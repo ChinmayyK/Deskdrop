@@ -1347,10 +1347,13 @@ impl Engine {
         file_name: String,
         mime_type: String,
         target_device: Option<Uuid>,
+        batch_id: Option<String>,
+        is_directory: bool,
+        item_count: u32,
     ) -> Result<[u8; 16]> {
         let mut mgr = self.shared.file_transfers.lock().await;
         let transfer =
-            mgr.start_outbound_path(path, file_name.clone(), mime_type, target_device)?;
+            mgr.start_outbound_path(path, file_name.clone(), mime_type, target_device, batch_id, is_directory, item_count)?;
         let transfer_id = transfer.transfer_id;
         let meta = transfer.meta.clone();
         let size_bytes = meta.size_bytes;

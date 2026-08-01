@@ -174,8 +174,12 @@ struct SpeedTestState: Identifiable, Equatable {
 struct FileTransferState: Identifiable {
     let id: String          // hex transfer ID
     let fromDeviceName: String
-    let fileName: String
-    let totalBytes: Int64
+    var fileName: String
+    var totalBytes: Int64
+    var isDirectory: Bool = false
+    var itemCount: Int = 1
+    var batchId: String? = nil
+    
     var bytesReceived: Int64 = 0
     var percent: Int = 0
     var speedBps: Int64? = nil

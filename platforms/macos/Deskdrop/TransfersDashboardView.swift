@@ -37,7 +37,7 @@ struct TransfersDashboardView: View {
                         .kerning(1.2)
                         .padding(.horizontal, 40)
                     
-                    if store.activeTransfers.isEmpty {
+                    if store.batchedTransfers.isEmpty {
                         Text("No active transfers")
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(CRTheme.inkSoft.opacity(0.8))
@@ -45,7 +45,7 @@ struct TransfersDashboardView: View {
                             .padding(.bottom, 8)
                     } else {
                         VStack(spacing: 12) {
-                            ForEach(store.activeTransfers) { transfer in
+                            ForEach(store.batchedTransfers) { transfer in
                                 ActiveTransferCard(transfer: transfer, store: store)
                             }
                         }
@@ -214,7 +214,7 @@ struct ActiveTransferCard: View {
                         .scaleEffect(isPulsing && isTransferring ? 1.15 : 1.0)
                         .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
                     
-                    Image(systemName: "icloud.and.arrow.down.fill")
+                    Image(systemName: transfer.isDirectory ? "folder.fill" : "doc.fill")
                         .font(.system(size: 20))
                         .foregroundStyle(CRTheme.brandElectric)
                         .scaleEffect(isPulsing && isTransferring ? 1.05 : 1.0)
@@ -224,11 +224,23 @@ struct ActiveTransferCard: View {
                 
                 // Details
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(transfer.fileName)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(CRTheme.ink)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    HStack(alignment: .center, spacing: 6) {
+                        Text(transfer.fileName)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(CRTheme.ink)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        
+                        if transfer.isDirectory {
+                            Text("\(transfer.itemCount) items")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(CRTheme.inkSoft)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(CRTheme.brandElectric.opacity(0.1))
+                                .cornerRadius(6)
+                        }
+                    }
                     
                     if #available(macOS 13.0, *) {
                         Text(statusText)

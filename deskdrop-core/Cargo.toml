@@ -60,6 +60,7 @@ anyhow = "1"
 default-net = "0.22.0"
 lz4_flex = "0.13.1"
 dashmap = "5"
+walkdir = "2"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 mdns-sd = "0.10"

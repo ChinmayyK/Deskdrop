@@ -54,9 +54,9 @@ struct ActivityFeedView: View {
             CRDivider()
 
             // Active file transfers
-            if !store.activeTransfers.isEmpty && searchText.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(store.activeTransfers) { transfer in
+            if !store.batchedTransfers.isEmpty && searchText.isEmpty {
+                Section(header: Text("Active Transfers").font(.subheadline).foregroundColor(.secondary)) {
+                    ForEach(store.batchedTransfers) { transfer in
                         FileTransferBanner(transfer: transfer)
                         CRDivider().padding(.leading, 54)
                     }
@@ -498,10 +498,19 @@ struct FileTransferBanner: View {
             .shadow(color: CRTheme.accentIndigo.opacity(0.3), radius: 8, x: 0, y: 2)
 
             VStack(alignment: .leading, spacing: 5) {
-                HStack {
+                HStack(spacing: 8) {
                     Text(transfer.fileName)
                         .font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink).lineLimit(1)
-                    Spacer()
+                    if transfer.isDirectory {
+                        Text("\(transfer.itemCount) items")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(CRTheme.accentIndigo.opacity(0.1))
+                            .cornerRadius(4)
+                    }
+                    Spacer(minLength: 0)
                     StopwatchSizeText(bytesReceived: Double(transfer.bytesReceived), totalBytes: transfer.totalBytes, isDashboard: false)
                         .animation(.linear(duration: 0.25), value: transfer.bytesReceived)
                 }
@@ -580,6 +589,7 @@ struct FileTransferBanner: View {
     }
 
     private var transferIcon: String {
+        if transfer.isDirectory { return "folder.fill" }
         switch transfer.status {
         case .incoming:     return "arrow.down.circle"
         case .transferring: return "arrow.down.circle.fill"

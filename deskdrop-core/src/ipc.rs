@@ -205,6 +205,12 @@ pub enum IpcRequest {
         name: String,
         mime: String,
         target_device: Option<String>,
+        #[serde(default)]
+        batch_id: Option<String>,
+        #[serde(default)]
+        is_directory: bool,
+        #[serde(default)]
+        item_count: u32,
     },
     /// Accept an incoming file transfer.
     AcceptFileTransfer { transfer_id: String },
@@ -1185,6 +1191,9 @@ pub async fn handle_ipc_request(
             name,
             mime,
             target_device,
+            batch_id,
+            is_directory,
+            item_count,
         } => {
             let tgt = match target_device {
                 Some(ref s) => match crate::ipc::parse_uuid(s) {
@@ -1194,7 +1203,7 @@ pub async fn handle_ipc_request(
                 None => None,
             };
             match eng
-                .send_file_path(std::path::PathBuf::from(path), name, mime, tgt)
+                .send_file_path(std::path::PathBuf::from(path), name, mime, tgt, batch_id, is_directory, item_count)
                 .await
             {
                 Ok(transfer_id) => IpcResponse::ok(hex::encode(transfer_id)),

@@ -1501,7 +1501,7 @@ class DeskdropService : Service() {
                         if (resolved != null) {
                             val (filePath, displayName, mimeType) = resolved
                             Log.i(TAG, "Pulling remote file: $filePath ($displayName, $mimeType) to target $targetDeviceId")
-                            DeskdropJni.sendFilePath(engineHandle, filePath, displayName, mimeType, targetDeviceId)
+                            DeskdropJni.sendFilePath(engineHandle, filePath, displayName, mimeType, targetDeviceId, null, false, 1)
                         } else {
                             Log.w(TAG, "Failed to resolve file path for pull request $fileId")
                         }
@@ -1907,7 +1907,10 @@ class DeskdropService : Service() {
                         staged.localFile.absolutePath,
                         staged.displayName,
                         staged.mimeType,
-                        null
+                        null,
+                        null,
+                        false,
+                        1
                     )
                     if (tid != null) {
                         TransferManager.pendingOutboundTransferIds.add(tid)
@@ -1971,7 +1974,10 @@ class DeskdropService : Service() {
                 staged.localFile.absolutePath,
                 staged.displayName,
                 staged.mimeType,
-                targetDeviceId
+                targetDeviceId,
+                null,
+                false,
+                1
             )
             if (tid != null) {
                 TransferManager.pendingOutboundTransferIds.add(tid)

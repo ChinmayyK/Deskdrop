@@ -201,7 +201,7 @@ pub unsafe extern "C" fn deskdrop_send_file_path(
     let res =
         runtime().block_on(
             h.engine
-                .send_file_path(path, file_name, mime_type, target_device),
+                .send_file_path(path, file_name, mime_type, target_device, None, false, 1),
         );
     if res.is_ok() {
         0

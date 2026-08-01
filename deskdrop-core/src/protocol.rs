@@ -201,6 +201,12 @@ pub struct FileTransferMetadata {
     pub file_name: String,
     pub size_bytes: u64,
     pub mime_type: String,
+    #[serde(default)]
+    pub is_directory: bool,
+    #[serde(default)]
+    pub item_count: u32,
+    #[serde(default)]
+    pub batch_id: Option<String>,
 }
 
 // ── Remote File & Media Explorer definitions ──────────────────────────────────

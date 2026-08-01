@@ -468,13 +468,33 @@ impl InboundTransfer {
 
     /// Accept the transfer, setting up paths.
     pub fn accept(&mut self, save_dir: &Path) -> Result<()> {
-        let safe_name = sanitize_file_name(&self.meta.file_name);
+        let (safe_name, sub_dirs) = if self.meta.batch_id.is_some() {
+            // For batched directory transfers, preserve relative structure but sanitize parts.
+            let parts: Vec<&str> = self.meta.file_name.split('/').collect();
+            let mut dirs = Vec::new();
+            for part in &parts[..parts.len().saturating_sub(1)] {
+                let sanitized = sanitize_file_name(part);
+                if !sanitized.is_empty() {
+                    dirs.push(sanitized);
+                }
+            }
+            let name = sanitize_file_name(parts.last().unwrap_or(&self.meta.file_name.as_str()));
+            (name, dirs)
+        } else {
+            (sanitize_file_name(&self.meta.file_name), Vec::new())
+        };
+
         anyhow::ensure!(
             !safe_name.is_empty(),
             "file name is empty after sanitization"
         );
 
-        std::fs::create_dir_all(save_dir).context("creating save dir")?;
+        let mut actual_save_dir = save_dir.to_path_buf();
+        for dir in sub_dirs {
+            actual_save_dir.push(dir);
+        }
+
+        std::fs::create_dir_all(&actual_save_dir).context("creating save dir")?;
 
         if let Some(free_bytes) = get_available_disk_space(save_dir) {
             anyhow::ensure!(
@@ -485,7 +505,7 @@ impl InboundTransfer {
             );
         }
 
-        let (dest, file) = create_unique_file(save_dir, &safe_name)
+        let (dest, file) = create_unique_file(&actual_save_dir, &safe_name)
             .with_context(|| "creating destination file atomically")?;
 
         self.dest_path = Some(dest);
@@ -758,6 +778,9 @@ impl FileTransferManager {
             file_name: file_name.clone(),
             size_bytes: data.len() as u64,
             mime_type,
+            is_directory: false,
+            item_count: 1,
+            batch_id: None,
         };
         let transfer = OutboundTransfer::new(data, meta, target_device);
         let tid = transfer.transfer_id;
@@ -770,6 +793,9 @@ impl FileTransferManager {
         file_name: String,
         mime_type: String,
         target_device: Option<Uuid>,
+        batch_id: Option<String>,
+        is_directory: bool,
+        item_count: u32,
     ) -> Result<&OutboundTransfer> {
         let size_bytes = std::fs::metadata(&path)
             .with_context(|| format!("reading metadata for {}", path.display()))?
@@ -782,6 +808,9 @@ impl FileTransferManager {
             file_name,
             size_bytes,
             mime_type,
+            is_directory,
+            item_count,
+            batch_id,
         };
         let transfer = OutboundTransfer::from_path(path, meta, target_device)?;
         let tid = transfer.transfer_id;
@@ -1030,7 +1059,10 @@ impl FileTransferManager {
                 "percent": percent,
                 "speed_bps": prog.speed_bps,
                 "eta_secs": prog.eta_secs,
-                "status": status_str
+                "status": status_str,
+                "is_directory": t.meta.is_directory,
+                "item_count": t.meta.item_count,
+                "batch_id": t.meta.batch_id.clone()
             }));
         }
         for t in self.outbound.values_mut() {
@@ -1060,7 +1092,10 @@ impl FileTransferManager {
                 "percent": percent,
                 "speed_bps": prog.speed_bps,
                 "eta_secs": prog.eta_secs,
-                "status": status_str
+                "status": status_str,
+                "is_directory": t.meta.is_directory,
+                "item_count": t.meta.item_count,
+                "batch_id": t.meta.batch_id.clone()
             }));
         }
         transfers

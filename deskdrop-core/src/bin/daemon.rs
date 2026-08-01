@@ -1049,6 +1049,9 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             name,
             mime,
             target_device,
+            batch_id,
+            is_directory,
+            item_count,
         } => {
             let transfer_id = state
                 .engine
@@ -1057,6 +1060,9 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                     name,
                     mime,
                     target_device.as_deref().map(parse_uuid).transpose()?,
+                    batch_id,
+                    is_directory,
+                    item_count,
                 )
                 .await?;
             Ok(IpcResponse::ok(hex::encode(transfer_id)))

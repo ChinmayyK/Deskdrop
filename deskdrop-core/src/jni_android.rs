@@ -1469,6 +1469,9 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePath(
     display_name: JString,
     mime_type: JString,
     target_device_id: JString,
+    batch_id: JString,
+    is_directory: jboolean,
+    item_count: jint,
 ) -> jstring {
     if handle == 0 {
         return std::ptr::null_mut();
@@ -1498,6 +1501,14 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePath(
             Err(_) => return std::ptr::null_mut(),
         }
     };
+    let batch_id = if batch_id.is_null() {
+        None
+    } else {
+        match env.get_string(&batch_id) {
+            Ok(s) => Some(s.into()),
+            Err(_) => None,
+        }
+    };
 
     let h = unsafe { &*(handle as *const AndroidHandle) };
     match rt().block_on(h.engine.send_file_path(
@@ -1505,6 +1516,9 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePath(
         display_name,
         mime_type,
         target_device,
+        batch_id,
+        is_directory != 0,
+        item_count as u32,
     )) {
         Ok(tid) => env
             .new_string(hex::encode(tid))

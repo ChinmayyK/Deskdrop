@@ -869,9 +869,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseFiles          = true
-        panel.canChooseDirectories    = false
+        panel.canChooseDirectories    = true
         panel.prompt                  = "Send"
-        panel.message                 = "Choose files to send to connected devices"
+        panel.message                 = "Choose files or folders to send to connected devices"
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             store.sendFiles(urls: panel.urls, toPeer: store.defaultTargetDevice?.id)
         }

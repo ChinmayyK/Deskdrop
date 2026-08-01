@@ -143,7 +143,10 @@ object DeskdropJni {
         path: String,
         displayName: String,
         mimeType: String,
-        targetDeviceId: String?
+        targetDeviceId: String?,
+        batchId: String?,
+        isDirectory: Boolean,
+        itemCount: Int
     ): String?
 
     /**
