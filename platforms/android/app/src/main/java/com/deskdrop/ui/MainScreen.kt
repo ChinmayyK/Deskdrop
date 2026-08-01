@@ -150,25 +150,14 @@ fun MainScreen(
     onResendActivity: (ActivityEntry) -> Unit = {},
     onReplayOnboarding: () -> Unit = {}
 ) {
-    var currentTab by rememberSaveable { mutableStateOf(AppTab.Home) }
+    val scope = rememberCoroutineScope()
     val tabs = AppTab.values()
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(
-        initialPage = tabs.indexOf(currentTab),
+        initialPage = 0,
         pageCount = { tabs.size }
     )
 
-    LaunchedEffect(currentTab) {
-        val targetPage = tabs.indexOf(currentTab)
-        if (pagerState.currentPage != targetPage) {
-            pagerState.animateScrollToPage(targetPage, animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-        }
-    }
-
-    LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
-        if (!pagerState.isScrollInProgress) {
-            currentTab = tabs[pagerState.currentPage]
-        }
-    }
+    val currentTab = tabs[pagerState.targetPage.coerceIn(0, tabs.size - 1)]
 
     val hasConnectedDevices = peers.any { it.isConnected }
 
@@ -207,7 +196,17 @@ fun MainScreen(
                                 onDeleteActivity = onDeleteActivity,
                                 onResendActivity = onResendActivity,
                                 onReplayOnboarding = onReplayOnboarding,
-                                onTabSelected = { currentTab = it },
+                                onTabSelected = { selectedTab ->
+                                    val targetIndex = tabs.indexOf(selectedTab)
+                                    if (targetIndex >= 0) {
+                                        scope.launch {
+                                            pagerState.animateScrollToPage(
+                                                targetIndex,
+                                                animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                            )
+                                        }
+                                    }
+                                },
                                 onRespondPairing = onRespondPairing
                             )
                             AppTab.Activity -> ActivityTab(
@@ -288,7 +287,17 @@ fun MainScreen(
             ) {
                 BottomDock(
                     currentTab = currentTab,
-                    onTabSelected = { currentTab = it },
+                    onTabSelected = { selectedTab ->
+                        val targetIndex = tabs.indexOf(selectedTab)
+                        if (targetIndex >= 0) {
+                            scope.launch {
+                                pagerState.animateScrollToPage(
+                                    targetIndex,
+                                    animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                )
+                            }
+                        }
+                    },
                     isDark = isDark
                 )
             }
