@@ -20,23 +20,9 @@ strip = true
 
 [profile.dev.package.sha2]
 opt-level = 3
-[profile.dev.package.crypto-common]
-opt-level = 3
-[profile.dev.package.block-buffer]
-opt-level = 3
-[profile.dev.package.digest]
-opt-level = 3
 [profile.dev.package.aes-gcm]
 opt-level = 3
-[profile.dev.package.aes]
-opt-level = 3
-[profile.dev.package.ghash]
-opt-level = 3
-[profile.dev.package.cipher]
-opt-level = 3
 [profile.dev.package.x25519-dalek]
-opt-level = 3
-[profile.dev.package.curve25519-dalek]
 opt-level = 3
 [profile.dev.package.lz4_flex]
 opt-level = 3

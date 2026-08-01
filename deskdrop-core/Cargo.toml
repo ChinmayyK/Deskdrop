@@ -21,7 +21,7 @@ tokio = { version = "1", features = ["full"] }
 # Serialization
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
-bincode = "1"
+postcard = { version = "1", features = ["alloc", "use-std"] }
 
 # Encryption
 aes-gcm = "0.10"
@@ -57,7 +57,7 @@ dirs = "5"
 # Error handling
 thiserror = "1"
 anyhow = "1"
-default-net = "0.22.0"
+netdev = "0.45.0"
 lz4_flex = "0.13.1"
 dashmap = "5"
 walkdir = "2"
@@ -71,8 +71,15 @@ jni = "0.21"
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Memory", "Win32_Storage_FileSystem"] }
 
+[target.'cfg(not(target_os="android"))'.dependencies]
+keyring = { version = "4.1.6", features = ["apple-native-keyring-store"] }
+
+[target.'cfg(target_os="android")'.dependencies]
+keyring = { version = "4.1.6", features = ["android-native-keyring-store"] }
+
 [dev-dependencies]
-bincode = "1"
+chacha20poly1305 = "0.10"
+postcard = { version = "1", features = ["alloc", "use-std"] }
 tokio-test = "0.4"
 tempfile = "3"
 
