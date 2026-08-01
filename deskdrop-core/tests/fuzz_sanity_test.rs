@@ -20,7 +20,7 @@
 //!
 //! # What we fuzz
 //!
-//! 1. **Protocol deserializer**: Feed arbitrary bytes to `bincode::deserialize`
+//! 1. **Protocol deserializer**: Feed arbitrary bytes to `postcard::from_bytes`
 //!    for every AppMessage variant. Must not panic.
 //!
 //! 2. **Crypto decrypt**: Feed arbitrary bytes as "encrypted frames" to
@@ -54,13 +54,13 @@ pub mod targets {
 
     fuzz_target!(|data: &[u8]| {
         // Must not panic on arbitrary input.
-        let _ = bincode::deserialize::<AppMessage>(data);
+        let _ = postcard::from_bytes::<AppMessage>(data);
     });
 
     // ── Fuzz 2: Chunked reassembler ───────────────────────────────────────────
 
     fuzz_target!(|data: &[u8]| {
-        let msgs: Vec<ChunkMessage> = match bincode::deserialize(data) {
+        let msgs: Vec<ChunkMessage> = match postcard::from_bytes(data) {
             Ok(v) => v,
             Err(_) => return,
         };
@@ -114,7 +114,7 @@ mod fuzz_sanity {
     #[test]
     fn deserialize_garbage_does_not_panic() {
         let garbage = [0xFF_u8; 128];
-        let _ = bincode::deserialize::<AppMessage>(&garbage);
+        let _ = postcard::from_bytes::<AppMessage>(&garbage);
     }
 
     #[test]
@@ -153,13 +153,13 @@ mod fuzz_sanity {
 
     #[test]
     fn deserialize_empty_bytes_does_not_panic() {
-        let _ = bincode::deserialize::<AppMessage>(&[]);
+        let _ = postcard::from_bytes::<AppMessage>(&[]);
     }
 
     #[test]
     fn deserialize_truncated_does_not_panic() {
         // Valid start of a bincode-encoded message, then truncated.
         let truncated = [0x00, 0x00, 0x00, 0x00, 0x68];
-        let _ = bincode::deserialize::<AppMessage>(&truncated);
+        let _ = postcard::from_bytes::<AppMessage>(&truncated);
     }
 }

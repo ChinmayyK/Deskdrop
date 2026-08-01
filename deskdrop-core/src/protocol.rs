@@ -1,6 +1,6 @@
 //! Deskdrop Protocol — wire format definitions
 //!
-//! All messages are length-prefixed (u32 LE) + bincode-encoded.
+//! All messages are length-prefixed (u32 LE) + postcard-encoded.
 //! After the handshake, every frame is AEAD-encrypted with a
 //! per-session AES-256-GCM key derived via X25519 ECDH + HKDF.
 
@@ -657,11 +657,11 @@ mod tests {
         };
 
         let _decoded_hello: EcdhFrame =
-            bincode::deserialize(&bincode::serialize(&hello).unwrap()).unwrap();
+            postcard::from_bytes(&postcard::to_stdvec(&hello).unwrap()).unwrap();
         let decoded_ack: AppMessage =
-            bincode::deserialize(&bincode::serialize(&ack).unwrap()).unwrap();
+            postcard::from_bytes(&postcard::to_stdvec(&ack).unwrap()).unwrap();
         let decoded_file_ack: AppMessage =
-            bincode::deserialize(&bincode::serialize(&file_ack).unwrap()).unwrap();
+            postcard::from_bytes(&postcard::to_stdvec(&file_ack).unwrap()).unwrap();
 
         match decoded_ack {
             AppMessage::HelloAck { metadata_json, .. } => assert!(metadata_json.is_none()),
