@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// 4 MB static buffer for high-speed benchmark data without CPU generation overhead.
-/// (4MB is a good balance between bincode overhead and socket backpressure).
+/// (4MB is a good balance between postcard overhead and socket backpressure).
 const CHUNK_SIZE: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
