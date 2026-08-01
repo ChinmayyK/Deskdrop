@@ -151,7 +151,7 @@ struct DynamicHeroHeaderView: View {
         // The user wanted "Connecting" as an override. Let's assume if there are devices but none are trusted, it's connecting.
         // Or if there's an active transfer.
         
-        if store.activeTransfers.contains(where: { 
+        if store.batchedTransfers.contains(where: { 
             if case .transferring = $0.status { return true }
             return false
         }) {

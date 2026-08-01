@@ -364,7 +364,7 @@ struct DeviceCentricDashboardView: View {
                 }
 
                 // Active Transfers Section
-                if !store.activeTransfers.isEmpty {
+                if !store.batchedTransfers.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 8) {
                             Image(systemName: "arrow.up.arrow.down").foregroundStyle(CRTheme.brandElectric)
@@ -373,7 +373,7 @@ struct DeviceCentricDashboardView: View {
                         .padding(.horizontal, 40)
                         
                         LazyVStack(spacing: 12) {
-                            ForEach(store.activeTransfers) { transfer in
+                            ForEach(store.batchedTransfers) { transfer in
                                 ActiveTransferCard(transfer: transfer, store: store)
                                     .padding(.horizontal, 40)
                             }

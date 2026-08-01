@@ -128,7 +128,7 @@ private struct ToastOverlayPanelView: View {
         .padding(.top, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(10)
-        .animation(.spring(response: 0.45, dampingFraction: 0.65, blendDuration: 0.1), value: store.toasts.map(\.id.uuidString) + store.activeTransfers.map(\.id))
+        .animation(.spring(response: 0.45, dampingFraction: 0.65, blendDuration: 0.1), value: store.toasts.map(\.id.uuidString) + store.batchedTransfers.map(\.id))
     }
 }
 

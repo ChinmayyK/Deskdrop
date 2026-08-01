@@ -61,6 +61,9 @@ struct IpcFileTransferState: Codable {
     let bytes_received: Int64
     let percent: Int
     let status: String
+    let is_directory: Bool?
+    let item_count: Int?
+    let batch_id: String?
 }
 
 /// Active call state from the daemon's status response.
@@ -324,14 +327,24 @@ final class DeskdropIPCClient {
     // ── File Transfer ─────────────────────────────────────────────────────────
 
     /// Send a file to a specific peer, or all peers when targetDevice is nil.
-    func sendFile(url: URL, targetDeviceId: String? = nil) async throws -> String {
+    func sendFile(
+        url: URL, 
+        targetDeviceId: String? = nil,
+        relativePath: String? = nil,
+        batchId: String? = nil,
+        isDirectory: Bool = false,
+        itemCount: Int = 1
+    ) async throws -> String {
         var cmd: [String: Any] = [
             "cmd":  "send_file_path",
             "path": url.path,
-            "name": url.lastPathComponent,
-            "mime": mimeType(for: url),
+            "name": relativePath ?? url.lastPathComponent,
+            "mime": isDirectory ? "inode/directory" : mimeType(for: url),
+            "is_directory": isDirectory,
+            "item_count": itemCount
         ]
         if let t = targetDeviceId { cmd["target_device"] = t }
+        if let b = batchId { cmd["batch_id"] = b }
         let raw = try await send(cmd: cmd)
         let resp = try JSONDecoder().decode(IpcResponse<String>.self, from: raw)
         return resp.data ?? ""
