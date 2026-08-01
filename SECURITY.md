@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | ✅ Yes    |
+| 1.2.x   | ✅ Yes    |
 | < 0.1   | ❌ No     |
 
 ---
@@ -34,12 +34,12 @@ for evaluating its security posture.
 
 | Threat | Mitigation |
 |--------|-----------|
-| **Network eavesdropping** | All clipboard content is encrypted with ChaCha20-Poly1305 (256-bit key). A passive observer on the LAN sees only ciphertext. |
+| **Network eavesdropping** | All clipboard content is encrypted with AES-256-GCM (256-bit key). A passive observer on the LAN sees only ciphertext. |
 | **Man-in-the-middle on first connection** | TOFU / PIN-based pairing. The PIN is derived from the X25519 shared secret via HKDF, so a MITM attacker produces a different PIN. A user who visually compares PINs detects the attack. |
 | **Replay attacks** | Session frames use a monotonically increasing per-session nonce counter. Out-of-order or replayed frames are rejected. |
 | **Rogue device on LAN** | Unknown devices are rejected until the user approves them (TOFU prompt / PIN confirmation). The device's key fingerprint is pinned after first approval; any key change causes an error. |
-| **Fingerprint substitution after trust** | The trust store records the SHA-256 of the peer's ephemeral public key. A reconnecting device presenting a different key triggers a security error and the session is terminated. |
-| **Oversized payload denial-of-service** | Frame size is hard-limited (70 MB). Content filter enforces `max_payload_bytes` (default 64 MB). Rate limiter caps pushes per second per peer. |
+| **Fingerprint substitution after trust** | The trust store records the SHA-256 of the peer's long-term identity public key. A reconnecting device presenting a different key triggers a security error and the session is terminated. |
+| **Oversized payload denial-of-service** | Frame size is hard-limited (40 MB). Content filter enforces `max_payload_bytes` (default 10 MB). Rate limiter caps pushes per second per peer. |
 | **Extension-based malware delivery** | The extension block-list rejects `.exe`, `.bat`, `.ps1`, `.sh`, and other executable types. |
 
 ### Out of scope (Deskdrop does NOT protect against these)
@@ -62,7 +62,7 @@ for evaluating its security posture.
 |-----------|-----------|----------|-------|
 | Key exchange | X25519 ECDH | 256-bit | Ephemeral per session (forward secrecy) |
 | Key derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "deskdrop-v1-session" |
-| Symmetric encryption | ChaCha20-Poly1305 | 256-bit | IETF variant; nonce = 96-bit counter |
+| Symmetric encryption | AES-256-GCM | 256-bit | nonce = 96-bit counter |
 | PIN derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "deskdrop-pin" |
 | Key fingerprint | SHA-256 | 256-bit | Of the peer's ephemeral public key bytes |
 | Random number generation | OS CSPRNG | — | via `rand::rngs::OsRng` |
@@ -70,27 +70,17 @@ for evaluating its security posture.
 All cryptographic code uses audited Rust crates:
 - `x25519-dalek 2.x` — X25519 key exchange
 - `hkdf 0.12` / `sha2 1.x` — HKDF-SHA256
-- `chacha20poly1305 0.10` — ChaCha20-Poly1305 AEAD
+- `aes-gcm 0.10` — AES-256-GCM AEAD
 
 ---
 
 ## Known Weaknesses (planned mitigations)
 
-1. **No long-term identity keys** — The current implementation pins the
-   *ephemeral* public key from the first session. If a device reconnects
-   after a restart, a new ephemeral key is generated and the trust store
-   entry is updated. This means TOFU protection is per-device-lifetime,
-   not per-key. **Planned**: add a stable X25519 identity key stored on
-   disk; pin that instead of the ephemeral key.
-
-2. **No key rotation** — There is no mechanism to force rotation of identity
-   keys. **Planned**: `deskdrop-cli devices rotate-key` command.
-
-3. **mDNS device name is unencrypted** — Device names in mDNS TXT records
+1. **mDNS device name is unencrypted** — Device names in mDNS TXT records
    are visible to all LAN participants. **Planned**: use opaque UUIDs in
    mDNS and reveal the friendly name only post-handshake.
 
-4. **IPC socket has no authentication** — The Unix socket is mode 0600 so
+2. **IPC socket has no authentication** — The Unix socket is mode 0600 so
    only the owning user can connect, but there is no token-based auth.
    On shared machines with `sudo` access this is a risk. **Planned**: HMAC
    challenge–response using a per-run secret in the daemon's environment.

@@ -4,7 +4,7 @@
 //! 1. Both peers generate an ephemeral X25519 keypair.
 //! 2. They exchange public keys inside HelloFrame / HelloAckFrame (plaintext).
 //! 3. ECDH shared secret → HKDF-SHA256 → 32-byte session key.
-//! 4. Every subsequent frame is encrypted with ChaCha20-Poly1305.
+//! 4. Every subsequent frame is encrypted with AES-256-GCM.
 //!    Nonce: 4-byte big-endian message counter || 8 zero bytes (never reused).
 //!
 //! # Long-term identity
