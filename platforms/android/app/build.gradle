@@ -23,18 +23,20 @@ android {
 
     signingConfigs {
         release {
-            def keystorePath = System.getenv("DESKDROP_KEYSTORE") ?: "release.keystore"
+            def keystorePath = System.getenv("DESKDROP_KEYSTORE")
+            if (keystorePath == null) {
+                throw new GradleException("DESKDROP_KEYSTORE environment variable not set for release build")
+            }
+            
             def keystoreFile = file(keystorePath)
             if (!keystoreFile.exists()) {
-                println("Keystore not found at ${keystoreFile}. Generating self-signed fallback keystore...")
-                exec {
-                    commandLine 'keytool', '-genkey', '-v', '-keystore', keystoreFile.absolutePath, '-alias', 'deskdrop', '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000', '-storepass', 'deskdrop', '-keypass', 'deskdrop', '-dname', 'CN=Deskdrop, OU=Dev, O=Deskdrop, L=Unknown, ST=Unknown, C=US'
-                }
+                throw new GradleException("Release keystore not found at ${keystoreFile.absolutePath}")
             }
+            
             storeFile keystoreFile
-            storePassword System.getenv("DESKDROP_STORE_PASSWORD") ?: "deskdrop"
-            keyAlias System.getenv("DESKDROP_KEY_ALIAS") ?: "deskdrop"
-            keyPassword System.getenv("DESKDROP_KEY_PASSWORD") ?: "deskdrop"
+            storePassword System.getenv("DESKDROP_STORE_PASSWORD")
+            keyAlias System.getenv("DESKDROP_KEY_ALIAS")
+            keyPassword System.getenv("DESKDROP_KEY_PASSWORD")
         }
     }
 
