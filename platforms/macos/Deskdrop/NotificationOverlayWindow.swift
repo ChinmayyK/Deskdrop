@@ -102,13 +102,22 @@ private struct ToastOverlayPanelView: View {
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
             // Dynamic Island Transfers (Highest Priority)
-            ForEach(store.activeTransfers) { transfer in
-                DynamicIslandTransferCard(transfer: transfer, store: store)
+            if store.activeTransfers.count > 1 {
+                GroupedDynamicIslandTransferCard(transfers: store.activeTransfers, store: store)
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.85)),
                         removal: .opacity.combined(with: .scale(scale: 0.95))
                     ))
-                    .zIndex(Double(transfer.id.hashValue))
+                    .zIndex(1000)
+            } else {
+                ForEach(store.activeTransfers) { transfer in
+                    DynamicIslandTransferCard(transfer: transfer, store: store)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.85)),
+                            removal: .opacity.combined(with: .scale(scale: 0.95))
+                        ))
+                        .zIndex(Double(transfer.id.hashValue))
+                }
             }
             
             // Standard Toasts
@@ -229,6 +238,106 @@ private struct DynamicIslandTransferCard: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minWidth: 260, maxWidth: 360, alignment: .leading)
+        .background {
+            Capsule(style: .continuous)
+                .fill(CRTheme.surface.opacity(0.85))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                )
+                .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
+        }
+    }
+}
+
+// MARK: - Grouped Dynamic Island Card
+
+private struct GroupedDynamicIslandTransferCard: View {
+    let transfers: [FileTransferState]
+    @ObservedObject var store: DeskdropStore
+
+    var totalBytesReceived: Int64 {
+        transfers.reduce(0) { $0 + $1.bytesReceived }
+    }
+    
+    var totalBytesExpected: Int64 {
+        transfers.reduce(0) { $0 + $1.totalBytes }
+    }
+    
+    var exactRatio: Double {
+        let expected = totalBytesExpected
+        if expected > 0 {
+            return min(1.0, max(0.0, Double(totalBytesReceived) / Double(expected)))
+        }
+        // Fallback to average percent if totalBytes are missing
+        let totalPercent = transfers.reduce(0) { $0 + $1.percent }
+        return Double(totalPercent) / Double(transfers.count * 100)
+    }
+
+    var exactPercentString: String {
+        String(format: "%.1f%%", exactRatio * 100.0)
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            // Left Icon
+            Image(systemName: "square.stack.3d.down.right.fill")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(CRTheme.brandElectric)
+                .frame(width: 20)
+
+            // Content Column
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("Receiving \(transfers.count) items")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                    
+                    Text("• \(exactPercentString)")
+                        .font(.system(size: 11, weight: .bold, design: .default))
+                        .foregroundStyle(CRTheme.brandElectric)
+                        .lineLimit(1)
+                }
+                
+                Text("From \(transfers.first?.fromDeviceName ?? "Multiple Devices")")
+                    .font(.system(size: 12, weight: .medium, design: .default))
+                    .foregroundStyle(Color.primary.opacity(0.7))
+                    .lineLimit(1)
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.primary.opacity(0.1))
+                            .frame(height: 4)
+                        
+                        Capsule()
+                            .fill(CRTheme.brandElectric)
+                            .frame(width: max(0, geo.size.width * CGFloat(exactRatio)), height: 4)
+                            .animation(.linear(duration: 0.15), value: exactRatio)
+                    }
+                }
+                .frame(height: 4)
+                .padding(.top, 4)
+            }
+
+            Spacer(minLength: 8)
+
+            // Cancel all button
+            Button(action: {
+                for t in transfers {
+                    store.rejectFileTransfer(t)
+                }
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.primary.opacity(0.4))
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
