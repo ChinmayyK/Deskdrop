@@ -145,6 +145,8 @@ public partial class App : Application
 
         try
         {
+            Deskdrop.WinUI.Native.ContextMenuIntegration.RegisterContextMenu();
+
             var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
             if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
             {
@@ -159,6 +161,46 @@ public partial class App : Application
                     {
                         // In a real app we would call NativeCore.deskdrop_accept_file_transfer or deskdrop_reject_file_transfer
                         // For now we just open the app
+                    }
+                }
+            }
+            else if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.CommandLineLaunch)
+            {
+                var cmdLineArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.ICommandLineActivatedEventArgs;
+                if (cmdLineArgs != null && cmdLineArgs.Operation.Arguments.Length > 0)
+                {
+                    // The first argument is usually the executable path, we want the subsequent ones.
+                    // But in Windows file association / shell context menu, the file path might be passed directly.
+                    string argsStr = cmdLineArgs.Operation.Arguments;
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via CommandLine: " + argsStr + "\n");
+                    
+                    // Simple parse: grab the last argument assuming it's a quoted path or a single unquoted path.
+                    // If we get activated from the context menu, "%1" passes the absolute path.
+                    string[] splitArgs = Environment.GetCommandLineArgs();
+                    if (splitArgs.Length >= 2)
+                    {
+                        string path = splitArgs[^1];
+                        if (System.IO.File.Exists(path) || System.IO.Directory.Exists(path))
+                        {
+                            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Context Menu Trigger: Sending " + path + "\n");
+                            
+                            // Send it after the daemon is initialized. We'll do a fire-and-forget task.
+                            System.Threading.Tasks.Task.Run(async () =>
+                            {
+                                await System.Threading.Tasks.Task.Delay(1000); // Wait for daemon & UI
+                                try
+                                {
+                                    if (Clipboard != null)
+                                    {
+                                        Clipboard.PushFile(path);
+                                    }
+                                }
+                                catch (Exception e)
+                                {
+                                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] Error pushing context menu file: {e.Message}\n");
+                                }
+                            });
+                        }
                     }
                 }
             }
