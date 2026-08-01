@@ -71,12 +71,12 @@ namespace Deskdrop.WinUI.Services
                                     });
                                 }
                             }
-                            catch { } 
+                            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); } 
                         });
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         public void Dispose()

@@ -425,7 +425,7 @@ namespace Deskdrop.WinUI
                     TaskbarProgress.SetState(hwnd, TaskbarProgress.TaskbarStates.NoProgress);
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
     }
 
@@ -1050,7 +1050,7 @@ namespace Deskdrop.WinUI
                     return JsonSerializer.Deserialize<System.Collections.Generic.List<T>>(wrapped.GetRawText(), JsonOptions);
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
             return null;
         }
 
@@ -1122,7 +1122,7 @@ namespace Deskdrop.WinUI
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
     }
 

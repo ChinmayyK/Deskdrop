@@ -89,7 +89,7 @@ namespace Deskdrop.WinUI
                         action?.Invoke();
                     }
                 }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
             }
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }

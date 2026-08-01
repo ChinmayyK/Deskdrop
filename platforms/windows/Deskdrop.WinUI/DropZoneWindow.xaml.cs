@@ -75,7 +75,7 @@ namespace Deskdrop.WinUI
                     System.Threading.Tasks.Task.Run(() => DaemonClient.PushTextTo(text, target));
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
     }
 }

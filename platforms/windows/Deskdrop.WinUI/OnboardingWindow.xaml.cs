@@ -37,7 +37,7 @@ namespace Deskdrop.WinUI
                 var qr = new QRPairingWindow();
                 qr.Activate();
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         private void BtnFooterLeft_Click(object sender, RoutedEventArgs e)

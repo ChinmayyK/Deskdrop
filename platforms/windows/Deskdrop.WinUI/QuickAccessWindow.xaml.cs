@@ -59,7 +59,7 @@ namespace Deskdrop.WinUI
                         DeviceTargetsList.ItemsSource = DeskdropStore.Shared.Peers;
                     }
                 }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
             });
         }
 
@@ -100,7 +100,7 @@ namespace Deskdrop.WinUI
                         .ToList();
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         private void BtnPinItem_Click(object sender, RoutedEventArgs e)
@@ -117,7 +117,7 @@ namespace Deskdrop.WinUI
                         .ToList();
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
@@ -131,7 +131,7 @@ namespace Deskdrop.WinUI
                     DeskdropStore.Shared.TriggerHistoryUpdate();
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         private void HistoryItem_Click(object sender, RoutedEventArgs e)
@@ -144,13 +144,13 @@ namespace Deskdrop.WinUI
                         var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
                         dp.SetText(item.FullText);
                         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
-                    } catch { }
+                    } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 }
                 else if (!string.IsNullOrEmpty(item.path) && System.IO.File.Exists(item.path))
                 {
                     try {
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.path) { UseShellExecute = true });
-                    } catch { }
+                    } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 }
                 Close();
             }
@@ -166,7 +166,7 @@ namespace Deskdrop.WinUI
                     {
                         DaemonClient.PushClipboard(peer.device_id);
                     } 
-                    catch { }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 });
                 Close();
             }

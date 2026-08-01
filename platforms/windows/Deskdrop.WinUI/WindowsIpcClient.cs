@@ -213,7 +213,7 @@ namespace Deskdrop.WinUI
                 }
                 foreach (var id in ids) DisconnectPeer(id);
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
             return null;
         }
         public static JsonDocument? RescanPeers() => Send(new { cmd = "rescan_peers" });
@@ -306,7 +306,7 @@ namespace Deskdrop.WinUI
                 if (running != _wasDaemonRunning)
                 {
                     _wasDaemonRunning = running;
-                    try { DaemonAvailabilityChanged?.Invoke(running); } catch { }
+                    try { DaemonAvailabilityChanged?.Invoke(running); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 }
 
                 if (!running) { SchedulePoll(SlowMs); return; }
@@ -327,21 +327,21 @@ namespace Deskdrop.WinUI
                             ? pcc.GetInt32() : 0;
 
                         if (peerCount != _lastPeerCount)
-                        { _lastPeerCount = peerCount; try { PeerCountChanged?.Invoke(peerCount); } catch { } }
+                        { _lastPeerCount = peerCount; try { PeerCountChanged?.Invoke(peerCount); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); } }
                         if (syncEnabled != _lastSyncState)
-                        { _lastSyncState = syncEnabled; try { SyncStateChanged?.Invoke(syncEnabled); } catch { } }
+                        { _lastSyncState = syncEnabled; try { SyncStateChanged?.Invoke(syncEnabled); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); } }
                         if (pending != _lastPendingClipboard)
-                        { _lastPendingClipboard = pending; try { PendingClipboardCountChanged?.Invoke(pending); } catch { } }
+                        { _lastPendingClipboard = pending; try { PendingClipboardCountChanged?.Invoke(pending); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); } }
                     }
                 }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
 
                 // Adaptive interval: fast when peers are present, slow otherwise.
                 SchedulePoll(_lastPeerCount > 0 ? FastMs : SlowMs);
             }
             catch
             {
-                try { SchedulePoll(SlowMs); } catch { }
+                try { SchedulePoll(SlowMs); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
             }
         }
 

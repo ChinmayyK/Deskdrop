@@ -80,7 +80,7 @@ namespace Deskdrop.WinUI.Services
 
                 _wasLeftButtonDown = isLeftButtonDown;
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         private void ShowDropZone()
@@ -105,7 +105,7 @@ namespace Deskdrop.WinUI.Services
                 
                 _dropZoneWindow.Activate();
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         private void HideDropZone()
@@ -118,7 +118,7 @@ namespace Deskdrop.WinUI.Services
                     _dropZoneWindow = null;
                 }
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
         }
 
         public void Dispose()
