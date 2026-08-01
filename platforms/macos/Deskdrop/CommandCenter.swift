@@ -739,12 +739,10 @@ struct TransferAnalyticsWidget: View {
     @ObservedObject var store: DeskdropStore
     
     var timeSavedString: String {
-        // Assume 5 MB/s transfer speed for alternative (e.g. uploading/downloading from cloud)
-        // 5 MB = 5 * 1024 * 1024 bytes
         let bytesPerSecond = 5.0 * 1024.0 * 1024.0
         let secondsSaved = Double(store.totalBytesTransferred) / bytesPerSecond
         if secondsSaved < 60 {
-            return "\(Int(secondsSaved)) sec"
+            return "\(Int(secondsSaved))s"
         } else if secondsSaved < 3600 {
             return "\(Int(secondsSaved / 60)) min"
         } else {
@@ -764,33 +762,97 @@ struct TransferAnalyticsWidget: View {
     
     var body: some View {
         if store.totalBytesTransferred > 0 {
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Deskdrop Wrapped")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.8))
-                    Text("You've beamed \(dataString)")
-                        .font(.system(size: 20, weight: .heavy, design: .monospaced))
-                        .foregroundStyle(Color.white)
+            HStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.25), Color.white.opacity(0.10)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 38, height: 38)
+                        
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("DESKDROP WRAPPED")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.75))
+                            .tracking(0.5)
+                        
+                        HStack(spacing: 5) {
+                            Text("You've beamed")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.white.opacity(0.9))
+                            
+                            Text(dataString)
+                                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                                .foregroundStyle(Color.white)
+                        }
+                    }
                 }
                 
-                Spacer()
+                Spacer(minLength: 12)
                 
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Time Saved")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.8))
-                    Text(timeSavedString)
-                        .font(.system(size: 20, weight: .heavy, design: .monospaced))
-                        .foregroundStyle(CRTheme.brandCyan)
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.shield.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.35, green: 0.85, blue: 1.0))
+                    
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("TIME SAVED")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.7))
+                            .tracking(0.4)
+                        
+                        Text(timeSavedString)
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white)
+                    }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.14))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                        )
+                )
             }
-            .padding(20)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
             .background(
-                LinearGradient(colors: [CRTheme.accentPurple, CRTheme.brandElectric], startPoint: .topLeading, endPoint: .bottomTrailing)
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.22, green: 0.36, blue: 0.96),
+                            Color(red: 0.42, green: 0.20, blue: 0.90)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.16), Color.clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                }
             )
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: CRTheme.accentPurple.opacity(0.3), radius: 10, x: 0, y: 5)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+            )
+            .shadow(color: Color(red: 0.25, green: 0.25, blue: 0.85).opacity(0.25), radius: 12, x: 0, y: 6)
         }
     }
 }
