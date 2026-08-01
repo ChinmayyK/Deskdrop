@@ -107,6 +107,7 @@ pub enum FileTransferMessage {
 #[serde(rename_all = "snake_case")]
 pub enum TransferStatus {
     Pending,
+    Queued,
     Transferring,
     Verifying,
     Complete,
@@ -509,7 +510,7 @@ impl InboundTransfer {
             .with_context(|| "creating destination file atomically")?;
 
         self.dest_path = Some(dest);
-        self.file_handle = Some(BufWriter::with_capacity(32 * 1024 * 1024, file));
+        self.file_handle = Some(BufWriter::with_capacity(4 * 1024 * 1024, file));
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
         Ok(())
@@ -554,6 +555,12 @@ impl InboundTransfer {
 
         if chunk_index < self.total_chunks - 1 {
             anyhow::ensure!(data_len == FILE_CHUNK_SIZE, "non-final chunk size mismatch");
+        } else {
+            let mut expected = (self.meta.size_bytes % (FILE_CHUNK_SIZE as u64)) as usize;
+            if expected == 0 && self.meta.size_bytes > 0 {
+                expected = FILE_CHUNK_SIZE;
+            }
+            anyhow::ensure!(data_len == expected, "final chunk size mismatch: expected {}, got {}", expected, data_len);
         }
 
         if chunk_index < self.queued_chunk_count {
@@ -631,6 +638,12 @@ impl InboundTransfer {
             "missing chunks: got {} of {}",
             self.received_chunk_count,
             self.total_chunks
+        );
+        anyhow::ensure!(
+            self.bytes_received == self.meta.size_bytes,
+            "size mismatch: expected {}, got {}",
+            self.meta.size_bytes,
+            self.bytes_received
         );
 
         // Integrity verification.
@@ -837,7 +850,7 @@ impl FileTransferManager {
         from_device: Uuid,
         from_device_name: String,
     ) -> Result<&mut InboundTransfer> {
-        if self.inbound.len() >= 10 {
+        if self.inbound.len() >= 100 {
             anyhow::bail!("too many active transfers");
         }
         let count_from_peer = self
@@ -845,7 +858,7 @@ impl FileTransferManager {
             .values()
             .filter(|t| t.from_device == from_device)
             .count();
-        if count_from_peer >= 5 {
+        if count_from_peer >= 50 {
             anyhow::bail!("too many active transfers from this peer");
         }
 
@@ -894,6 +907,42 @@ impl FileTransferManager {
             transfer.status = TransferStatus::Transferring;
         }
         Ok(resume_from)
+    }
+
+    pub fn queue_inbound(&mut self, tid: &TransferId) -> Result<()> {
+        let transfer = self.inbound.get_mut(tid).context("unknown transfer")?;
+        if transfer.status == TransferStatus::Pending {
+            transfer.status = TransferStatus::Queued;
+        }
+        Ok(())
+    }
+
+    pub fn get_inbound_to_start(&self, max_active: usize) -> Vec<(TransferId, Uuid)> {
+        let active_count = self
+            .inbound
+            .values()
+            .filter(|t| t.status == TransferStatus::Transferring)
+            .count();
+            
+        if active_count >= max_active {
+            return vec![];
+        }
+        
+        let available_slots = max_active - active_count;
+        let mut queued: Vec<_> = self
+            .inbound
+            .values()
+            .filter(|t| t.status == TransferStatus::Queued)
+            .collect();
+            
+        // Sort by created_at to process oldest first (FIFO)
+        queued.sort_by_key(|t| t.created_at);
+        
+        queued
+            .into_iter()
+            .take(available_slots)
+            .map(|t| (t.transfer_id, t.from_device))
+            .collect()
     }
 
     pub fn reject_inbound(&mut self, tid: &TransferId) {
@@ -1038,6 +1087,7 @@ impl FileTransferManager {
             let percent = prog.percent;
             let status_str = match t.status {
                 TransferStatus::Pending => "incoming",
+                TransferStatus::Queued => "queued",
                 TransferStatus::Verifying => "verifying",
                 TransferStatus::Complete => "complete",
                 TransferStatus::Failed => "failed",
@@ -1071,6 +1121,7 @@ impl FileTransferManager {
             let percent = prog.percent;
             let status_str = match t.status {
                 TransferStatus::Pending => "transferring", // Remote hasn't accepted yet, but from our end it's outgoing
+                TransferStatus::Queued => "transferring",  // We treat queued similarly for UI simplicity on sender side
                 TransferStatus::Verifying => "verifying",
                 TransferStatus::Complete => "complete",
                 TransferStatus::Failed => "failed",
@@ -1340,6 +1391,9 @@ mod tests {
             file_name: "test.txt".into(),
             size_bytes: data.len() as u64,
             mime_type: "text/plain".into(),
+            batch_id: None,
+            is_directory: false,
+            item_count: 1,
         }
     }
 
