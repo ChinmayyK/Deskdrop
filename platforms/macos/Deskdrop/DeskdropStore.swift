@@ -1078,10 +1078,10 @@ final class DeskdropStore: ObservableObject {
         }
         
         switch t.status {
-        case .completed:
+        case .complete:
             TransferNotificationManager.shared.onTransferCompleted(id: t.id, filename: t.fileName)
-        case .failed:
-            TransferNotificationManager.shared.onTransferFailed(id: t.id, filename: t.fileName, error: "Transfer Failed")
+        case .failed(let reason):
+            TransferNotificationManager.shared.onTransferFailed(id: t.id, filename: t.fileName, error: reason)
         default:
             break
         }
@@ -1096,10 +1096,13 @@ final class DeskdropStore: ObservableObject {
                               percent: t.percent, status: status)
         activeTransfers[idx] = t
         
-        if status == .completed {
+        switch status {
+        case .complete:
             TransferNotificationManager.shared.onTransferCompleted(id: id, filename: t.fileName)
-        } else if status == .failed {
-            TransferNotificationManager.shared.onTransferFailed(id: id, filename: t.fileName, error: "Transfer Failed")
+        case .failed(let reason):
+            TransferNotificationManager.shared.onTransferFailed(id: id, filename: t.fileName, error: reason)
+        default:
+            break
         }
     }
 

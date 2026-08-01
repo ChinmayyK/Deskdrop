@@ -1584,7 +1584,7 @@ impl Engine {
                             tokio::spawn(async move {
                     const BATCH_SIZE: usize = 16;
                     'outer: loop {
-                        let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
+                        let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
                             if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
                                 (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
@@ -2387,7 +2387,6 @@ impl Engine {
             if let Some(peer) = self.shared.peer_manager.get(target_device) {
                 let addrs = peer.socket_addrs();
                 if !addrs.is_empty() {
-                    let shared = self.shared.clone();
                     if let Ok(()) = connect_loop(
                         self.shared.clone(),
                         addrs,
@@ -3972,7 +3971,7 @@ fn register_session(
             }
         });
 
-        let mut rx_disk_tx = disk_tx.clone();
+        let rx_disk_tx = disk_tx.clone();
         let mut rx_task = tokio::spawn(async move {
             let touch_last_seen = || {
                 rx_last_seen.store(
@@ -4350,7 +4349,7 @@ fn register_session(
                             tokio::spawn(async move {
                                 const BATCH_SIZE: usize = 16;
                                 'outer: loop {
-                                    let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
+                                    let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
                                         if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
                                             (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
@@ -4722,7 +4721,7 @@ fn register_session(
                             tokio::spawn(async move {
                                 const BATCH_SIZE: usize = 16;
                                 'outer: loop {
-                                    let (next_chunk, last_acked, total_chunks): (u32, u32, u32) = {
+                                    let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
                                         if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
                                             (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
