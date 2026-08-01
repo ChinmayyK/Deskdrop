@@ -15,8 +15,35 @@ env:
 
 
 jobs:
+  # ── Verification Gates ────────────────────────────────────────────────────
+  verify:
+    name: Test & Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+      - name: Install system deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config libssl-dev avahi-daemon libavahi-client-dev
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Run Tests
+        run: cargo test --workspace
+      - name: Cargo Audit
+        run: |
+          cargo install cargo-audit
+          cargo audit
+
   # ── Windows x64 installer ─────────────────────────────────────────────────
   release-windows:
+    needs: verify
     name: Windows Release
     runs-on: windows-latest
     steps:
@@ -46,6 +73,7 @@ jobs:
 
   # ── Android APK ───────────────────────────────────────────────────────────
   release-android:
+    needs: verify
     name: Android Release APK
     runs-on: ubuntu-latest
     steps:
@@ -80,9 +108,11 @@ jobs:
 
       - name: Decode keystore
         run: |
-          if [ -n "${{ secrets.ANDROID_KEYSTORE_B64 }}" ]; then
-            echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > platforms/android/app/release.keystore
+          if [ -z "${{ secrets.ANDROID_KEYSTORE_B64 }}" ]; then
+            echo "Error: ANDROID_KEYSTORE_B64 secret is missing"
+            exit 1
           fi
+          echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > platforms/android/app/release.keystore
 
       - name: Build APK
         run: ./gradlew assembleRelease
@@ -101,6 +131,7 @@ jobs:
 
   # ── macOS DMG ─────────────────────────────────────────────────────────────
   release-macos:
+    needs: verify
     name: macOS Release
     runs-on: macos-latest
     steps:
@@ -121,6 +152,7 @@ jobs:
 
   # ── Linux x86_64 binary + deb ─────────────────────────────────────────────
   release-linux:
+    needs: verify
     name: Linux Release
     runs-on: ubuntu-latest
     steps:
