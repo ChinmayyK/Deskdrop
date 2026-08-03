@@ -696,15 +696,15 @@ impl Engine {
             remote_thumb_waiters: Arc::new(Mutex::new(std::collections::HashMap::new())),
         };
 
-        spawn_listener_supervisor(shared.clone(), listener_rx);
-        if let Some((_, discovery_rx)) = discovery_pair {
-            spawn_discovery_supervisor(shared.clone(), discovery_rx);
-        }
-
         let engine = Self {
             shared: shared.clone(),
             seq: Arc::new(Mutex::new(0)),
         };
+
+        spawn_listener_supervisor(shared.clone(), listener_rx);
+        if let Some((_, discovery_rx)) = discovery_pair {
+            spawn_discovery_supervisor(shared.clone(), discovery_rx);
+        }
 
         let initial_bind = {
             let state = engine.shared.network_state.lock().await;
@@ -1730,7 +1730,13 @@ impl Engine {
     }
 
     pub async fn bound_port(&self) -> u16 {
-        self.shared.network_state.lock().await.bind_addr.port()
+        loop {
+            let port = self.shared.network_state.lock().await.bind_addr.port();
+            if port != 0 {
+                return port;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
     }
 
     pub fn local_device_name(&self) -> String {
@@ -2799,6 +2805,10 @@ fn spawn_listener_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Listen
 
                     match bind_server_with_retry(addr).await {
                         Ok(server) => {
+                            if let Ok(local_addr) = server.local_addr() {
+                                let mut state = shared.network_state.lock().await;
+                                state.bind_addr = local_addr;
+                            }
                             let shared_clone = shared.clone();
                             listener_task = Some(tokio::spawn(async move {
                                 run_server_loop(shared_clone, server).await;
