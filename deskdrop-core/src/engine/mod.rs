@@ -1729,6 +1729,10 @@ impl Engine {
         self.shared.config.device_id
     }
 
+    pub async fn bound_port(&self) -> u16 {
+        self.shared.network_state.lock().await.bind_addr.port()
+    }
+
     pub fn local_device_name(&self) -> String {
         self.shared.config.device_name.clone()
     }

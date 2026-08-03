@@ -56,7 +56,7 @@ async fn two_engines_exchange_text() {
     let cfg1 = EngineConfig {
         device_id: device_id_1,
         device_name: "TestDevice1".into(),
-        port: 47900,
+        port: 0,
         trust_store_path: trust_path_1,
         peer_store_path: peer_path_1,
         identity_path: identity_path_1,
@@ -68,7 +68,7 @@ async fn two_engines_exchange_text() {
     let cfg2 = EngineConfig {
         device_id: device_id_2,
         device_name: "TestDevice2".into(),
-        port: 47901,
+        port: 0,
         trust_store_path: trust_path_2,
         peer_store_path: peer_path_2,
         identity_path: identity_path_2,
@@ -80,10 +80,13 @@ async fn two_engines_exchange_text() {
     let engine1 = Engine::start(cfg1, tx1).await.expect("engine1 start");
     let _engine2 = Engine::start(cfg2, tx2).await.expect("engine2 start");
 
+    let port1 = engine1.bound_port().await;
+    let port2 = _engine2.bound_port().await;
+
     // Wait for engine2 to start listening
     let mut ready = false;
     for _ in 0..50 {
-        if let Ok(stream) = tokio::net::TcpStream::connect("127.0.0.1:47901").await {
+        if let Ok(stream) = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port2)).await {
             drop(stream);
             ready = true;
             break;
@@ -93,7 +96,7 @@ async fn two_engines_exchange_text() {
     assert!(ready, "engine2 did not start listening in time");
 
     engine1
-        .connect_to_peer("127.0.0.1".into(), 47901)
+        .connect_to_peer("127.0.0.1".into(), port2)
         .await
         .expect("manual connect");
 

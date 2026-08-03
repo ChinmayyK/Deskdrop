@@ -16,7 +16,7 @@ path = "src/bin/daemon.rs"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "macros", "fs", "sync", "rt"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "macros", "fs", "sync", "rt", "signal"] }
 
 # Serialization
 serde = { version = "1", features = ["derive", "rc"] }

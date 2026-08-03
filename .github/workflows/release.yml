@@ -203,6 +203,10 @@ jobs:
         with:
           path: release-artifacts
 
+      - name: Generate Checksums
+        run: |
+          find release-artifacts -type f -exec sha256sum {} + | sed 's|release-artifacts/.*/||' > sha256sums.txt
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -227,5 +231,6 @@ jobs:
             release-artifacts/**/*.apk
             release-artifacts/**/*.tar.gz
             release-artifacts/**/*.dmg
+            sha256sums.txt
           draft: false
           prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}
