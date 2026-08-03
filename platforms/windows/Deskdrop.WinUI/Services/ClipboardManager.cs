@@ -17,7 +17,7 @@ namespace Deskdrop.WinUI.Services
         private readonly DispatcherQueue _dispatcher;
         private string _lastText = string.Empty;
         private readonly DispatcherTimer _pollTimer;
-        private readonly DispatcherTimer _timer;
+
         private uint _lastSequenceNumber;
 
         public ObservableCollection<HistoryItem> History { get; set; } = new ObservableCollection<HistoryItem>();
@@ -26,10 +26,7 @@ namespace Deskdrop.WinUI.Services
         public ClipboardManager()
         {
             _dispatcher = DispatcherQueue.GetForCurrentThread();
-            _timer = new DispatcherTimer();
-            _timer.Interval = TimeSpan.FromMilliseconds(500);
-            _timer.Tick += OnTick;
-            _timer.Start();
+            Windows.ApplicationModel.DataTransfer.Clipboard.ContentChanged += Clipboard_ContentChanged;
 
             _pollTimer = new DispatcherTimer();
             _pollTimer.Interval = TimeSpan.FromMilliseconds(30);
@@ -37,7 +34,7 @@ namespace Deskdrop.WinUI.Services
             _pollTimer.Start();
         }
 
-        private async void OnTick(object? sender, object e)
+        private async void Clipboard_ContentChanged(object? sender, object e)
         {
             await CheckClipboardAsync();
         }
@@ -239,7 +236,7 @@ namespace Deskdrop.WinUI.Services
 
         public void Dispose()
         {
-            _timer.Stop();
+            Windows.ApplicationModel.DataTransfer.Clipboard.ContentChanged -= Clipboard_ContentChanged;
             _pollTimer.Stop();
         }
     }

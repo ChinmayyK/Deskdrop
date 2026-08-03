@@ -43,9 +43,18 @@ namespace Deskdrop.WinUI
             else if (key?.Equals("V", StringComparison.OrdinalIgnoreCase) == true) vk = 0x56;
             else if (key?.Equals("K", StringComparison.OrdinalIgnoreCase) == true) vk = 0x4B;
 
-            if (vk != 0 && RegisterHotKey(_hwnd, id, fsModifiers, vk))
+            if (vk != 0)
             {
-                _callbacks[id] = () => HotKeyPressed?.Invoke();
+                if (RegisterHotKey(_hwnd, id, fsModifiers, vk))
+                {
+                    _callbacks[id] = () => HotKeyPressed?.Invoke();
+                }
+                else
+                {
+                    App.MainDispatcherQueue?.TryEnqueue(() => {
+                        Services.NotificationHelper.ShowToast("Hotkey Error", "Failed to register global hotkey. Another app might be using it.");
+                    });
+                }
             }
         }
 
@@ -64,6 +73,9 @@ namespace Deskdrop.WinUI
                 _callbacks[id] = callback;
                 return id;
             }
+            App.MainDispatcherQueue?.TryEnqueue(() => {
+                Services.NotificationHelper.ShowToast("Hotkey Error", "Failed to register global hotkey. Another app might be using it.");
+            });
             return -1;
         }
 

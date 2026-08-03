@@ -27,7 +27,7 @@
                         </StackPanel>
                     </Border>
                     
-                    <Button HorizontalAlignment="Right" Foreground="White" Style="{ThemeResource TransparentButtonStyle}" Click="CloseButton_Click">
+                    <Button HorizontalAlignment="Right" Foreground="White" Style="{ThemeResource TransparentButtonStyle}" Click="CloseButton_Click" ToolTipService.ToolTip="Close" AutomationProperties.Name="Close">
                         <FontIcon Glyph="&#xE711;" FontSize="12"/>
                     </Button>
                 </Grid>

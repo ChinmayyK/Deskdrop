@@ -35,12 +35,22 @@ namespace Deskdrop.WinUI.UI
                 presenter.IsMaximizable = false;
                 presenter.SetBorderAndTitleBar(false, false);
             }
-            appWindow.Resize(new Windows.Graphics.SizeInt32(200, 300));
+                presenter.SetBorderAndTitleBar(false, false);
+            }
+            appWindow.Resize(new Windows.Graphics.SizeInt32(20, 150));
+        }
+
+        private Microsoft.UI.Windowing.AppWindow GetAppWindow()
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+            return Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
         }
 
         private void Grid_DragEnter(object sender, Microsoft.UI.Xaml.DragEventArgs e)
         {
             e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+            GetAppWindow().Resize(new Windows.Graphics.SizeInt32(220, 300));
             RestingSliver.Visibility = Visibility.Collapsed;
             ExpandedCard.Visibility = Visibility.Visible;
             ExpandedCard.Opacity = 1.0;
@@ -51,6 +61,7 @@ namespace Deskdrop.WinUI.UI
             RestingSliver.Visibility = Visibility.Visible;
             ExpandedCard.Visibility = Visibility.Collapsed;
             ExpandedCard.Opacity = 0;
+            GetAppWindow().Resize(new Windows.Graphics.SizeInt32(20, 150));
         }
 
         private async void Grid_Drop(object sender, Microsoft.UI.Xaml.DragEventArgs e)
@@ -58,6 +69,7 @@ namespace Deskdrop.WinUI.UI
             RestingSliver.Visibility = Visibility.Visible;
             ExpandedCard.Visibility = Visibility.Collapsed;
             ExpandedCard.Opacity = 0;
+            GetAppWindow().Resize(new Windows.Graphics.SizeInt32(20, 150));
             try
             {
                 var peers = System.Linq.Enumerable.ToList(DeskdropStore.Shared.Peers);
