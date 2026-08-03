@@ -302,6 +302,7 @@ class DeskdropService : Service() {
     private fun isClipboardNotifyEnabled()= prefs().getBoolean("notify_on_remote_copy", false)
 
     // ── Engine Threading ──────────────────────────────────────────────────────
+    private val serviceScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
     @Volatile private var isRunning = true
     private var eventDrainThread: Thread? = null
     private val engineLock = java.util.concurrent.locks.ReentrantReadWriteLock()
@@ -752,6 +753,7 @@ class DeskdropService : Service() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         stopNsdDiscovery()
 
         stopBatteryMonitor()
@@ -949,10 +951,24 @@ class DeskdropService : Service() {
                 }
                 
                 if (ev != 0L) {
+                    val batch = mutableListOf(ev)
+                    while (batch.size < 50) {
+                        engineLock.readLock().lock()
+                        val nextEv = try {
+                            if (engineHandle != 0L) DeskdropJni.pollEvent(engineHandle) else 0L
+                        } finally {
+                            engineLock.readLock().unlock()
+                        }
+                        if (nextEv == 0L) break
+                        batch.add(nextEv)
+                    }
+
                     acquireWakeLock()
                     handler.post {
-                        try { handleEvent(ev) } finally { 
-                            DeskdropJni.freeEvent(ev)
+                        try { 
+                            for (e in batch) { handleEvent(e) } 
+                        } finally { 
+                            for (e in batch) { DeskdropJni.freeEvent(e) }
                             releaseWakeLock() 
                         }
                     }
@@ -1183,7 +1199,7 @@ class DeskdropService : Service() {
                     return
                 }
                 // Offload the heavy file copy to a background coroutine so we don't block the JNI thread and freeze the UI
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                serviceScope.launch {
                     val publicUriStr = saveFileToPublicDownloads(File(destPath))
                     
                     val finalPath = publicUriStr ?: destPath

@@ -255,11 +255,11 @@ class MainActivity : ComponentActivity() {
                         autoForwardScreenshots = autoForwardScreenshots.value,
                         deviceName = deviceName.value,
                         deviceId = deviceId.value,
-                        peers = peers.value,
-                        feed = feed.value,
+                        peers = kotlinx.collections.immutable.toImmutableList(peers.value),
+                        feed = kotlinx.collections.immutable.toImmutableList(feed.value),
                         ambientStatus = ambientStatus.value,
-                        activeTransfers = activeTransfers,
-                        activeSpeedTests = activeSpeedTests,
+                        activeTransfers = kotlinx.collections.immutable.toImmutableList(activeTransfers),
+                        activeSpeedTests = kotlinx.collections.immutable.toImmutableList(activeSpeedTests),
                         onSyncEnabledChange = {
                             isSyncEnabled.value = it
                             saveBooleanPref("sync_enabled", it)
