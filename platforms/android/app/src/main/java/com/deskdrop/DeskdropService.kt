@@ -672,7 +672,6 @@ class DeskdropService : Service() {
                 startEventDrainThread()
                 acquireMulticastLock()
                 acquireWifiLock()
-                acquireWakeLock()
                 // Cache our own UUID prefix so NSD can filter self-connections.
                 myDeviceId = DeskdropJni.getDeviceId(engineHandle)
                 myDeviceUuidPrefix = myDeviceId?.take(8)
@@ -686,7 +685,6 @@ class DeskdropService : Service() {
                 // Engine was already running — permission may have just been granted.
                 acquireMulticastLock()
                 acquireWifiLock()
-                acquireWakeLock()
                 startBatteryMonitor()
             }
 
@@ -844,24 +842,22 @@ class DeskdropService : Service() {
     }
 
     private fun acquireWakeLock() {
-        if (wakeLock?.isHeld == true) return
-        val pm = runCatching {
-            applicationContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-        }.getOrNull() ?: return
-        wakeLock = pm.newWakeLock(
-            android.os.PowerManager.PARTIAL_WAKE_LOCK,
-            "Deskdrop::ServiceWakeLock"
-        ).apply {
-            setReferenceCounted(false)
-            acquire()
+        if (wakeLock == null) {
+            val pm = runCatching {
+                applicationContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            }.getOrNull() ?: return
+            wakeLock = pm.newWakeLock(
+                android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                "Deskdrop::ServiceWakeLock"
+            ).apply {
+                setReferenceCounted(true)
+            }
         }
-        Log.i(TAG, "Service WakeLock acquired to keep TCP socket active when screen turns off")
+        wakeLock?.acquire(30000) // 30 seconds max per event
     }
 
     private fun releaseWakeLock() {
         runCatching { wakeLock?.let { if (it.isHeld) it.release() } }
-        wakeLock = null
-        Log.i(TAG, "Service WakeLock released")
     }
     // ── Multicast lock ────────────────────────────────────────────────────────
     //
@@ -928,7 +924,6 @@ class DeskdropService : Service() {
         handler.post {
             acquireMulticastLock()
             acquireWifiLock()
-            acquireWakeLock()
             stopNsdDiscovery()
             startNsdDiscovery()
             cancelNsdRetry()
@@ -954,8 +949,12 @@ class DeskdropService : Service() {
                 }
                 
                 if (ev != 0L) {
+                    acquireWakeLock()
                     handler.post {
-                        try { handleEvent(ev) } finally { DeskdropJni.freeEvent(ev) }
+                        try { handleEvent(ev) } finally { 
+                            DeskdropJni.freeEvent(ev)
+                            releaseWakeLock() 
+                        }
                     }
                 } else {
                     Thread.sleep(100)
@@ -2996,6 +2995,7 @@ class DeskdropService : Service() {
     // the engine stays silently disconnected until the user kills and relaunches.
 
     private fun registerNetworkCallback() {
+        if (networkCallback != null) return
         val cm = runCatching {
             getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         }.getOrNull() ?: return
@@ -3013,7 +3013,6 @@ class DeskdropService : Service() {
                         acquireMulticastLock()
                         acquireWifiLock()
                     }
-                    acquireWakeLock()
                     
                     // Brief delay lets the IP stack settle before mDNS re-registers.
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }
