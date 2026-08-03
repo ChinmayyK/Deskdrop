@@ -56,7 +56,7 @@ struct PeerViewModel: Identifiable, Equatable {
 
 /// Timeline / activity feed entry.
 /// Uses friendly device names — raw UUIDs never appear here.
-struct TimelineEntry: Identifiable {
+struct TimelineEntry: Identifiable, Equatable {
     let id: UUID = UUID()
     let timestamp: Date
     /// e.g. "Chinmay's Pixel 8" — human-readable name
@@ -86,7 +86,7 @@ enum TimelineEntryKind: String {
 
 /// Trust dialog model.
 /// Shows the friendly name prominently; fingerprint in secondary position.
-struct TrustPrompt: Identifiable {
+struct TrustPrompt: Identifiable, Equatable {
     let id: UUID = UUID()
     let deviceId: String           // internal — for IPC approval call only
     let deviceName: String         // shown prominently in the dialog
@@ -97,7 +97,7 @@ struct TrustPrompt: Identifiable {
 // ── Activity Feed — IPC model ─────────────────────────────────────────────────
 // Mirrors crate::activity::ActivityEntry as a Codable Swift struct.
 
-struct IpcActivityEntry: Codable, Identifiable {
+struct IpcActivityEntry: Codable, Identifiable, Equatable {
     let id: Int64
     let timestamp_ms: Int64
     let device_id: String
@@ -171,7 +171,7 @@ struct SpeedTestState: Identifiable, Equatable {
 
 // ── File transfer progress model ──────────────────────────────────────────────
 
-struct FileTransferState: Identifiable {
+struct FileTransferState: Identifiable, Equatable {
     let id: String          // hex transfer ID
     let fromDeviceName: String
     var fileName: String
@@ -227,7 +227,7 @@ enum FileTransferStatus {
 
 // ── Clipboard apply policy preference ────────────────────────────────────────
 
-struct ClipboardPolicy {
+struct ClipboardPolicy: Equatable {
     var timelineFirstMode: Bool = true   // default: timeline-first
     var autoApply: Bool = true           // default: auto-apply incoming clipboard
     var autoApplyDebounceMs: Int = 500

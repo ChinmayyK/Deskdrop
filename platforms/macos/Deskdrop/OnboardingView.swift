@@ -166,7 +166,7 @@ private struct StepOneFindDevice: View {
                         Text("Scanning local network...")
                             .foregroundStyle(CRTheme.inkSubtle)
                             .font(.system(size: 14, weight: .medium))
-                        Button("Rescan") { store.startDiscovery() }
+                        Button("Rescan") { store.scanForDevices() }
                             .buttonStyle(CRSecondaryButtonStyle())
                     }
                     .frame(height: 250)

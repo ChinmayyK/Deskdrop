@@ -297,7 +297,7 @@ final class DeskdropStore: ObservableObject {
             default: return false
             }
         }
-        let interval: TimeInterval = hasActiveTransfers ? 0.25 : (connectedCount > 0 ? 1.5 : 1.0)
+        let interval: TimeInterval = hasActiveTransfers ? 0.25 : (connectedCount > 0 ? 1.5 : 3.0)
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.refresh()
@@ -339,8 +339,15 @@ final class DeskdropStore: ObservableObject {
                     uniquePeers.append(makePeerViewModel(p))
                 }
             }
-            peers = uniquePeers
+            if self.peers != uniquePeers {
+                self.peers = uniquePeers
+            }
             
+            if connectedCount == 0 {
+                watcher.stop()
+            } else {
+                watcher.start()
+            }
 
             pendingClipboardCount = s.pending_clipboard_count ?? 0
             if let fp = s.local_fingerprint { localFingerprint = fp }
@@ -379,7 +386,7 @@ final class DeskdropStore: ObservableObject {
             }
             
             if let ast = s.active_speed_tests {
-                activeSpeedTests = ast.filter { $0.phase != "Idle" }.map { t in
+                let newTests = ast.filter { $0.phase != "Idle" }.map { t in
                     SpeedTestState(
                         id: t.peer_id,
                         testId: t.test_id,
@@ -388,8 +395,11 @@ final class DeskdropStore: ObservableObject {
                         durationSecs: t.duration_secs
                     )
                 }
+                if self.activeSpeedTests != newTests {
+                    self.activeSpeedTests = newTests
+                }
             } else {
-                activeSpeedTests = []
+                if !self.activeSpeedTests.isEmpty { self.activeSpeedTests = [] }
             }
 
             // ── Call continuity: update active call state ─────────────────────
