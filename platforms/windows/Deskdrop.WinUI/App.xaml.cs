@@ -143,7 +143,7 @@ public partial class App : Application
             if (!mainInstance.IsCurrent)
             {
                 System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Secondary instance detected. Redirecting to main instance...\n");
-                mainInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
+                System.Threading.Tasks.Task.Run(async () => await mainInstance.RedirectActivationToAsync(activatedArgs)).Wait();
                 Environment.Exit(0);
                 return;
             }
@@ -158,12 +158,15 @@ public partial class App : Application
 
             if (!DaemonClient.IsDaemonRunning())
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Starting native engine via deskdrop_start...\n");
-                _engineHandle = NativeCore.deskdrop_start(null, 0);
-                if (_engineHandle == IntPtr.Zero)
+                System.Threading.Tasks.Task.Run(() =>
                 {
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ERROR: deskdrop_start returned null handle!\n");
-                }
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Starting native engine via deskdrop_start...\n");
+                    _engineHandle = NativeCore.deskdrop_start(null, 0);
+                    if (_engineHandle == IntPtr.Zero)
+                    {
+                        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ERROR: deskdrop_start returned null handle!\n");
+                    }
+                });
             }
 
 

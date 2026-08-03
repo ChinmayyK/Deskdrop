@@ -21,7 +21,7 @@ namespace Deskdrop.WinUI.Views
             this.Loaded += (s, e) => LoadRemoteDirectory("/");
         }
 
-        private async void LoadRemoteDirectory(string path, bool forceRefresh = false)
+        private async System.Threading.Tasks.Task LoadRemoteDirectory(string path, bool forceRefresh = false)
         {
             if (string.IsNullOrEmpty(path)) path = "/";
             _currentPath = path;

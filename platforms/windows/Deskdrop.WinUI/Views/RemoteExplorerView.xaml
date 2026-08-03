@@ -88,13 +88,13 @@
                             <TextBlock Text="items" FontSize="13" Foreground="#6E6E73"/>
                         </StackPanel>
 
-                        <ItemsControl ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}">
-                            <ItemsControl.ItemsPanel>
+                        <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}">
+                            <ListView SelectionMode="None" Padding="0".ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <Grid/>
                                 </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
+                            </ListView.ItemsPanel>
+                            <ListView SelectionMode="None" Padding="0".ItemTemplate>
                                 <DataTemplate x:DataType="winui:RemoteFile">
                                     <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,8">
                                         <Grid>
@@ -127,8 +127,8 @@
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                            </ListView.ItemTemplate>
+                        </ListView>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

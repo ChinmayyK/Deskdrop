@@ -56,13 +56,13 @@
                 <!-- Devices List -->
                 <TextBlock Text="DEVICES" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" CharacterSpacing="50" Margin="0,8,0,0"/>
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <ItemsControl x:Name="DeviceTargetsList">
-                        <ItemsControl.ItemsPanel>
+                    <ListView SelectionMode="None" Padding="0" x:Name="DeviceTargetsList">
+                        <ListView SelectionMode="None" Padding="0".ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" Spacing="8"/>
                             </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
+                        </ListView.ItemsPanel>
+                        <ListView SelectionMode="None" Padding="0".ItemTemplate>
                             <DataTemplate x:DataType="local:PeerViewModel">
                                 <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="0" CornerRadius="8" Padding="12,8" Click="DeviceTarget_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -71,14 +71,14 @@
                                     </StackPanel>
                                 </Button>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </ListView.ItemTemplate>
+                    </ListView>
                 </ScrollViewer>
 
                 <!-- Timeline / Clipboard History -->
                 <TextBlock Text="TIMELINE" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" CharacterSpacing="50" Margin="0,8,0,0"/>
-                <ItemsControl x:Name="TimelineList">
-                    <ItemsControl.ItemTemplate>
+                <ListView SelectionMode="None" Padding="0" x:Name="TimelineList">
+                    <ListView SelectionMode="None" Padding="0".ItemTemplate>
                         <DataTemplate x:DataType="local:HistoryItem">
                             <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="0" CornerRadius="12" Margin="0,0,0,8" Padding="12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="HistoryItem_Click">
                                 <Grid>
@@ -103,8 +103,8 @@
                                 </Grid>
                             </Button>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ListView.ItemTemplate>
+                </ListView>
             </StackPanel>
         </ScrollViewer>
     </Grid>

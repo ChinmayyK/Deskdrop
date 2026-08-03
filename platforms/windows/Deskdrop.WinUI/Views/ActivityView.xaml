@@ -21,8 +21,8 @@
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <ItemsControl x:Name="TimelineList">
-                <ItemsControl.ItemTemplate>
+            <ListView SelectionMode="None" Padding="0" x:Name="TimelineList">
+                <ListView SelectionMode="None" Padding="0".ItemTemplate>
                     <DataTemplate x:DataType="root:HistoryItem">
                         <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" CornerRadius="12" Margin="0,0,0,12" Padding="16" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="HistoryItem_Click">
                             <Grid>
@@ -47,8 +47,8 @@
                             </Grid>
                         </Button>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ListView.ItemTemplate>
+            </ListView>
         </ScrollViewer>
     </Grid>
 </Page>

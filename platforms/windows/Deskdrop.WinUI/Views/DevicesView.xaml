@@ -47,8 +47,8 @@
 
                 <!-- DYNAMIC PEER DISCOVERY & PAIRING SECTION -->
                 <TextBlock Text="Devices &amp; Pairing" FontSize="17" FontWeight="Bold" Foreground="#1D1D1F" Margin="0,0,0,14"/>
-                <ItemsControl ItemsSource="{x:Bind mgr.Peers, Mode=OneWay}" Margin="0,0,0,28">
-                    <ItemsControl.ItemTemplate>
+                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.Peers, Mode=OneWay}" Margin="0,0,0,28">
+                    <ListView SelectionMode="None" Padding="0".ItemTemplate>
                         <DataTemplate x:DataType="winui:PeerViewModel">
                             <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="14" Padding="16" Margin="0,0,0,10" Tapped="OnPeerCardTapped">
                                 <Grid>
@@ -87,8 +87,8 @@
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ListView.ItemTemplate>
+                </ListView>
 
                 <!-- Launchpad Section Title -->
                 <TextBlock Text="Launchpad" FontSize="17" FontWeight="Bold" Foreground="#1D1D1F" Margin="0,0,0,16"/>
@@ -168,8 +168,8 @@
 
                 <!-- Recent Activity Section -->
                 <TextBlock Text="Recent Activity" FontSize="17" FontWeight="Bold" Foreground="#1D1D1F" Margin="0,0,0,16"/>
-                <ItemsControl ItemsSource="{x:Bind mgr.ActivityFeed, Mode=OneWay}">
-                    <ItemsControl.ItemTemplate>
+                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.ActivityFeed, Mode=OneWay}">
+                    <ListView SelectionMode="None" Padding="0".ItemTemplate>
                         <DataTemplate x:DataType="winui:ActivityEntry">
                             <Border Background="#F5F5F7" CornerRadius="12" Padding="16,12" Margin="0,0,0,8">
                                 <Grid>
@@ -185,8 +185,8 @@
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ListView.ItemTemplate>
+                </ListView>
             </StackPanel>
         </ScrollViewer>
 

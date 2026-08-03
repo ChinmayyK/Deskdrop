@@ -799,58 +799,27 @@ namespace Deskdrop.WinUI
             });
         }
 
-        private void ParseActivityFeed(JsonElement dataElem)
+                private void ParseActivityFeed(JsonElement dataElem)
         {
             var entries = DeserializeList<ActivityEntry>(dataElem, "entries");
             if (entries != null)
             {
                 global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
                 {
-                    var existing = ActivityFeed.ToList();
-                    foreach (var e in entries.OrderByDescending(e => e.timestamp_ms))
-                    {
-                        var match = existing.FirstOrDefault(x => x.id == e.id);
-                        if (match != null)
-                        {
-                            CopyActivityEntry(e, match);
-                            existing.Remove(match);
-                        }
-                        else
-                        {
-                            ActivityFeed.Add(e);
-                        }
-                    }
-                    foreach (var rem in existing) ActivityFeed.Remove(rem);
+                    ActivityFeed = new ObservableCollection<ActivityEntry>(entries.OrderByDescending(e => e.timestamp_ms));
                     OnPropertyChanged(nameof(ActivityCount));
                 });
             }
         }
 
-        private void ParsePendingClipboards(JsonElement dataElem)
+                private void ParsePendingClipboards(JsonElement dataElem)
         {
             var clips = DeserializeList<PendingClipboard>(dataElem, "clipboards");
             if (clips != null)
             {
                 global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
                 {
-                    var existing = PendingClipboards.ToList();
-                    foreach (var c in clips.OrderByDescending(c => c.timestamp_ms))
-                    {
-                        var match = existing.FirstOrDefault(x => x.content_hash == c.content_hash);
-                        if (match != null)
-                        {
-                            match.summary = c.summary;
-                            match.device_name = c.device_name;
-                            match.text_preview = c.text_preview;
-                            match.timestamp_ms = c.timestamp_ms;
-                            existing.Remove(match);
-                        }
-                        else
-                        {
-                            PendingClipboards.Add(c);
-                        }
-                    }
-                    foreach (var rem in existing) PendingClipboards.Remove(rem);
+                    PendingClipboards = new ObservableCollection<PendingClipboard>(clips.OrderByDescending(c => c.timestamp_ms));
                     NotifyPendingClipboardMetrics();
                 });
             }
@@ -858,96 +827,58 @@ namespace Deskdrop.WinUI
 
         private void ParseDaemonState(JsonElement dataElem)
         {
+            System.Collections.Generic.List<PeerViewModel>? newPeers = null;
+            System.Collections.Generic.List<PeerBatteryState>? batteries = null;
+            System.Collections.Generic.List<PeerStorageState>? storages = null;
+
+            if (dataElem.TryGetProperty("peers", out var peersElem))
+                newPeers = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText(), JsonOptions);
+            
+            if (dataElem.TryGetProperty("peer_batteries", out var batElem))
+                batteries = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerBatteryState>>(batElem.GetRawText(), JsonOptions);
+
+            if (dataElem.TryGetProperty("peer_storages", out var storElem))
+                storages = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerStorageState>>(storElem.GetRawText(), JsonOptions);
+
+            if (newPeers != null)
+            {
+                foreach (var peer in newPeers)
+                {
+                    if (batteries != null)
+                    {
+                        var bat = batteries.Find(b => b.device_id == peer.device_id);
+                        if (bat != null)
+                        {
+                            peer.BatteryLevel = bat.level;
+                            peer.BatteryCharging = bat.charging;
+                        }
+                    }
+                    if (storages != null)
+                    {
+                        var st = storages.Find(s => s.device_id == peer.device_id);
+                        if (st != null)
+                        {
+                            peer.StorageTotal = st.total_bytes;
+                            peer.StorageFree = st.free_bytes;
+                            peer.StorageImages = st.images_bytes;
+                            peer.StorageVideos = st.videos_bytes;
+                            peer.StorageApps = st.apps_bytes;
+                        }
+                    }
+                }
+            }
+
             global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
             {
-                if (dataElem.TryGetProperty("peers", out var peersElem))
+                if (newPeers != null)
                 {
-                    var newPeers = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText(), JsonOptions);
+                    Peers = new ObservableCollection<PeerViewModel>(newPeers);
+                    var connected = newPeers.Where(p => p.is_trusted && p.status == "connected").ToList();
+                    ConnectedPeers = new ObservableCollection<PeerViewModel>(connected);
                     
-                    if (dataElem.TryGetProperty("peer_batteries", out var batElem))
-                    {
-                        var batteries = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerBatteryState>>(batElem.GetRawText(), JsonOptions);
-                        if (newPeers != null && batteries != null)
-                        {
-                            foreach (var peer in newPeers)
-                            {
-                                var bat = batteries.Find(b => b.device_id == peer.device_id);
-                                if (bat != null)
-                                {
-                                    peer.BatteryLevel = bat.level;
-                                    peer.BatteryCharging = bat.charging;
-                                }
-                            }
-                        }
-                    }
-
-                    if (dataElem.TryGetProperty("peer_storages", out var storElem))
-                    {
-                        var storages = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerStorageState>>(storElem.GetRawText(), JsonOptions);
-                        if (newPeers != null && storages != null)
-                        {
-                            foreach (var peer in newPeers)
-                            {
-                                var st = storages.Find(s => s.device_id == peer.device_id);
-                                if (st != null)
-                                {
-                                    peer.StorageTotal = st.total_bytes;
-                                    peer.StorageFree = st.free_bytes;
-                                    peer.StorageImages = st.images_bytes;
-                                    peer.StorageVideos = st.videos_bytes;
-                                    peer.StorageApps = st.apps_bytes;
-                                }
-                            }
-                        }
-                    }
-
-                    if (newPeers != null)                    {
-                        var existing = Peers.ToList();
-                        var existingConnected = ConnectedPeers.ToList();
-                        foreach(var peer in newPeers)
-                        {
-                            var match = Peers.FirstOrDefault(p => p.device_id == peer.device_id);
-                            if (match != null)
-                            {
-                                match.friendly_name = peer.friendly_name;
-                                match.platform = peer.platform;
-                                match.status = peer.status;
-                                match.is_trusted = peer.is_trusted;
-                                match.remembered = peer.remembered;
-                                match.sync_enabled = peer.sync_enabled;
-                                match.auto_connect = peer.auto_connect;
-                                match.explicit_disconnect = peer.explicit_disconnect;
-                                match.last_seen = peer.last_seen;
-                                match.last_error = peer.last_error;
-                                match.BatteryLevel = peer.BatteryLevel;
-                                match.BatteryCharging = peer.BatteryCharging;
-                                match.StorageTotal = peer.StorageTotal;
-                                match.StorageFree = peer.StorageFree;
-                                match.StorageImages = peer.StorageImages;
-                                match.StorageVideos = peer.StorageVideos;
-                                match.StorageApps = peer.StorageApps;
-                                match.pairingPin = peer.pairingPin;
-                                match.pairingRequested = peer.pairingRequested;
-                                match.outgoingPairingWaiting = peer.outgoingPairingWaiting;
-                                existing.Remove(match);
-                            }
-                            else
-                            {
-                                Peers.Add(peer);
-                                if (peer.is_trusted && peer.status == "connected") ConnectedPeers.Add(peer);
-                            }
-                        }
-                        foreach(var rem in existing) Peers.Remove(rem);
-                        foreach(var rem in existingConnected) { if (!Peers.Any(p => p.device_id == rem.device_id) || !rem.is_trusted || rem.status != "connected") ConnectedPeers.Remove(rem); }
-                        // Ensure connected peers is synced for existing peers that updated
-                        foreach (var peer in Peers) {
-                            if (peer.is_trusted && peer.status == "connected" && !ConnectedPeers.Contains(peer)) ConnectedPeers.Add(peer);
-                            else if ((!peer.is_trusted || peer.status != "connected") && ConnectedPeers.Contains(peer)) ConnectedPeers.Remove(peer);
-                        }
-                        
-                        StatusLine = Peers.Count == 0 ? "Running - no devices connected" : $"Connected to {ConnectedCount} device{(ConnectedCount == 1 ? "" : "s")}";
-                        NotifyPeerMetrics();
-                    }
+                    StatusLine = Peers.Count == 0 ? "Running - no devices connected" : $"Connected to {ConnectedCount} device{(ConnectedCount == 1 ? "" : "s")}";
+                    NotifyPeerMetrics();
+                }
                 }
 
                 if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
@@ -1098,7 +1029,7 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(HasPendingClipboards));
         }
 
-        public async void PickAndSendFiles(string targetDeviceId)
+        public async System.Threading.Tasks.Task PickAndSendFiles(string targetDeviceId)
         {
             try
             {
