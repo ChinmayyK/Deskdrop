@@ -20,13 +20,6 @@ public partial class App : Application
     public static Window MainWindow { get; private set; }
     private Window? _window;
     
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    private const int SW_RESTORE = 9;
-
     // Tray Icon Properties
     public H.NotifyIcon.TaskbarIcon? TrayIcon { get; private set; }
     public static Microsoft.UI.Dispatching.DispatcherQueue? MainDispatcherQueue { get; private set; }
@@ -89,8 +82,7 @@ public partial class App : Application
                             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
                             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
                             appWindow.Show();
-                            ShowWindow(hwnd, SW_RESTORE);
-                            SetForegroundWindow(hwnd);
+                            MainWindow.Activate();
                         }
                         catch
                         {
@@ -102,8 +94,7 @@ public partial class App : Application
                     try
                     {
                         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
-                        ShowWindow(hwnd, SW_RESTORE);
-                        SetForegroundWindow(hwnd);
+                        _window.Activate();
                     }
                     catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
                 }

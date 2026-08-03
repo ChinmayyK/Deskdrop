@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:Deskdrop.WinUI"
     mc:Ignorable="d"
     Title="Dashboard">
 
@@ -39,10 +40,10 @@
                         </StackPanel>
                         
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                            <Button Background="Transparent" BorderThickness="0" Click="BtnHeaderDiagnostics_Click" ToolTipService.ToolTip="Diagnostics">
+                            <Button Background="Transparent" BorderThickness="0" Click="BtnHeaderDiagnostics_Click" ToolTipService.ToolTip="Diagnostics" AutomationProperties.Name="Diagnostics">
                                 <FontIcon Glyph="&#xE9D9;" />
                             </Button>
-                            <Button Background="Transparent" BorderThickness="0" Click="BtnHeaderQuit_Click" ToolTipService.ToolTip="Quit">
+                            <Button Background="Transparent" BorderThickness="0" Click="BtnHeaderQuit_Click" ToolTipService.ToolTip="Quit" AutomationProperties.Name="Quit">
                                 <FontIcon Glyph="&#xE711;" />
                             </Button>
                         </StackPanel>
@@ -62,11 +63,11 @@
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate>
+                            <DataTemplate x:DataType="local:PeerViewModel">
                                 <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="0" CornerRadius="8" Padding="12,8" Click="DeviceTarget_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon Glyph="&#xE896;" Foreground="#0A84FF" />
-                                        <TextBlock Text="{Binding friendly_name}" FontSize="13" FontWeight="Medium"/>
+                                        <TextBlock Text="{x:Bind friendly_name}" FontSize="13" FontWeight="Medium"/>
                                     </StackPanel>
                                 </Button>
                             </DataTemplate>
@@ -78,7 +79,7 @@
                 <TextBlock Text="TIMELINE" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" CharacterSpacing="50" Margin="0,8,0,0"/>
                 <ItemsControl x:Name="TimelineList">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate>
+                        <DataTemplate x:DataType="local:HistoryItem">
                             <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="0" CornerRadius="12" Margin="0,0,0,8" Padding="12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="HistoryItem_Click">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -87,15 +88,15 @@
                                     </Grid.ColumnDefinitions>
                                     
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{Binding display_text}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding path}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12"/>
+                                        <TextBlock Text="{x:Bind display_text}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{x:Bind path}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12"/>
                                     </StackPanel>
                                     
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <Button Background="Transparent" BorderThickness="0" Click="BtnPinItem_Click" Padding="4">
+                                        <Button Background="Transparent" BorderThickness="0" Click="BtnPinItem_Click" Padding="4" AutomationProperties.Name="Pin Item">
                                             <FontIcon Glyph="&#xE718;" FontSize="14"/>
                                         </Button>
-                                        <Button Background="Transparent" BorderThickness="0" Click="BtnDeleteItem_Click" Padding="4" Foreground="#FF3B30">
+                                        <Button Background="Transparent" BorderThickness="0" Click="BtnDeleteItem_Click" Padding="4" Foreground="#FF3B30" AutomationProperties.Name="Delete Item">
                                             <FontIcon Glyph="&#xE74D;" FontSize="14"/>
                                         </Button>
                                     </StackPanel>
