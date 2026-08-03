@@ -230,37 +230,31 @@ async fn send_encrypted(
 ) -> Result<()> {
     let payload = msg.take_raw_payload();
 
-    let mut buffer = postcard::to_stdvec(msg).context("serializing AppMessage")?;
-    let nonce = session
-        .encrypt_in_place(&mut buffer)
-        .context("encrypting")?;
-    let len = (12 + buffer.len()) as u32;
-    let len_bytes = len.to_le_bytes();
+    let mut buffer = get_buffer(8192); // Reused from pool
+    let serialized_len = postcard::to_slice(msg, &mut buffer[16..]).context("serializing AppMessage")?.len();
+
+    let (nonce, tag) = session.encrypt_slice_in_place(&mut buffer[16..16 + serialized_len])?;
+    buffer[16 + serialized_len..16 + serialized_len + 16].copy_from_slice(&tag);
+    let total_ct_len = serialized_len + 16;
+    let len = (12 + total_ct_len) as u32;
+
+    buffer[0..4].copy_from_slice(&len.to_le_bytes());
+    buffer[4..16].copy_from_slice(&nonce);
 
     use bytes::Buf;
-    let mut chained = Buf::chain(
-        Buf::chain(
-            std::io::Cursor::new(len_bytes),
-            std::io::Cursor::new(nonce.to_vec()),
-        ),
-        std::io::Cursor::new(buffer),
-    );
-
-    stream.write_all_buf(&mut chained).await?;
-
     if let Some(mut p) = payload {
         let p_nonce = session.encrypt_in_place(&mut p).context("encrypting payload")?;
         let p_len = (12 + p.len()) as u32;
         let p_len_bytes = p_len.to_le_bytes();
-        let mut p_chained = Buf::chain(
-            Buf::chain(
-                std::io::Cursor::new(p_len_bytes),
-                std::io::Cursor::new(p_nonce.to_vec()),
-            ),
-            std::io::Cursor::new(p),
-        );
-        stream.write_all_buf(&mut p_chained).await?;
+        let mut chained = Buf::chain(&buffer[..16 + total_ct_len], &p_len_bytes[..])
+            .chain(&p_nonce[..])
+            .chain(&p[..]);
+        stream.write_all_buf(&mut chained).await?;
+        return_buffer(p);
+    } else {
+        stream.write_all(&buffer[..16 + total_ct_len]).await?;
     }
+    return_buffer(buffer);
 
     stream.flush().await?;
     Ok(())
@@ -276,38 +270,31 @@ async fn send_encrypted_no_flush(
 ) -> Result<()> {
     let payload = msg.take_raw_payload();
 
-    let mut buffer = postcard::to_stdvec(msg).context("serializing AppMessage")?;
-    let nonce = session
-        .encrypt_in_place(&mut buffer)
-        .context("encrypting")?;
-    let len = (12 + buffer.len()) as u32;
-    let len_bytes = len.to_le_bytes();
+    let mut buffer = get_buffer(8192); // Reused from pool
+    let serialized_len = postcard::to_slice(msg, &mut buffer[16..]).context("serializing AppMessage")?.len();
 
-    // Zero-copy chaining avoids allocating a flat Vec for length+nonce+ciphertext.
+    let (nonce, tag) = session.encrypt_slice_in_place(&mut buffer[16..16 + serialized_len])?;
+    buffer[16 + serialized_len..16 + serialized_len + 16].copy_from_slice(&tag);
+    let total_ct_len = serialized_len + 16;
+    let len = (12 + total_ct_len) as u32;
+
+    buffer[0..4].copy_from_slice(&len.to_le_bytes());
+    buffer[4..16].copy_from_slice(&nonce);
+
     use bytes::Buf;
-    let mut chained = Buf::chain(
-        Buf::chain(
-            std::io::Cursor::new(len_bytes),
-            std::io::Cursor::new(nonce.to_vec()),
-        ),
-        std::io::Cursor::new(buffer),
-    );
-
-    stream.write_all_buf(&mut chained).await?;
-
     if let Some(mut p) = payload {
         let p_nonce = session.encrypt_in_place(&mut p).context("encrypting payload")?;
         let p_len = (12 + p.len()) as u32;
         let p_len_bytes = p_len.to_le_bytes();
-        let mut p_chained = Buf::chain(
-            Buf::chain(
-                std::io::Cursor::new(p_len_bytes),
-                std::io::Cursor::new(p_nonce.to_vec()),
-            ),
-            std::io::Cursor::new(p),
-        );
-        stream.write_all_buf(&mut p_chained).await?;
+        let mut chained = Buf::chain(&buffer[..16 + total_ct_len], &p_len_bytes[..])
+            .chain(&p_nonce[..])
+            .chain(&p[..]);
+        stream.write_all_buf(&mut chained).await?;
+        return_buffer(p);
+    } else {
+        stream.write_all(&buffer[..16 + total_ct_len]).await?;
     }
+    return_buffer(buffer);
 
     Ok(())
 }

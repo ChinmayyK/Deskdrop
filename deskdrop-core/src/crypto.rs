@@ -253,6 +253,22 @@ impl SessionKey {
         Ok(nonce)
     }
 
+    /// Encrypts the provided slice in-place, and returns the generated nonce and the 16-byte authentication tag.
+    pub fn encrypt_slice_in_place(&mut self, buffer: &mut [u8]) -> Result<(Nonce, aes_gcm::Tag)> {
+        use aes_gcm::aead::AeadInPlace;
+        let nonce = counter_nonce(self.send_counter);
+        self.send_counter = self
+            .send_counter
+            .checked_add(1)
+            .context("send counter overflow")?;
+
+        let tag = self.cipher
+            .encrypt_in_place_detached(&nonce, &[], buffer)
+            .map_err(|e| anyhow::anyhow!("encrypt: {:?}", e))?;
+
+        Ok((nonce, tag))
+    }
+
     /// Decrypt a frame produced by [`encrypt`]. Enforces monotonic counter.
     pub fn decrypt(&mut self, frame: &[u8]) -> Result<Vec<u8>> {
         anyhow::ensure!(frame.len() >= 12, "frame too short");

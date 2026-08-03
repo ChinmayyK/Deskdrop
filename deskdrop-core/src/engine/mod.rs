@@ -605,17 +605,32 @@ impl Engine {
         ensure_parent(&config.peer_store_path)?;
         ensure_parent(&config.identity_path)?;
 
-        let identity = IdentityStore::new(&config.identity_path)
-            .load_or_create()
-            .context("loading identity key")?;
+        let (identity, trust, peer_manager, history) = tokio::task::spawn_blocking({
+            let config = config.clone();
+            move || {
+                let identity = IdentityStore::new(&config.identity_path)
+                    .load_or_create()
+                    .context("loading identity key")?;
+                let trust = TrustStore::load(&config.trust_store_path).context("loading trust store")?;
+                let peer_manager = PeerManager::load(&config.peer_store_path).context("loading peer store")?;
+                let history_path = config.data_dir.join("history.json");
+                let limit = config.history_limit.unwrap_or(500);
+                let history = crate::history::History::load_with_limit(&history_path, limit).unwrap_or_else(
+                    |_| {
+                        let tmp = std::env::temp_dir().join("deskdrop_history_fallback.json");
+                        crate::history::History::load_with_limit(&tmp, limit)
+                            .expect("cannot create fallback history store")
+                    },
+                );
+                Ok::<_, anyhow::Error>((identity, trust, peer_manager, history))
+            }
+        }).await.unwrap()?;
+
         if config.device_id.is_nil() {
             config.device_id = stable_device_id(identity.public_bytes);
         }
-        let trust = Arc::new(Mutex::new(
-            TrustStore::load(&config.trust_store_path).context("loading trust store")?,
-        ));
-        let peer_manager =
-            Arc::new(PeerManager::load(&config.peer_store_path).context("loading peer store")?);
+        let trust = Arc::new(Mutex::new(trust));
+        let peer_manager = Arc::new(peer_manager);
 
         let (active_interface, bind_addr) = resolve_bind_address(&config)?;
         let (listener_tx, listener_rx) = mpsc::channel(8);
@@ -656,19 +671,7 @@ impl Engine {
             quality_probes: Arc::new(dashmap::DashMap::new()),
             clipboard_store: Arc::new(Mutex::new(crate::engine_support::ClipboardStore::default())),
             local_clipboard: Arc::new(Mutex::new(crate::engine_support::LocalClipboard::new())),
-            history: Arc::new(Mutex::new({
-                let history_path = config.data_dir.join("history.json");
-                let limit = config.history_limit.unwrap_or(500);
-                crate::history::History::load_with_limit(&history_path, limit).unwrap_or_else(
-                    |_| {
-                        // If the history file is missing or corrupt, start fresh
-                        // in a temp path so the daemon always starts successfully.
-                        let tmp = std::env::temp_dir().join("deskdrop_history_fallback.json");
-                        crate::history::History::load_with_limit(&tmp, limit)
-                            .expect("cannot create fallback history store")
-                    },
-                )
-            })),
+            history: Arc::new(Mutex::new(history)),
             feedback: Arc::new(Mutex::new(crate::engine_support::FeedbackLog::new(200))),
             local_last_wake: Arc::new(std::sync::atomic::AtomicU64::new(
                 std::time::SystemTime::now()

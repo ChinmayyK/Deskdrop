@@ -72,8 +72,9 @@ pub(crate) async fn read_outbound_chunks(
                         let sample_len = data.len().min(4096);
                         if sample_len > 0 {
                             let sample = &data[..sample_len];
-                            let c_sample = lz4_flex::compress_prepend_size(sample);
-                            c_sample.len() < sample_len * 95 / 100
+                            let mut c_sample = [0u8; 4096 + 32];
+                            let c_len = lz4_flex::block::compress_into(sample, &mut c_sample).unwrap_or(usize::MAX);
+                            c_len < sample_len * 95 / 100
                         } else {
                             false
                         }
@@ -105,7 +106,7 @@ pub(crate) async fn read_outbound_chunks(
                         if current_pos != offset {
                             file.seek(std::io::SeekFrom::Start(offset))?;
                         }
-                        let mut buf = vec![0u8; len];
+                        let mut buf = crate::network::get_buffer(len);
                         let mut read_bytes = 0;
                         while read_bytes < len {
                             let n = file.read(&mut buf[read_bytes..])?;
@@ -127,8 +128,9 @@ pub(crate) async fn read_outbound_chunks(
                             let sample_len = buf.len().min(4096);
                             if sample_len > 0 {
                                 let sample = &buf[..sample_len];
-                                let c_sample = lz4_flex::compress_prepend_size(sample);
-                                c_sample.len() < sample_len * 95 / 100
+                                let mut c_sample = [0u8; 4096 + 32];
+                                let c_len = lz4_flex::block::compress_into(sample, &mut c_sample).unwrap_or(usize::MAX);
+                                c_len < sample_len * 95 / 100
                             } else {
                                 false
                             }
@@ -144,10 +146,10 @@ pub(crate) async fn read_outbound_chunks(
                                     true,
                                 ));
                             } else {
-                                chunk_data.push((chunk_index, buf.clone(), false));
+                                chunk_data.push((chunk_index, buf, false));
                             }
                         } else {
-                            chunk_data.push((chunk_index, buf.clone(), false));
+                            chunk_data.push((chunk_index, buf, false));
                         }
                     }
                 }
