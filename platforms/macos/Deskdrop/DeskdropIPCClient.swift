@@ -183,7 +183,7 @@ final class DeskdropIPCClient {
 
     func status() async throws -> IpcStatusResponse {
         let raw = try await send(cmd: ["cmd": "status"])
-        let resp = try JSONDecoder().decode(IpcResponse<IpcStatusResponse>.self, from: raw)
+        let resp = try await decode(IpcResponse<IpcStatusResponse>.self, from: raw)
         guard let data = resp.data else { throw DeskdropIPCError.noData }
         return data
     }
@@ -271,7 +271,7 @@ final class DeskdropIPCClient {
             let token: String
         }
         
-        let parsed = try JSONDecoder().decode(TokenResponse.self, from: resp)
+        let parsed = try await decode(TokenResponse.self, from: resp)
         if let token = parsed.data?.token ?? parsed.token {
             return token
         }
@@ -290,19 +290,19 @@ final class DeskdropIPCClient {
 
     func activityRecent(limit: Int = 50) async throws -> [IpcActivityEntry] {
         let raw = try await send(cmd: ["cmd": "activity_recent", "limit": limit])
-        let resp = try JSONDecoder().decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
+        let resp = try await decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
         return resp.data ?? []
     }
 
     func activitySince(sinceId: Int64) async throws -> [IpcActivityEntry] {
         let raw = try await send(cmd: ["cmd": "activity_since", "since_id": sinceId])
-        let resp = try JSONDecoder().decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
+        let resp = try await decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
         return resp.data ?? []
     }
 
     func pendingRemoteClipboards() async throws -> [IpcActivityEntry] {
         let raw = try await send(cmd: ["cmd": "pending_remote_clipboards"])
-        let resp = try JSONDecoder().decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
+        let resp = try await decode(IpcResponse<[IpcActivityEntry]>.self, from: raw)
         return resp.data ?? []
     }
 
@@ -346,7 +346,7 @@ final class DeskdropIPCClient {
         if let t = targetDeviceId { cmd["target_device"] = t }
         if let b = batchId { cmd["batch_id"] = b }
         let raw = try await send(cmd: cmd)
-        let resp = try JSONDecoder().decode(IpcResponse<String>.self, from: raw)
+        let resp = try await decode(IpcResponse<String>.self, from: raw)
         return resp.data ?? ""
     }
 
@@ -377,7 +377,7 @@ final class DeskdropIPCClient {
             cmd["target_device"] = id
         }
         let raw = try await send(cmd: cmd)
-        let resp = try JSONDecoder().decode(IpcResponse<IpcCameraFrameResponse>.self, from: raw)
+        let resp = try await decode(IpcResponse<IpcCameraFrameResponse>.self, from: raw)
         guard let b64 = resp.data?.frame_base64 else { return nil }
         return Data(base64Encoded: b64)
     }
@@ -405,7 +405,7 @@ final class DeskdropIPCClient {
         if let query = searchQuery, !query.isEmpty { cmd["search_query"] = query }
         
         let raw = try await send(cmd: cmd)
-        let resp = try JSONDecoder().decode(IpcResponse<IpcRemoteFilesResult>.self, from: raw)
+        let resp = try await decode(IpcResponse<IpcRemoteFilesResult>.self, from: raw)
         if let err = resp.message { throw DeskdropIPCError.serverError(err) }
         guard let data = resp.data else { throw DeskdropIPCError.noData }
         return data
@@ -419,7 +419,7 @@ final class DeskdropIPCClient {
             "size_px": sizePx
         ]
         let raw = try await send(cmd: cmd)
-        let resp = try JSONDecoder().decode(IpcResponse<IpcRemoteThumbnailResult>.self, from: raw)
+        let resp = try await decode(IpcResponse<IpcRemoteThumbnailResult>.self, from: raw)
         if let err = resp.message { throw DeskdropIPCError.serverError(err) }
         guard let b64 = resp.data?.data_base64 else { return nil }
         return Data(base64Encoded: b64)
@@ -479,6 +479,13 @@ final class DeskdropIPCClient {
             }
         }
         throw lastError
+    }
+
+    /// Perform JSON decoding on a background thread to avoid blocking the caller's actor (e.g. MainActor).
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) async throws -> T {
+        try await Task.detached(priority: .userInitiated) {
+            try JSONDecoder().decode(type, from: data)
+        }.value
     }
 }
 
