@@ -166,6 +166,8 @@ private struct StepOneFindDevice: View {
                         Text("Scanning local network...")
                             .foregroundStyle(CRTheme.inkSubtle)
                             .font(.system(size: 14, weight: .medium))
+                        Button("Rescan") { store.startDiscovery() }
+                            .buttonStyle(CRSecondaryButtonStyle())
                     }
                     .frame(height: 250)
                 } else {
@@ -390,12 +392,17 @@ private struct StepTwoVerify: View {
                     .frame(height: 200)
             }
         }
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
-                if selectedPeer?.pairingPin == nil && selectedPeer?.trusted != true {
-                    hasTimedOut = true
+        .task(id: selectedPeer?.id) {
+            hasTimedOut = false
+            guard selectedPeer != nil else { return }
+            do {
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                if !Task.isCancelled {
+                    if selectedPeer?.pairingPin == nil && selectedPeer?.trusted != true {
+                        hasTimedOut = true
+                    }
                 }
-            }
+            } catch {}
         }
         .onChange(of: selectedPeer?.pairingPin) { _ in
             hasTimedOut = false

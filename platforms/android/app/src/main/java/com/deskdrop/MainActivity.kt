@@ -11,7 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
-import androidx.compose.runtime.mutableStateOf
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
@@ -109,6 +110,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
@@ -632,7 +634,14 @@ class MainActivity : ComponentActivity() {
         }
 
         if (needed.isNotEmpty()) {
-            requestPermissions(needed.toTypedArray(), 1001)
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Permissions Required")
+                .setMessage("Deskdrop needs access to storage (for saving and sending files), notifications (for file transfer updates), and phone state (for call continuity features).")
+                .setPositiveButton("Continue") { _, _ ->
+                    requestPermissions(needed.toTypedArray(), 1001)
+                }
+                .setCancelable(false)
+                .show()
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {

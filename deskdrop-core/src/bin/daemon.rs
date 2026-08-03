@@ -174,7 +174,8 @@ async fn run() -> Result<()> {
                         let mut buf = [0u8; 1024];
                         if socket.read(&mut buf).await.is_ok() {
                             // We don't even parse HTTP headers fully, just serve the latest frame.
-                            let frame = st.engine.camera_frames().await.values().next().cloned();
+                            let frames = st.engine.camera_frames().await;
+                            let frame = { let x = frames.iter().next().map(|r| r.value().clone()); x };
                             if let Some(bytes) = frame {
                                 let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -888,7 +889,8 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             Ok(IpcResponse::ok(payload))
         }
         IpcRequest::LatestCameraFrame { target_device: _ } => {
-            let frame = state.engine.camera_frames().await.values().next().cloned();
+            let frames = state.engine.camera_frames().await;
+            let frame = { let x = frames.iter().next().map(|r| r.value().clone()); x };
             if let Some(bytes) = frame {
                 let base64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                 Ok(IpcResponse::ok(json!({ "frame_base64": base64 })))

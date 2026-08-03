@@ -24,6 +24,7 @@ final class DeskdropToastWindowManager: NSObject {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        UserDefaults.standard.addObserver(self, forKeyPath: "overlayPositionBottomRight", options: .new, context: nil)
 
         Publishers.CombineLatest(store.$toasts, store.$activeTransfers)
             .receive(on: RunLoop.main)
@@ -35,6 +36,15 @@ final class DeskdropToastWindowManager: NSObject {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        UserDefaults.standard.removeObserver(self, forKeyPath: "overlayPositionBottomRight")
+    }
+
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        if keyPath == "overlayPositionBottomRight" {
+            DispatchQueue.main.async { self.layoutPanel() }
+        } else {
+            super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
+        }
     }
 
     private func handleUpdate(toasts: [ToastItem], transfers: [FileTransferState]) {
@@ -51,9 +61,15 @@ final class DeskdropToastWindowManager: NSObject {
         let visible = screen.visibleFrame
         let width: CGFloat = 360
         let height: CGFloat = min(visible.height - 24, 520)
+        let isBottomRight = UserDefaults.standard.bool(forKey: "overlayPositionBottomRight")
+        
+        let yPos: CGFloat = isBottomRight 
+            ? visible.minY + 12 
+            : visible.maxY - height - 12
+            
         let frame = NSRect(
-            x: visible.maxX - width - 16, // Pinned to top-right
-            y: visible.maxY - height - 12, // Pin to top
+            x: visible.maxX - width - 16,
+            y: yPos,
             width: width,
             height: height
         )

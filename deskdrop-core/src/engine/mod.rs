@@ -535,10 +535,10 @@ pub(crate) struct EngineShared {
     /// Clipboard apply policy (timeline-first vs auto-apply).
     pub(crate) apply_policy: Arc<Mutex<ClipboardApplyPolicy>>,
     /// Settings snapshot for policy decisions (updated lazily).
-    pub(crate) settings: Arc<Mutex<Settings>>,
+    pub(crate) settings: Arc<std::sync::Mutex<Settings>>,
     /// Per-peer link-quality probes — drives adaptive chunk sizing (HIGH-03).
     /// Keyed by peer device UUID; populated on first Pong receipt.
-    pub(crate) quality_probes: Arc<Mutex<std::collections::HashMap<uuid::Uuid, QualityProbe>>>,
+    pub(crate) quality_probes: Arc<dashmap::DashMap<uuid::Uuid, QualityProbe>>,
     /// Clipboard content store — maps content hash → text payload for repush.
     pub(crate) clipboard_store: Arc<Mutex<crate::engine_support::ClipboardStore>>,
     /// Local clipboard reader (platform abstraction for push_current_clipboard).
@@ -552,19 +552,19 @@ pub(crate) struct EngineShared {
     /// Active phone call state (set on ringing/offhook, cleared on idle).
     pub(crate) active_call: Arc<Mutex<Option<ActiveCallState>>>,
     /// Per-peer battery levels (F20). Keyed by device UUID.
-    pub(crate) peer_batteries: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerBatteryState>>>,
-    pub(crate) peer_storage: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerStorageState>>>,
+    pub(crate) peer_batteries: Arc<dashmap::DashMap<uuid::Uuid, PeerBatteryState>>,
+    pub(crate) peer_storage: Arc<dashmap::DashMap<uuid::Uuid, PeerStorageState>>,
     /// Cache of local battery state to push to newly connected peers.
-    pub(crate) local_battery: Arc<Mutex<Option<(u8, bool)>>>,
+    pub(crate) local_battery: Arc<std::sync::Mutex<Option<(u8, bool)>>>,
     /// Cache of local storage state to push to newly connected peers.
     #[allow(clippy::type_complexity)]
-    pub(crate) local_storage: Arc<Mutex<Option<(u64, u64, u64, u64, u64)>>>,
+    pub(crate) local_storage: Arc<std::sync::Mutex<Option<(u64, u64, u64, u64, u64)>>>,
     /// Cache of local network state to push to newly connected peers.
-    local_network: Arc<Mutex<Option<String>>>,
+    local_network: Arc<std::sync::Mutex<Option<String>>>,
     /// Per-peer network status. Keyed by device UUID.
-    peer_networks: Arc<Mutex<std::collections::HashMap<uuid::Uuid, PeerNetworkState>>>,
+    peer_networks: Arc<dashmap::DashMap<uuid::Uuid, PeerNetworkState>>,
     /// Per-peer latest camera frame (to prevent MPSC channel OOM).
-    pub camera_frames: Arc<Mutex<std::collections::HashMap<uuid::Uuid, Vec<u8>>>>,
+    pub camera_frames: Arc<dashmap::DashMap<uuid::Uuid, Vec<u8>>>,
     /// Rate limit for pairing UI spam from untrusted peers.
 
     /// Throttle for inbound clipboard pushes.
@@ -652,8 +652,8 @@ impl Engine {
             ))),
             speed_tests: Arc::new(Mutex::new(std::collections::HashMap::new())),
             apply_policy: Arc::new(Mutex::new(ClipboardApplyPolicy::default())),
-            settings: Arc::new(Mutex::new(Settings::default())),
-            quality_probes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            settings: Arc::new(std::sync::Mutex::new(Settings::default())),
+            quality_probes: Arc::new(dashmap::DashMap::new()),
             clipboard_store: Arc::new(Mutex::new(crate::engine_support::ClipboardStore::default())),
             local_clipboard: Arc::new(Mutex::new(crate::engine_support::LocalClipboard::new())),
             history: Arc::new(Mutex::new({
@@ -677,13 +677,13 @@ impl Engine {
                     .as_millis() as u64,
             )),
             active_call: Arc::new(Mutex::new(None)),
-            peer_batteries: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            peer_storage: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            local_battery: Arc::new(Mutex::new(None)),
-            local_storage: Arc::new(Mutex::new(None)),
-            local_network: Arc::new(Mutex::new(None)),
-            peer_networks: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            camera_frames: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            peer_batteries: Arc::new(dashmap::DashMap::new()),
+            peer_storage: Arc::new(dashmap::DashMap::new()),
+            local_battery: Arc::new(std::sync::Mutex::new(None)),
+            local_storage: Arc::new(std::sync::Mutex::new(None)),
+            local_network: Arc::new(std::sync::Mutex::new(None)),
+            peer_networks: Arc::new(dashmap::DashMap::new()),
+            camera_frames: Arc::new(dashmap::DashMap::new()),
 
             throttle: crate::throttle::Throttle::default_rate(),
             congestion_controller: crate::throttle::AdaptiveCongestionController::default(),
@@ -1068,11 +1068,11 @@ impl Engine {
     pub async fn apply_settings(&self, new_settings: Settings) {
         let mut policy = self.shared.apply_policy.lock().await;
         policy.update_from_settings(&new_settings);
-        *self.shared.settings.lock().await = new_settings;
+        *self.shared.settings.lock().unwrap() = new_settings;
     }
 
     pub async fn current_settings(&self) -> Settings {
-        self.shared.settings.lock().await.clone()
+        self.shared.settings.lock().unwrap().clone()
     }
 
     fn persist_settings_snapshot(&self, settings: Settings) -> Result<Settings> {
@@ -1085,7 +1085,7 @@ impl Engine {
 
     /// Apply a JSON merge-patch to the current settings.
     pub async fn patch_settings(&self, patch: String) -> Result<()> {
-        let mut current = serde_json::to_value(&*self.shared.settings.lock().await)?;
+        let mut current = serde_json::to_value(&*self.shared.settings.lock().unwrap())?;
         let patch_val: serde_json::Value =
             serde_json::from_str(&patch).context("patch_settings: invalid JSON patch")?;
         json_merge_patch(&mut current, &patch_val);
@@ -1099,7 +1099,7 @@ impl Engine {
     /// Apply a partial settings update from the Mac preferences UI.
     pub async fn save_settings_partial(&self, p: crate::ipc::PartialSettings) -> Result<()> {
         // Clone first so we're not holding the lock while calling apply_settings.
-        let mut s = self.shared.settings.lock().await.clone();
+        let mut s = self.shared.settings.lock().unwrap().clone();
         if let Some(v) = p.port {
             s.port = v;
         }
@@ -1184,7 +1184,7 @@ impl Engine {
     }
 
     pub async fn set_sync_enabled(&self, enabled: bool) -> Result<()> {
-        let mut settings = self.shared.settings.lock().await.clone();
+        let mut settings = self.shared.settings.lock().unwrap().clone();
         settings.sync_enabled = enabled;
         let persisted = self.persist_settings_snapshot(settings)?;
         self.apply_settings(persisted).await;
@@ -1192,7 +1192,7 @@ impl Engine {
     }
 
     pub async fn set_timeline_first_mode(&self, enabled: bool) -> Result<()> {
-        let mut settings = self.shared.settings.lock().await.clone();
+        let mut settings = self.shared.settings.lock().unwrap().clone();
         settings.timeline_first_mode = enabled;
         let persisted = self.persist_settings_snapshot(settings)?;
         self.apply_settings(persisted).await;
@@ -1200,7 +1200,7 @@ impl Engine {
     }
 
     pub async fn set_auto_apply_clipboard(&self, enabled: bool) -> Result<()> {
-        let mut settings = self.shared.settings.lock().await.clone();
+        let mut settings = self.shared.settings.lock().unwrap().clone();
         settings.auto_apply_remote_clipboard = enabled;
         let persisted = self.persist_settings_snapshot(settings)?;
         self.apply_settings(persisted).await;
@@ -1212,7 +1212,7 @@ impl Engine {
     /// Record a local text entry in history without syncing it to peers.
     pub async fn remember_text(&self, text: String) -> Result<()> {
         let device_name = self.shared.config.device_name.clone();
-        let max_bytes = self.shared.settings.lock().await.max_history_text_bytes;
+        let max_bytes = self.shared.settings.lock().unwrap().max_history_text_bytes;
         let content = crate::protocol::ClipboardContent::Text(text);
         self.shared
             .history
@@ -1247,17 +1247,14 @@ impl Engine {
         &self,
         device_id: Uuid,
     ) -> Option<crate::settings::PeerSettings> {
-        self.shared
-            .settings
-            .lock()
-            .await
+        self.shared.settings.lock().unwrap()
             .per_peer
             .get(&device_id.to_string())
             .cloned()
     }
 
     pub async fn patch_peer_settings(&self, device_id: Uuid, patch: String) -> Result<()> {
-        let mut settings = self.shared.settings.lock().await;
+        let mut settings = self.shared.settings.lock().unwrap();
         let key = device_id.to_string();
         let existing = settings.per_peer.entry(key).or_default();
         let mut val = serde_json::to_value(&*existing)?;
@@ -1756,7 +1753,7 @@ impl Engine {
         sync_images: bool,
         sync_files: bool,
     ) {
-        let mut settings = self.shared.settings.lock().await;
+        let mut settings = self.shared.settings.lock().unwrap();
         settings.sync_enabled = sync_enabled;
         settings.sync_text = sync_text;
         settings.sync_images = sync_images;
@@ -2290,7 +2287,8 @@ impl Engine {
             if let Some(tx) = target_tx {
                 let sh = self.shared.clone();
                 tokio::spawn(async move {
-                    if let Some((level, charging)) = *sh.local_battery.lock().await {
+                    let battery_val = *sh.local_battery.lock().unwrap();
+            if let Some((level, charging)) = battery_val {
                         let _ = tx
                             .send(AppMessage::BatteryStatus {
                                 level,
@@ -2300,7 +2298,8 @@ impl Engine {
                             })
                             .await;
                     }
-                    if let Some(net) = sh.local_network.lock().await.clone() {
+                    let net_val = sh.local_network.lock().unwrap().clone();
+            if let Some(net) = net_val {
                         let _ = tx
                             .send(AppMessage::NetworkStatus {
                                 network_type: net,
@@ -2583,8 +2582,8 @@ impl Engine {
 
     pub async fn camera_frames(
         &self,
-    ) -> tokio::sync::MutexGuard<'_, std::collections::HashMap<Uuid, Vec<u8>>> {
-        self.shared.camera_frames.lock().await
+    ) -> Arc<dashmap::DashMap<Uuid, Vec<u8>>> {
+        self.shared.camera_frames.clone()
     }
 
     /// Spawn a background task that periodically prunes transient, untrusted
@@ -2637,7 +2636,7 @@ impl Engine {
                 // Run the expensive filesystem scan only once every 10 minutes (120 ticks of 5s)
                 if disk_prune_counter >= 120 {
                     disk_prune_counter = 0;
-                    let retention_days = settings.lock().await.history_retention_days;
+                    let retention_days = settings.lock().unwrap().history_retention_days;
                     if retention_days > 0 {
                         if let Err(err) = hist.purge_expired_retention(retention_days) {
                             tracing::warn!(error = %err, "retention history pruning failed");
@@ -2766,11 +2765,7 @@ impl Engine {
 
     /// Retrieve the latest camera frame for a specific peer.
     pub fn get_latest_camera_frame(&self, peer_id: uuid::Uuid) -> Option<Vec<u8>> {
-        self.shared
-            .camera_frames
-            .blocking_lock()
-            .get(&peer_id)
-            .cloned()
+        self.shared.camera_frames.get(&peer_id).map(|r| r.clone())
     }
 }
 
@@ -3725,7 +3720,8 @@ fn register_session(
         let outbox = outbox_tx.clone();
         let sh = shared.clone();
         tokio::spawn(async move {
-            if let Some((level, charging)) = *sh.local_battery.lock().await {
+            let battery_val = *sh.local_battery.lock().unwrap();
+            if let Some((level, charging)) = battery_val {
                 let _ = outbox
                     .send(AppMessage::BatteryStatus {
                         level,
@@ -3735,7 +3731,8 @@ fn register_session(
                     })
                     .await;
             }
-            if let Some(net) = sh.local_network.lock().await.clone() {
+            let net_val = sh.local_network.lock().unwrap().clone();
+            if let Some(net) = net_val {
                 let _ = outbox
                     .send(AppMessage::NetworkStatus {
                         network_type: net,
@@ -3744,7 +3741,8 @@ fn register_session(
                     })
                     .await;
             }
-            if let Some((images, videos, apps, free, total)) = *sh.local_storage.lock().await {
+            let storage_val = *sh.local_storage.lock().unwrap();
+            if let Some((images, videos, apps, free, total)) = storage_val {
                 let _ = outbox
                     .send(AppMessage::StorageStatus {
                         images_bytes: images,
@@ -3821,7 +3819,7 @@ fn register_session(
                 chunk_index: u32,
                 offset: u64,
                 padding: usize,
-                data: bytes::Bytes,
+                data: Vec<u8>,
             },
             Complete {
                 transfer_id: [u8; 16],
@@ -4060,7 +4058,7 @@ fn register_session(
 
                             // Run inbound payload through the FilterChain (e.g. executable blocking, etc.)
                             let filter_chain = crate::filter::FilterChain::from_settings(
-                                &*shared.settings.lock().await,
+                                &*shared.settings.lock().unwrap(),
                             );
                             if let crate::filter::Verdict::Deny { reason } =
                                 filter_chain.run(&content)
@@ -4177,7 +4175,7 @@ fn register_session(
 
                             // Persist the incoming item to history.
                             {
-                                let max_bytes = shared.settings.lock().await.max_history_text_bytes;
+                                let max_bytes = shared.settings.lock().unwrap().max_history_text_bytes;
                                 let source = display_name.clone();
                                 let _ = shared
                                     .history
@@ -4284,7 +4282,7 @@ fn register_session(
                             .get(peer_id)
                             .map(|p| p.trusted)
                             .unwrap_or(false);
-                        let settings = shared.settings.lock().await.clone();
+                        let settings = shared.settings.lock().unwrap().clone();
                         let auto_accept = (is_trusted || settings.auto_accept_file_transfers)
                             && (settings.auto_accept_max_bytes == 0
                                 || file_bytes <= settings.auto_accept_max_bytes);
@@ -4460,7 +4458,7 @@ fn register_session(
 
                         let data = if compressed {
                             match lz4_flex::decompress_size_prepended(&payload) {
-                                Ok(d) => bytes::Bytes::from(d),
+                                Ok(d) => d,
                                 Err(e) => {
                                     tracing::error!("Failed to decompress file chunk: {}", e);
                                     let mut mgr = shared.file_transfers.lock().await;
@@ -5016,7 +5014,7 @@ fn register_session(
                         // Send an instant ping if they just woke up to update their last_seen_millis
                         // and prevent their local 15s grace period from expiring before our next tick.
                         if !is_asleep {
-                            let ping = probe::make_ping();
+                            let mut ping = probe::make_ping();
                             *rx_ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) =
                                 Some(std::time::Instant::now());
                             let _ = rx_session_outbox_tx.send(ping).await;
@@ -5256,8 +5254,8 @@ fn register_session(
                         if let Some(sent_at) = maybe_sent_at {
                             let rtt_us = probe::measure_rtt_us(sent_at);
                             let result = ProbeResult::from_samples(vec![rtt_us]);
-                            let mut probes = shared.quality_probes.lock().await;
-                            probes
+                            
+                            shared.quality_probes
                                 .entry(peer_id)
                                 .or_insert_with(|| QualityProbe::new(peer_name.as_str()))
                                 .record(result);
@@ -5334,8 +5332,8 @@ fn register_session(
                         }
                         // Persist in shared state for IPC status polling.
                         {
-                            let mut batteries = shared.peer_batteries.lock().await;
-                            batteries.insert(
+                            
+                            shared.peer_batteries.insert(
                                 origin_device,
                                 PeerBatteryState {
                                     device_id: origin_device,
@@ -5370,8 +5368,8 @@ fn register_session(
                             continue;
                         }
                         {
-                            let mut networks = shared.peer_networks.lock().await;
-                            networks.insert(
+                            
+                            shared.peer_networks.insert(
                                 origin_device,
                                 PeerNetworkState {
                                     device_id: origin_device,
@@ -5408,8 +5406,8 @@ fn register_session(
                             continue;
                         }
                         {
-                            let mut storages = shared.peer_storage.lock().await;
-                            storages.insert(
+                            
+                            shared.peer_storage.insert(
                                 origin_device,
                                 PeerStorageState {
                                     device_id: origin_device,
@@ -5548,7 +5546,7 @@ fn register_session(
                         {
                             continue;
                         }
-                        shared.camera_frames.lock().await.remove(&origin_device);
+                        shared.camera_frames.remove(&origin_device);
                         let _ = shared
                             .event_tx
                             .send(EngineEvent::CameraStreamStop {
@@ -5569,11 +5567,7 @@ fn register_session(
                         {
                             continue;
                         }
-                        shared
-                            .camera_frames
-                            .lock()
-                            .await
-                            .insert(origin_device, data);
+                        shared.camera_frames.insert(origin_device, data);
                         let _ = shared
                             .event_tx
                             .send(EngineEvent::CameraFrameReceived {
@@ -5771,13 +5765,13 @@ fn register_session(
                     match shutdown {
                         Ok(cmd) => {
                             if cmd.explicit_disconnect {
-                                let _ = sess_tx.send(&AppMessage::CallAction {
+                                let _ = sess_tx.send(&mut AppMessage::CallAction {
                                     action: "system:explicit_disconnect".to_string(),
                                     origin_device: shared.config.device_id,
                                 }).await;
                             }
                             if cmd.send_bye {
-                                let _ = sess_tx.send(&AppMessage::Bye).await;
+                                let _ = sess_tx.send(&mut AppMessage::Bye).await;
                             }
                             break cmd.reason;
                         }
@@ -5826,26 +5820,26 @@ fn register_session(
                     };
 
                     if should_ping {
-                        let ping = probe::make_ping();
+                        let mut ping = probe::make_ping();
                         *ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
-                        if let Err(err) = sess_tx.send(&ping).await {
+                        if let Err(err) = sess_tx.send(&mut ping).await {
                             break format!("heartbeat send failed: {err}");
                         }
                     }
                 }
-                Some(msg) = outbox_rx.recv() => {
-                    if let Err(err) = sess_tx.send(&msg).await {
+                Some(mut msg) = outbox_rx.recv() => {
+                    if let Err(err) = sess_tx.send(&mut msg).await {
                         break format!("send failed: {err}");
                     }
                 }
-                Some(msg) = file_outbox_rx.recv() => {
-                    if let Err(err) = sess_tx.send_no_flush(&msg).await {
+                Some(mut msg) = file_outbox_rx.recv() => {
+                    if let Err(err) = sess_tx.send_no_flush(&mut msg).await {
                         break format!("send failed: {err}");
                     }
                     for _ in 0..31 {
                         match file_outbox_rx.try_recv() {
-                            Ok(next_msg) => {
-                                if let Err(_err) = sess_tx.send_no_flush(&next_msg).await {
+                            Ok(mut next_msg) => {
+                                if let Err(_err) = sess_tx.send_no_flush(&mut next_msg).await {
                                     break;
                                 }
                             }
@@ -5904,7 +5898,7 @@ fn register_session(
                     .lock()
                     .await
                     .pause_all_for_device(peer_id);
-                shared.camera_frames.lock().await.remove(&peer_id);
+                shared.camera_frames.remove(&peer_id);
                 pump_transfer_queue(&shared).await;
 
                 // FIX: Phantom Pairing Prompts. Clear incoming pairing state if connection drops.

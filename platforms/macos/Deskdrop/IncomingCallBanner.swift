@@ -56,7 +56,7 @@ final class CallBannerWindowManager: NSObject {
     private func handleCallUpdate(_ call: IncomingCallState?) {
         layoutPanel()
         if let call = call, (call.isRinging || call.isOffhook) {
-            panel.orderFrontRegardless()
+            // panel.orderFrontRegardless() // Disabled per user request
             if call.isRinging {
                 startRingtone()
                 NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .default)
@@ -67,6 +67,10 @@ final class CallBannerWindowManager: NSObject {
             panel.orderOut(nil)
             stopRingtone()
         }
+    }
+
+    func show() {
+        // Disabled per user request
     }
 
     @objc private func layoutPanel() {

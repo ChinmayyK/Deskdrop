@@ -49,6 +49,9 @@ struct StopwatchProgressView: View {
                 .frame(width: 50, height: 12)
                 .modifier(StopwatchTextModifier(progress: progress))
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Transfer Progress")
+        .accessibilityValue("\(Int(max(0, min(progress, 1)) * 100))%")
     }
 }
 

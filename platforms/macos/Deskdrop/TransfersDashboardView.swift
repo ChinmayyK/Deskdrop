@@ -86,7 +86,7 @@ struct TransfersDashboardView: View {
                             .padding(.horizontal, 40)
                             .padding(.bottom, 40)
                     } else {
-                        VStack(spacing: 0) {
+                        LazyVStack(spacing: 0) {
                             ForEach(historyItems) { item in
                                 TransferHistoryRow(entry: item) {
                                     if let dest = item.dest_path, !dest.isEmpty {
@@ -265,16 +265,16 @@ struct ActiveTransferCard: View {
                 // Actions
                 HStack(spacing: 8) {
                     if case .incoming = transfer.status {
-                        actionButton(icon: "checkmark", color: .green) { store.acceptFileTransfer(transfer) }
-                        actionButton(icon: "xmark", color: .red) { store.rejectFileTransfer(transfer) }
+                        actionButton(icon: "checkmark", label: "Accept", color: .green) { store.acceptFileTransfer(transfer) }
+                        actionButton(icon: "xmark", label: "Reject", color: .red) { store.rejectFileTransfer(transfer) }
                     } else if case .transferring = transfer.status {
-                        actionButton(icon: "pause.fill") { store.pauseFileTransfer(transfer) }
-                        actionButton(icon: "xmark") { store.cancelFileTransfer(transfer) }
+                        actionButton(icon: "pause.fill", label: "Pause") { store.pauseFileTransfer(transfer) }
+                        actionButton(icon: "xmark", label: "Cancel") { store.cancelFileTransfer(transfer) }
                     } else if case .paused = transfer.status {
-                        actionButton(icon: "play.fill") { store.resumeFileTransfer(transfer) }
-                        actionButton(icon: "xmark") { store.cancelFileTransfer(transfer) }
+                        actionButton(icon: "play.fill", label: "Resume") { store.resumeFileTransfer(transfer) }
+                        actionButton(icon: "xmark", label: "Cancel") { store.cancelFileTransfer(transfer) }
                     } else if case .complete = transfer.status {
-                        actionButton(icon: "checkmark", color: .green) { store.cancelFileTransfer(transfer) }
+                        actionButton(icon: "checkmark", label: "Dismiss", color: .green) { store.cancelFileTransfer(transfer) }
                     }
                 }
             }
@@ -337,7 +337,7 @@ struct ActiveTransferCard: View {
         .crCard(cornerRadius: 24)
     }
     
-    private func actionButton(icon: String, color: Color = CRTheme.inkSoft, action: @escaping () -> Void) -> some View {
+    private func actionButton(icon: String, label: String, color: Color = CRTheme.inkSoft, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .bold))
@@ -348,6 +348,7 @@ struct ActiveTransferCard: View {
         }
         .buttonStyle(.plain)
         .crHoverScale(scale: 1.05)
+        .accessibilityLabel(label)
     }
 }
 

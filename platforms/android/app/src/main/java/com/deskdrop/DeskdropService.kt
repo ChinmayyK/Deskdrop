@@ -1173,7 +1173,7 @@ class DeskdropService : Service() {
                     TransferManager.activeTransfers.remove(tid)
                     TransferManager.publishActiveTransfers(force = true)
                     
-                    val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
+                    val builder = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
                         .setSmallIcon(R.mipmap.ic_launcher)
                         .setContentTitle("File sent to $from")
                         .setContentText(fileName)
@@ -1631,7 +1631,7 @@ class DeskdropService : Service() {
         // in the expanded BigText style — so the user can read it before deciding.
         val bigText = if (fullText.length > 400) fullText.take(397) + "…" else fullText
 
-        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setSmallIcon(android.R.drawable.ic_menu_edit)
             .setContentTitle("Clipboard from $from")
             .setContentText(preview)
@@ -1669,7 +1669,7 @@ class DeskdropService : Service() {
         val rejectPi = PendingIntent.getService(this, tid.hashCode() + 1,
             rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Incoming file from $from")
             .setContentText("$fileName ($sizeStr)")
@@ -1768,7 +1768,7 @@ class DeskdropService : Service() {
         val pauseResumePi = PendingIntent.getService(this, tid.hashCode() + 3,
             pauseResumeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val builder = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(if (isOutbound) "Sending $fileName" else "Receiving $fileName")
             .setContentText(buildTransferStatusLine(percent, bytesReceived, totalBytes, speedBps, etaSecs) + if (isPaused) " (Paused)" else "")
@@ -1794,7 +1794,7 @@ class DeskdropService : Service() {
         val openPi = PendingIntent.getActivity(this, uri.hashCode(), openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val builder = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val builder = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("File received from $from")
             .setContentText(fileName)
@@ -3312,7 +3312,7 @@ class DeskdropService : Service() {
             )
         }
 
-        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setContentTitle("File received from $fromDevice")
             .setContentText(fileName)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
@@ -3335,7 +3335,7 @@ class DeskdropService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setContentTitle("Deskdrop Connection Error")
             .setContentText(message.take(80))
             .setSmallIcon(android.R.drawable.stat_notify_error)
@@ -3445,7 +3445,7 @@ class DeskdropService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notif = NotificationCompat.Builder(this, CHAN_ALERTS)
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setContentTitle("Permission Required")
             .setContentText("Deskdrop needs storage access to browse files. Tap here to grant permission.")
             .setSmallIcon(android.R.drawable.stat_notify_error)

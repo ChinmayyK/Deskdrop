@@ -11,9 +11,10 @@ struct ActivityFeedView: View {
     @State private var filterKind: KindFilter = .all
     @State private var expandedID: UUID?       = nil
 
-    // ── Computed feed ─────────────────────────────────────────────────────────
+    @State private var filteredEntries: [IpcActivityEntry] = []
+    @State private var dayGroups: [(label: String, entries: [IpcActivityEntry])] = []
 
-    private var filteredEntries: [IpcActivityEntry] {
+    private func updateFeed() {
         var entries = store.activityFeed
         if filterKind != .all { entries = entries.filter { filterKind.matches($0.kind) } }
         if !searchText.isEmpty {
@@ -23,16 +24,13 @@ struct ActivityFeedView: View {
                 || ($0.text_preview?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
-        return entries
-    }
+        filteredEntries = entries
 
-    // Group entries by calendar day
-    private var dayGroups: [(label: String, entries: [IpcActivityEntry])] {
         let cal = Calendar.current
-        let byDay = Dictionary(grouping: filteredEntries) { entry -> Date in
+        let byDay = Dictionary(grouping: entries) { entry -> Date in
             cal.startOfDay(for: Date(timeIntervalSince1970: Double(entry.timestamp_ms) / 1000))
         }
-        return byDay.keys.sorted(by: >).map { day in
+        dayGroups = byDay.keys.sorted(by: >).map { day in
             let label: String
             if cal.isDateInToday(day)          { label = "Today" }
             else if cal.isDateInYesterday(day) { label = "Yesterday" }
@@ -97,9 +95,19 @@ struct ActivityFeedView: View {
                     }
                 }
             }
+            // Hidden refresh shortcut
+            Button("") {
+                Task { await store.refreshActivityFeed() }
+            }
+            .keyboardShortcut("r", modifiers: .command)
+            .hidden()
         }
         .frame(minWidth: 380, minHeight: 480)
         .task { await store.refreshActivityFeed() }
+        .onChange(of: store.activityFeed) { _ in updateFeed() }
+        .onChange(of: searchText) { _ in updateFeed() }
+        .onChange(of: filterKind) { _ in updateFeed() }
+        .onAppear { updateFeed() }
     }
 }
 

@@ -798,6 +798,9 @@ struct CRProgressBar: View {
             }
         }
         .frame(height: height)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Progress")
+        .accessibilityValue("\(Int(max(0, min(value, 1)) * 100))%")
     }
 }
 

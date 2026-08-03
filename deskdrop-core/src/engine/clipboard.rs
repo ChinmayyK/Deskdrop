@@ -66,7 +66,7 @@ impl crate::engine::Engine {
         }
 
         // Optionally compress images before sending.
-        let compress_enabled = self.shared.settings.lock().await.sync_images;
+        let compress_enabled = self.shared.settings.lock().unwrap().sync_images;
         let content = if matches!(content, ClipboardContent::Image { .. }) && compress_enabled {
             let (compressed, stats) = crate::compress::compress_image(content, true).await;
             if let Some(ref s) = stats {
@@ -413,10 +413,7 @@ impl crate::engine::Engine {
     }
 
     pub async fn template_list(&self) -> Vec<crate::settings::ClipboardTemplate> {
-        self.shared
-            .settings
-            .lock()
-            .await
+        self.shared.settings.lock().unwrap()
             .clipboard_templates
             .clone()
     }
@@ -426,7 +423,7 @@ impl crate::engine::Engine {
             .shared
             .settings
             .lock()
-            .await
+            .unwrap()
             .clipboard_templates
             .clone();
         let tmpl = templates
@@ -453,7 +450,7 @@ impl crate::engine::Engine {
         text: String,
         description: String,
     ) -> Result<()> {
-        let mut settings = self.shared.settings.lock().await;
+        let mut settings = self.shared.settings.lock().unwrap();
         if let Some(t) = settings
             .clipboard_templates
             .iter_mut()
@@ -474,7 +471,7 @@ impl crate::engine::Engine {
     }
 
     pub async fn template_remove(&self, name: String) -> Result<bool> {
-        let mut settings = self.shared.settings.lock().await;
+        let mut settings = self.shared.settings.lock().unwrap();
         let before = settings.clipboard_templates.len();
         settings.clipboard_templates.retain(|t| t.name != name);
         Ok(settings.clipboard_templates.len() < before)

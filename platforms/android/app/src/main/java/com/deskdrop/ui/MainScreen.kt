@@ -1473,7 +1473,7 @@ fun ActivityTab(
                     )
                 }
             } else {
-                items(feed) { entry ->
+                items(feed, key = { it.id }) { entry ->
                     ActivityFeedCardNew(
                         isDark = isDark,
                         entry = entry,
@@ -1589,7 +1589,7 @@ fun DevicesTab(
                     )
                 }
             } else {
-                items(peers) { peer ->
+                items(peers, key = { it.id }) { peer ->
                     PeerListCard(
                         isDark = isDark,
                         peer = peer,

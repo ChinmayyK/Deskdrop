@@ -16,6 +16,14 @@
         <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
     </style>
 
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <!-- Set the splash screen background, animated icon, and animation duration. -->
+        <item name="windowSplashScreenBackground">@color/cr_bg</item>
+        <!-- Use clear and transparent colors if no animated icon is present to keep it simple -->
+        <!-- Set the post-splash theme -->
+        <item name="postSplashScreenTheme">@style/Theme.Deskdrop</item>
+    </style>
+
     <style name="Theme.Deskdrop.ShareTarget" parent="android:Theme.Translucent.NoTitleBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>

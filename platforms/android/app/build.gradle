@@ -24,19 +24,16 @@ android {
     signingConfigs {
         release {
             def keystorePath = System.getenv("DESKDROP_KEYSTORE")
-            if (keystorePath == null) {
-                throw new GradleException("DESKDROP_KEYSTORE environment variable not set for release build")
+            if (keystorePath != null) {
+                def keystoreFile = file(keystorePath)
+                if (!keystoreFile.exists()) {
+                    throw new GradleException("Release keystore not found at ${keystoreFile.absolutePath}")
+                }
+                storeFile keystoreFile
+                storePassword System.getenv("DESKDROP_STORE_PASSWORD")
+                keyAlias System.getenv("DESKDROP_KEY_ALIAS")
+                keyPassword System.getenv("DESKDROP_KEY_PASSWORD")
             }
-            
-            def keystoreFile = file(keystorePath)
-            if (!keystoreFile.exists()) {
-                throw new GradleException("Release keystore not found at ${keystoreFile.absolutePath}")
-            }
-            
-            storeFile keystoreFile
-            storePassword System.getenv("DESKDROP_STORE_PASSWORD")
-            keyAlias System.getenv("DESKDROP_KEY_ALIAS")
-            keyPassword System.getenv("DESKDROP_KEY_PASSWORD")
         }
     }
 
@@ -90,6 +87,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
 
     // Google Play Services Code Scanner (no camera permission required)
     implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'

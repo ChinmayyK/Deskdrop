@@ -68,7 +68,7 @@ pub enum FileTransferMessage {
         transfer_id: TransferId,
         chunk_index: u32,
         total_chunks: u32,
-        data: Bytes,
+        data: Vec<u8>,
         #[serde(default)]
         compressed: bool,
     },
@@ -211,7 +211,7 @@ impl OutboundTransfer {
             OutboundSource::Memory(data_vec) => {
                 let start = (idx as usize) * FILE_CHUNK_SIZE;
                 let end = (start + FILE_CHUNK_SIZE).min(data_vec.len());
-                data_vec.slice(start..end)
+                data_vec[start..end].to_vec()
             }
             OutboundSource::FilePath(path, cached_file) => {
                 if cached_file.is_none() {
@@ -256,7 +256,7 @@ impl OutboundTransfer {
                 let end = (start + FILE_CHUNK_SIZE).min(data_vec.len());
                 ChunkInstruction::Memory {
                     chunk_index: idx,
-                    data: data_vec.slice(start..end),
+                    data: data_vec[start..end].to_vec(),
                 }
             }
             OutboundSource::FilePath(path, _) => {
@@ -287,7 +287,7 @@ impl OutboundTransfer {
     pub fn process_chunk_data(
         &mut self,
         chunk_index: u32,
-        data: Bytes,
+        data: Vec<u8>,
         compressed: bool,
     ) -> FileTransferMessage {
         self.next_chunk = chunk_index + 1;
@@ -401,7 +401,7 @@ impl OutboundTransfer {
 pub enum ChunkInstruction {
     Memory {
         chunk_index: u32,
-        data: Bytes,
+        data: Vec<u8>,
     },
     File {
         chunk_index: u32,
@@ -629,6 +629,8 @@ impl InboundTransfer {
         self.received_chunk_count += 1;
         self.last_confirmed_chunk = chunk_index;
 
+        crate::network::return_buffer(data);
+
         Ok(self.progress_snapshot())
     }
 
@@ -679,14 +681,6 @@ impl InboundTransfer {
 
     fn append_chunk(&mut self, data: &[u8]) -> Result<()> {
         if let Some(file) = &mut self.file_handle {
-            // Seek to the correct offset based on chunks received, only if needed
-            let offset = (self.received_chunk_count as u64) * (FILE_CHUNK_SIZE as u64);
-            let current_pos = file.stream_position().unwrap_or(u64::MAX);
-            if current_pos != offset {
-                file.seek(std::io::SeekFrom::Start(offset))
-                    .context("seeking to chunk offset")?;
-            }
-
             file.write_all(data).context("writing chunk to temp file")?;
             self.hasher.update(data);
         } else {
@@ -1346,7 +1340,7 @@ fn chunk_count(size_bytes: u64) -> Result<u32> {
     u32::try_from(chunks).context("file is too large to address with 32-bit chunk indices")
 }
 
-fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64) -> Result<Bytes> {
+fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64) -> Result<Vec<u8>> {
     let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
     let remaining = total_bytes.saturating_sub(offset);
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
@@ -1358,7 +1352,7 @@ fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64
     let mut buf = vec![0u8; to_read];
     file.read_exact(&mut buf)
         .with_context(|| "reading outbound file chunk".to_string())?;
-    Ok(Bytes::from(buf))
+    Ok(buf)
 }
 
 pub fn checksum_file(path: &Path) -> Result<String> {

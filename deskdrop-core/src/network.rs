@@ -24,6 +24,31 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, info};
 use uuid::Uuid;
 
+static BUFFER_POOL: std::sync::OnceLock<std::sync::Mutex<Vec<Vec<u8>>>> = std::sync::OnceLock::new();
+
+pub fn get_buffer(capacity: usize) -> Vec<u8> {
+    let mut pool = BUFFER_POOL.get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64))).lock().unwrap();
+    if let Some(mut buf) = pool.pop() {
+        if buf.capacity() < capacity {
+            buf.reserve(capacity - buf.capacity());
+        }
+        buf.resize(capacity, 0);
+        buf
+    } else {
+        vec![0u8; capacity]
+    }
+}
+
+pub fn return_buffer(mut buf: Vec<u8>) {
+    // Only pool up to 64 buffers, and don't pool huge ones (e.g., > 5MB)
+    if buf.capacity() > 5 * 1024 * 1024 { return; }
+    let mut pool = BUFFER_POOL.get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64))).lock().unwrap();
+    if pool.len() < 64 {
+        buf.clear();
+        pool.push(buf);
+    }
+}
+
 const MAX_FRAME_SIZE: u32 = 40 * 1024 * 1024; // 40 MB limit for safety (to accommodate 32MB images)
 
 /// v3 fix: outbound connections must succeed within this window.
@@ -201,8 +226,10 @@ async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream, max_size: u32) 
 async fn send_encrypted(
     stream: &mut (impl AsyncWriteExt + Unpin),
     session: &mut SessionKey,
-    msg: &AppMessage,
+    msg: &mut AppMessage,
 ) -> Result<()> {
+    let payload = msg.take_raw_payload();
+
     let mut buffer = postcard::to_stdvec(msg).context("serializing AppMessage")?;
     let nonce = session
         .encrypt_in_place(&mut buffer)
@@ -220,6 +247,21 @@ async fn send_encrypted(
     );
 
     stream.write_all_buf(&mut chained).await?;
+
+    if let Some(mut p) = payload {
+        let p_nonce = session.encrypt_in_place(&mut p).context("encrypting payload")?;
+        let p_len = (12 + p.len()) as u32;
+        let p_len_bytes = p_len.to_le_bytes();
+        let mut p_chained = Buf::chain(
+            Buf::chain(
+                std::io::Cursor::new(p_len_bytes),
+                std::io::Cursor::new(p_nonce.to_vec()),
+            ),
+            std::io::Cursor::new(p),
+        );
+        stream.write_all_buf(&mut p_chained).await?;
+    }
+
     stream.flush().await?;
     Ok(())
 }
@@ -230,8 +272,10 @@ async fn send_encrypted(
 async fn send_encrypted_no_flush(
     stream: &mut (impl AsyncWriteExt + Unpin),
     session: &mut SessionKey,
-    msg: &AppMessage,
+    msg: &mut AppMessage,
 ) -> Result<()> {
+    let payload = msg.take_raw_payload();
+
     let mut buffer = postcard::to_stdvec(msg).context("serializing AppMessage")?;
     let nonce = session
         .encrypt_in_place(&mut buffer)
@@ -250,6 +294,21 @@ async fn send_encrypted_no_flush(
     );
 
     stream.write_all_buf(&mut chained).await?;
+
+    if let Some(mut p) = payload {
+        let p_nonce = session.encrypt_in_place(&mut p).context("encrypting payload")?;
+        let p_len = (12 + p.len()) as u32;
+        let p_len_bytes = p_len.to_le_bytes();
+        let mut p_chained = Buf::chain(
+            Buf::chain(
+                std::io::Cursor::new(p_len_bytes),
+                std::io::Cursor::new(p_nonce.to_vec()),
+            ),
+            std::io::Cursor::new(p),
+        );
+        stream.write_all_buf(&mut p_chained).await?;
+    }
+
     Ok(())
 }
 
@@ -269,7 +328,7 @@ async fn recv_encrypted(
         "encrypted frame length invalid: {len}"
     );
 
-    let mut cipher_buffer = vec![0u8; len as usize];
+    let mut cipher_buffer = get_buffer(len as usize);
     tokio::time::timeout(
         Duration::from_secs(30),
         stream.read_exact(&mut cipher_buffer),
@@ -281,7 +340,37 @@ async fn recv_encrypted(
     session
         .decrypt_in_place(&mut cipher_buffer)
         .context("decrypting")?;
-    postcard::from_bytes(&cipher_buffer).context("deserializing AppMessage")
+    let mut msg: AppMessage = postcard::from_bytes(&cipher_buffer).context("deserializing AppMessage")?;
+
+    return_buffer(cipher_buffer); // Return metadata buffer immediately
+
+    if msg.expects_raw_payload() {
+        let mut p_len_buf = [0u8; 4];
+        tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut p_len_buf))
+            .await
+            .context("timeout waiting for payload frame length")?
+            .context("reading payload frame length")?;
+
+        let p_len = u32::from_le_bytes(p_len_buf);
+        anyhow::ensure!(
+            (16..=MAX_FRAME_SIZE).contains(&p_len),
+            "payload frame length invalid: {p_len}"
+        );
+
+        let mut p_cipher_buffer = get_buffer(p_len as usize);
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            stream.read_exact(&mut p_cipher_buffer),
+        )
+        .await
+        .context("timeout waiting for payload frame body")?
+        .context("reading payload frame body")?;
+
+        session.decrypt_in_place(&mut p_cipher_buffer).context("decrypting payload")?;
+        msg.set_raw_payload(p_cipher_buffer);
+    }
+
+    Ok(msg)
 }
 
 // ── Handshake ─────────────────────────────────────────────────────────────────
@@ -352,7 +441,7 @@ pub async fn handshake_initiator(
     };
     let metadata_json = serde_json::to_string(&metadata).ok();
 
-    let hello = AppMessage::Hello {
+    let mut hello = AppMessage::Hello {
         device_id: my_device_id,
         device_name: my_device_name.to_string(),
         identity_pubkey: my_identity_key
@@ -363,7 +452,7 @@ pub async fn handshake_initiator(
         metadata_json,
     };
 
-    send_encrypted(stream, &mut session, &hello)
+    send_encrypted(stream, &mut session, &mut hello)
         .await
         .context("sending encrypted Hello")?;
 
@@ -509,7 +598,7 @@ where
         .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ecdh.ecdh_pubkey, &session_salt);
 
-    let ack = AppMessage::HelloAck {
+    let mut ack = AppMessage::HelloAck {
         device_id: my_device_id,
         device_name: name_to_send,
         identity_pubkey: my_identity_key
@@ -522,7 +611,7 @@ where
         metadata_json: None,
     };
 
-    send_encrypted(stream, &mut session, &ack)
+    send_encrypted(stream, &mut session, &mut ack)
         .await
         .context("sending HelloAck")?;
 
@@ -580,11 +669,11 @@ impl PeerSession {
         )
     }
 
-    pub async fn send(&mut self, msg: &AppMessage) -> Result<()> {
+    pub async fn send(&mut self, msg: &mut AppMessage) -> Result<()> {
         send_encrypted(&mut self.stream, &mut self.session, msg).await
     }
 
-    pub async fn send_no_flush(&mut self, msg: &AppMessage) -> Result<()> {
+    pub async fn send_no_flush(&mut self, msg: &mut AppMessage) -> Result<()> {
         send_encrypted_no_flush(&mut self.stream, &mut self.session, msg).await
     }
 
@@ -598,11 +687,11 @@ impl PeerSession {
 }
 
 impl PeerSessionTx {
-    pub async fn send(&mut self, msg: &AppMessage) -> Result<()> {
+    pub async fn send(&mut self, msg: &mut AppMessage) -> Result<()> {
         send_encrypted(&mut self.stream, &mut self.session, msg).await
     }
 
-    pub async fn send_no_flush(&mut self, msg: &AppMessage) -> Result<()> {
+    pub async fn send_no_flush(&mut self, msg: &mut AppMessage) -> Result<()> {
         send_encrypted_no_flush(&mut self.stream, &mut self.session, msg).await
     }
 

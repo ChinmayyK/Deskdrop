@@ -21,23 +21,9 @@ final class FileBannerWindowManager: NSObject {
     }
 
     func show(title: String, body: String) {
-        layoutPanel()
-        hostingView.rootView = FileBannerContainerView(message: FileBannerMessage(title: title, body: body))
-        panel.orderFrontRegardless()
-        
-        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .default)
-        if let sound = NSSound(named: "Glass") {
-            sound.volume = 0.5
-            sound.play()
-        }
-
-        dismissTimer?.invalidate()
-        dismissTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.hide()
-            }
-        }
+        // Disabled per user request
     }
+
 
     func hide() {
         hostingView.rootView = FileBannerContainerView(message: nil)

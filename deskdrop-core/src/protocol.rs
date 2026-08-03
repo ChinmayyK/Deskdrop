@@ -4,7 +4,6 @@
 //! After the handshake, every frame is AEAD-encrypted with a
 //! per-session AES-256-GCM key derived via X25519 ECDH + HKDF.
 
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -17,11 +16,13 @@ pub enum ClipboardContent {
     Text(String),
     Image {
         mime: String,
+        #[serde(skip)]
         data: Vec<u8>,
     },
     /// File payload — delivered as clipboard and also saved to Downloads/Deskdrop.
     File {
         name: String,
+        #[serde(skip)]
         data: Vec<u8>,
     },
 }
@@ -353,7 +354,8 @@ pub enum AppMessage {
         transfer_id: [u8; 16],
         chunk_index: u32,
         total_chunks: u32,
-        data: Bytes,
+        #[serde(skip)]
+        data: Vec<u8>,
         #[serde(default)]
         compressed: bool,
     },
@@ -402,6 +404,7 @@ pub enum AppMessage {
     SpeedTestData {
         test_id: Uuid,
         seq: u32,
+        #[serde(skip)]
         data: Vec<u8>,
     },
     /// Periodic stats sent from receiver back to the sender.
@@ -536,6 +539,7 @@ pub enum AppMessage {
     RemoteThumbnailResponse {
         request_id: Uuid,
         file_id: u64,
+        #[serde(skip)]
         data: Vec<u8>,
         error: Option<String>,
     },
@@ -552,6 +556,59 @@ pub enum AppMessage {
         new_name: Option<String>,
     },
     Bye,
+}
+
+impl AppMessage {
+    pub fn take_raw_payload(&mut self) -> Option<Vec<u8>> {
+        match self {
+            AppMessage::FileChunk { data, .. } => Some(std::mem::take(data)),
+            AppMessage::ClipboardPush { content, .. } => {
+                if let Some(c) = std::sync::Arc::get_mut(content) {
+                    match c {
+                        ClipboardContent::Image { data, .. } => Some(std::mem::take(data)),
+                        ClipboardContent::File { data, .. } => Some(std::mem::take(data)),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            AppMessage::SpeedTestData { data, .. } => Some(std::mem::take(data)),
+            AppMessage::RemoteThumbnailResponse { data, .. } => Some(std::mem::take(data)),
+            _ => None,
+        }
+    }
+
+    pub fn expects_raw_payload(&self) -> bool {
+        match self {
+            AppMessage::FileChunk { .. } => true,
+            AppMessage::ClipboardPush { content, .. } => matches!(
+                **content,
+                ClipboardContent::Image { .. } | ClipboardContent::File { .. }
+            ),
+            AppMessage::SpeedTestData { .. } => true,
+            AppMessage::RemoteThumbnailResponse { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn set_raw_payload(&mut self, payload: Vec<u8>) {
+        match self {
+            AppMessage::FileChunk { data, .. } => *data = payload,
+            AppMessage::ClipboardPush { content, .. } => {
+                if let Some(c) = std::sync::Arc::get_mut(content) {
+                    match c {
+                        ClipboardContent::Image { data, .. } => *data = payload,
+                        ClipboardContent::File { data, .. } => *data = payload,
+                        _ => {}
+                    }
+                }
+            }
+            AppMessage::SpeedTestData { data, .. } => *data = payload,
+            AppMessage::RemoteThumbnailResponse { data, .. } => *data = payload,
+            _ => {}
+        }
+    }
 }
 
 // ── mDNS / defaults ──────────────────────────────────────────────────────────

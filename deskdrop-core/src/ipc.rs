@@ -896,7 +896,10 @@ pub async fn handle_ipc_request(
             let frame = if let Some(uid) = peer {
                 eng.get_latest_camera_frame(uid)
             } else {
-                eng.camera_frames().await.values().next().cloned()
+                {
+                    let frames = eng.camera_frames().await;
+                    let x = frames.iter().next().map(|r| r.value().clone()); x
+                }
             };
 
             if let Some(f) = frame {

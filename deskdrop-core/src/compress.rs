@@ -182,6 +182,16 @@ fn compress_blocking(
     {
         use image::ImageFormat;
 
+        let reader = image::io::Reader::new(std::io::Cursor::new(data))
+            .with_guessed_format()?;
+        let dimensions = reader.into_dimensions()?;
+        
+        // Prevent OOM: if decoded RGBA (4 bytes per pixel) exceeds ~50MB, skip compression.
+        let max_pixels = 50 * 1024 * 1024 / 4; 
+        if (dimensions.0 as usize).saturating_mul(dimensions.1 as usize) > max_pixels {
+            anyhow::bail!("image too large for safe in-memory compression ({}x{})", dimensions.0, dimensions.1);
+        }
+
         let img = image::load_from_memory(data)?;
         let mut out = Vec::new();
         let source_mime = mime.to_ascii_lowercase();

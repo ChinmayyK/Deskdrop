@@ -134,7 +134,7 @@ private fun StepOneFindDevice(isDark: Boolean, peers: List<PeerSnapshot>, select
                     Text("Searching for nearby devices...", color = CRTheme.textMedium(isDark)) 
                 }
             } else {
-                items(peers.size) { idx ->
+                items(peers.size, key = { peers[it].id }) { idx ->
                     val peer = peers[idx]
                     val isSelected = selected?.id == peer.id
                     Row(
