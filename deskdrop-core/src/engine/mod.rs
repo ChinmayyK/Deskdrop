@@ -3836,7 +3836,7 @@ fn register_session(
                 chunk_index: u32,
                 offset: u64,
                 padding: usize,
-                data: Vec<u8>,
+                data: bytes::Bytes,
             },
             Complete {
                 transfer_id: [u8; 16],
@@ -3933,6 +3933,19 @@ fn register_session(
                         }
                     }
                     DiskTaskMsg::Complete { transfer_id, sha256_checksum } => {
+                        let file_handle = {
+                            let mut mgr = dw_shared.file_transfers.lock().await;
+                            mgr.get_inbound_mut(&transfer_id).and_then(|t| t.file_handle.take())
+                        };
+
+                        if let Some(mut file) = file_handle {
+                            let _ = tokio::task::spawn_blocking(move || {
+                                use std::io::Write;
+                                let _ = file.flush();
+                                let _ = file.get_ref().sync_all();
+                            }).await;
+                        }
+
                         let result = {
                             let mut mgr = dw_shared.file_transfers.lock().await;
                             if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
@@ -4475,7 +4488,7 @@ fn register_session(
 
                         let data = if compressed {
                             match lz4_flex::decompress_size_prepended(&payload) {
-                                Ok(d) => d,
+                                Ok(d) => d.into(),
                                 Err(e) => {
                                     tracing::error!("Failed to decompress file chunk: {}", e);
                                     let mut mgr = shared.file_transfers.lock().await;

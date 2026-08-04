@@ -206,7 +206,7 @@ impl Default for Settings {
             blocked_device_ids: Vec::new(),
             block_sensitive_text: true,
             ignore_patterns: Vec::new(),
-            clipboard_poll_ms: 100,
+            clipboard_poll_ms: 500,
             max_pushes_per_sec: 10.0,
             rate_limit_burst: 3.0,
             smart_sync_duplicate_window_ms: 1_500,

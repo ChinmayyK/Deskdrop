@@ -637,7 +637,7 @@ pub struct PeerSessionTx {
 }
 
 pub struct PeerSessionRx {
-    pub stream: tokio::net::tcp::OwnedReadHalf,
+    pub stream: tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
     pub session: SessionKey,
 }
 
@@ -650,7 +650,7 @@ impl PeerSession {
                 session: self.session.clone(),
             },
             PeerSessionRx {
-                stream: rx,
+                stream: tokio::io::BufReader::new(rx),
                 session: self.session,
             },
         )

@@ -45,7 +45,7 @@ pub(crate) async fn read_outbound_chunks(
 
     type FileChunkResult = anyhow::Result<(
         Option<(Option<std::fs::File>, sha2::Sha256)>,
-        Vec<(u32, Vec<u8>, bool)>,
+        Vec<(u32, bytes::Bytes, bool)>,
     )>;
 
     // Determine if we should try LZ4 based on file extension.
@@ -84,12 +84,12 @@ pub(crate) async fn read_outbound_chunks(
                     if do_compress {
                         let compressed = lz4_flex::compress_prepend_size(&data);
                         if compressed.len() < data.len() {
-                            chunk_data.push((chunk_index, compressed, true));
+                            chunk_data.push((chunk_index, compressed.into(), true));
                         } else {
-                            chunk_data.push((chunk_index, data.to_vec(), false));
+                            chunk_data.push((chunk_index, data.clone(), false));
                         }
                     } else {
-                        chunk_data.push((chunk_index, data.to_vec(), false));
+                        chunk_data.push((chunk_index, data.clone(), false));
                     }
                 }
                 crate::file_transfer::ChunkInstruction::File {
@@ -142,14 +142,14 @@ pub(crate) async fn read_outbound_chunks(
                             if compressed.len() < buf.len() {
                                 chunk_data.push((
                                     chunk_index,
-                                    compressed,
+                                    compressed.into(),
                                     true,
                                 ));
                             } else {
-                                chunk_data.push((chunk_index, buf, false));
+                                chunk_data.push((chunk_index, buf.into(), false));
                             }
                         } else {
-                            chunk_data.push((chunk_index, buf, false));
+                            chunk_data.push((chunk_index, buf.into(), false));
                         }
                     }
                 }

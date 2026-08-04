@@ -68,7 +68,7 @@ pub enum FileTransferMessage {
         transfer_id: TransferId,
         chunk_index: u32,
         total_chunks: u32,
-        data: Vec<u8>,
+        data: bytes::Bytes,
         #[serde(default)]
         compressed: bool,
     },
@@ -208,10 +208,10 @@ impl OutboundTransfer {
         }
         let idx = self.next_chunk;
         let data = match &mut self.source {
-            OutboundSource::Memory(data_vec) => {
+            OutboundSource::Memory(data_bytes) => {
                 let start = (idx as usize) * FILE_CHUNK_SIZE;
-                let end = (start + FILE_CHUNK_SIZE).min(data_vec.len());
-                data_vec[start..end].to_vec()
+                let end = (start + FILE_CHUNK_SIZE).min(data_bytes.len());
+                data_bytes.slice(start..end)
             }
             OutboundSource::FilePath(path, cached_file) => {
                 if cached_file.is_none() {
@@ -251,12 +251,12 @@ impl OutboundTransfer {
         }
         let idx = self.next_chunk;
         let instr = match &self.source {
-            OutboundSource::Memory(data_vec) => {
+            OutboundSource::Memory(data_bytes) => {
                 let start = (idx as usize) * FILE_CHUNK_SIZE;
-                let end = (start + FILE_CHUNK_SIZE).min(data_vec.len());
+                let end = (start + FILE_CHUNK_SIZE).min(data_bytes.len());
                 ChunkInstruction::Memory {
                     chunk_index: idx,
-                    data: data_vec[start..end].to_vec(),
+                    data: data_bytes.slice(start..end),
                 }
             }
             OutboundSource::FilePath(path, _) => {
@@ -287,7 +287,7 @@ impl OutboundTransfer {
     pub fn process_chunk_data(
         &mut self,
         chunk_index: u32,
-        data: Vec<u8>,
+        data: bytes::Bytes,
         compressed: bool,
     ) -> FileTransferMessage {
         self.next_chunk = chunk_index + 1;
@@ -401,7 +401,7 @@ impl OutboundTransfer {
 pub enum ChunkInstruction {
     Memory {
         chunk_index: u32,
-        data: Vec<u8>,
+        data: bytes::Bytes,
     },
     File {
         chunk_index: u32,
@@ -1340,7 +1340,7 @@ fn chunk_count(size_bytes: u64) -> Result<u32> {
     u32::try_from(chunks).context("file is too large to address with 32-bit chunk indices")
 }
 
-fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64) -> Result<Vec<u8>> {
+fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64) -> Result<bytes::Bytes> {
     let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
     let remaining = total_bytes.saturating_sub(offset);
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
@@ -1352,7 +1352,7 @@ fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64
     let mut buf = vec![0u8; to_read];
     file.read_exact(&mut buf)
         .with_context(|| "reading outbound file chunk".to_string())?;
-    Ok(buf)
+    Ok(buf.into())
 }
 
 pub fn checksum_file(path: &Path) -> Result<String> {
