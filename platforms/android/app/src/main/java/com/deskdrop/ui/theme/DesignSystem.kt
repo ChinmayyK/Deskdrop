@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import org.intellij.lang.annotations.Language
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
+import androidx.compose.material3.ripple
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -83,30 +84,30 @@ object CRTheme {
 
 object CRTypography {
     val h1 = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 28.sp,
         letterSpacing = (-0.5).sp
     )
     val h2 = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 18.sp,
         letterSpacing = (-0.3).sp
     )
     val bodyMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp
     )
     val label = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         letterSpacing = 0.2.sp
     )
     val caption = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         letterSpacing = 0.3.sp,
@@ -137,7 +138,7 @@ fun Modifier.crPressScale(
     if (onClick != null) {
         mod = mod.clickable(
             interactionSource = interactionSource,
-            indication = null,
+            indication = ripple(),
             onClick = onClick
         )
     }

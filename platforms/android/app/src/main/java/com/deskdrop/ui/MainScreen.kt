@@ -159,7 +159,7 @@ fun MainScreen(
 
     val currentTab = tabs[pagerState.targetPage.coerceIn(0, tabs.size - 1)]
 
-    val hasConnectedDevices = peers.any { it.isConnected }
+    val hasConnectedDevices = remember(peers) { peers.any { it.isConnected } }
 
     CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices) {
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -401,14 +401,16 @@ fun HomeTab(
                 contentPadding = PaddingValues(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(activeTransfers) { t ->
-                    ActiveTransferCard(
-                        isDark = isDark,
-                        transfer = t,
-                        onPause = { onActionPauseTransfer(t.id) },
-                        onResume = { onActionResumeTransfer(t.id) },
-                        onCancel = { onActionCancelTransfer(t.id) }
-                    )
+                items(activeTransfers, key = { it.id }) { t ->
+                    Box(modifier = Modifier.animateItem()) {
+                        ActiveTransferCard(
+                            isDark = isDark,
+                            transfer = t,
+                            onPause = { onActionPauseTransfer(t.id) },
+                            onResume = { onActionResumeTransfer(t.id) },
+                            onCancel = { onActionCancelTransfer(t.id) }
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(32.dp))
@@ -439,6 +441,7 @@ fun HomeTab(
                             .crPressScale(0.95f)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { showQrDialog = true }
+                            .androidx.compose.material3.minimumInteractiveComponentSize()
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -455,20 +458,23 @@ fun HomeTab(
                                 Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
                                     val ip = getLocalIpAddress()
                                     val uri = "deskdrop://$ip:47823"
-                                    val bitmap = remember(uri) {
-                                        try {
-                                            val writer = com.google.zxing.qrcode.QRCodeWriter()
-                                            val bitMatrix = writer.encode(uri, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512)
-                                            val width = bitMatrix.width
-                                            val height = bitMatrix.height
-                                            val bmp = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.RGB_565)
-                                            for (x in 0 until width) {
-                                                for (y in 0 until height) {
-                                                    bmp.setPixel(x, y, if (bitMatrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                                    var bitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+                                    LaunchedEffect(uri) {
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                                            try {
+                                                val writer = com.google.zxing.qrcode.QRCodeWriter()
+                                                val bitMatrix = writer.encode(uri, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512)
+                                                val width = bitMatrix.width
+                                                val height = bitMatrix.height
+                                                val bmp = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.RGB_565)
+                                                for (x in 0 until width) {
+                                                    for (y in 0 until height) {
+                                                        bmp.setPixel(x, y, if (bitMatrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                                                    }
                                                 }
-                                            }
-                                            bmp
-                                        } catch (e: Exception) { null }
+                                                bitmap = bmp
+                                            } catch (e: Exception) { bitmap = null }
+                                        }
                                     }
                                     if (bitmap != null) {
                                         androidx.compose.foundation.Image(
@@ -495,6 +501,7 @@ fun HomeTab(
                             .crPressScale(0.95f)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { onActionPairMagicLink() }
+                            .androidx.compose.material3.minimumInteractiveComponentSize()
                             .background(CRTheme.brandElectric.copy(alpha = 0.15f))
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -512,6 +519,7 @@ fun HomeTab(
                             .crPressScale(0.95f)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { onManualIp() }
+                            .androidx.compose.material3.minimumInteractiveComponentSize()
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -546,7 +554,7 @@ fun HomeTab(
                 contentPadding = PaddingValues(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(peers) { peer ->
+                items(peers, key = { it.id }) { peer ->
                     DeviceCard(
                         isDark = isDark, 
                         peer = peer,
@@ -555,7 +563,7 @@ fun HomeTab(
                         onStartSpeedTest = { onActionStartSpeedTest(peer.id) },
                         onRespond = { onRespondPairing(peer, it) },
                         speedTestProgress = activeSpeedTests.find { it.peerId == peer.id },
-                        modifier = if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp)
+                        modifier = Modifier.animateItem().then(if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp))
                     )
                 }
             }
