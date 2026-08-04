@@ -153,7 +153,7 @@ private struct ToastOverlayPanelView: View {
         .padding(.top, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(10)
-        .animation(.spring(response: 0.45, dampingFraction: 0.65, blendDuration: 0.1), value: store.toasts.map(\.id.uuidString) + store.batchedTransfers.map(\.id))
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: store.toasts.map(\.id.uuidString) + store.batchedTransfers.map(\.id))
     }
 }
 
@@ -221,7 +221,7 @@ private struct DynamicIslandTransferCard: View {
                             Capsule()
                                 .fill(progressColor)
                                 .frame(width: max(0, geo.size.width * CGFloat(transfer.exactRatio)), height: 4)
-                                .animation(.linear(duration: 0.15), value: transfer.exactRatio)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: transfer.exactRatio)
                         }
                     }
                     .frame(height: 4)
@@ -343,7 +343,7 @@ private struct GroupedDynamicIslandTransferCard: View {
                         Capsule()
                             .fill(CRTheme.brandElectric)
                             .frame(width: max(0, geo.size.width * CGFloat(exactRatio)), height: 4)
-                            .animation(.linear(duration: 0.15), value: exactRatio)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: exactRatio)
                     }
                 }
                 .frame(height: 4)

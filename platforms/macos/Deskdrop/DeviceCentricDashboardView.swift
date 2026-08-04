@@ -514,8 +514,9 @@ struct ModernDeviceCardButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+        .scaleEffect(isHovered ? 1.04 : 1.0)
         .onHover { isHovered = $0 }
-        .animation(.crFast, value: isHovered)
+        .animation(.spring(response: 0.2, dampingFraction: 0.7), value: isHovered)
     }
 }
 

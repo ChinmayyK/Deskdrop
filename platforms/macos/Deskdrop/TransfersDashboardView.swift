@@ -289,7 +289,7 @@ struct ActiveTransferCard: View {
                     HStack {
                         if #available(macOS 13.0, *) {
                             Text(percentText)
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .font(.system(size: 11, weight: .medium).monospacedDigit())
                                 .foregroundStyle(CRTheme.ink)
                                 .contentTransition(.numericText())
                                 .animation(.linear(duration: 0.15), value: percentText)
@@ -297,19 +297,19 @@ struct ActiveTransferCard: View {
                             Spacer()
                             
                             Text(sizeText)
-                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .font(.system(size: 11, weight: .regular).monospacedDigit())
                                 .foregroundStyle(CRTheme.inkSoft)
                                 .contentTransition(.numericText())
                                 .animation(.linear(duration: 0.15), value: sizeText)
                         } else {
                             Text(percentText)
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .font(.system(size: 11, weight: .medium).monospacedDigit())
                                 .foregroundStyle(CRTheme.ink)
                             
                             Spacer()
                             
                             Text(sizeText)
-                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .font(.system(size: 11, weight: .regular).monospacedDigit())
                                 .foregroundStyle(CRTheme.inkSoft)
                         }
                     }
@@ -324,7 +324,7 @@ struct ActiveTransferCard: View {
                             RoundedRectangle(cornerRadius: 5)
                                 .fill(progressGradient)
                                 .frame(width: max(0, geo.size.width * CGFloat(transfer.exactRatio)), height: 10)
-                                .animation(.linear(duration: 0.15), value: transfer.exactRatio)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: transfer.exactRatio)
                         }
                     }
                     .frame(height: 10)

@@ -374,6 +374,11 @@ private struct StepTwoVerify: View {
                         Text("Connection timed out.")
                             .foregroundStyle(CRTheme.ink)
                         
+                        Text("Make sure both devices are on the same Wi-Fi network and Deskdrop is running.")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .multilineTextAlignment(.center)
+                        
                         Button("Try Again") { onCancel() }
                             .buttonStyle(CRSecondaryButtonStyle())
                     }
@@ -420,12 +425,14 @@ private struct RadarPulseView: View {
                 .frame(width: 100, height: 100)
                 .scaleEffect(isPulsing ? 2.0 : 0.5)
                 .opacity(isPulsing ? 0 : 1)
+                .animation(.spring(response: 2.0, dampingFraction: 0.8).repeatForever(autoreverses: false).delay(0.4), value: isPulsing)
             
             Circle()
                 .fill(CRTheme.brandElectric.opacity(0.15))
                 .frame(width: 70, height: 70)
                 .scaleEffect(isPulsing ? 1.6 : 0.8)
                 .opacity(isPulsing ? 0 : 1)
+                .animation(.spring(response: 2.0, dampingFraction: 0.8).repeatForever(autoreverses: false).delay(0.2), value: isPulsing)
             
             ZStack {
                 Circle().fill(CRTheme.surfaceElevated).frame(width: 64, height: 64)
@@ -444,9 +451,7 @@ private struct RadarPulseView: View {
             }
         }
         .onAppear {
-            withAnimation(.easeOut(duration: 2.0).repeatForever(autoreverses: false)) {
-                isPulsing = true
-            }
+            isPulsing = true
         }
     }
 }
