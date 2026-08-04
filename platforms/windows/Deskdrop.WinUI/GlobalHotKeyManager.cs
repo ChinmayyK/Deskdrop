@@ -101,7 +101,7 @@ namespace Deskdrop.WinUI
                         action?.Invoke();
                     }
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                catch (Exception ex) { App.HandleError(ex); }
             }
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }

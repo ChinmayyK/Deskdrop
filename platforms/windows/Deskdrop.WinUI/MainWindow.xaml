@@ -7,7 +7,11 @@
     mc:Ignorable="d"
     Title="Deskdrop Control Center">
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Window.SystemBackdrop>
+        <MicaBackdrop/>
+    </Window.SystemBackdrop>
+
+    <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -39,7 +43,7 @@
                     </StackPanel>
                     
                     <!-- Open Dashboard Button -->
-                    <Button Grid.Column="2" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Open Full Dashboard" Click="BtnOpenDashboard_Click">
+                    <Button Grid.Column="2" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Open Full Dashboard" AutomationProperties.Name="Open Full Dashboard" Click="BtnOpenDashboard_Click">
                         <FontIcon Glyph="&#xE713;" FontSize="18"/>
                     </Button>
                 </Grid>

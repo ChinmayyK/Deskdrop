@@ -425,7 +425,7 @@ namespace Deskdrop.WinUI
                     TaskbarProgress.SetState(hwnd, TaskbarProgress.TaskbarStates.NoProgress);
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
     }
 
@@ -577,12 +577,7 @@ namespace Deskdrop.WinUI
 
         private void StartPolling()
         {
-            _pollTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            };
-            _pollTimer.Tick += (s, e) => UpdateStateFromDaemon();
-            _pollTimer.Start();
+            UpdateStateFromDaemon();
         }
 
 
@@ -981,7 +976,7 @@ namespace Deskdrop.WinUI
                     return JsonSerializer.Deserialize<System.Collections.Generic.List<T>>(wrapped.GetRawText(), JsonOptions);
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
             return null;
         }
 
@@ -1053,7 +1048,7 @@ namespace Deskdrop.WinUI
                     }
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
     }
 

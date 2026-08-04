@@ -57,8 +57,12 @@ namespace Deskdrop.WinUI
             DropGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(128, 0, 0, 0)); // Revert
             try
             {
-                var peers = System.Linq.Enumerable.ToList(DeskdropStore.Shared.Peers);
-                var target = peers.Count > 0 ? peers[0].device_id : "";
+                var target = DeskdropStore.Shared.SelectedPeer?.device_id;
+                if (string.IsNullOrEmpty(target))
+                {
+                    var peers = System.Linq.Enumerable.ToList(DeskdropStore.Shared.Peers);
+                    target = peers.Count > 0 ? peers[0].device_id : "";
+                }
                 if (string.IsNullOrEmpty(target)) return;
 
                 if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
@@ -75,7 +79,7 @@ namespace Deskdrop.WinUI
                     System.Threading.Tasks.Task.Run(() => DaemonClient.PushTextTo(text, target));
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
     }
 }

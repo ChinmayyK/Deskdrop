@@ -33,27 +33,29 @@ public partial class App : Application
     private static IntPtr _engineHandle = IntPtr.Zero;
     public static IntPtr EngineHandle => _engineHandle;
     public static Deskdrop.WinUI.Services.ClipboardManager? Clipboard { get; private set; }
+    public static System.Threading.Tasks.TaskCompletionSource<Deskdrop.WinUI.Services.ClipboardManager> ClipboardReady { get; } = new();
 
     public App()
     {
         MainDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
+        System.IO.Directory.CreateDirectory(dir);
         
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App constructor started\n");
 
         this.UnhandledException += (s, e) =>
         {
             e.Handled = true;
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] WinUI UnhandledException: {e.Exception?.Message}\n{e.Exception?.StackTrace}\n"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] WinUI UnhandledException: {e.Exception?.Message}\n{e.Exception?.StackTrace}\n"); } catch (Exception ex) { App.HandleError(ex); }
         };
         AppDomain.CurrentDomain.UnhandledException += (s, e) =>
         {
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] AppDomain UnhandledException: {(e.ExceptionObject as Exception)?.Message}\n"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] AppDomain UnhandledException: {(e.ExceptionObject as Exception)?.Message}\n"); } catch (Exception ex) { App.HandleError(ex); }
         };
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) =>
         {
             e.SetObserved();
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] TaskScheduler UnobservedTaskException: {e.Exception?.Message}\n"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] TaskScheduler UnobservedTaskException: {e.Exception?.Message}\n"); } catch (Exception ex) { App.HandleError(ex); }
         };
 
         InitializeComponent();
@@ -63,7 +65,7 @@ public partial class App : Application
         ShowMainWindowCommand = new RelayCommand(() =>
         {
             var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ShowMainWindowCommand invoked\n"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ShowMainWindowCommand invoked\n"); } catch (Exception ex) { App.HandleError(ex); }
 
             var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             queue?.TryEnqueue(() =>
@@ -96,7 +98,7 @@ public partial class App : Application
                         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
                         _window.Activate();
                     }
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    catch (Exception ex) { App.HandleError(ex); }
                 }
                 catch (Exception ex)
                 {
@@ -106,7 +108,7 @@ public partial class App : Application
                         _window = MainWindow;
                         MainWindow.Activate();
                     }
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    catch (Exception ex) { App.HandleError(ex); }
                 }
             });
         });
@@ -117,13 +119,13 @@ public partial class App : Application
             var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             queue?.TryEnqueue(() =>
             {
-                try { TrayIcon?.Dispose(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                try { TrayIcon?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 if (_engineHandle != IntPtr.Zero)
                 {
-                    try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { App.HandleError(ex); }
                 }
-                try { GlobalHotKeyManager.Shared.Dispose(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
-                try { Application.Current.Exit(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                try { GlobalHotKeyManager.Shared.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
+                try { Application.Current.Exit(); } catch (Exception ex) { App.HandleError(ex); }
                 Environment.Exit(0);
             });
         });
@@ -171,6 +173,7 @@ public partial class App : Application
 
 
             Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
+            ClipboardReady.TrySetResult(Clipboard);
 
             MainDispatcherQueue ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
@@ -181,6 +184,22 @@ public partial class App : Application
                 IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
                 LeftClickCommand = ShowMainWindowCommand,
                 DoubleClickCommand = ShowMainWindowCommand
+            };
+
+            DeskdropStore.Shared.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(DeskdropStore.Peers))
+                {
+                    var count = DeskdropStore.Shared.Peers.Count;
+                    var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                    queue?.TryEnqueue(() =>
+                    {
+                        if (TrayIcon != null)
+                        {
+                            TrayIcon.ToolTipText = $"Deskdrop — {count} device(s) connected";
+                        }
+                    });
+                }
             };
 
             var menu = new MenuFlyout();
@@ -207,13 +226,13 @@ public partial class App : Application
             {
                 GlobalHotKeyManager.Shared.Register(true, true, false, false, 0x56, () => {
                     var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                    queue?.TryEnqueue(() => { try { new QuickAccessWindow().Activate(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); } });
+                    queue?.TryEnqueue(() => { try { new QuickAccessWindow().Activate(); } catch (Exception ex) { App.HandleError(ex); } });
                 });
                 GlobalHotKeyManager.Shared.Register(true, false, false, false, 0x4B, () => {
                     ShowMainWindowCommand?.Execute(null);
                 });
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
         catch (Exception ex)
         {
@@ -255,10 +274,10 @@ public partial class App : Application
                         
                         System.Threading.Tasks.Task.Run(async () =>
                         {
-                            while (Clipboard == null) await System.Threading.Tasks.Task.Delay(200);
+                            var clipboard = await ClipboardReady.Task;
                             try
                             {
-                                Clipboard.PushFile(path);
+                                clipboard.PushFile(path);
                             }
                             catch (Exception e)
                             {
@@ -269,6 +288,16 @@ public partial class App : Application
                 }
             }
         }
+    }
+
+    public static void HandleError(Exception ex, [System.Runtime.CompilerServices.CallerMemberName] string callerName = "")
+    {
+        try
+        {
+            var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] Swallowed Exception in {callerName}: {ex.Message}\n{ex.StackTrace}\n");
+        }
+        catch { } // Failsafe
     }
 }
 

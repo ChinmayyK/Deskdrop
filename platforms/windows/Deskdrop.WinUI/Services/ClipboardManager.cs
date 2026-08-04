@@ -34,6 +34,8 @@ namespace Deskdrop.WinUI.Services
             _pollTimer.Start();
         }
 
+
+
         private async void Clipboard_ContentChanged(object? sender, object e)
         {
             await CheckClipboardAsync();
@@ -47,10 +49,12 @@ namespace Deskdrop.WinUI.Services
         private void DrainEvents()
         {
             if (App.EngineHandle == IntPtr.Zero) return;
+            bool processedAny = false;
             while (true)
             {
                 var ev = NativeCore.deskdrop_poll_event(App.EngineHandle);
                 if (ev == IntPtr.Zero) break;
+                processedAny = true;
                 try
                 {
                     int kind = NativeCore.deskdrop_event_type(ev);
@@ -68,7 +72,7 @@ namespace Deskdrop.WinUI.Services
                                         var package = new DataPackage();
                                         package.SetText(text);
                                         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-                                    } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                                    } catch (Exception ex) { App.HandleError(ex); }
                                     AddHistoryItem(text, from, "📝", text);
                                 });
                             }
@@ -96,7 +100,7 @@ namespace Deskdrop.WinUI.Services
                         {
                             var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                try { new IncomingCallBannerWindow().Activate(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                                try { new IncomingCallBannerWindow().Activate(); } catch (Exception ex) { App.HandleError(ex); }
                             });
                             break;
                         }
@@ -106,6 +110,10 @@ namespace Deskdrop.WinUI.Services
                 {
                     NativeCore.deskdrop_free_event(ev);
                 }
+            }
+            if (processedAny)
+            {
+                DeskdropStore.Shared.UpdateStateFromDaemon();
             }
         }
 
@@ -124,7 +132,7 @@ namespace Deskdrop.WinUI.Services
             };
             History.Insert(0, item);
             if (History.Count > 100) History.RemoveAt(History.Count - 1);
-            try { DeskdropStore.Shared.History.Insert(0, item); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            try { DeskdropStore.Shared.History.Insert(0, item); } catch (Exception ex) { App.HandleError(ex); }
         }
 
         private async Task CheckClipboardAsync()
@@ -173,12 +181,12 @@ namespace Deskdrop.WinUI.Services
                                     DaemonClient.SendFilePath(file.Path, file.Name, "application/octet-stream");
                                 }
                                 AddHistoryItem(file.Name, "local", "📎", file.Path);
-                            } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                            } catch (Exception ex) { App.HandleError(ex); }
                         }
                     }
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         public void HandleIncomingData(System.Text.Json.JsonElement json)
@@ -215,7 +223,7 @@ namespace Deskdrop.WinUI.Services
                         DaemonClient.SendFilePath(path, name, "application/octet-stream", targetDevice);
                     }
                     _dispatcher.TryEnqueue(() => AddHistoryItem(name, "local", "📎", path));
-                } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                } catch (Exception ex) { App.HandleError(ex); }
             }
         }
 

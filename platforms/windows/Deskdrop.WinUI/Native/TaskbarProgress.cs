@@ -47,7 +47,7 @@ namespace Deskdrop.WinUI
                 }
                 _taskbarInstance.SetProgressState(hwnd, state);
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         public static void SetValue(IntPtr hwnd, double progress, double total)
@@ -61,7 +61,7 @@ namespace Deskdrop.WinUI
                 }
                 _taskbarInstance.SetProgressValue(hwnd, (ulong)progress, (ulong)total);
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
     }
 }

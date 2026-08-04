@@ -37,18 +37,18 @@ namespace Deskdrop.WinUI
         {
             if (App.MainDispatcherQueue?.HasThreadAccess == true)
             {
-                try { action(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                try { action(); } catch (Exception ex) { App.HandleError(ex); }
             }
             else
             {
                 var queue = App.MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                queue?.TryEnqueue(() => { try { action(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); } });
+                queue?.TryEnqueue(() => { try { action(); } catch (Exception ex) { App.HandleError(ex); } });
             }
         }
         public static void InvokeAsync(Action action)
         {
             var queue = App.MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            queue?.TryEnqueue(() => { try { action(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); } });
+            queue?.TryEnqueue(() => { try { action(); } catch (Exception ex) { App.HandleError(ex); } });
         }
     }
 }

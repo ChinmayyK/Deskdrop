@@ -65,7 +65,7 @@ namespace Deskdrop.WinUI
                         DeviceTargetsList.ItemsSource = DeskdropStore.Shared.Peers;
                     }
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                catch (Exception ex) { App.HandleError(ex); }
             });
         }
 
@@ -103,17 +103,17 @@ namespace Deskdrop.WinUI
                 var snapshot = DeskdropStore.Shared.History.ToList();
                 if (string.IsNullOrWhiteSpace(query))
                 {
-                    TimelineList.ItemsSource = snapshot;
+                    TimelineList.ItemsSource = DeskdropStore.Shared.History;
                 }
                 else
                 {
-                    TimelineList.ItemsSource = snapshot
+                    var results = snapshot
                         .Where(h => (h.display_text?.ToLowerInvariant().Contains(query) == true) || 
-                                    (h.path?.ToLowerInvariant().Contains(query) == true))
-                        .ToList();
+                                    (h.path?.ToLowerInvariant().Contains(query) == true));
+                    TimelineList.ItemsSource = new ObservableCollection<HistoryItem>(results);
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void BtnPinItem_Click(object sender, RoutedEventArgs e)
@@ -124,13 +124,13 @@ namespace Deskdrop.WinUI
                 {
                     item.IsPinned = !item.IsPinned;
                     var snapshot = DeskdropStore.Shared.History.ToList();
-                    TimelineList.ItemsSource = snapshot
+                    var results = snapshot
                         .OrderByDescending(h => h.IsPinned)
-                        .ThenByDescending(h => h.Time)
-                        .ToList();
+                        .ThenByDescending(h => h.Time);
+                    TimelineList.ItemsSource = new ObservableCollection<HistoryItem>(results);
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
@@ -144,7 +144,7 @@ namespace Deskdrop.WinUI
                     DeskdropStore.Shared.TriggerHistoryUpdate();
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void HistoryItem_Click(object sender, RoutedEventArgs e)
@@ -157,13 +157,13 @@ namespace Deskdrop.WinUI
                         var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
                         dp.SetText(item.FullText);
                         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
-                    } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    } catch (Exception ex) { App.HandleError(ex); }
                 }
                 else if (!string.IsNullOrEmpty(item.path) && System.IO.File.Exists(item.path))
                 {
                     try {
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.path) { UseShellExecute = true });
-                    } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    } catch (Exception ex) { App.HandleError(ex); }
                 }
                 Close();
             }
@@ -179,7 +179,7 @@ namespace Deskdrop.WinUI
                     {
                         DaemonClient.PushClipboard(peer.device_id);
                     } 
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    catch (Exception ex) { App.HandleError(ex); }
                 });
                 Close();
             }

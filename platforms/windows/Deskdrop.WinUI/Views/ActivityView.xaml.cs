@@ -13,9 +13,9 @@ namespace Deskdrop.WinUI.Views
             this.InitializeComponent();
             DeskdropStore.Shared.PropertyChanged += OnStorePropertyChanged;
             this.Unloaded += (s, e) => {
-                try { DeskdropStore.Shared.PropertyChanged -= OnStorePropertyChanged; } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                try { DeskdropStore.Shared.PropertyChanged -= OnStorePropertyChanged; } catch (Exception ex) { App.HandleError(ex); }
             };
-            try { TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            try { TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList(); } catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void OnStorePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -23,7 +23,7 @@ namespace Deskdrop.WinUI.Views
             if (e.PropertyName == nameof(DeskdropStore.Shared.History))
             {
                 DispatcherQueue?.TryEnqueue(() => {
-                    try { TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    try { TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList(); } catch (Exception ex) { App.HandleError(ex); }
                 });
             }
         }
@@ -45,7 +45,7 @@ namespace Deskdrop.WinUI.Views
                         (h.path?.ToLowerInvariant().Contains(text) == true)).ToList();
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void HistoryItem_Click(object sender, RoutedEventArgs e)
@@ -58,13 +58,13 @@ namespace Deskdrop.WinUI.Views
                         var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
                         package.SetText(item.FullText);
                         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-                    } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    } catch (Exception ex) { App.HandleError(ex); }
                 }
                 else if (!string.IsNullOrEmpty(item.path) && System.IO.File.Exists(item.path))
                 {
                     try {
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.path) { UseShellExecute = true });
-                    } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                    } catch (Exception ex) { App.HandleError(ex); }
                 }
             }
         }
@@ -83,7 +83,7 @@ namespace Deskdrop.WinUI.Views
                         .ToList();
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
@@ -97,7 +97,7 @@ namespace Deskdrop.WinUI.Views
                     TimelineList.ItemsSource = DeskdropStore.Shared.History.ToList();
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
     }
 }

@@ -47,7 +47,7 @@ namespace Deskdrop.WinUI
                 var qrWindow = new QRPairingWindow();
                 qrWindow.Activate();
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void BtnOpenDashboard_Click(object sender, RoutedEventArgs e)
@@ -57,7 +57,7 @@ namespace Deskdrop.WinUI
                 var dashboard = new DashboardWindow();
                 dashboard.Activate();
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
     }
 }

@@ -80,7 +80,7 @@ namespace Deskdrop.WinUI.Services
 
                 _wasLeftButtonDown = isLeftButtonDown;
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void ShowDropZone()
@@ -98,14 +98,14 @@ namespace Deskdrop.WinUI.Services
                 int screenW = GetSystemMetrics(SM_CXSCREEN);
                 int screenH = GetSystemMetrics(SM_CYSCREEN);
                 
-                int w = 350;
-                int h = screenH;
+                int w = 20;
+                int h = 200;
                 
-                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - w, 0, w, h));
+                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - w, (screenH - h) / 2, w, h));
                 
                 _dropZoneWindow.Activate();
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void HideDropZone()
@@ -118,7 +118,7 @@ namespace Deskdrop.WinUI.Services
                     _dropZoneWindow = null;
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         public void Dispose()

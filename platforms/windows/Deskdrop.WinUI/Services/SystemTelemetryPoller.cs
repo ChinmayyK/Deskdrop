@@ -71,7 +71,7 @@ namespace Deskdrop.WinUI.Services
                 {
                     break;
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                catch (Exception ex) { App.HandleError(ex); }
             }
         }
 

@@ -18,7 +18,7 @@ namespace Deskdrop.WinUI.Views
             this.InitializeComponent();
             mgr.ActivityFeed.CollectionChanged += OnActivityFeedChanged;
             this.Unloaded += (s, e) => {
-                try { mgr.ActivityFeed.CollectionChanged -= OnActivityFeedChanged; } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+                try { mgr.ActivityFeed.CollectionChanged -= OnActivityFeedChanged; } catch (Exception ex) { App.HandleError(ex); }
             };
             UpdateFilter();
         }
@@ -56,7 +56,7 @@ namespace Deskdrop.WinUI.Views
                     FilteredFeed.Add(item);
                 }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Swallowed Exception: {ex.Message}\n{ex.StackTrace}"); }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void OnSearchTextChanged(object sender, TextChangedEventArgs e)

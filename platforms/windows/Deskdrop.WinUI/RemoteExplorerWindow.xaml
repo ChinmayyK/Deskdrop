@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:Deskdrop.WinUI"
     mc:Ignorable="d"
     Title="Remote Explorer">
 
@@ -38,9 +39,9 @@
 
         <!-- File List -->
         <ScrollViewer Grid.Row="1" Margin="0,52,0,0">
-            <ListView x:Name="FileListView" ItemsSource="{Binding Files}" SelectionMode="None" DoubleTapped="FileListView_MouseDoubleClick" Padding="16">
+            <ListView x:Name="FileListView" ItemsSource="{x:Bind Files, Mode=OneWay}" SelectionMode="None" DoubleTapped="FileListView_MouseDoubleClick" Padding="16">
                 <ListView.ItemTemplate>
-                    <DataTemplate>
+                    <DataTemplate x:DataType="local:RemoteFileItem">
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="12" Margin="0,0,0,8" Padding="12">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -50,15 +51,15 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 
-                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,12,0" Visibility="{Binding DataContext.IsSelectionMode, ElementName=RootGrid}"/>
+                                <CheckBox Grid.Column="0" IsChecked="{x:Bind IsSelected, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,12,0" Visibility="{Binding DataContext.IsSelectionMode, ElementName=RootGrid}"/>
                                 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
                                     <FontIcon Glyph="&#xE8B7;" Foreground="#0A84FF" FontSize="20"/>
-                                    <TextBlock Text="{Binding display_name}" FontSize="14" FontWeight="Medium" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{x:Bind display_name}" FontSize="14" FontWeight="Medium" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                                 
-                                <TextBlock Grid.Column="2" Text="{Binding FormattedDate}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0"/>
-                                <TextBlock Grid.Column="3" Text="{Binding FormattedSize}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="{x:Bind FormattedDate}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                                <TextBlock Grid.Column="3" Text="{x:Bind FormattedSize}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
                     </DataTemplate>
@@ -74,7 +75,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
-                <TextBlock Text="{Binding SelectedCountText}" FontSize="14" FontWeight="Medium" VerticalAlignment="Center"/>
+                <TextBlock Text="{x:Bind SelectedCountText, Mode=OneWay}" FontSize="14" FontWeight="Medium" VerticalAlignment="Center"/>
                 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                     <Button Content="Download" Background="#0A84FF" Foreground="White" CornerRadius="8" Click="BtnDownloadBatch_Click"/>
