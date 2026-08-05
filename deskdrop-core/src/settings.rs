@@ -425,9 +425,11 @@ fn json_merge(target: &mut serde_json::Value, patch: &serde_json::Value) {
 // ── Platform config paths ─────────────────────────────────────────────────────
 
 pub fn default_settings_path() -> PathBuf {
+    #[cfg(target_os = "android")]
+    let base = PathBuf::from("/data/user/0/com.deskdrop.debug/files");
     #[cfg(target_os = "windows")]
     let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(all(not(target_os = "windows"), not(target_os = "android")))]
     let base = dirs::config_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")));
 
@@ -435,24 +437,30 @@ pub fn default_settings_path() -> PathBuf {
 }
 
 pub fn default_trust_store_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("deskdrop")
-        .join("trust.json")
+    #[cfg(target_os = "android")]
+    let base = PathBuf::from("/data/user/0/com.deskdrop.debug/files");
+    #[cfg(not(target_os = "android"))]
+    let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+
+    base.join("deskdrop").join("trust.json")
 }
 
 pub fn default_peer_store_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("deskdrop")
-        .join("peers.json")
+    #[cfg(target_os = "android")]
+    let base = PathBuf::from("/data/user/0/com.deskdrop.debug/files");
+    #[cfg(not(target_os = "android"))]
+    let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+
+    base.join("deskdrop").join("peers.json")
 }
 
 pub fn default_history_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("deskdrop")
-        .join("history.json")
+    #[cfg(target_os = "android")]
+    let base = PathBuf::from("/data/user/0/com.deskdrop.debug/files");
+    #[cfg(not(target_os = "android"))]
+    let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+
+    base.join("deskdrop").join("history.json")
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -57,7 +57,9 @@ struct QuickAccessHistoryView: View {
             else {
                 let f = DateFormatter(); f.dateFormat = "EEEE, MMM d"; label = f.string(from: day).uppercased()
             }
-            groups.append((label, byDay[day]!))
+            if let items = byDay[day] {
+                groups.append((label, items))
+            }
         }
         return groups
     }

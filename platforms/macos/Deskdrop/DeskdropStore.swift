@@ -260,20 +260,22 @@ final class DeskdropStore: ObservableObject {
             return
         }
 
-        guard let archiveURL = buildClipboardArchive(from: readable) else {
+        Task {
+            guard let archiveURL = await buildClipboardArchive(from: readable) else {
+                showToast(
+                    title: "Archive failed",
+                    body: "Could not bundle copied files for transfer",
+                    tint: CRTheme.accentOrange
+                )
+                return
+            }
+            sendFile(url: archiveURL)
             showToast(
-                title: "Archive failed",
-                body: "Could not bundle copied files for transfer",
-                tint: CRTheme.accentOrange
+                title: "Bundled \(readable.count) files",
+                body: "Sending a zip archive to connected devices",
+                tint: CRTheme.accentBlue
             )
-            return
         }
-        sendFile(url: archiveURL)
-        showToast(
-            title: "Bundled \(readable.count) files",
-            body: "Sending a zip archive to connected devices",
-            tint: CRTheme.accentBlue
-        )
     }
 
     /// Apply received clipboard text locally without triggering the watcher callback.
@@ -678,12 +680,13 @@ final class DeskdropStore: ObservableObject {
     }
     
     private func processAndSend(url: URL, targetDeviceId: String?) async {
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return }
-        
-        if isDir.boolValue {
+        let result = await Task.detached { () -> ([URL], String)? in
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return nil }
+            if !isDir.boolValue { return ([], "") }
+            
             let batchId = UUID().uuidString
-            guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey]) else { return }
+            guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey]) else { return nil }
             
             var fileUrls: [URL] = []
             if let urls = enumerator.allObjects as? [URL] {
@@ -694,7 +697,12 @@ final class DeskdropStore: ObservableObject {
                     }
                 }
             }
-            
+            return (fileUrls, batchId)
+        }.value
+
+        guard let (fileUrls, batchId) = result else { return }
+
+        if !batchId.isEmpty {
             let totalCount = fileUrls.count
             for fileUrl in fileUrls {
                 let relativePath = url.lastPathComponent + "/" + fileUrl.path.replacingOccurrences(of: url.path + "/", with: "")
@@ -890,66 +898,68 @@ final class DeskdropStore: ObservableObject {
         try await ipc.requestRemoteFileAction(targetDevice: targetDevice, fileId: fileId, action: action, newName: newName)
     }
 
-    private func buildClipboardArchive(from urls: [URL]) -> URL? {
+    private func buildClipboardArchive(from urls: [URL]) async -> URL? {
         guard !urls.isEmpty else { return nil }
 
-        let stamp = ISO8601DateFormatter()
-            .string(from: Date())
-            .replacingOccurrences(of: ":", with: "-")
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("deskdrop-clipboard-archives", isDirectory: true)
-        let stagingDir = tempRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let archiveURL = tempRoot.appendingPathComponent("Deskdrop Bundle \(stamp).zip")
+        return await Task.detached { () -> URL? in
+            let stamp = ISO8601DateFormatter()
+                .string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+            let tempRoot = FileManager.default.temporaryDirectory
+                .appendingPathComponent("deskdrop-clipboard-archives", isDirectory: true)
+            let stagingDir = tempRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            let archiveURL = tempRoot.appendingPathComponent("Deskdrop Bundle \(stamp).zip")
 
-        do {
-            try FileManager.default.createDirectory(
-                at: stagingDir,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
-
-            var stagedNames = Set<String>()
-            for source in urls {
-                let stagedName = uniqueClipboardItemName(for: source.lastPathComponent, existing: &stagedNames)
-                let stagedURL = stagingDir.appendingPathComponent(stagedName)
-                try FileManager.default.createSymbolicLink(at: stagedURL, withDestinationURL: source)
-            }
-
-            if FileManager.default.fileExists(atPath: archiveURL.path) {
-                try FileManager.default.removeItem(at: archiveURL)
-            }
-
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-            process.currentDirectoryURL = stagingDir
-            process.arguments = ["-r", "-q", archiveURL.path] + stagedNames.sorted()
-
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0,
-                  FileManager.default.fileExists(atPath: archiveURL.path) else {
-                throw NSError(
-                    domain: "DeskdropArchive",
-                    code: Int(process.terminationStatus),
-                    userInfo: nil
+            do {
+                try FileManager.default.createDirectory(
+                    at: stagingDir,
+                    withIntermediateDirectories: true,
+                    attributes: nil
                 )
-            }
 
-            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(1800)) {
-                try? FileManager.default.removeItem(at: archiveURL)
+                var stagedNames = Set<String>()
+                for source in urls {
+                    let stagedName = self.uniqueClipboardItemName(for: source.lastPathComponent, existing: &stagedNames)
+                    let stagedURL = stagingDir.appendingPathComponent(stagedName)
+                    try FileManager.default.createSymbolicLink(at: stagedURL, withDestinationURL: source)
+                }
+
+                if FileManager.default.fileExists(atPath: archiveURL.path) {
+                    try FileManager.default.removeItem(at: archiveURL)
+                }
+
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+                process.currentDirectoryURL = stagingDir
+                process.arguments = ["-r", "-q", archiveURL.path] + stagedNames.sorted()
+
+                try process.run()
+                process.waitUntilExit()
+
+                guard process.terminationStatus == 0,
+                      FileManager.default.fileExists(atPath: archiveURL.path) else {
+                    throw NSError(
+                        domain: "DeskdropArchive",
+                        code: Int(process.terminationStatus),
+                        userInfo: nil
+                    )
+                }
+
+                DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(1800)) {
+                    try? FileManager.default.removeItem(at: archiveURL)
+                    try? FileManager.default.removeItem(at: stagingDir)
+                }
+                return archiveURL
+            } catch {
                 try? FileManager.default.removeItem(at: stagingDir)
+                try? FileManager.default.removeItem(at: archiveURL)
+                NSLog("Deskdrop: failed to archive clipboard files: \(error.localizedDescription)")
+                return nil
             }
-            return archiveURL
-        } catch {
-            try? FileManager.default.removeItem(at: stagingDir)
-            try? FileManager.default.removeItem(at: archiveURL)
-            NSLog("Deskdrop: failed to archive clipboard files: \(error.localizedDescription)")
-            return nil
-        }
+        }.value
     }
 
-    private func uniqueClipboardItemName(for baseName: String, existing: inout Set<String>) -> String {
+    nonisolated private func uniqueClipboardItemName(for baseName: String, existing: inout Set<String>) -> String {
         guard !existing.contains(baseName) else {
             let stem = URL(fileURLWithPath: baseName).deletingPathExtension().lastPathComponent
             let ext = URL(fileURLWithPath: baseName).pathExtension
@@ -1009,9 +1019,7 @@ final class DeskdropStore: ObservableObject {
                     }
                 }
             }
-            // Keep pendingClipboardCount in sync with local feed state.
-            // This stays accurate between status() polls (which happen less often when idle).
-            pendingClipboardCount = activityFeed.filter { $0.isApplicable }.count
+            // pendingClipboardCount relies on daemon status, do not recompute locally from limited feed.
         } catch {}
     }
 
@@ -1053,7 +1061,6 @@ final class DeskdropStore: ObservableObject {
             activityFeed = entries
             lastActivityId = entries.first?.id ?? 0
             mirrorAutoAppliedClipboardIfNeeded(entries: entries)
-            pendingClipboardCount = activityFeed.filter { $0.isApplicable }.count
         } catch {}
     }
 

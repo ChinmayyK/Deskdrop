@@ -8,6 +8,7 @@ enum class ActivityKind {
     PEER_CONNECTED, PEER_DISCONNECTED, WARNING;
 }
 
+@androidx.compose.runtime.Immutable
 data class ActivityEntry(
     val id: Long = System.nanoTime(),
     val timestamp: Long = System.currentTimeMillis(),

@@ -567,39 +567,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let isScreenshot = fileName.lowercased().contains("screenshot")
 
             if isScreenshot {
-                let currentUrl = URL(fileURLWithPath: destPath)
-                let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-                let deskdropDir = downloadsDir.appendingPathComponent("Deskdrop")
-                let screenshotsDir = deskdropDir.appendingPathComponent("android_screenshot")
-                
-                try? FileManager.default.createDirectory(at: screenshotsDir, withIntermediateDirectories: true)
-                let newDestUrl = screenshotsDir.appendingPathComponent(fileName)
-                
-                do {
-                    if FileManager.default.fileExists(atPath: newDestUrl.path) {
-                        try FileManager.default.removeItem(at: newDestUrl)
-                    }
-                    try FileManager.default.moveItem(at: currentUrl, to: newDestUrl)
+                Task.detached {
+                    let currentUrl = URL(fileURLWithPath: destPath)
+                    guard let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return }
+                    let deskdropDir = downloadsDir.appendingPathComponent("Deskdrop")
+                    let screenshotsDir = deskdropDir.appendingPathComponent("android_screenshot")
                     
-                    if let image = NSImage(contentsOf: newDestUrl) {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.writeObjects([image])
-                    }
+                    try? FileManager.default.createDirectory(at: screenshotsDir, withIntermediateDirectories: true)
+                    let newDestUrl = screenshotsDir.appendingPathComponent(fileName)
                     
-                    store.showToast(
-                        title: "Screenshot Synced",
-                        body: "Copied to clipboard",
-                        tint: CRTheme.accentBlue,
-                        systemImage: "camera.viewfinder",
-                        ttl: 4.0,
-                        primaryAction: ToastAction(title: "Reveal", role: .primary) {
-                            NSWorkspace.shared.activateFileViewerSelecting([newDestUrl])
+                    do {
+                        if FileManager.default.fileExists(atPath: newDestUrl.path) {
+                            try FileManager.default.removeItem(at: newDestUrl)
                         }
-                    )
-                    return // Skip the standard notification
-                } catch {
-                    print("Failed to handle screenshot sync: \(error)")
+                        try FileManager.default.moveItem(at: currentUrl, to: newDestUrl)
+                        
+                        let image = NSImage(contentsOf: newDestUrl)
+                        
+                        await MainActor.run { [weak self] in
+                            if let image = image {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.writeObjects([image])
+                            }
+                            
+                            self?.store.showToast(
+                                title: "Screenshot Synced",
+                                body: "Copied to clipboard",
+                                tint: CRTheme.accentBlue,
+                                systemImage: "camera.viewfinder",
+                                ttl: 4.0,
+                                primaryAction: ToastAction(title: "Reveal", role: .primary) {
+                                    NSWorkspace.shared.activateFileViewerSelecting([newDestUrl])
+                                }
+                            )
+                        }
+                    } catch {
+                        print("Failed to handle screenshot sync: \(error)")
+                    }
                 }
+                return // Skip the standard notification
             }
             
             let title = "File Received"

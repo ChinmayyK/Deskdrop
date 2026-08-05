@@ -5,6 +5,7 @@ import org.json.JSONArray
 
 const val PREF_PEER_SNAPSHOTS_JSON = "peer_snapshots_json"
 
+@androidx.compose.runtime.Immutable
 data class PeerSnapshot(
     val id: String,
     val name: String,

@@ -140,10 +140,12 @@ impl IdentityStore {
 
     /// Default path for the current platform.
     pub fn default_path() -> PathBuf {
-        dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("deskdrop")
-            .join("identity.key")
+        #[cfg(target_os = "android")]
+        let base = PathBuf::from("/data/user/0/com.deskdrop.debug/files");
+        #[cfg(not(target_os = "android"))]
+        let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+
+        base.join("deskdrop").join("identity.key")
     }
 
     /// Load an existing key, or generate and persist a new one.

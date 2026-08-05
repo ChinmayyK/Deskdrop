@@ -221,7 +221,7 @@ struct FileTransferState: Identifiable, Equatable {
     }
 }
 
-enum FileTransferStatus {
+enum FileTransferStatus: Equatable {
     case incoming, queued, transferring, paused, verifying, complete(destPath: String), failed(reason: String), cancelled
 }
 

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
 package com.deskdrop.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -56,6 +58,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.graphics.asImageBitmap
 import com.deskdrop.DeskdropService
 import com.deskdrop.ui.getLocalIpAddress
@@ -402,7 +407,7 @@ fun HomeTab(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(activeTransfers, key = { it.id }) { t ->
-                    Box(modifier = Modifier.animateItem()) {
+                    Box(modifier = Modifier) {
                         ActiveTransferCard(
                             isDark = isDark,
                             transfer = t,
@@ -441,7 +446,7 @@ fun HomeTab(
                             .crPressScale(0.95f)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { showQrDialog = true }
-                            .androidx.compose.material3.minimumInteractiveComponentSize()
+                            .minimumInteractiveComponentSize()
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -476,9 +481,10 @@ fun HomeTab(
                                             } catch (e: Exception) { bitmap = null }
                                         }
                                     }
-                                    if (bitmap != null) {
+                                    val localBitmap = bitmap
+                                    if (localBitmap != null) {
                                         androidx.compose.foundation.Image(
-                                            bitmap = bitmap.asImageBitmap(),
+                                            bitmap = localBitmap.asImageBitmap(),
                                             contentDescription = "QR Code",
                                             modifier = Modifier.fillMaxSize()
                                         )
@@ -501,7 +507,7 @@ fun HomeTab(
                             .crPressScale(0.95f)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { onActionPairMagicLink() }
-                            .androidx.compose.material3.minimumInteractiveComponentSize()
+                            .minimumInteractiveComponentSize()
                             .background(CRTheme.brandElectric.copy(alpha = 0.15f))
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -519,7 +525,7 @@ fun HomeTab(
                             .crPressScale(0.95f)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { onManualIp() }
-                            .androidx.compose.material3.minimumInteractiveComponentSize()
+                            .minimumInteractiveComponentSize()
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -563,7 +569,7 @@ fun HomeTab(
                         onStartSpeedTest = { onActionStartSpeedTest(peer.id) },
                         onRespond = { onRespondPairing(peer, it) },
                         speedTestProgress = activeSpeedTests.find { it.peerId == peer.id },
-                        modifier = Modifier.animateItem().then(if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp))
+                        modifier = Modifier.then(if (peers.size == 1) Modifier.fillParentMaxWidth(0.95f) else Modifier.width(170.dp))
                     )
                 }
             }

@@ -41,6 +41,7 @@ import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import java.util.UUID
 
 // ── JNI Bridge ────────────────────────────────────────────────────────────────
@@ -158,6 +159,21 @@ class DeskdropService : Service() {
     private var engineHandle: Long = 0L
     private val handler = Handler(Looper.getMainLooper())
     private var lastClipboardSignature: String? = null
+
+    private fun executeInBackgroundWithWakeLock(tag: String, block: () -> Unit) {
+        backgroundExecutor.execute {
+            val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val wl = pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Deskdrop::$tag")
+            wl?.acquire(30000L) // Maximum 30 seconds
+            try {
+                block()
+            } finally {
+                if (wl?.isHeld == true) {
+                    try { wl.release() } catch (e: Exception) {}
+                }
+            }
+        }
+    }
     private var suppressNext = false
     private val connectedPeerIds = java.util.concurrent.ConcurrentHashMap<String, String>()  // deviceId → displayName
     private val engineStarted = AtomicBoolean(false)
@@ -652,6 +668,7 @@ class DeskdropService : Service() {
                     getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
                         ?: filesDir
                     ).resolve("Deskdrop").apply { mkdirs() }
+                DeskdropJni.initContext(applicationContext)
                 engineHandle = DeskdropJni.start(
                     deviceName,
                     0,
@@ -852,7 +869,7 @@ class DeskdropService : Service() {
                 android.os.PowerManager.PARTIAL_WAKE_LOCK,
                 "Deskdrop::ServiceWakeLock"
             ).apply {
-                setReferenceCounted(true)
+                setReferenceCounted(false)
             }
         }
         wakeLock?.acquire(30000) // 30 seconds max per event
@@ -962,8 +979,6 @@ class DeskdropService : Service() {
                         if (nextEv == 0L) break
                         batch.add(nextEv)
                     }
-
-                    acquireWakeLock()
                     handler.post {
                         try { 
                             for (e in batch) { handleEvent(e) } 
@@ -1429,35 +1444,29 @@ class DeskdropService : Service() {
                 val offset = DeskdropJni.eventOffset(ev)
                 val limit = DeskdropJni.eventLimit(ev)
 
-                backgroundExecutor.execute {
+                executeInBackgroundWithWakeLock("RemoteFilesQuery") {
                     if (!hasFilePermissions()) {
                         Log.w(TAG, "Storage permission missing for RemoteFilesQuery")
-                        showPermissionRequiredNotification()
+                        try {
+                            showPermissionRequiredNotification()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to show permission notification", e)
+                        }
                         DeskdropJni.sendRemoteFilesResponse(
                             engineHandle, requestId, targetDeviceId, null, null, 0, "Permission Denied: Please grant storage permission on your Android device to browse files."
                         )
-                        return@execute
+                        return@executeInBackgroundWithWakeLock
                     }
 
                     try {
-                        if (summaryOnly) {
-                            val (summaryJson, total) = RemoteFileManager.queryFilesSummary(
-                                applicationContext, category, source, query
-                            )
-                            DeskdropJni.sendRemoteFilesResponse(
-                                engineHandle, requestId, targetDeviceId, summaryJson, null, total, null
-                            )
-                        } else {
-                            val (summaryJson, _) = RemoteFileManager.queryFilesSummary(
-                                applicationContext, category, source, query
-                            )
-                            val (filesJson, total) = RemoteFileManager.queryFilesList(
-                                applicationContext, category, source, query, offset, limit
-                            )
-                            DeskdropJni.sendRemoteFilesResponse(
-                                engineHandle, requestId, targetDeviceId, summaryJson, filesJson, total, null
-                            )
-                        }
+                        val (summaryJson, filesJson, total) = RemoteFileManager.queryFiles(
+                            applicationContext, category, source, query, offset, limit,
+                            includeSummary = true,
+                            includeList = !summaryOnly
+                        )
+                        DeskdropJni.sendRemoteFilesResponse(
+                            engineHandle, requestId, targetDeviceId, summaryJson, filesJson, total, null
+                        )
                     } catch (e: Exception) {
                         Log.e(TAG, "Error handling RemoteFilesQuery", e)
                         DeskdropJni.sendRemoteFilesResponse(
@@ -1473,12 +1482,17 @@ class DeskdropService : Service() {
                 val fileId = DeskdropJni.eventFileId(ev)
                 val sizePx = DeskdropJni.eventThumbnailSizePx(ev).let { if (it <= 0) 256 else it }
 
-                backgroundExecutor.execute {
+                executeInBackgroundWithWakeLock("RemoteThumbnail") {
                     if (!hasFilePermissions()) {
+                        try {
+                            showPermissionRequiredNotification()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to show permission notification", e)
+                        }
                         DeskdropJni.sendRemoteThumbnailResponse(
                             engineHandle, requestId, targetDeviceId, fileId, null, "Permission Denied"
                         )
-                        return@execute
+                        return@executeInBackgroundWithWakeLock
                     }
                     try {
                         val thumbnailBytes = RemoteFileManager.getThumbnail(applicationContext, fileId, sizePx)
@@ -1505,11 +1519,15 @@ class DeskdropService : Service() {
                 val targetDeviceId = DeskdropJni.eventDeviceId(ev) ?: return
                 val fileId = DeskdropJni.eventFileId(ev)
 
-                backgroundExecutor.execute {
+                executeInBackgroundWithWakeLock("RemoteFilePull") {
                     if (!hasFilePermissions()) {
                         Log.w(TAG, "Storage permission missing for RemoteFilePullRequest")
-                        showPermissionRequiredNotification()
-                        return@execute
+                        try {
+                            showPermissionRequiredNotification()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to show permission notification", e)
+                        }
+                        return@executeInBackgroundWithWakeLock
                     }
                     try {
                         val resolved = RemoteFileManager.resolveFilePathAndMeta(applicationContext, fileId)
@@ -1532,11 +1550,15 @@ class DeskdropService : Service() {
                 val action = DeskdropJni.eventText(ev) ?: return
                 val newName = DeskdropJni.eventSearchQuery(ev)
 
-                backgroundExecutor.execute {
+                executeInBackgroundWithWakeLock("RemoteFileAction") {
                     if (!hasFilePermissions()) {
                         Log.w(TAG, "Storage permission missing for RemoteFileActionRequest")
-                        showPermissionRequiredNotification()
-                        return@execute
+                        try {
+                            showPermissionRequiredNotification()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to show permission notification", e)
+                        }
+                        return@executeInBackgroundWithWakeLock
                     }
                     try {
                         Log.i(TAG, "Executing remote file action: $action on file $fileId (new name: $newName)")
@@ -2058,35 +2080,40 @@ class DeskdropService : Service() {
         from: String,
         isFile: Boolean
     ) {
-        val saveDir = if (isFile) getDownloadsDir() else cacheDir
-        val file = writeBinaryFile(name, data, mime, saveDir)
+        serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val saveDir = if (isFile) getDownloadsDir() else cacheDir
+            val file = writeBinaryFile(name, data, mime, saveDir)
 
-        // Copy file to public Downloads if it is a file
-        if (isFile) {
-            saveFileToPublicDownloads(file)
+            // Copy file to public Downloads if it is a file
+            if (isFile) {
+                saveFileToPublicDownloads(file)
+            }
+            val finalFile = file
+
+            val uri = FileProvider.getUriForFile(this@DeskdropService, "$packageName.fileprovider", file) // use secure private file for URI
+            
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                suppressNext = true
+                lastClipboardSignature = "uri:$uri"
+                clipboardManager.setPrimaryClip(
+                    android.content.ClipData.newUri(contentResolver, finalFile.name, uri)
+                )
+
+                val kind = if (mime?.startsWith("image/") == true) {
+                    ActivityKind.CLIPBOARD_IMAGE
+                } else {
+                    ActivityKind.FILE_RECEIVED
+                }
+                ActivityFeedManager.addToFeed(ActivityEntry(deviceName = from, kind = kind, preview = finalFile.name))
+                broadcastStatus()
+
+                if (isFile) {
+                    // Files always get an explicit notification — user needs to know where it landed
+                    showFileReceivedNotification(from, finalFile.name, uri)
+                }
+                // Images and clipboard binary: silent — activity feed only
+            }
         }
-        val finalFile = file
-
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file) // use secure private file for URI
-        suppressNext = true
-        lastClipboardSignature = "uri:$uri"
-        clipboardManager.setPrimaryClip(
-            android.content.ClipData.newUri(contentResolver, finalFile.name, uri)
-        )
-
-        val kind = if (mime?.startsWith("image/") == true) {
-            ActivityKind.CLIPBOARD_IMAGE
-        } else {
-            ActivityKind.FILE_RECEIVED
-        }
-        ActivityFeedManager.addToFeed(ActivityEntry(deviceName = from, kind = kind, preview = finalFile.name))
-        broadcastStatus()
-
-        if (isFile) {
-            // Files always get an explicit notification — user needs to know where it landed
-            showFileReceivedNotification(from, finalFile.name, uri)
-        }
-        // Images and clipboard binary: silent — activity feed only
     }
 
     // ── File I/O ──────────────────────────────────────────────────────────────

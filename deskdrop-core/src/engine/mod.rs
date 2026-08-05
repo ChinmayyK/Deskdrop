@@ -604,6 +604,9 @@ impl Engine {
         ensure_parent(&config.trust_store_path)?;
         ensure_parent(&config.peer_store_path)?;
         ensure_parent(&config.identity_path)?;
+        if let Some(p) = config.data_dir.parent() {
+            std::fs::create_dir_all(&config.data_dir).ok();
+        }
 
         let (identity, trust, peer_manager, history) = tokio::task::spawn_blocking({
             let config = config.clone();

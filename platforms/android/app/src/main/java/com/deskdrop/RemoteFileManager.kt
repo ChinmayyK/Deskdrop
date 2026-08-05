@@ -31,113 +31,19 @@ object RemoteFileManager {
         val dataPath: String
     )
 
-    fun queryFilesSummary(
-        context: Context,
-        categoryFilter: String?,
-        sourceFilter: String?,
-        searchQuery: String?
-    ): Pair<String, Int> {
-        var images = 0
-        var videos = 0
-        var audio = 0
-        var documents = 0
-        var apks = 0
-        var archives = 0
-
-        var whatsapp = 0
-        var downloads = 0
-        var camera = 0
-
-        var totalMatching = 0
-
-        val projection = arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.DISPLAY_NAME,
-            MediaStore.Files.FileColumns.SIZE,
-            MediaStore.Files.FileColumns.MIME_TYPE,
-            MediaStore.Files.FileColumns.DATA
-        )
-
-        val uri = MediaStore.Files.getContentUri("external")
-        val selection = "${MediaStore.Files.FileColumns.SIZE} > 0"
-
-        try {
-            context.contentResolver.query(
-                uri,
-                projection,
-                selection,
-                null,
-                "${MediaStore.Files.FileColumns.DATE_MODIFIED} DESC"
-            )?.use { cursor ->
-                val idIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns._ID)
-                val nameIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME)
-                val sizeIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.SIZE)
-                val mimeIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE)
-                val dataIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
-
-                while (cursor.moveToNext()) {
-                    val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
-                    val size = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L
-                    if (size <= 0L) continue
-                    val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) ?: "" else ""
-                    val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
-
-                    val cat = getCategory(mime, name)
-                    val src = getSource(dataPath)
-
-                    // Update global type and source counts for everything on device
-                    when (cat) {
-                        "Images" -> images++
-                        "Videos" -> videos++
-                        "Audio" -> audio++
-                        "Documents" -> documents++
-                        "Apks" -> apks++
-                        "Archives" -> archives++
-                    }
-                    when (src) {
-                        "WhatsApp" -> whatsapp++
-                        "Downloads" -> downloads++
-                        "Camera" -> camera++
-                    }
-
-                    if (matchesFilters(name, cat, src, categoryFilter, sourceFilter, searchQuery)) {
-                        totalMatching++
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error querying files summary", e)
-        }
-
-        val typeCounts = JSONObject().apply {
-            put("images", images)
-            put("videos", videos)
-            put("audio", audio)
-            put("documents", documents)
-            put("apks", apks)
-            put("archives", archives)
-        }
-        val sourceCounts = JSONObject().apply {
-            put("whatsapp", whatsapp)
-            put("downloads", downloads)
-            put("camera", camera)
-        }
-        val summaryObj = JSONObject().apply {
-            put("type_counts", typeCounts)
-            put("source_counts", sourceCounts)
-        }
-
-        return Pair(summaryObj.toString(), totalMatching)
-    }
-
-    fun queryFilesList(
+    fun queryFiles(
         context: Context,
         categoryFilter: String?,
         sourceFilter: String?,
         searchQuery: String?,
         offset: Int,
-        limit: Int
-    ): Pair<String, Int> {
+        limit: Int,
+        includeSummary: Boolean,
+        includeList: Boolean
+    ): Triple<String?, String?, Int> {
+        var images = 0; var videos = 0; var audio = 0; var documents = 0; var apks = 0; var archives = 0
+        var whatsapp = 0; var downloads = 0; var camera = 0
+
         val matchingList = mutableListOf<FileMeta>()
         var totalMatching = 0
 
@@ -172,59 +78,100 @@ object RemoteFileManager {
                     val size = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L
                     if (size <= 0L) continue
                     
-                    val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) ?: "" else ""
                     val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
+                    val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) ?: "" else ""
+                    val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
 
                     val cat = getCategory(mime, name)
-                    if (cat == "Other" && categoryFilter != null && categoryFilter != "All") continue
-
-                    val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
                     val src = getSource(dataPath)
 
+                    if (includeSummary) {
+                        when (cat) {
+                            "Images" -> images++
+                            "Videos" -> videos++
+                            "Audio" -> audio++
+                            "Documents" -> documents++
+                            "Apks" -> apks++
+                            "Archives" -> archives++
+                        }
+                        when (src) {
+                            "WhatsApp" -> whatsapp++
+                            "Downloads" -> downloads++
+                            "Camera" -> camera++
+                        }
+                    }
+
                     if (matchesFilters(name, cat, src, categoryFilter, sourceFilter, searchQuery)) {
-                        if (totalMatching >= offset && totalMatching < offset + limit) {
-                            val id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L
-                            val dateMod = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
-                            val contentUri = ContentUris.withAppendedId(uri, id).toString()
-                            
-                            matchingList.add(
-                                FileMeta(
-                                    fileId = id,
-                                    displayName = name,
-                                    sizeBytes = size,
-                                    mimeType = mime.ifEmpty { "application/octet-stream" },
-                                    dateModified = dateMod,
-                                    category = cat,
-                                    source = src,
-                                    contentUri = contentUri,
-                                    dataPath = dataPath
+                        if (includeList) {
+                            if (totalMatching >= offset && matchingList.size < limit) {
+                                val id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L
+                                val dateMod = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
+                                val contentUri = ContentUris.withAppendedId(uri, id).toString()
+                                
+                                matchingList.add(
+                                    FileMeta(
+                                        fileId = id,
+                                        displayName = name,
+                                        sizeBytes = size,
+                                        mimeType = mime.ifEmpty { "application/octet-stream" },
+                                        dateModified = dateMod,
+                                        category = cat,
+                                        source = src,
+                                        contentUri = contentUri,
+                                        dataPath = dataPath
+                                    )
                                 )
-                            )
+                            }
                         }
                         totalMatching++
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error querying files list", e)
+            Log.e(TAG, "Error querying files", e)
         }
 
-        val jsonArray = JSONArray()
-        for (item in matchingList) {
-            val obj = JSONObject().apply {
-                put("file_id", item.fileId)
-                put("display_name", item.displayName)
-                put("size_bytes", item.sizeBytes)
-                put("mime_type", item.mimeType)
-                put("date_modified", item.dateModified)
-                put("category", item.category)
-                put("source", item.source)
-                put("content_uri", item.contentUri)
+        var summaryJson: String? = null
+        if (includeSummary) {
+            val typeCounts = JSONObject().apply {
+                put("images", images)
+                put("videos", videos)
+                put("audio", audio)
+                put("documents", documents)
+                put("apks", apks)
+                put("archives", archives)
             }
-            jsonArray.put(obj)
+            val sourceCounts = JSONObject().apply {
+                put("whatsapp", whatsapp)
+                put("downloads", downloads)
+                put("camera", camera)
+            }
+            summaryJson = JSONObject().apply {
+                put("type_counts", typeCounts)
+                put("source_counts", sourceCounts)
+            }.toString()
         }
 
-        return Pair(jsonArray.toString(), totalMatching)
+        var filesJson: String? = null
+        if (includeList) {
+            val jsonArray = JSONArray()
+            for (item in matchingList) {
+                val obj = JSONObject().apply {
+                    put("file_id", item.fileId)
+                    put("display_name", item.displayName)
+                    put("size_bytes", item.sizeBytes)
+                    put("mime_type", item.mimeType)
+                    put("date_modified", item.dateModified)
+                    put("category", item.category)
+                    put("source", item.source)
+                    put("content_uri", item.contentUri)
+                }
+                jsonArray.put(obj)
+            }
+            filesJson = jsonArray.toString()
+        }
+
+        return Triple(summaryJson, filesJson, totalMatching)
     }
 
     fun getThumbnail(context: Context, fileId: Long, sizePx: Int): ByteArray? {

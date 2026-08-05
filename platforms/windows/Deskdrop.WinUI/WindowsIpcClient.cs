@@ -143,7 +143,14 @@ namespace Deskdrop.WinUI
             var dl   = DateTime.Now.AddMilliseconds(timeoutMs);
             while (DateTime.Now < dl)
             {
-                if (stream.Read(buf, 0, 1) == 0) break;
+                try
+                {
+                    if (stream.Read(buf, 0, 1) == 0) break;
+                }
+                catch (IOException)
+                {
+                    break;
+                }
                 if (buf[0] == '\n') break;
                 sb.Append((char)buf[0]);
             }
@@ -274,11 +281,12 @@ namespace Deskdrop.WinUI
     /// </summary>
     internal sealed class DaemonPoller : IDisposable
     {
-        // Fast poll when peers are connected; slow poll when idle.
         private const int FastMs = 1000;
         private const int SlowMs = 5000;
 
-        private System.Threading.Timer? _timer;
+        private CancellationTokenSource? _cts;
+        private Task? _pollTask;
+
         private bool _wasDaemonRunning;
         private int  _lastPeerCount        = -1;
         private bool _lastSyncState        = true;
@@ -287,65 +295,77 @@ namespace Deskdrop.WinUI
         public event Action<bool>? DaemonAvailabilityChanged;
         public event Action<int>?  PeerCountChanged;
         public event Action<bool>? SyncStateChanged;
-        /// Fired when the number of unapplied incoming clipboard items changes.
         public event Action<int>?  PendingClipboardCountChanged;
 
-        public DaemonPoller() => SchedulePoll(SlowMs);
-
-        private void SchedulePoll(int delayMs)
+        public DaemonPoller()
         {
-            _timer?.Dispose();
-            _timer = new System.Threading.Timer(_ => Poll(), null, delayMs, Timeout.Infinite);
+            _cts = new CancellationTokenSource();
+            _pollTask = Task.Run(() => PollLoopAsync(_cts.Token));
         }
 
-        private void Poll()
+        private async Task PollLoopAsync(CancellationToken token)
         {
-            try
+            while (!token.IsCancellationRequested)
             {
-                bool running = DaemonClient.IsDaemonRunning();
-                if (running != _wasDaemonRunning)
+                int delayMs = SlowMs;
+                try
                 {
-                    _wasDaemonRunning = running;
-                    try { DaemonAvailabilityChanged?.Invoke(running); } catch (Exception ex) { App.HandleError(ex); }
+                    bool running = DaemonClient.IsDaemonRunning();
+                    if (running != _wasDaemonRunning)
+                    {
+                        _wasDaemonRunning = running;
+                        try { DaemonAvailabilityChanged?.Invoke(running); } catch (Exception ex) { App.HandleError(ex); }
+                    }
+
+                    if (running)
+                    {
+                        var resp = await DaemonClient.SendAsync(new { cmd = "status" }, token);
+                        if (resp != null)
+                        {
+                            try
+                            {
+                                var root = resp.RootElement;
+                                if (root.TryGetProperty("data", out var data))
+                                {
+                                    int peerCount = data.TryGetProperty("peer_count", out var pc) ? pc.GetInt32() : 0;
+                                    bool syncEnabled = !data.TryGetProperty("sync_enabled", out var se) || se.GetBoolean();
+                                    int pending = data.TryGetProperty("pending_clipboard_count", out var pcc) ? pcc.GetInt32() : 0;
+
+                                    if (peerCount != _lastPeerCount)
+                                    { _lastPeerCount = peerCount; try { PeerCountChanged?.Invoke(peerCount); } catch (Exception ex) { App.HandleError(ex); } }
+                                    if (syncEnabled != _lastSyncState)
+                                    { _lastSyncState = syncEnabled; try { SyncStateChanged?.Invoke(syncEnabled); } catch (Exception ex) { App.HandleError(ex); } }
+                                    if (pending != _lastPendingClipboard)
+                                    { _lastPendingClipboard = pending; try { PendingClipboardCountChanged?.Invoke(pending); } catch (Exception ex) { App.HandleError(ex); } }
+                                }
+                            }
+                            catch (Exception ex) { App.HandleError(ex); }
+                            
+                            delayMs = _lastPeerCount > 0 ? FastMs : SlowMs;
+                        }
+                    }
                 }
-
-                if (!running) { SchedulePoll(SlowMs); return; }
-
-                var resp = DaemonClient.Status();
-                if (resp == null) { SchedulePoll(SlowMs); return; }
+                catch (Exception ex)
+                {
+                    App.HandleError(ex);
+                }
 
                 try
                 {
-                    var root = resp.RootElement;
-                    if (root.TryGetProperty("data", out var data))
-                    {
-                        int peerCount = data.TryGetProperty("peer_count", out var pc)
-                            ? pc.GetInt32() : 0;
-                        bool syncEnabled = !data.TryGetProperty("sync_enabled", out var se)
-                            || se.GetBoolean();
-                        int pending = data.TryGetProperty("pending_clipboard_count", out var pcc)
-                            ? pcc.GetInt32() : 0;
-
-                        if (peerCount != _lastPeerCount)
-                        { _lastPeerCount = peerCount; try { PeerCountChanged?.Invoke(peerCount); } catch (Exception ex) { App.HandleError(ex); } }
-                        if (syncEnabled != _lastSyncState)
-                        { _lastSyncState = syncEnabled; try { SyncStateChanged?.Invoke(syncEnabled); } catch (Exception ex) { App.HandleError(ex); } }
-                        if (pending != _lastPendingClipboard)
-                        { _lastPendingClipboard = pending; try { PendingClipboardCountChanged?.Invoke(pending); } catch (Exception ex) { App.HandleError(ex); } }
-                    }
+                    await Task.Delay(delayMs, token);
                 }
-                catch (Exception ex) { App.HandleError(ex); }
-
-                // Adaptive interval: fast when peers are present, slow otherwise.
-                SchedulePoll(_lastPeerCount > 0 ? FastMs : SlowMs);
-            }
-            catch
-            {
-                try { SchedulePoll(SlowMs); } catch (Exception ex) { App.HandleError(ex); }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
             }
         }
 
-        public void Dispose() { _timer?.Dispose(); }
+        public void Dispose()
+        {
+            _cts?.Cancel();
+            _cts?.Dispose();
+        }
     }
 }
 

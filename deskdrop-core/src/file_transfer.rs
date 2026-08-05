@@ -1328,7 +1328,14 @@ fn now_unix() -> u64 {
 
 /// Default save directory for received files.
 pub fn default_save_dir() -> PathBuf {
-    dirs::download_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+    #[cfg(target_os = "android")]
+    {
+        PathBuf::from("/storage/emulated/0/Download/Deskdrop")
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        dirs::download_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+    }
 }
 
 fn chunk_count(size_bytes: u64) -> Result<u32> {

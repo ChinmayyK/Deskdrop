@@ -528,6 +528,7 @@ dependencies = [
  "libc",
  "lz4_flex",
  "mdns-sd",
+ "ndk-context",
  "netdev",
  "postcard",
  "rand",

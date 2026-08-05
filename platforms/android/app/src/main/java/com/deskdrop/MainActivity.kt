@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.collections.immutable.toImmutableList
 import com.deskdrop.ui.MainScreen
 import com.deskdrop.ui.OnboardingScreen
 import com.deskdrop.ui.theme.AppTheme
@@ -256,11 +257,11 @@ class MainActivity : ComponentActivity() {
                         autoForwardScreenshots = autoForwardScreenshots.value,
                         deviceName = deviceName.value,
                         deviceId = deviceId.value,
-                        peers = kotlinx.collections.immutable.toImmutableList(peers.value),
-                        feed = kotlinx.collections.immutable.toImmutableList(feed.value),
+                        peers = peers.value.toImmutableList(),
+                        feed = feed.value.toImmutableList(),
                         ambientStatus = ambientStatus.value,
-                        activeTransfers = kotlinx.collections.immutable.toImmutableList(activeTransfers),
-                        activeSpeedTests = kotlinx.collections.immutable.toImmutableList(activeSpeedTests),
+                        activeTransfers = activeTransfers.toImmutableList(),
+                        activeSpeedTests = activeSpeedTests.toImmutableList(),
                         onSyncEnabledChange = {
                             isSyncEnabled.value = it
                             saveBooleanPref("sync_enabled", it)

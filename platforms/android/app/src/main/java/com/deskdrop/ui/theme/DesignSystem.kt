@@ -8,7 +8,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import org.intellij.lang.annotations.Language
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
-import androidx.compose.material3.ripple
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -138,7 +138,7 @@ fun Modifier.crPressScale(
     if (onClick != null) {
         mod = mod.clickable(
             interactionSource = interactionSource,
-            indication = ripple(),
+            indication = androidx.compose.material.ripple.rememberRipple(),
             onClick = onClick
         )
     }

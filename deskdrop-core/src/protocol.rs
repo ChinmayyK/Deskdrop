@@ -570,7 +570,12 @@ impl AppMessage {
                         _ => None,
                     }
                 } else {
-                    None
+                    // Fallback to explicitly cloning the inner data if we can't get mut
+                    match &**content {
+                        ClipboardContent::Image { data, .. } => Some(data.clone()),
+                        ClipboardContent::File { data, .. } => Some(data.clone()),
+                        _ => None,
+                    }
                 }
             }
             AppMessage::SpeedTestData { data, .. } => Some(std::mem::take(data)),

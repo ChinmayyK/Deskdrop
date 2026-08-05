@@ -33,6 +33,26 @@ struct AndroidHandle {
 
 // ── start ─────────────────────────────────────────────────────────────────────
 
+static ANDROID_CONTEXT: OnceLock<jni::objects::GlobalRef> = OnceLock::new();
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_initContext(
+    env: JNIEnv,
+    _class: JClass,
+    context: jni::objects::JObject,
+) {
+    let vm = env.get_java_vm().expect("Failed to get JavaVM");
+    let ctx_ref = env.new_global_ref(context).expect("Failed to create GlobalRef");
+    let vm_ptr = vm.get_java_vm_pointer() as *mut std::ffi::c_void;
+    let ctx_ptr = ctx_ref.as_obj().as_raw() as *mut std::ffi::c_void;
+    unsafe {
+        // If it's already initialized, this will panic with previous.is_none()
+        ndk_context::initialize_android_context(vm_ptr, ctx_ptr);
+    }
+    // Hold the global reference forever so ndk-context can use it.
+    let _ = ANDROID_CONTEXT.set(ctx_ref);
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_deskdrop_DeskdropJni_start(
     mut env: JNIEnv,
@@ -1797,7 +1817,10 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifyNetworkRestored(
         return -1;
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
-    rt().block_on(h.engine.reconnect_all_peers());
+    let engine = h.engine.clone();
+    rt().spawn(async move {
+        engine.reconnect_all_peers().await;
+    });
     0
 }
 
@@ -1812,7 +1835,10 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifySleepState(
         return -1;
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
-    rt().block_on(h.engine.notify_sleep_state(is_asleep != 0));
+    let engine = h.engine.clone();
+    rt().spawn(async move {
+        engine.notify_sleep_state(is_asleep != 0).await;
+    });
     0
 }
 

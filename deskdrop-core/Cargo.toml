@@ -73,6 +73,7 @@ windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_Securit
 [target.'cfg(not(target_os="android"))'.dependencies]
 
 [target.'cfg(target_os="android")'.dependencies]
+ndk-context = "0.1"
 
 [dev-dependencies]
 chacha20poly1305 = "0.10"
