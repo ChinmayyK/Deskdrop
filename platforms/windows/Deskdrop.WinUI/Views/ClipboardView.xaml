@@ -41,7 +41,7 @@
                 <StackPanel Visibility="{x:Bind mgr.HasPendingClipboards, Mode=OneWay}" Margin="0,0,0,24">
                     <TextBlock Text="PENDING REMOTE CLIPBOARDS" FontSize="11" FontWeight="Bold" Foreground="#0055CC" CharacterSpacing="60" Margin="0,0,0,10"/>
                     <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.PendingClipboards, Mode=OneWay}">
-                        <ListView SelectionMode="None" Padding="0".ItemTemplate>
+                        <ListView.ItemTemplate>
                             <DataTemplate x:DataType="winui:PendingClipboard">
                                 <Border Background="#EBF4FF" BorderBrush="#B9D5FF" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,10">
                                     <Grid>
@@ -75,7 +75,7 @@
 
                 <!-- Filtered Clipboard History Feed -->
                 <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind FilteredFeed, Mode=OneWay}">
-                    <ListView SelectionMode="None" Padding="0".ItemTemplate>
+                    <ListView.ItemTemplate>
                         <DataTemplate x:DataType="winui:ActivityEntry">
                             <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="16,14" Margin="0,0,0,10">
                                 <Grid>

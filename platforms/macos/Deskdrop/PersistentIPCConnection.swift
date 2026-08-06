@@ -70,7 +70,8 @@ actor PersistentIPCConnection {
                     continuation.resume(throwing: DeskdropIPCError.connectionFailed)
                 }
             }
-            newConnection.stateUpdateHandler = { [weak self] state in
+            newConnection.stateUpdateHandler = { [weak self, weak newConnection] state in
+                guard let newConnection = newConnection else { return }
                 guard guardObj.tryResume() else {
                     if case .failed = state {
                         newConnection.cancel()

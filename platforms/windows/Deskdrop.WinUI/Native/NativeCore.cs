@@ -36,6 +36,13 @@ namespace Deskdrop.WinUI
         public const int PB_EVENT_CAMERA_FRAME = 25;
         public const int PB_EVENT_SYSTEM_HEALTH_UPDATED = 26;
 
+        public const int PB_EVENT_REMOTE_FILES_QUERY = 30;
+        public const int PB_EVENT_REMOTE_THUMBNAIL_REQUEST = 31;
+        public const int PB_EVENT_REMOTE_FILE_PULL_REQUEST = 32;
+        public const int PB_EVENT_REMOTE_FILES_RESPONSE = 33;
+        public const int PB_EVENT_REMOTE_THUMBNAIL_RESPONSE = 34;
+        public const int PB_EVENT_REMOTE_FILE_ACTION_REQUEST = 37;
+
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_start(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string? deviceName, ushort port);
@@ -111,6 +118,68 @@ namespace Deskdrop.WinUI
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_event_transfer_dest_path(IntPtr ev);
+
+        // Remote Explorer FFI Functions
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_send_remote_files_query(
+            IntPtr handle,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string targetDeviceId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string requestId,
+            int summaryOnly,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? category,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? source,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? searchQuery,
+            uint offset,
+            uint limit);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_send_remote_thumbnail_request(
+            IntPtr handle,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string targetDeviceId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string requestId,
+            ulong fileId,
+            uint sizePx);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_send_remote_file_pull_request(
+            IntPtr handle,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string targetDeviceId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string requestId,
+            ulong fileId);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_send_remote_files_response(
+            IntPtr handle,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string requestId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string targetDeviceId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? summaryJson,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? filesJson,
+            uint totalMatching,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string? errorStr);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_remote_request_id(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_remote_summary_json(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_remote_files_json(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern uint deskdrop_event_remote_total_matching(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern ulong deskdrop_event_remote_file_id(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_remote_thumbnail_data(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern UIntPtr deskdrop_event_remote_thumbnail_len(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_remote_error(IntPtr ev);
 
         public const uint ES_CONTINUOUS = 0x80000000;
         public const uint ES_SYSTEM_REQUIRED = 0x00000001;

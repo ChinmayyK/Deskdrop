@@ -75,6 +75,38 @@ class DeskdropService : Service() {
 
         // Expose engine handle for high-throughput zero-copy JNI calls (e.g. video frames)
         @Volatile var activeEngineHandle: Long = 0L
+        val engineLock = java.util.concurrent.locks.ReentrantReadWriteLock()
+
+        fun pushVideoFrameSafely(jpegBytes: ByteArray): Int {
+            engineLock.readLock().lock()
+            return try {
+                val h = activeEngineHandle
+                if (h != 0L) {
+                    DeskdropJni.pushVideoFrame(h, jpegBytes)
+                } else {
+                    -1
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error pushing video frame", e)
+                -1
+            } finally {
+                engineLock.readLock().unlock()
+            }
+        }
+
+        fun stopCameraStreamSafely() {
+            engineLock.readLock().lock()
+            try {
+                val h = activeEngineHandle
+                if (h != 0L) {
+                    DeskdropJni.stopCameraStream(h)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping camera stream", e)
+            } finally {
+                engineLock.readLock().unlock()
+            }
+        }
 
 
         val quickSendContextFlow = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
@@ -216,14 +248,15 @@ class DeskdropService : Service() {
             if (intent?.action != PairingActivity.ACTION_PAIRING_RESULT) return
             val deviceId = intent.getStringExtra(PairingActivity.EXTRA_DEVICE_ID) ?: return
             val approved = intent.getBooleanExtra(PairingActivity.EXTRA_APPROVED, false)
-            val h = engineHandle
-            if (h == 0L) return
-
-            val result = DeskdropJni.respondToPairing(h, deviceId, approved)
-
-            Log.i(TAG, "Pairing result for $deviceId approved=$approved result=$result")
-            notificationManager.cancel(NOTIF_ID_TOFU)
-            persistStatus()
+            engineLock.readLock {
+                val h = engineHandle
+                if (h != 0L) {
+                    val result = DeskdropJni.respondToPairing(h, deviceId, approved)
+                    Log.i(TAG, "Pairing result for $deviceId approved=$approved result=$result")
+                    notificationManager.cancel(NOTIF_ID_TOFU)
+                    persistStatus()
+                }
+            }
         }
     }
 
@@ -255,17 +288,19 @@ class DeskdropService : Service() {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             if (!prefs.getBoolean("auto_forward_sms", false)) return
 
-            val h = engineHandle
-            if (h == 0L || !hasConnectedPeers()) return
-
-            val msgs = android.provider.Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            for (msg in msgs) {
-                val body = msg.messageBody
-                val codeMatch = Regex("\\b\\d{4,8}\\b").find(body ?: "")
-                if (codeMatch != null) {
-                    DeskdropJni.pushText(h, codeMatch.value)
-                    Log.i(TAG, "Pushed 2FA code: ${codeMatch.value}")
-                    break
+            engineLock.readLock {
+                val h = engineHandle
+                if (h != 0L && hasConnectedPeers()) {
+                    val msgs = android.provider.Telephony.Sms.Intents.getMessagesFromIntent(intent)
+                    for (msg in msgs) {
+                        val body = msg.messageBody
+                        val codeMatch = Regex("\\b\\d{4,8}\\b").find(body ?: "")
+                        if (codeMatch != null) {
+                            DeskdropJni.pushText(h, codeMatch.value)
+                            Log.i(TAG, "Pushed 2FA code: ${codeMatch.value}")
+                            break
+                        }
+                    }
                 }
             }
         }
@@ -274,40 +309,42 @@ class DeskdropService : Service() {
     private val screenshotObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean, uri: android.net.Uri?) {
             super.onChange(selfChange, uri)
-            val h = engineHandle
-            
-            // Check settings first
-            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            if (!prefs.getBoolean("auto_forward_screenshots", false)) return
+            engineLock.readLock {
+                val h = engineHandle
+                
+                // Check settings first
+                val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                if (!prefs.getBoolean("auto_forward_screenshots", false)) return@readLock
 
-            if (h == 0L || !hasConnectedPeers()) return
+                if (h == 0L || !hasConnectedPeers()) return@readLock
 
-            try {
-                // Always query the main URI and sort by date
-                val cursor = contentResolver.query(
-                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(android.provider.MediaStore.Images.Media.DATA),
-                    null, null,
-                    android.provider.MediaStore.Images.Media.DATE_ADDED + " DESC"
-                )
-                cursor?.use {
-                    if (it.moveToFirst()) {
-                        val dataIndex = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DATA)
-                        val path = it.getString(dataIndex)
-                        if (path.contains("Screenshot", ignoreCase = true)) {
-                            // Check if it's new
-                            val file = java.io.File(path)
-                            if (file.exists() && System.currentTimeMillis() - file.lastModified() < 10000) {
-                                // It's a recent screenshot! Read the file and push it.
-                                val bytes = file.readBytes()
-                                DeskdropJni.pushImage(h, "image/png", bytes)
-                                Log.i(TAG, "Pushed new screenshot: $path")
+                try {
+                    // Always query the main URI and sort by date
+                    val cursor = contentResolver.query(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        arrayOf(android.provider.MediaStore.Images.Media.DATA),
+                        null, null,
+                        android.provider.MediaStore.Images.Media.DATE_ADDED + " DESC"
+                    )
+                    cursor?.use {
+                        if (it.moveToFirst()) {
+                            val dataIndex = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DATA)
+                            val path = it.getString(dataIndex)
+                            if (path.contains("Screenshot", ignoreCase = true)) {
+                                // Check if it's new
+                                val file = java.io.File(path)
+                                if (file.exists() && System.currentTimeMillis() - file.lastModified() < 10000) {
+                                    // It's a recent screenshot! Read the file and push it.
+                                    val bytes = file.readBytes()
+                                    DeskdropJni.pushImage(h, "image/png", bytes)
+                                    Log.i(TAG, "Pushed new screenshot: $path")
+                                }
                             }
                         }
                     }
+                } catch (e: Exception) {
+                    Log.w("DeskdropService", "Failed to query media store", e)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to observe screenshot", e)
             }
         }
     }
@@ -321,7 +358,16 @@ class DeskdropService : Service() {
     private val serviceScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
     @Volatile private var isRunning = true
     private var eventDrainThread: Thread? = null
-    private val engineLock = java.util.concurrent.locks.ReentrantReadWriteLock()
+    private val engineLock get() = Companion.engineLock
+    private inline fun <T> java.util.concurrent.locks.ReentrantReadWriteLock.readLock(action: () -> T): T {
+        val rl = readLock()
+        rl.lock()
+        return try {
+            action()
+        } finally {
+            rl.unlock()
+        }
+    }
     private fun syncMode(): BackgroundSyncMode =
         if (prefs().getString("sync_mode", "always") == "battery") BackgroundSyncMode.BATTERY_OPTIMIZED
         else BackgroundSyncMode.ALWAYS_ACTIVE
@@ -869,7 +915,7 @@ class DeskdropService : Service() {
                 android.os.PowerManager.PARTIAL_WAKE_LOCK,
                 "Deskdrop::ServiceWakeLock"
             ).apply {
-                setReferenceCounted(false)
+                setReferenceCounted(true)
             }
         }
         wakeLock?.acquire(30000) // 30 seconds max per event
@@ -979,6 +1025,7 @@ class DeskdropService : Service() {
                         if (nextEv == 0L) break
                         batch.add(nextEv)
                     }
+                    acquireWakeLock()
                     handler.post {
                         try { 
                             for (e in batch) { handleEvent(e) } 
@@ -1461,7 +1508,7 @@ class DeskdropService : Service() {
                     try {
                         val (summaryJson, filesJson, total) = RemoteFileManager.queryFiles(
                             applicationContext, category, source, query, offset, limit,
-                            includeSummary = true,
+                            includeSummary = summaryOnly || offset == 0,
                             includeList = !summaryOnly
                         )
                         DeskdropJni.sendRemoteFilesResponse(
@@ -2624,55 +2671,59 @@ class DeskdropService : Service() {
         if (storageMonitorRunnable != null) return
         val r = object : Runnable {
             override fun run() {
-                val h = engineHandle
-                if (h != 0L) {
-                    backgroundExecutor.execute {
-                        try {
-                            val storageManager = getSystemService(android.content.Context.STORAGE_STATS_SERVICE) as android.app.usage.StorageStatsManager
-                            val rawTotalBytes = storageManager.getTotalBytes(android.os.storage.StorageManager.UUID_DEFAULT)
-                            val freeBytes = storageManager.getFreeBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+                backgroundExecutor.execute {
+                    engineLock.readLock {
+                        val h = engineHandle
+                        if (h != 0L) {
+                            try {
+                                val storageManager = getSystemService(android.content.Context.STORAGE_STATS_SERVICE) as? android.app.usage.StorageStatsManager
+                                if (storageManager != null) {
+                                    val rawTotalBytes = storageManager.getTotalBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+                                    val freeBytes = storageManager.getFreeBytes(android.os.storage.StorageManager.UUID_DEFAULT)
 
-                            val GB = 1_000_000_000L
-                            val tiers = longArrayOf(16 * GB, 32 * GB, 64 * GB, 128 * GB, 256 * GB, 512 * GB, 1000 * GB, 2000 * GB)
-                            var totalBytes = rawTotalBytes
-                            for (tier in tiers) {
-                                if (rawTotalBytes <= tier) {
-                                    totalBytes = tier
-                                    break
-                                }
-                            }
-
-                            var imgSize = 0L
-                            var vidSize = 0L
-                            
-                            val uri = android.provider.MediaStore.Files.getContentUri("external")
-                            val proj = arrayOf(
-                                android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE,
-                                android.provider.MediaStore.Files.FileColumns.SIZE
-                            )
-                            val sel = "${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=?"
-                            val selArgs = arrayOf(
-                                android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
-                                android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
-                            )
-                            
-                            contentResolver.query(uri, proj, sel, selArgs, null)?.use { cursor ->
-                                val typeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE)
-                                val sizeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.SIZE)
-                                while (cursor.moveToNext()) {
-                                    val type = cursor.getInt(typeCol)
-                                    val size = cursor.getLong(sizeCol)
-                                    if (type == android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE) {
-                                        imgSize += size
-                                    } else {
-                                        vidSize += size
+                                    val GB = 1_000_000_000L
+                                    val tiers = longArrayOf(16 * GB, 32 * GB, 64 * GB, 128 * GB, 256 * GB, 512 * GB, 1000 * GB, 2000 * GB)
+                                    var totalBytes = rawTotalBytes
+                                    for (tier in tiers) {
+                                        if (rawTotalBytes <= tier) {
+                                            totalBytes = tier
+                                            break
+                                        }
                                     }
+
+                                    var imgSize = 0L
+                                    var vidSize = 0L
+                                    
+                                    val uri = android.provider.MediaStore.Files.getContentUri("external")
+                                    val proj = arrayOf(
+                                        android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE,
+                                        android.provider.MediaStore.Files.FileColumns.SIZE
+                                    )
+                                    val sel = "${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=?"
+                                    val selArgs = arrayOf(
+                                        android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+                                        android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
+                                    )
+                                    
+                                    contentResolver.query(uri, proj, sel, selArgs, null)?.use { cursor ->
+                                        val typeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE)
+                                        val sizeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.SIZE)
+                                        while (cursor.moveToNext()) {
+                                            val type = cursor.getInt(typeCol)
+                                            val size = cursor.getLong(sizeCol)
+                                            if (type == android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE) {
+                                                imgSize += size
+                                            } else {
+                                                vidSize += size
+                                            }
+                                        }
+                                    }
+                                    
+                                    DeskdropJni.pushStorageStatus(h, imgSize, vidSize, 0L, freeBytes, totalBytes)
                                 }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Storage telemetry failed", e)
                             }
-                            
-                            DeskdropJni.pushStorageStatus(h, imgSize, vidSize, 0L, freeBytes, totalBytes)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Storage telemetry failed", e)
                         }
                     }
                 }
@@ -3060,6 +3111,7 @@ class DeskdropService : Service() {
                     // Brief delay lets the IP stack settle before mDNS re-registers.
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }
                     val action = Runnable {
+                        delayedNetworkAction = null
                         if (isWifiOrEth) {
                             restartDiscoveryNow()
                         }
@@ -3105,6 +3157,8 @@ class DeskdropService : Service() {
     }
 
     private fun unregisterNetworkCallback() {
+        delayedNetworkAction?.let { handler.removeCallbacks(it) }
+        delayedNetworkAction = null
         val cb = networkCallback ?: return
         networkCallback = null
         val cm = runCatching {

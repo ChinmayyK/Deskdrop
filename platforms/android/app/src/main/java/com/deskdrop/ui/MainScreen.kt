@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.layout.LocalPinnableContainer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -42,6 +43,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -814,7 +817,14 @@ fun ActiveTransferCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                AnimatedContent(targetState = if (transfer.isPaused) "Paused" else if (transfer.speedBps > 0) "${transfer.speedBps / 1024 / 1024} MB/s" else "Calculating...", label = "speed_anim") { speedText ->
+                val speedFormatted = when {
+                    transfer.isPaused -> "Paused"
+                    transfer.speedBps >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB/s", transfer.speedBps.toDouble() / (1024 * 1024))
+                    transfer.speedBps >= 1024 -> "${transfer.speedBps / 1024} KB/s"
+                    transfer.speedBps > 0 -> "${transfer.speedBps} B/s"
+                    else -> "Calculating..."
+                }
+                AnimatedContent(targetState = speedFormatted, label = "speed_anim") { speedText ->
                     Text(
                         text = speedText,
                         style = CRTypography.caption,
@@ -1252,23 +1262,31 @@ fun TimelineActivityRow(
             else -> "Open / Copy"
         }
         
-        androidx.compose.material3.DropdownMenu(
-            expanded = showMenu,
-            onDismissRequest = { showMenu = false },
-            modifier = Modifier.background(if (isDark) Color(0xFF1E1E1E) else Color.White)
-        ) {
-            androidx.compose.material3.DropdownMenuItem(
-                text = { Text(primaryActionLabel, color = CRTheme.textHigh(isDark)) },
-                onClick = { showMenu = false; onApply(entry) }
-            )
-            androidx.compose.material3.DropdownMenuItem(
-                text = { Text("Resend", color = CRTheme.textHigh(isDark)) },
-                onClick = { showMenu = false; onResend(entry) }
-            )
-            androidx.compose.material3.DropdownMenuItem(
-                text = { Text("Delete history", color = CRTheme.accentRed) },
-                onClick = { showMenu = false; onDelete(entry) }
-            )
+        DisposableEffect(Unit) {
+            onDispose {
+                showMenu = false
+            }
+        }
+
+        CompositionLocalProvider(LocalPinnableContainer provides null) {
+            androidx.compose.material3.DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+                modifier = Modifier.background(if (isDark) Color(0xFF1E1E1E) else Color.White)
+            ) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(primaryActionLabel, color = CRTheme.textHigh(isDark)) },
+                    onClick = { showMenu = false; onApply(entry) }
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Resend", color = CRTheme.textHigh(isDark)) },
+                    onClick = { showMenu = false; onResend(entry) }
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Delete history", color = CRTheme.accentRed) },
+                    onClick = { showMenu = false; onDelete(entry) }
+                )
+            }
         }
         }
     }
@@ -1392,34 +1410,42 @@ fun DeviceCard(
             )
         }
         
-        androidx.compose.material3.DropdownMenu(
-            expanded = showMenu,
-            onDismissRequest = { showMenu = false },
-            modifier = Modifier.background(if (isDark) Color(0xFF1E1E1E) else Color.White)
-        ) {
-            if (peer.lifecycleState == "pending_approval" && !peer.trusted) {
+        DisposableEffect(Unit) {
+            onDispose {
+                showMenu = false
+            }
+        }
+
+        CompositionLocalProvider(LocalPinnableContainer provides null) {
+            androidx.compose.material3.DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+                modifier = Modifier.background(if (isDark) Color(0xFF1E1E1E) else Color.White)
+            ) {
+                if (peer.lifecycleState == "pending_approval" && !peer.trusted) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Accept Pairing", color = CRTheme.accentGreen) },
+                        onClick = { showMenu = false; onRespond(true) }
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Reject Pairing", color = CRTheme.accentRed) },
+                        onClick = { showMenu = false; onRespond(false) }
+                    )
+                } else if (peer.isConnected) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Send Files", color = CRTheme.textHigh(isDark)) },
+                        onClick = { showMenu = false; onSendFiles() }
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Speed Test", color = CRTheme.textHigh(isDark)) },
+                        onClick = { showMenu = false; onStartSpeedTest() }
+                    )
+                }
                 androidx.compose.material3.DropdownMenuItem(
-                    text = { Text("Accept Pairing", color = CRTheme.accentGreen) },
-                    onClick = { showMenu = false; onRespond(true) }
-                )
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text("Reject Pairing", color = CRTheme.accentRed) },
-                    onClick = { showMenu = false; onRespond(false) }
-                )
-            } else if (peer.isConnected) {
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text("Send Files", color = CRTheme.textHigh(isDark)) },
-                    onClick = { showMenu = false; onSendFiles() }
-                )
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text("Speed Test", color = CRTheme.textHigh(isDark)) },
-                    onClick = { showMenu = false; onStartSpeedTest() }
+                    text = { Text("Forget Device", color = CRTheme.accentRed) },
+                    onClick = { showMenu = false; onForget() }
                 )
             }
-            androidx.compose.material3.DropdownMenuItem(
-                text = { Text("Forget Device", color = CRTheme.accentRed) },
-                onClick = { showMenu = false; onForget() }
-            )
         }
     }
 }

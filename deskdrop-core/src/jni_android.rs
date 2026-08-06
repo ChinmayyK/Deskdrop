@@ -41,16 +41,30 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_initContext(
     _class: JClass,
     context: jni::objects::JObject,
 ) {
-    let vm = env.get_java_vm().expect("Failed to get JavaVM");
-    let ctx_ref = env.new_global_ref(context).expect("Failed to create GlobalRef");
-    let vm_ptr = vm.get_java_vm_pointer() as *mut std::ffi::c_void;
-    let ctx_ptr = ctx_ref.as_obj().as_raw() as *mut std::ffi::c_void;
-    unsafe {
-        // If it's already initialized, this will panic with previous.is_none()
-        ndk_context::initialize_android_context(vm_ptr, ctx_ptr);
-    }
-    // Hold the global reference forever so ndk-context can use it.
-    let _ = ANDROID_CONTEXT.set(ctx_ref);
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if ANDROID_CONTEXT.get().is_some() {
+            return;
+        }
+        if context.is_null() {
+            return;
+        }
+        let vm = match env.get_java_vm() {
+            Ok(vm) => vm,
+            Err(_) => return,
+        };
+        let ctx_ref = match env.new_global_ref(context) {
+            Ok(ref_) => ref_,
+            Err(_) => return,
+        };
+        let vm_ptr = vm.get_java_vm_pointer() as *mut std::ffi::c_void;
+        let ctx_ptr = ctx_ref.as_obj().as_raw() as *mut std::ffi::c_void;
+
+        if ANDROID_CONTEXT.set(ctx_ref).is_ok() {
+            let _ = std::panic::catch_unwind(|| unsafe {
+                ndk_context::initialize_android_context(vm_ptr, ctx_ptr);
+            });
+        }
+    }));
 }
 
 #[no_mangle]

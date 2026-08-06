@@ -89,12 +89,12 @@
                         </StackPanel>
 
                         <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}">
-                            <ListView SelectionMode="None" Padding="0".ItemsPanel>
+                            <ListView.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <Grid/>
                                 </ItemsPanelTemplate>
                             </ListView.ItemsPanel>
-                            <ListView SelectionMode="None" Padding="0".ItemTemplate>
+                            <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="winui:RemoteFile">
                                     <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,8">
                                         <Grid>

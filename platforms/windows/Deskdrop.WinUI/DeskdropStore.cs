@@ -874,7 +874,6 @@ namespace Deskdrop.WinUI
                     StatusLine = Peers.Count == 0 ? "Running - no devices connected" : $"Connected to {ConnectedCount} device{(ConnectedCount == 1 ? "" : "s")}";
                     NotifyPeerMetrics();
                 }
-                }
 
                 if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
                 {

@@ -31,7 +31,7 @@
                 
                 <!-- Active Transfers List -->
                 <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.ActiveTransfers, Mode=OneWay}" Margin="0,0,0,32">
-                    <ListView SelectionMode="None" Padding="0".ItemTemplate>
+                    <ListView.ItemTemplate>
                         <DataTemplate x:DataType="winui:FileTransferState">
                             <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="14" Padding="18" Margin="0,0,0,12">
                                 <Grid>
@@ -81,7 +81,7 @@
 
                 <TextBlock Text="RECENT HISTORY" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" CharacterSpacing="60" Margin="0,0,0,12"/>
                 <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.ActivityFeed, Mode=OneWay}">
-                    <ListView SelectionMode="None" Padding="0".ItemTemplate>
+                    <ListView.ItemTemplate>
                         <DataTemplate x:DataType="winui:ActivityEntry">
                             <Border Background="#F5F5F7" CornerRadius="12" Padding="16,14" Margin="0,0,0,8">
                                 <Grid>
