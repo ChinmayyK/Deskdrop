@@ -33,6 +33,9 @@ async fn run() -> Result<()> {
         }
         ["push", text] => cmd_push(text).await,
         ["send", target, text] => cmd_send(target, text).await,
+        ["send-file", path] => cmd_send_file(path, None).await,
+        ["send-file", target, path] => cmd_send_file(path, Some(target)).await,
+        ["send-file", "--path", path, "--target", target] => cmd_send_file(path, Some(target)).await,
         ["connect", ip] => cmd_connect(ip, deskdrop_core::protocol::DEFAULT_PORT).await,
         ["connect", ip, port] => cmd_connect(ip, port.parse().context("bad port")?).await,
         ["peers"] => cmd_peers().await,
@@ -245,6 +248,43 @@ async fn cmd_send(target: &str, text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+async fn cmd_send_file(path: &str, target: Option<&str>) -> Result<()> {
+    let p = std::path::Path::new(path);
+    if !p.exists() {
+        bail!("file not found: {}", path);
+    }
+    let name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file")
+        .to_string();
+    let abs_path = std::fs::canonicalize(p)?
+        .to_string_lossy()
+        .to_string();
+    let resp = ipc(&IpcRequest::SendFilePath {
+        path: abs_path,
+        name,
+        mime: "application/octet-stream".to_string(),
+        target_device: target.map(|s| s.to_string()),
+        batch_id: None,
+        is_directory: false,
+        item_count: 1,
+    })
+    .await?;
+    match resp {
+        IpcResponse::Ok { data: Some(data) } => {
+            println!("File transfer initiated: {}", data);
+            Ok(())
+        }
+        IpcResponse::Ok { data: None } => {
+            println!("File transfer initiated");
+            Ok(())
+        }
+        IpcResponse::Error { message } => bail!("{}", message),
+        r => bail!("{:?}", r),
+    }
 }
 
 fn print_dispatch_response(response: IpcResponse) -> Result<()> {

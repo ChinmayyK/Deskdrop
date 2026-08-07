@@ -39,17 +39,29 @@ import com.deskdrop.ui.theme.CRSwitch
 
 fun getLocalIpAddress(): String {
     try {
-        val en = java.net.NetworkInterface.getNetworkInterfaces()
+        var preferredIp: String? = null
+        var fallbackIp: String? = null
+        val en = java.net.NetworkInterface.getNetworkInterfaces() ?: return "Unknown IP"
         while (en.hasMoreElements()) {
             val intf = en.nextElement()
+            val name = intf.name.lowercase()
             val enumIpAddr = intf.inetAddresses
             while (enumIpAddr.hasMoreElements()) {
                 val inetAddress = enumIpAddr.nextElement()
                 if (!inetAddress.isLoopbackAddress && inetAddress is java.net.Inet4Address) {
-                    return inetAddress.hostAddress ?: ""
+                    val host = inetAddress.hostAddress ?: continue
+                    if (host.isEmpty()) continue
+                    if (name.startsWith("wlan") || name.startsWith("eth") || name.startsWith("en") || name.startsWith("ap")) {
+                        return host
+                    } else if (!name.startsWith("rmnet") && !name.startsWith("tun") && !name.startsWith("ccmni") && !name.startsWith("pdp") && !name.startsWith("ppp") && !name.startsWith("wireguard")) {
+                        if (preferredIp == null) preferredIp = host
+                    } else {
+                        if (fallbackIp == null) fallbackIp = host
+                    }
                 }
             }
         }
+        return preferredIp ?: fallbackIp ?: "Unknown IP"
     } catch (ex: Exception) {
         // Ignore
     }

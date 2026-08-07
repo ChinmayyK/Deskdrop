@@ -232,6 +232,13 @@ class DeskdropShareTarget : ComponentActivity() {
     }
 
     private fun sendFiles(sharedUris: List<Uri>, sharedName: String?, targetId: String?) {
+        for (uri in sharedUris) {
+            if (uri.scheme == "content") {
+                runCatching {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+        }
         val stringUris = sharedUris.map { it.toString() }
         val svc = Intent(this@DeskdropShareTarget, DeskdropService::class.java).apply {
             action = DeskdropService.ACTION_PUSH_SHARED_URI

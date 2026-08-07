@@ -110,6 +110,13 @@ int32_t deskdrop_send_remote_file_pull_request(DeskdropHandle *handle,
                                                 const char *target_device_id,
                                                 const char *request_id,
                                                 uint64_t file_id);
+int32_t deskdrop_send_remote_files_response(DeskdropHandle *handle,
+                                             const char *request_id,
+                                             const char *target_device_id,
+                                             const char *summary_json,
+                                             const char *files_json,
+                                             uint32_t total_matching,
+                                             const char *error_str);
 
 const char *deskdrop_event_remote_request_id(PbEvent *event);
 const char *deskdrop_event_remote_summary_json(PbEvent *event);

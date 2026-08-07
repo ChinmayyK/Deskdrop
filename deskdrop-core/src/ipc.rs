@@ -412,6 +412,8 @@ pub enum IpcRequest {
         offset: u32,
         #[serde(default = "default_remote_files_limit")]
         limit: u32,
+        #[serde(default)]
+        timeout_secs: Option<u64>,
     },
     /// Request a base64 thumbnail for a remote media file.
     RemoteThumbnailRequest {
@@ -1385,6 +1387,7 @@ pub async fn handle_ipc_request(
             search_query,
             offset,
             limit,
+            timeout_secs,
         } => {
             let target_uuid = match uuid::Uuid::parse_str(&target_device) {
                 Ok(u) => u,
@@ -1401,7 +1404,7 @@ pub async fn handle_ipc_request(
                     search_query,
                     offset,
                     limit,
-                    12,
+                    timeout_secs.unwrap_or(10),
                 )
                 .await
             {

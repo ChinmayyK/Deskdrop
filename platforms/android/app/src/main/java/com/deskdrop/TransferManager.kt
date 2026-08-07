@@ -6,6 +6,7 @@ enum class TransferState {
     INCOMING, PROGRESS, PAUSED, CANCELED, FAILED, COMPLETED
 }
 
+@androidx.compose.runtime.Immutable
 data class TransferProgress(
     val id: String,
     val fileName: String,
@@ -44,6 +45,7 @@ object TransferManager {
     val activeSpeedTests = java.util.concurrent.ConcurrentHashMap<String, SpeedTestProgress>()
 }
 
+@androidx.compose.runtime.Immutable
 data class SpeedTestProgress(
     val peerId: String,
     val peerName: String,

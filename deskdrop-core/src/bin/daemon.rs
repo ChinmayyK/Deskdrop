@@ -5,14 +5,19 @@ use deskdrop_core::{
     history::{History, HistoryEntry, HistoryFilter},
     ipc::{IpcRequest, IpcResponse},
     peer_manager::PeerConnectionState,
-    protocol::ClipboardContent,
+    protocol::{
+        ClipboardContent, RemoteFileCategory, RemoteFileEntry, RemoteFileSource,
+        RemoteFilesSummary,
+    },
     settings::{default_history_path, default_settings_path, ClipboardTemplate, SettingsStore},
     trust::format_fingerprint,
 };
 use serde::Serialize;
 use serde_json::json;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
+    hash::{Hash, Hasher},
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
@@ -563,10 +568,356 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
         EngineEvent::FileTransferPaused { .. } | EngineEvent::FileTransferResumed { .. } => {
             // These are informational only; no feedback needed.
         }
+        EngineEvent::RemoteFilesQueryReceived {
+            request_id,
+            from_device,
+            summary_only,
+            category,
+            source,
+            search_query,
+            offset,
+            limit,
+        } => {
+            let engine = state.engine.clone();
+            tokio::spawn(async move {
+                let res = tokio::task::spawn_blocking(move || {
+                    scan_local_files_for_remote_query(
+                        summary_only,
+                        category,
+                        source,
+                        search_query,
+                        offset,
+                        limit,
+                    )
+                })
+                .await;
+
+                match res {
+                    Ok(Ok((summary, files, total))) => {
+                        engine
+                            .send_remote_files_response(
+                                from_device,
+                                request_id,
+                                Some(summary),
+                                files,
+                                total,
+                                None,
+                            )
+                            .await;
+                    }
+                    Ok(Err(e)) => {
+                        engine
+                            .send_remote_files_response(
+                                from_device,
+                                request_id,
+                                None,
+                                Vec::new(),
+                                0,
+                                Some(e.to_string()),
+                            )
+                            .await;
+                    }
+                    Err(e) => {
+                        engine
+                            .send_remote_files_response(
+                                from_device,
+                                request_id,
+                                None,
+                                Vec::new(),
+                                0,
+                                Some(format!("Task failed: {e}")),
+                            )
+                            .await;
+                    }
+                }
+            });
+        }
         _ => {}
     }
 
     Ok(())
+}
+
+fn hash_path(path: &Path) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    path.to_string_lossy().hash(&mut hasher);
+    hasher.finish()
+}
+
+fn categorize_file_by_extension(ext: &str) -> (RemoteFileCategory, &'static str) {
+    match ext.to_lowercase().as_str() {
+        // Images
+        "jpg" | "jpeg" => (RemoteFileCategory::Images, "image/jpeg"),
+        "png" => (RemoteFileCategory::Images, "image/png"),
+        "gif" => (RemoteFileCategory::Images, "image/gif"),
+        "bmp" => (RemoteFileCategory::Images, "image/bmp"),
+        "webp" => (RemoteFileCategory::Images, "image/webp"),
+        "heic" => (RemoteFileCategory::Images, "image/heic"),
+        "svg" => (RemoteFileCategory::Images, "image/svg+xml"),
+
+        // Videos
+        "mp4" | "m4v" => (RemoteFileCategory::Videos, "video/mp4"),
+        "mkv" => (RemoteFileCategory::Videos, "video/x-matroska"),
+        "mov" => (RemoteFileCategory::Videos, "video/quicktime"),
+        "avi" => (RemoteFileCategory::Videos, "video/x-msvideo"),
+        "wmv" => (RemoteFileCategory::Videos, "video/x-ms-wmv"),
+        "flv" => (RemoteFileCategory::Videos, "video/x-flv"),
+        "webm" => (RemoteFileCategory::Videos, "video/webm"),
+
+        // Audio
+        "mp3" => (RemoteFileCategory::Audio, "audio/mpeg"),
+        "wav" => (RemoteFileCategory::Audio, "audio/wav"),
+        "flac" => (RemoteFileCategory::Audio, "audio/flac"),
+        "aac" => (RemoteFileCategory::Audio, "audio/aac"),
+        "ogg" => (RemoteFileCategory::Audio, "audio/ogg"),
+        "m4a" => (RemoteFileCategory::Audio, "audio/mp4"),
+        "wma" => (RemoteFileCategory::Audio, "audio/x-ms-wma"),
+
+        // Documents
+        "pdf" => (RemoteFileCategory::Documents, "application/pdf"),
+        "doc" => (RemoteFileCategory::Documents, "application/msword"),
+        "docx" => (
+            RemoteFileCategory::Documents,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
+        "txt" | "md" => (RemoteFileCategory::Documents, "text/plain"),
+        "rtf" => (RemoteFileCategory::Documents, "application/rtf"),
+        "xls" => (RemoteFileCategory::Documents, "application/vnd.ms-excel"),
+        "xlsx" => (
+            RemoteFileCategory::Documents,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        "ppt" => (
+            RemoteFileCategory::Documents,
+            "application/vnd.ms-powerpoint",
+        ),
+        "pptx" => (
+            RemoteFileCategory::Documents,
+            "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+        ),
+        "csv" => (RemoteFileCategory::Documents, "text/csv"),
+
+        // Apks
+        "apk" => (
+            RemoteFileCategory::Apks,
+            "application/vnd.android.package-archive",
+        ),
+
+        // Archives
+        "zip" => (RemoteFileCategory::Archives, "application/zip"),
+        "tar" => (RemoteFileCategory::Archives, "application/x-tar"),
+        "gz" => (RemoteFileCategory::Archives, "application/gzip"),
+        "7z" => (
+            RemoteFileCategory::Archives,
+            "application/x-7z-compressed",
+        ),
+        "rar" => (RemoteFileCategory::Archives, "application/vnd.rar"),
+        "bz2" => (RemoteFileCategory::Archives, "application/x-bzip2"),
+        "xz" => (RemoteFileCategory::Archives, "application/x-xz"),
+
+        _ => (RemoteFileCategory::Other, "application/octet-stream"),
+    }
+}
+
+fn determine_source(
+    path: &Path,
+    pictures_dir: Option<&Path>,
+    downloads_dir: Option<&Path>,
+) -> RemoteFileSource {
+    let path_str = path.to_string_lossy();
+    if path_str.to_lowercase().contains("whatsapp") {
+        RemoteFileSource::WhatsApp
+    } else if pictures_dir.map_or(false, |p| path.starts_with(p))
+        || path_str.to_lowercase().contains("camera")
+        || path_str.to_lowercase().contains("dcim")
+    {
+        RemoteFileSource::Camera
+    } else if downloads_dir.map_or(false, |d| path.starts_with(d)) {
+        RemoteFileSource::Downloads
+    } else {
+        RemoteFileSource::Other
+    }
+}
+
+fn scan_local_files_for_remote_query(
+    summary_only: bool,
+    category_filter: Option<RemoteFileCategory>,
+    source_filter: Option<RemoteFileSource>,
+    search_query: Option<String>,
+    offset: u32,
+    limit: u32,
+) -> Result<(RemoteFilesSummary, Vec<RemoteFileEntry>, u32)> {
+    let downloads_dir = dirs::download_dir();
+    let documents_dir = dirs::document_dir();
+    let pictures_dir = dirs::picture_dir();
+    let videos_dir = dirs::video_dir();
+    let audio_dir = dirs::audio_dir();
+
+    let root_dirs: Vec<PathBuf> = [
+        downloads_dir.clone(),
+        documents_dir.clone(),
+        pictures_dir.clone(),
+        videos_dir.clone(),
+        audio_dir.clone(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
+    let mut scanned_entries: Vec<RemoteFileEntry> = Vec::new();
+    let mut summary = RemoteFilesSummary::default();
+
+    fn walk_dir(
+        dir: &Path,
+        current_depth: usize,
+        max_depth: usize,
+        pictures_dir: Option<&Path>,
+        downloads_dir: Option<&Path>,
+        entries: &mut Vec<RemoteFileEntry>,
+        summary: &mut RemoteFilesSummary,
+    ) {
+        if current_depth > max_depth {
+            return;
+        }
+
+        let read_dir = match std::fs::read_dir(dir) {
+            Ok(rd) => rd,
+            Err(_) => return,
+        };
+
+        for entry in read_dir.flatten() {
+            let file_name = entry.file_name();
+            let file_name_str = file_name.to_string_lossy();
+            if file_name_str.starts_with('.') {
+                continue;
+            }
+
+            let path = entry.path();
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+
+            if file_type.is_dir() {
+                walk_dir(
+                    &path,
+                    current_depth + 1,
+                    max_depth,
+                    pictures_dir,
+                    downloads_dir,
+                    entries,
+                    summary,
+                );
+            } else if file_type.is_file() {
+                let metadata = match entry.metadata() {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                let (category, mime_type) = categorize_file_by_extension(ext);
+                let source = determine_source(&path, pictures_dir, downloads_dir);
+
+                match category {
+                    RemoteFileCategory::Images => summary.type_counts.images += 1,
+                    RemoteFileCategory::Videos => summary.type_counts.videos += 1,
+                    RemoteFileCategory::Audio => summary.type_counts.audio += 1,
+                    RemoteFileCategory::Documents => summary.type_counts.documents += 1,
+                    RemoteFileCategory::Apks => summary.type_counts.apks += 1,
+                    RemoteFileCategory::Archives => summary.type_counts.archives += 1,
+                    _ => {}
+                }
+
+                match source {
+                    RemoteFileSource::WhatsApp => summary.source_counts.whatsapp += 1,
+                    RemoteFileSource::Downloads => summary.source_counts.downloads += 1,
+                    RemoteFileSource::Camera => summary.source_counts.camera += 1,
+                    _ => {}
+                }
+
+                let date_modified = metadata
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+
+                let file_id = hash_path(&path);
+
+                let remote_entry = RemoteFileEntry {
+                    file_id,
+                    display_name: file_name_str.to_string(),
+                    size_bytes: metadata.len(),
+                    mime_type: mime_type.to_string(),
+                    date_modified,
+                    category,
+                    source,
+                    content_uri: path.to_string_lossy().to_string(),
+                };
+
+                entries.push(remote_entry);
+            }
+        }
+    }
+
+    let mut visited_paths = HashSet::new();
+    for root in root_dirs {
+        let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+        if visited_paths.insert(canonical_root.clone()) {
+            walk_dir(
+                &canonical_root,
+                1,
+                3,
+                pictures_dir.as_deref(),
+                downloads_dir.as_deref(),
+                &mut scanned_entries,
+                &mut summary,
+            );
+        }
+    }
+
+    let query_lower = search_query.as_ref().map(|q| q.to_lowercase());
+
+    let matching_entries: Vec<RemoteFileEntry> = scanned_entries
+        .into_iter()
+        .filter(|entry| {
+            if let Some(ref cat) = category_filter {
+                if *cat != RemoteFileCategory::All && entry.category != *cat {
+                    return false;
+                }
+            }
+            if let Some(ref src) = source_filter {
+                if *src != RemoteFileSource::All && entry.source != *src {
+                    return false;
+                }
+            }
+            if let Some(ref q) = query_lower {
+                if !q.is_empty() && !entry.display_name.to_lowercase().contains(q) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+
+    let total_matching = matching_entries.len() as u32;
+
+    let mut sorted_entries = matching_entries;
+    sorted_entries.sort_by(|a, b| b.date_modified.cmp(&a.date_modified));
+
+    let result_files = if summary_only {
+        Vec::new()
+    } else {
+        let start = offset as usize;
+        if start >= sorted_entries.len() {
+            Vec::new()
+        } else {
+            let end = (start + limit as usize).min(sorted_entries.len());
+            sorted_entries[start..end].to_vec()
+        }
+    };
+
+    Ok((summary, result_files, total_matching))
 }
 
 async fn handle_request(state: DaemonState, req: IpcRequest) -> IpcResponse {
@@ -1364,6 +1715,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             search_query,
             offset,
             limit,
+            timeout_secs,
         } => {
             let target_uuid = parse_uuid(&target_device)?;
             let cat = category
@@ -1382,7 +1734,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                     search_query,
                     offset,
                     limit,
-                    12,
+                    timeout_secs.unwrap_or(10),
                 )
                 .await?;
             Ok(IpcResponse::ok(res))

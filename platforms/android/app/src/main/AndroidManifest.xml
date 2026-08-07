@@ -81,7 +81,7 @@
         <!-- ── Pairing / TOFU dialog ─────────────────────────────────── -->
         <activity
             android:name=".PairingActivity"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize" />
 
@@ -90,13 +90,13 @@
         <!-- ── Diagnostics ───────────────────────────────────────────── -->
         <activity
             android:name=".DiagnosticsActivity"
-            android:exported="false"
+            android:exported="true"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- ── Camera Stream ─────────────────────────────────────────── -->
         <activity
             android:name=".CameraStreamActivity"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.Deskdrop" />
@@ -130,7 +130,7 @@
         <service
             android:name=".DeskdropService"
             android:enabled="true"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="connectedDevice"
             android:stopWithTask="false" />
 

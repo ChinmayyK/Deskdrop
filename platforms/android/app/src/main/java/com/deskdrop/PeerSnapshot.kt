@@ -60,18 +60,18 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             lifecycleState = obj.optString("lifecycle_state", "discovered"),
         )
         
-        val existing = uniquePeers[name]
+        val existing = uniquePeers[peer.id]
         if (existing == null) {
-            uniquePeers[name] = peer
+            uniquePeers[peer.id] = peer
         } else {
             val peerPriority = if (peer.isConnected) 2 else if (peer.isConnecting) 1 else 0
             val existingPriority = if (existing.isConnected) 2 else if (existing.isConnecting) 1 else 0
             
             if (peerPriority > existingPriority) {
-                uniquePeers[name] = peer
+                uniquePeers[peer.id] = peer
             } else if (peerPriority == existingPriority) {
                 if ((peer.lastSeenSecs ?: 0) > (existing.lastSeenSecs ?: 0)) {
-                    uniquePeers[name] = peer
+                    uniquePeers[peer.id] = peer
                 }
             }
         }

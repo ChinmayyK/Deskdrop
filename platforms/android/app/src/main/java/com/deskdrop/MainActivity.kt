@@ -72,6 +72,14 @@ class MainActivity : ComponentActivity() {
         if (uris.isNotEmpty()) {
             val intent = Intent(this, DeskdropService::class.java).apply {
                 action = DeskdropService.ACTION_PUSH_SHARED_URI
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (uris.isNotEmpty()) {
+                    val cd = android.content.ClipData.newRawUri("shared_uris", uris[0])
+                    for (i in 1 until uris.size) {
+                        cd.addItem(android.content.ClipData.Item(uris[i]))
+                    }
+                    clipData = cd
+                }
                 putStringArrayListExtra(DeskdropService.EXTRA_SHARED_URIS, java.util.ArrayList(uris.map { it.toString() }))
                 if (targetDeviceIdForNextSend != null) {
                     putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, targetDeviceIdForNextSend)
@@ -472,6 +480,14 @@ class MainActivity : ComponentActivity() {
                         if (uris.isNotEmpty()) {
                             val intent = Intent(this@MainActivity, DeskdropService::class.java).apply {
                                 action = DeskdropService.ACTION_PUSH_SHARED_URI
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                if (uris.isNotEmpty()) {
+                                    val cd = android.content.ClipData.newRawUri("shared_uris", uris[0])
+                                    for (i in 1 until uris.size) {
+                                        cd.addItem(android.content.ClipData.Item(uris[i]))
+                                    }
+                                    clipData = cd
+                                }
                                 putStringArrayListExtra(DeskdropService.EXTRA_SHARED_URIS, java.util.ArrayList(uris.map { it.toString() }))
                                 putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, targetId)
                             }

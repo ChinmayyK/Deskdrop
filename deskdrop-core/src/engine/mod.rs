@@ -578,7 +578,13 @@ pub(crate) struct EngineShared {
     /// Waiters for remote files queries (`query_remote_files_sync`). Keyed by `request_id`.
     pub(crate) remote_file_waiters: Arc<
         Mutex<
-            std::collections::HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<RemoteFilesResult>>,
+            std::collections::HashMap<
+                uuid::Uuid,
+                (
+                    uuid::Uuid,
+                    tokio::sync::oneshot::Sender<RemoteFilesResult>,
+                ),
+            >,
         >,
     >,
     /// Waiters for remote thumbnail requests (`request_remote_thumbnail_sync`). Keyed by `request_id`.
@@ -586,7 +592,10 @@ pub(crate) struct EngineShared {
         Mutex<
             std::collections::HashMap<
                 uuid::Uuid,
-                tokio::sync::oneshot::Sender<RemoteThumbnailResult>,
+                (
+                    uuid::Uuid,
+                    tokio::sync::oneshot::Sender<RemoteThumbnailResult>,
+                ),
             >,
         >,
     >,
@@ -1902,6 +1911,9 @@ impl Engine {
             .peer_manager
             .set_explicit_disconnect(device_id, true)?;
 
+        // Drain pending RPC waiters immediately on explicit disconnect
+        drain_remote_waiters(&self.shared, device_id).await;
+
         let session = self.shared.peer_manager.shutdown_peer_session(device_id)?;
         if let Some(session) = session {
             if let Some(shutdown_tx) = session.shutdown_tx {
@@ -1998,7 +2010,7 @@ impl Engine {
         search_query: Option<String>,
         offset: u32,
         limit: u32,
-    ) {
+    ) -> bool {
         let msg = AppMessage::RemoteFilesQuery {
             request_id,
             origin_device: self.shared.config.device_id,
@@ -2015,7 +2027,9 @@ impl Engine {
             .find(|(id, _)| *id == target_device)
             .map(|(_, tx)| tx)
         {
-            let _ = tx.send(msg).await;
+            tx.send(msg).await.is_ok()
+        } else {
+            false
         }
     }
 
@@ -2051,7 +2065,7 @@ impl Engine {
         request_id: Uuid,
         file_id: u64,
         size_px: u32,
-    ) {
+    ) -> bool {
         let msg = AppMessage::RemoteThumbnailRequest {
             request_id,
             origin_device: self.shared.config.device_id,
@@ -2064,7 +2078,9 @@ impl Engine {
             .find(|(id, _)| *id == target_device)
             .map(|(_, tx)| tx)
         {
-            let _ = tx.send(msg).await;
+            tx.send(msg).await.is_ok()
+        } else {
+            false
         }
     }
 
@@ -2147,26 +2163,41 @@ impl Engine {
         limit: u32,
         timeout_secs: u64,
     ) -> Result<RemoteFilesResult> {
+        let effective_timeout = if timeout_secs == 0 { 10 } else { timeout_secs };
         let request_id = Uuid::new_v4();
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.shared
             .remote_file_waiters
             .lock()
             .await
-            .insert(request_id, tx);
-        self.send_remote_files_query(
-            target_device,
-            request_id,
-            summary_only,
-            category,
-            source,
-            search_query,
-            offset,
-            limit,
-        )
-        .await;
-        match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), rx).await {
-            Ok(Ok(res)) => Ok(res),
+            .insert(request_id, (target_device, tx));
+        let sent = self
+            .send_remote_files_query(
+                target_device,
+                request_id,
+                summary_only,
+                category,
+                source,
+                search_query,
+                offset,
+                limit,
+            )
+            .await;
+        if !sent {
+            self.shared
+                .remote_file_waiters
+                .lock()
+                .await
+                .remove(&request_id);
+            anyhow::bail!("Target device {} is not connected", target_device);
+        }
+        match tokio::time::timeout(std::time::Duration::from_secs(effective_timeout), rx).await {
+            Ok(Ok(res)) => {
+                if let Some(err) = res.error {
+                    anyhow::bail!("{err}");
+                }
+                Ok(res)
+            }
             Ok(Err(_)) => {
                 self.shared
                     .remote_file_waiters
@@ -2181,7 +2212,7 @@ impl Engine {
                     .lock()
                     .await
                     .remove(&request_id);
-                anyhow::bail!("Remote files query timed out after {}s", timeout_secs)
+                anyhow::bail!("Remote files query timed out after {}s", effective_timeout)
             }
         }
     }
@@ -2199,9 +2230,18 @@ impl Engine {
             .remote_thumb_waiters
             .lock()
             .await
-            .insert(request_id, tx);
-        self.send_remote_thumbnail_request(target_device, request_id, file_id, size_px)
+            .insert(request_id, (target_device, tx));
+        let sent = self
+            .send_remote_thumbnail_request(target_device, request_id, file_id, size_px)
             .await;
+        if !sent {
+            self.shared
+                .remote_thumb_waiters
+                .lock()
+                .await
+                .remove(&request_id);
+            anyhow::bail!("Target device {} is not connected", target_device);
+        }
         match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), rx).await {
             Ok(Ok(res)) => Ok(res),
             Ok(Err(_)) => {
@@ -2533,6 +2573,8 @@ impl Engine {
         let found = self.shared.peer_manager.forget_device(device_id)?;
         if found {
             let _ = self.shared.trust.lock().await.revoke_peer(device_id);
+            // Drain pending RPC waiters for forgotten device
+            drain_remote_waiters(&self.shared, device_id).await;
             // Disconnect the session — device will not auto-reconnect
             let session = self.shared.peer_manager.shutdown_peer_session(device_id)?;
             if let Some(session) = session {
@@ -5649,7 +5691,7 @@ fn register_session(
                         error,
                     }) => {
                         touch_last_seen();
-                        if let Some(tx) =
+                        if let Some((_target, tx)) =
                             shared.remote_file_waiters.lock().await.remove(&request_id)
                         {
                             let _ = tx.send(RemoteFilesResult {
@@ -5703,7 +5745,7 @@ fn register_session(
                         error,
                     }) => {
                         touch_last_seen();
-                        if let Some(tx) =
+                        if let Some((_target, tx)) =
                             shared.remote_thumb_waiters.lock().await.remove(&request_id)
                         {
                             let _ = tx.send(RemoteThumbnailResult {
@@ -5934,6 +5976,9 @@ fn register_session(
                 shared.camera_frames.remove(&peer_id);
                 pump_transfer_queue(&shared).await;
 
+                // Drain pending remote file waiters and notify oneshot receivers with error fast-path
+                drain_remote_waiters(&shared, peer_id).await;
+
                 // FIX: Phantom Pairing Prompts. Clear incoming pairing state if connection drops.
                 let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
                 let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
@@ -6005,9 +6050,12 @@ fn register_session(
                     }
                 }
             }
-            Ok(None) => {}
+            Ok(None) => {
+                drain_remote_waiters(&shared, peer_id).await;
+            }
             Err(err) => {
                 warn!(peer_id = %peer_id, error = %err, "failed to mark peer disconnected");
+                drain_remote_waiters(&shared, peer_id).await;
             }
         }
     });
@@ -6103,5 +6151,62 @@ pub(crate) async fn pump_transfer_queue(shared: &EngineShared) {
                 break;
             }
         }
+    }
+}
+
+/// Drain pending remote file waiters and remote thumbnail waiters for a given peer
+/// and notify oneshot receivers with an immediate fast-path error ("Peer disconnected").
+pub(crate) async fn drain_remote_waiters(shared: &EngineShared, peer_id: Uuid) {
+    let waiters_to_notify: Vec<tokio::sync::oneshot::Sender<RemoteFilesResult>> = {
+        let mut waiters = shared.remote_file_waiters.lock().await;
+        let matching_keys: Vec<Uuid> = waiters
+            .iter()
+            .filter_map(|(req_id, (target, _))| {
+                if *target == peer_id {
+                    Some(*req_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        matching_keys
+            .into_iter()
+            .filter_map(|req_id| waiters.remove(&req_id).map(|(_, tx)| tx))
+            .collect()
+    };
+
+    for tx in waiters_to_notify {
+        let _ = tx.send(RemoteFilesResult {
+            summary: None,
+            files: Vec::new(),
+            total_matching: 0,
+            error: Some("Peer disconnected".to_string()),
+        });
+    }
+
+    let thumb_waiters_to_notify: Vec<tokio::sync::oneshot::Sender<RemoteThumbnailResult>> = {
+        let mut thumb_waiters = shared.remote_thumb_waiters.lock().await;
+        let matching_keys: Vec<Uuid> = thumb_waiters
+            .iter()
+            .filter_map(|(req_id, (target, _))| {
+                if *target == peer_id {
+                    Some(*req_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        matching_keys
+            .into_iter()
+            .filter_map(|req_id| thumb_waiters.remove(&req_id).map(|(_, tx)| tx))
+            .collect()
+    };
+
+    for tx in thumb_waiters_to_notify {
+        let _ = tx.send(RemoteThumbnailResult {
+            file_id: 0,
+            data: Vec::new(),
+            error: Some("Peer disconnected".to_string()),
+        });
     }
 }

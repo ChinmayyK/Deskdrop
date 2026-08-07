@@ -67,10 +67,7 @@ class CameraStreamActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
-        val handle = DeskdropService.activeEngineHandle
-        if (handle != 0L) {
-            DeskdropJni.stopCameraStream(handle)
-        }
+        DeskdropService.stopCameraStreamSafely()
     }
 
     fun getExecutor(): ExecutorService = cameraExecutor
@@ -270,9 +267,8 @@ private class FrameProcessor {
                 yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 85, jpegOutputStream)
                 val jpegBytes = jpegOutputStream.toByteArray()
 
-                val handle = DeskdropService.activeEngineHandle
-                if (handle != 0L) {
-                    val result = DeskdropJni.pushVideoFrame(handle, jpegBytes)
+                val result = DeskdropService.pushVideoFrameSafely(jpegBytes)
+                if (result >= 0) {
                     android.util.Log.d("CameraStream", "Pushed frame: ${jpegBytes.size} bytes, result=$result")
                 } else {
                     android.util.Log.w("CameraStream", "Engine handle is 0 — service not running? Cannot push frame.")

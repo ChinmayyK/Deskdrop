@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
 import android.util.Size
@@ -19,6 +20,7 @@ import java.io.File
 object RemoteFileManager {
     private const val TAG = "RemoteFileManager"
 
+    @androidx.compose.runtime.Immutable
     data class FileMeta(
         val fileId: Long,
         val displayName: String,
@@ -31,6 +33,92 @@ object RemoteFileManager {
         val dataPath: String
     )
 
+    private const val DOCUMENTS_SELECTION =
+        "(${MediaStore.Files.FileColumns.MIME_TYPE} = 'application/pdf' OR " +
+        "${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'text/%' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.pdf' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.doc' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.docx' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.xls' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.xlsx' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.ppt' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.pptx' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.txt' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.csv' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.md')"
+
+    private const val APKS_SELECTION =
+        "(${MediaStore.Files.FileColumns.MIME_TYPE} = 'application/vnd.android.package-archive' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.apk')"
+
+    private const val ARCHIVES_SELECTION =
+        "(${MediaStore.Files.FileColumns.MIME_TYPE} IN ('application/zip', 'application/x-zip-compressed', 'application/x-tar', 'application/gzip', 'application/x-rar-compressed', 'application/x-7z-compressed') OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.zip' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.tar' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.gz' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.rar' OR " +
+        "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.7z')"
+
+    private const val OTHER_SELECTION =
+        "NOT (${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'image/%' OR " +
+        "${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'video/%' OR " +
+        "${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'audio/%' OR " +
+        DOCUMENTS_SELECTION + " OR " +
+        APKS_SELECTION + " OR " +
+        ARCHIVES_SELECTION + ")"
+
+    private fun countFiles(context: Context, selection: String, selectionArgs: Array<String>? = null): Int {
+        val uri = MediaStore.Files.getContentUri("external")
+        val projection = arrayOf(MediaStore.Files.FileColumns._ID)
+        return try {
+            context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+                cursor.count
+            } ?: 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Error counting files for selection: $selection", e)
+            0
+        }
+    }
+
+    private fun buildFilterSelection(
+        categoryFilter: String?,
+        sourceFilter: String?,
+        searchQuery: String?
+    ): Pair<String, Array<String>> {
+        val selectionParts = mutableListOf<String>()
+        val selectionArgs = mutableListOf<String>()
+
+        selectionParts.add("${MediaStore.Files.FileColumns.SIZE} > 0")
+
+        if (!categoryFilter.isNullOrEmpty() && categoryFilter != "All") {
+            when (categoryFilter) {
+                "Images" -> selectionParts.add("${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'image/%'")
+                "Videos" -> selectionParts.add("${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'video/%'")
+                "Audio" -> selectionParts.add("${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'audio/%'")
+                "Documents" -> selectionParts.add(DOCUMENTS_SELECTION)
+                "Apks" -> selectionParts.add(APKS_SELECTION)
+                "Archives" -> selectionParts.add(ARCHIVES_SELECTION)
+                "Other" -> selectionParts.add(OTHER_SELECTION)
+            }
+        }
+
+        if (!sourceFilter.isNullOrEmpty() && sourceFilter != "All") {
+            when (sourceFilter) {
+                "WhatsApp" -> selectionParts.add("${MediaStore.Files.FileColumns.DATA} LIKE '%whatsapp%'")
+                "Downloads" -> selectionParts.add("${MediaStore.Files.FileColumns.DATA} LIKE '%download%'")
+                "Camera" -> selectionParts.add("(${MediaStore.Files.FileColumns.DATA} LIKE '%dcim%' OR ${MediaStore.Files.FileColumns.DATA} LIKE '%camera%')")
+            }
+        }
+
+        if (!searchQuery.isNullOrEmpty()) {
+            selectionParts.add("${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE ?")
+            selectionArgs.add("%$searchQuery%")
+        }
+
+        val selectionString = selectionParts.joinToString(" AND ")
+        return Pair(selectionString, selectionArgs.toTypedArray())
+    }
+
     fun queryFiles(
         context: Context,
         categoryFilter: String?,
@@ -41,98 +129,20 @@ object RemoteFileManager {
         includeSummary: Boolean,
         includeList: Boolean
     ): Triple<String?, String?, Int> {
-        var images = 0; var videos = 0; var audio = 0; var documents = 0; var apks = 0; var archives = 0
-        var whatsapp = 0; var downloads = 0; var camera = 0
-
-        val matchingList = mutableListOf<FileMeta>()
-        var totalMatching = 0
-
-        val projection = arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.DISPLAY_NAME,
-            MediaStore.Files.FileColumns.SIZE,
-            MediaStore.Files.FileColumns.MIME_TYPE,
-            MediaStore.Files.FileColumns.DATE_MODIFIED,
-            MediaStore.Files.FileColumns.DATA
-        )
-
-        val uri = MediaStore.Files.getContentUri("external")
-        val selection = "${MediaStore.Files.FileColumns.SIZE} > 0"
-
-        try {
-            context.contentResolver.query(
-                uri,
-                projection,
-                selection,
-                null,
-                "${MediaStore.Files.FileColumns.DATE_MODIFIED} DESC"
-            )?.use { cursor ->
-                val idIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns._ID)
-                val nameIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME)
-                val sizeIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.SIZE)
-                val mimeIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE)
-                val dateIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATE_MODIFIED)
-                val dataIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
-
-                while (cursor.moveToNext()) {
-                    val size = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L
-                    if (size <= 0L) continue
-                    
-                    val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
-                    val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) ?: "" else ""
-                    val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
-
-                    val cat = getCategory(mime, name)
-                    val src = getSource(dataPath)
-
-                    if (includeSummary) {
-                        when (cat) {
-                            "Images" -> images++
-                            "Videos" -> videos++
-                            "Audio" -> audio++
-                            "Documents" -> documents++
-                            "Apks" -> apks++
-                            "Archives" -> archives++
-                        }
-                        when (src) {
-                            "WhatsApp" -> whatsapp++
-                            "Downloads" -> downloads++
-                            "Camera" -> camera++
-                        }
-                    }
-
-                    if (matchesFilters(name, cat, src, categoryFilter, sourceFilter, searchQuery)) {
-                        if (includeList) {
-                            if (totalMatching >= offset && matchingList.size < limit) {
-                                val id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L
-                                val dateMod = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
-                                val contentUri = ContentUris.withAppendedId(uri, id).toString()
-                                
-                                matchingList.add(
-                                    FileMeta(
-                                        fileId = id,
-                                        displayName = name,
-                                        sizeBytes = size,
-                                        mimeType = mime.ifEmpty { "application/octet-stream" },
-                                        dateModified = dateMod,
-                                        category = cat,
-                                        source = src,
-                                        contentUri = contentUri,
-                                        dataPath = dataPath
-                                    )
-                                )
-                            }
-                        }
-                        totalMatching++
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error querying files", e)
-        }
-
         var summaryJson: String? = null
         if (includeSummary) {
+            val baseSize = "${MediaStore.Files.FileColumns.SIZE} > 0"
+            val images = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'image/%'")
+            val videos = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'video/%'")
+            val audio = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'audio/%'")
+            val documents = countFiles(context, "$baseSize AND $DOCUMENTS_SELECTION")
+            val apks = countFiles(context, "$baseSize AND $APKS_SELECTION")
+            val archives = countFiles(context, "$baseSize AND $ARCHIVES_SELECTION")
+
+            val whatsapp = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.DATA} LIKE '%whatsapp%'")
+            val downloads = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.DATA} LIKE '%download%'")
+            val camera = countFiles(context, "$baseSize AND (${MediaStore.Files.FileColumns.DATA} LIKE '%dcim%' OR ${MediaStore.Files.FileColumns.DATA} LIKE '%camera%')")
+
             val typeCounts = JSONObject().apply {
                 put("images", images)
                 put("videos", videos)
@@ -152,8 +162,69 @@ object RemoteFileManager {
             }.toString()
         }
 
+        val (selectionString, selectionArgs) = buildFilterSelection(categoryFilter, sourceFilter, searchQuery)
+        val totalMatching = countFiles(context, selectionString, selectionArgs)
+
         var filesJson: String? = null
-        if (includeList) {
+        if (includeList && totalMatching > 0 && offset < totalMatching && limit > 0) {
+            val matchingList = mutableListOf<FileMeta>()
+            val uri = MediaStore.Files.getContentUri("external")
+            val projection = arrayOf(
+                MediaStore.Files.FileColumns._ID,
+                MediaStore.Files.FileColumns.DISPLAY_NAME,
+                MediaStore.Files.FileColumns.SIZE,
+                MediaStore.Files.FileColumns.MIME_TYPE,
+                MediaStore.Files.FileColumns.DATE_MODIFIED,
+                MediaStore.Files.FileColumns.DATA
+            )
+
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val queryArgs = Bundle().apply {
+                        putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selectionString)
+                        if (selectionArgs.isNotEmpty()) {
+                            putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
+                        }
+                        putStringArray(
+                            ContentResolver.QUERY_ARG_SORT_COLUMNS,
+                            arrayOf(MediaStore.Files.FileColumns.DATE_MODIFIED)
+                        )
+                        putInt(
+                            ContentResolver.QUERY_ARG_SORT_DIRECTION,
+                            ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
+                        )
+                        putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+                        putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+                    }
+                    context.contentResolver.query(uri, projection, queryArgs, null)?.use { cursor ->
+                        readCursorRows(cursor, uri, matchingList)
+                    }
+                } else {
+                    val sortOrder = "${MediaStore.Files.FileColumns.DATE_MODIFIED} DESC LIMIT $limit OFFSET $offset"
+                    context.contentResolver.query(
+                        uri,
+                        projection,
+                        selectionString,
+                        if (selectionArgs.isNotEmpty()) selectionArgs else null,
+                        sortOrder
+                    )?.use { cursor ->
+                        readCursorRows(cursor, uri, matchingList)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Bundle query failed, falling back to 5-arg query: ${e.message}")
+                val sortOrder = "${MediaStore.Files.FileColumns.DATE_MODIFIED} DESC LIMIT $limit OFFSET $offset"
+                context.contentResolver.query(
+                    uri,
+                    projection,
+                    selectionString,
+                    if (selectionArgs.isNotEmpty()) selectionArgs else null,
+                    sortOrder
+                )?.use { cursor ->
+                    readCursorRows(cursor, uri, matchingList)
+                }
+            }
+
             val jsonArray = JSONArray()
             for (item in matchingList) {
                 val obj = JSONObject().apply {
@@ -169,9 +240,53 @@ object RemoteFileManager {
                 jsonArray.put(obj)
             }
             filesJson = jsonArray.toString()
+        } else if (includeList) {
+            filesJson = "[]"
         }
 
         return Triple(summaryJson, filesJson, totalMatching)
+    }
+
+    private fun readCursorRows(
+        cursor: android.database.Cursor,
+        uri: Uri,
+        matchingList: MutableList<FileMeta>
+    ) {
+        val idIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns._ID)
+        val nameIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME)
+        val sizeIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.SIZE)
+        val mimeIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE)
+        val dateIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATE_MODIFIED)
+        val dataIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
+
+        while (cursor.moveToNext()) {
+            val size = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L
+            if (size <= 0L) continue
+
+            val id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L
+            val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
+            val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) ?: "" else ""
+            val dateMod = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
+            val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
+
+            val cat = getCategory(mime, name)
+            val src = getSource(dataPath)
+            val contentUri = ContentUris.withAppendedId(uri, id).toString()
+
+            matchingList.add(
+                FileMeta(
+                    fileId = id,
+                    displayName = name,
+                    sizeBytes = size,
+                    mimeType = mime.ifEmpty { "application/octet-stream" },
+                    dateModified = dateMod,
+                    category = cat,
+                    source = src,
+                    contentUri = contentUri,
+                    dataPath = dataPath
+                )
+            )
+        }
     }
 
     fun getThumbnail(context: Context, fileId: Long, sizePx: Int): ByteArray? {

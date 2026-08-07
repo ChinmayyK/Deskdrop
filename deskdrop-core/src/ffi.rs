@@ -1198,6 +1198,75 @@ pub unsafe extern "C" fn deskdrop_send_remote_file_pull_request(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn deskdrop_send_remote_files_response(
+    handle: *mut DeskdropHandle,
+    request_id: *const c_char,
+    target_device_id: *const c_char,
+    summary_json: *const c_char,
+    files_json: *const c_char,
+    total_matching: u32,
+    error_str: *const c_char,
+) -> c_int {
+    if handle.is_null() || request_id.is_null() || target_device_id.is_null() {
+        return 0;
+    }
+    let req_raw = match CStr::from_ptr(request_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let req_uuid = match uuid::Uuid::parse_str(req_raw) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+    let target_raw = match CStr::from_ptr(target_device_id).to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let target_uuid = match uuid::Uuid::parse_str(target_raw) {
+        Ok(u) => u,
+        Err(_) => return 0,
+    };
+
+    let summary: Option<crate::protocol::RemoteFilesSummary> = if summary_json.is_null() {
+        None
+    } else {
+        match CStr::from_ptr(summary_json).to_str() {
+            Ok(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+            _ => None,
+        }
+    };
+
+    let files: Vec<crate::protocol::RemoteFileEntry> = if files_json.is_null() {
+        Vec::new()
+    } else {
+        match CStr::from_ptr(files_json).to_str() {
+            Ok(s) if !s.is_empty() => serde_json::from_str(s).unwrap_or_default(),
+            _ => Vec::new(),
+        }
+    };
+
+    let err_opt = if error_str.is_null() {
+        None
+    } else {
+        match CStr::from_ptr(error_str).to_str() {
+            Ok(s) if !s.is_empty() => Some(s.to_string()),
+            _ => None,
+        }
+    };
+
+    let h = &*handle;
+    runtime().block_on(h.engine.send_remote_files_response(
+        target_uuid,
+        req_uuid,
+        summary,
+        files,
+        total_matching,
+        err_opt,
+    ));
+    1
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_remote_request_id(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
     let s = match &e.inner {
@@ -1304,5 +1373,172 @@ pub unsafe extern "C" fn deskdrop_event_remote_error(event: *mut PbEvent) -> *co
         e.cache_str(s)
     } else {
         std::ptr::null()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CString;
+
+    fn create_test_handle() -> (*mut DeskdropHandle, tempfile::TempDir) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = EngineConfig {
+            device_name: "TestDevice".into(),
+            port: 0,
+            trust_store_path: temp_dir.path().join("trust.json"),
+            peer_store_path: temp_dir.path().join("peers.json"),
+            identity_path: temp_dir.path().join("identity.bin"),
+            data_dir: temp_dir.path().join("data"),
+            enable_discovery: false,
+            ..EngineConfig::default()
+        };
+        let (event_tx, event_rx) = mpsc::channel(256);
+        let engine = runtime().block_on(Engine::start(config, event_tx)).unwrap();
+        let handle = Box::into_raw(Box::new(DeskdropHandle {
+            engine,
+            event_rx: std::sync::Mutex::new(Some(event_rx)),
+        }));
+        (handle, temp_dir)
+    }
+
+    #[test]
+    fn test_send_remote_files_response_null_inputs() {
+        unsafe {
+            let req = CString::new(uuid::Uuid::new_v4().to_string()).unwrap();
+            let target = CString::new(uuid::Uuid::new_v4().to_string()).unwrap();
+
+            // Null handle
+            assert_eq!(
+                deskdrop_send_remote_files_response(
+                    std::ptr::null_mut(),
+                    req.as_ptr(),
+                    target.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    std::ptr::null()
+                ),
+                0
+            );
+
+            let (handle, _dir) = create_test_handle();
+            assert!(!handle.is_null());
+
+            // Null request_id
+            assert_eq!(
+                deskdrop_send_remote_files_response(
+                    handle,
+                    std::ptr::null(),
+                    target.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    std::ptr::null()
+                ),
+                0
+            );
+
+            // Null target_device_id
+            assert_eq!(
+                deskdrop_send_remote_files_response(
+                    handle,
+                    req.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    std::ptr::null()
+                ),
+                0
+            );
+
+            deskdrop_stop(handle);
+        }
+    }
+
+    #[test]
+    fn test_send_remote_files_response_invalid_uuid() {
+        unsafe {
+            let (handle, _dir) = create_test_handle();
+            assert!(!handle.is_null());
+
+            let valid_uuid = CString::new(uuid::Uuid::new_v4().to_string()).unwrap();
+            let invalid_uuid = CString::new("invalid-uuid-string").unwrap();
+
+            // Invalid request_id
+            assert_eq!(
+                deskdrop_send_remote_files_response(
+                    handle,
+                    invalid_uuid.as_ptr(),
+                    valid_uuid.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    std::ptr::null()
+                ),
+                0
+            );
+
+            // Invalid target_device_id
+            assert_eq!(
+                deskdrop_send_remote_files_response(
+                    handle,
+                    valid_uuid.as_ptr(),
+                    invalid_uuid.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    std::ptr::null()
+                ),
+                0
+            );
+
+            deskdrop_stop(handle);
+        }
+    }
+
+    #[test]
+    fn test_send_remote_files_response_valid() {
+        unsafe {
+            let (handle, _dir) = create_test_handle();
+            assert!(!handle.is_null());
+
+            let req_uuid = CString::new(uuid::Uuid::new_v4().to_string()).unwrap();
+            let target_uuid = CString::new(uuid::Uuid::new_v4().to_string()).unwrap();
+
+            // Call with optional null JSON and error strings
+            let res1 = deskdrop_send_remote_files_response(
+                handle,
+                req_uuid.as_ptr(),
+                target_uuid.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                5,
+                std::ptr::null(),
+            );
+            assert_eq!(res1, 1);
+
+            // Call with valid JSON payloads and error string
+            let summary_json = CString::new(
+                serde_json::to_string(&crate::protocol::RemoteFilesSummary::default()).unwrap(),
+            )
+            .unwrap();
+            let files_json = CString::new("[]").unwrap();
+            let err_str = CString::new("no error").unwrap();
+
+            let res2 = deskdrop_send_remote_files_response(
+                handle,
+                req_uuid.as_ptr(),
+                target_uuid.as_ptr(),
+                summary_json.as_ptr(),
+                files_json.as_ptr(),
+                0,
+                err_str.as_ptr(),
+            );
+            assert_eq!(res2, 1);
+
+            deskdrop_stop(handle);
+        }
     }
 }
