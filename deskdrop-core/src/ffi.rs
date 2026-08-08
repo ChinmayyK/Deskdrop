@@ -198,11 +198,15 @@ pub unsafe extern "C" fn deskdrop_send_file_path(
     let mime_type = CStr::from_ptr(mime_type_ptr).to_string_lossy().into_owned();
 
     let h = &*handle;
-    let res =
-        runtime().block_on(
-            h.engine
-                .send_file_path(path, file_name, mime_type, target_device, None, false, 1),
-        );
+    let res = runtime().block_on(h.engine.send_file_path(
+        path,
+        file_name,
+        mime_type,
+        target_device,
+        None,
+        false,
+        1,
+    ));
     if res.is_ok() {
         0
     } else {

@@ -900,7 +900,8 @@ pub async fn handle_ipc_request(
             } else {
                 {
                     let frames = eng.camera_frames().await;
-                    let x = frames.iter().next().map(|r| r.value().clone()); x
+                    let x = frames.iter().next().map(|r| r.value().clone());
+                    x
                 }
             };
 
@@ -1208,7 +1209,15 @@ pub async fn handle_ipc_request(
                 None => None,
             };
             match eng
-                .send_file_path(std::path::PathBuf::from(path), name, mime, tgt, batch_id, is_directory, item_count)
+                .send_file_path(
+                    std::path::PathBuf::from(path),
+                    name,
+                    mime,
+                    tgt,
+                    batch_id,
+                    is_directory,
+                    item_count,
+                )
                 .await
             {
                 Ok(transfer_id) => IpcResponse::ok(hex::encode(transfer_id)),

@@ -12,11 +12,11 @@
 //! Its public key's SHA-256 hash is the "fingerprint" shown to users
 //! during TOFU (Trust On First Use) verification.
 
-use anyhow::{Context, Result};
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Key,
 };
+use anyhow::{Context, Result};
 type Nonce = aes_gcm::aead::Nonce<Aes256Gcm>;
 use hkdf::Hkdf;
 use hmac::Mac;
@@ -262,7 +262,8 @@ impl SessionKey {
             .checked_add(1)
             .context("send counter overflow")?;
 
-        let tag = self.cipher
+        let tag = self
+            .cipher
             .encrypt_in_place_detached(&nonce, &[], buffer)
             .map_err(|e| anyhow::anyhow!("encrypt: {:?}", e))?;
 

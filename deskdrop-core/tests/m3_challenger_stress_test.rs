@@ -105,9 +105,7 @@ async fn test_reproduce_disconnect_peer_waiter_leak() {
     let (engine_a, _dev_a, _engine_b, dev_b, mut rx_b, _tmp) = setup_test_nodes().await;
 
     // Non-responding node B receiver
-    tokio::spawn(async move {
-        while let Some(_event) = rx_b.recv().await {}
-    });
+    tokio::spawn(async move { while let Some(_event) = rx_b.recv().await {} });
 
     let engine_a = Arc::new(engine_a);
     let eng = engine_a.clone();
@@ -123,7 +121,10 @@ async fn test_reproduce_disconnect_peer_waiter_leak() {
     let start_disconnect = Instant::now();
     // Call explicit disconnect_peer
     let disconnected = engine_a.disconnect_peer(dev_b).await.unwrap();
-    assert!(disconnected, "disconnect_peer should return true for active peer");
+    assert!(
+        disconnected,
+        "disconnect_peer should return true for active peer"
+    );
 
     // Wait for the query to resolve
     let result = query_handle.await.unwrap();
@@ -152,9 +153,7 @@ async fn test_reproduce_disconnect_peer_waiter_leak() {
 async fn test_dynamic_timeouts_granularity() {
     let (engine_a, _dev_a, _engine_b, dev_b, mut rx_b, _tmp) = setup_test_nodes().await;
 
-    tokio::spawn(async move {
-        while let Some(_event) = rx_b.recv().await {}
-    });
+    tokio::spawn(async move { while let Some(_event) = rx_b.recv().await {} });
 
     let t1_start = Instant::now();
     let err1 = engine_a
@@ -176,9 +175,7 @@ async fn test_dynamic_timeouts_granularity() {
 async fn test_forget_device_drains_remote_file_and_thumb_waiters() {
     let (engine_a, _dev_a, _engine_b, dev_b, mut rx_b, _tmp) = setup_test_nodes().await;
 
-    tokio::spawn(async move {
-        while let Some(_event) = rx_b.recv().await {}
-    });
+    tokio::spawn(async move { while let Some(_event) = rx_b.recv().await {} });
 
     let engine_a = Arc::new(engine_a);
     let mut file_tasks = Vec::new();
@@ -207,7 +204,10 @@ async fn test_forget_device_drains_remote_file_and_thumb_waiters() {
 
     for task in file_tasks {
         let res = task.await.unwrap();
-        assert!(res.is_err(), "Pending file query should fail on forget_device");
+        assert!(
+            res.is_err(),
+            "Pending file query should fail on forget_device"
+        );
     }
 
     for task in thumb_tasks {
@@ -236,9 +236,7 @@ async fn test_forget_device_drains_remote_file_and_thumb_waiters() {
 async fn test_concurrent_waiters_disconnect_drain() {
     let (engine_a, _dev_a, _engine_b, dev_b, mut rx_b, _tmp) = setup_test_nodes().await;
 
-    tokio::spawn(async move {
-        while let Some(_event) = rx_b.recv().await {}
-    });
+    tokio::spawn(async move { while let Some(_event) = rx_b.recv().await {} });
 
     let engine_a = Arc::new(engine_a);
     let mut file_tasks = Vec::new();
@@ -266,7 +264,10 @@ async fn test_concurrent_waiters_disconnect_drain() {
 
     for task in file_tasks {
         let res = task.await.unwrap();
-        assert!(res.is_err(), "All concurrent file waiters must fail immediately on disconnect");
+        assert!(
+            res.is_err(),
+            "All concurrent file waiters must fail immediately on disconnect"
+        );
     }
 
     for task in thumb_tasks {
@@ -308,7 +309,9 @@ async fn test_session_shutdown_race_drains_waiters() {
 
         let eng_t = engine_a.clone();
         thumb_tasks.push(tokio::spawn(async move {
-            eng_t.request_remote_thumbnail_sync(dev_b, i as u64, 128, 10).await
+            eng_t
+                .request_remote_thumbnail_sync(dev_b, i as u64, 128, 10)
+                .await
         }));
     }
 
@@ -345,5 +348,3 @@ async fn test_session_shutdown_race_drains_waiters() {
 
     drop(engine_b);
 }
-
-

@@ -73,7 +73,8 @@ pub(crate) async fn read_outbound_chunks(
                         if sample_len > 0 {
                             let sample = &data[..sample_len];
                             let mut c_sample = [0u8; 4096 + 32];
-                            let c_len = lz4_flex::block::compress_into(sample, &mut c_sample).unwrap_or(usize::MAX);
+                            let c_len = lz4_flex::block::compress_into(sample, &mut c_sample)
+                                .unwrap_or(usize::MAX);
                             c_len < sample_len * 95 / 100
                         } else {
                             false
@@ -129,7 +130,8 @@ pub(crate) async fn read_outbound_chunks(
                             if sample_len > 0 {
                                 let sample = &buf[..sample_len];
                                 let mut c_sample = [0u8; 4096 + 32];
-                                let c_len = lz4_flex::block::compress_into(sample, &mut c_sample).unwrap_or(usize::MAX);
+                                let c_len = lz4_flex::block::compress_into(sample, &mut c_sample)
+                                    .unwrap_or(usize::MAX);
                                 c_len < sample_len * 95 / 100
                             } else {
                                 false
@@ -140,11 +142,7 @@ pub(crate) async fn read_outbound_chunks(
                         if do_compress {
                             let compressed = lz4_flex::compress_prepend_size(&buf);
                             if compressed.len() < buf.len() {
-                                chunk_data.push((
-                                    chunk_index,
-                                    compressed.into(),
-                                    true,
-                                ));
+                                chunk_data.push((chunk_index, compressed.into(), true));
                             } else {
                                 chunk_data.push((chunk_index, buf.into(), false));
                             }

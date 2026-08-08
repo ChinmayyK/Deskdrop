@@ -6,8 +6,7 @@ use deskdrop_core::{
     ipc::{IpcRequest, IpcResponse},
     peer_manager::PeerConnectionState,
     protocol::{
-        ClipboardContent, RemoteFileCategory, RemoteFileEntry, RemoteFileSource,
-        RemoteFilesSummary,
+        ClipboardContent, RemoteFileCategory, RemoteFileEntry, RemoteFileSource, RemoteFilesSummary,
     },
     settings::{default_history_path, default_settings_path, ClipboardTemplate, SettingsStore},
     trust::format_fingerprint,
@@ -180,7 +179,10 @@ async fn run() -> Result<()> {
                         if socket.read(&mut buf).await.is_ok() {
                             // We don't even parse HTTP headers fully, just serve the latest frame.
                             let frames = st.engine.camera_frames().await;
-                            let frame = { let x = frames.iter().next().map(|r| r.value().clone()); x };
+                            let frame = {
+                                let x = frames.iter().next().map(|r| r.value().clone());
+                                x
+                            };
                             if let Some(bytes) = frame {
                                 let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -707,10 +709,7 @@ fn categorize_file_by_extension(ext: &str) -> (RemoteFileCategory, &'static str)
         "zip" => (RemoteFileCategory::Archives, "application/zip"),
         "tar" => (RemoteFileCategory::Archives, "application/x-tar"),
         "gz" => (RemoteFileCategory::Archives, "application/gzip"),
-        "7z" => (
-            RemoteFileCategory::Archives,
-            "application/x-7z-compressed",
-        ),
+        "7z" => (RemoteFileCategory::Archives, "application/x-7z-compressed"),
         "rar" => (RemoteFileCategory::Archives, "application/vnd.rar"),
         "bz2" => (RemoteFileCategory::Archives, "application/x-bzip2"),
         "xz" => (RemoteFileCategory::Archives, "application/x-xz"),
@@ -1241,7 +1240,10 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
         }
         IpcRequest::LatestCameraFrame { target_device: _ } => {
             let frames = state.engine.camera_frames().await;
-            let frame = { let x = frames.iter().next().map(|r| r.value().clone()); x };
+            let frame = {
+                let x = frames.iter().next().map(|r| r.value().clone());
+                x
+            };
             if let Some(bytes) = frame {
                 let base64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                 Ok(IpcResponse::ok(json!({ "frame_base64": base64 })))

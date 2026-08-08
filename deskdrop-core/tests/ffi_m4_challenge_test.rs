@@ -1,9 +1,7 @@
 //! Empirical challenge and stress test harness for `deskdrop_send_remote_files_response`.
 
 use deskdrop_core::engine::{Engine, EngineConfig};
-use deskdrop_core::ffi::{
-    deskdrop_send_remote_files_response, deskdrop_stop, DeskdropHandle,
-};
+use deskdrop_core::ffi::{deskdrop_send_remote_files_response, deskdrop_stop, DeskdropHandle};
 use deskdrop_core::protocol::{
     RemoteFileCategory, RemoteFileCategoryCounts, RemoteFileEntry, RemoteFileSource,
     RemoteFileSourceCounts, RemoteFilesSummary,
@@ -133,11 +131,7 @@ fn test_invalid_uuid_strings() {
                 0,
                 std::ptr::null(),
             );
-            assert_eq!(
-                res1, 0,
-                "Invalid request_id ('{}') should return 0",
-                inv
-            );
+            assert_eq!(res1, 0, "Invalid request_id ('{}') should return 0", inv);
 
             // Invalid target_device_id
             let res2 = deskdrop_send_remote_files_response(

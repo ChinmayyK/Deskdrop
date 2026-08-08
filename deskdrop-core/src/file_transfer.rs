@@ -38,8 +38,8 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chunks reduce per-chunk
-                                                    // overhead (mutex locks, syscalls, encrypt/serialize
-                                                    // round-trips) by 2× vs 512 KB.
+                                                // overhead (mutex locks, syscalls, encrypt/serialize
+                                                // round-trips) by 2× vs 512 KB.
 
 /// Maximum transfer size (4 GB). Rejects announced transfers exceeding this
 /// limit to prevent disk-bomb attacks via pre-allocation.
@@ -313,8 +313,7 @@ impl OutboundTransfer {
             self.meta.size_bytes
         } else {
             let acked_count = self.last_acked_chunk.map(|idx| idx + 1).unwrap_or(0);
-            let sent =
-                ((acked_count as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
+            let sent = ((acked_count as u64) * (FILE_CHUNK_SIZE as u64)).min(self.meta.size_bytes);
             if sent >= self.meta.size_bytes
                 && self.meta.size_bytes > 0
                 && acked_count < self.total_chunks
@@ -387,7 +386,11 @@ impl OutboundTransfer {
             self.started_at = Some(Instant::now());
         }
         self.next_chunk = chunk_index;
-        self.last_acked_chunk = if chunk_index > 0 { Some(chunk_index - 1) } else { None };
+        self.last_acked_chunk = if chunk_index > 0 {
+            Some(chunk_index - 1)
+        } else {
+            None
+        };
         self.status = TransferStatus::Transferring;
     }
 
@@ -560,17 +563,19 @@ impl InboundTransfer {
             if expected == 0 && self.meta.size_bytes > 0 {
                 expected = FILE_CHUNK_SIZE;
             }
-            anyhow::ensure!(data_len == expected, "final chunk size mismatch: expected {}, got {}", expected, data_len);
+            anyhow::ensure!(
+                data_len == expected,
+                "final chunk size mismatch: expected {}, got {}",
+                expected,
+                data_len
+            );
         }
 
         if chunk_index < self.queued_chunk_count {
             return Ok((0, 0, true)); // duplicate
         }
-        anyhow::ensure!(
-            chunk_index == self.queued_chunk_count,
-            "out-of-order chunk"
-        );
-        
+        anyhow::ensure!(chunk_index == self.queued_chunk_count, "out-of-order chunk");
+
         self.queued_chunk_count += 1;
 
         let offset = (chunk_index as u64) * (FILE_CHUNK_SIZE as u64);
@@ -695,7 +700,7 @@ impl InboundTransfer {
         } else {
             ((self.received_chunk_count as f64 / self.total_chunks as f64) * 100.0) as u8
         };
-        
+
         let now = Instant::now();
         if let Some(last_calc) = self.last_speed_calc_at {
             let elapsed = now.duration_since(last_calc).as_secs_f64();
@@ -917,21 +922,21 @@ impl FileTransferManager {
             .values()
             .filter(|t| t.status == TransferStatus::Transferring)
             .count();
-            
+
         if active_count >= max_active {
             return vec![];
         }
-        
+
         let available_slots = max_active - active_count;
         let mut queued: Vec<_> = self
             .inbound
             .values()
             .filter(|t| t.status == TransferStatus::Queued)
             .collect();
-            
+
         // Sort by created_at to process oldest first (FIFO)
         queued.sort_by_key(|t| t.created_at);
-        
+
         queued
             .into_iter()
             .take(available_slots)
@@ -1115,7 +1120,7 @@ impl FileTransferManager {
             let percent = prog.percent;
             let status_str = match t.status {
                 TransferStatus::Pending => "transferring", // Remote hasn't accepted yet, but from our end it's outgoing
-                TransferStatus::Queued => "transferring",  // We treat queued similarly for UI simplicity on sender side
+                TransferStatus::Queued => "transferring", // We treat queued similarly for UI simplicity on sender side
                 TransferStatus::Verifying => "verifying",
                 TransferStatus::Complete => "complete",
                 TransferStatus::Failed => "failed",
@@ -1334,7 +1339,8 @@ pub fn default_save_dir() -> PathBuf {
     }
     #[cfg(not(target_os = "android"))]
     {
-        dirs::download_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+        dirs::download_dir()
+            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
     }
 }
 
@@ -1347,7 +1353,11 @@ fn chunk_count(size_bytes: u64) -> Result<u32> {
     u32::try_from(chunks).context("file is too large to address with 32-bit chunk indices")
 }
 
-fn read_file_chunk_from_file(file: &mut File, chunk_index: u32, total_bytes: u64) -> Result<bytes::Bytes> {
+fn read_file_chunk_from_file(
+    file: &mut File,
+    chunk_index: u32,
+    total_bytes: u64,
+) -> Result<bytes::Bytes> {
     let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
     let remaining = total_bytes.saturating_sub(offset);
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))

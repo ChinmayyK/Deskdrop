@@ -448,16 +448,7 @@ async fn test_tier1_feature_query_search_substring() {
     let _responder = spawn_mock_responder(engine_b, rx_b, sample_file_dataset());
 
     let res = engine_a
-        .query_remote_files_sync(
-            dev_b,
-            false,
-            None,
-            None,
-            Some("photo".into()),
-            0,
-            50,
-            5,
-        )
+        .query_remote_files_sync(dev_b, false, None, None, Some("photo".into()), 0, 50, 5)
         .await
         .expect("Search substring should succeed");
 
@@ -698,9 +689,7 @@ async fn test_tier2_boundary_timeout_expiry() {
 async fn test_tier2_boundary_custom_timeout_expiry() {
     let (engine_a, _dev_a, _engine_b, dev_b, mut rx_b, _tmp) = setup_test_nodes().await;
 
-    tokio::spawn(async move {
-        while let Some(_event) = rx_b.recv().await {}
-    });
+    tokio::spawn(async move { while let Some(_event) = rx_b.recv().await {} });
 
     let err = engine_a
         .query_remote_files_sync(dev_b, false, None, None, None, 0, 50, 2)

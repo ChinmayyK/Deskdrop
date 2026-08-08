@@ -413,7 +413,10 @@ impl crate::engine::Engine {
     }
 
     pub async fn template_list(&self) -> Vec<crate::settings::ClipboardTemplate> {
-        self.shared.settings.lock().unwrap()
+        self.shared
+            .settings
+            .lock()
+            .unwrap()
             .clipboard_templates
             .clone()
     }

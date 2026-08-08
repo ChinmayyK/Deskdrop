@@ -24,10 +24,14 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, info};
 use uuid::Uuid;
 
-static BUFFER_POOL: std::sync::OnceLock<std::sync::Mutex<Vec<Vec<u8>>>> = std::sync::OnceLock::new();
+static BUFFER_POOL: std::sync::OnceLock<std::sync::Mutex<Vec<Vec<u8>>>> =
+    std::sync::OnceLock::new();
 
 pub fn get_buffer(capacity: usize) -> Vec<u8> {
-    let mut pool = BUFFER_POOL.get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64))).lock().unwrap();
+    let mut pool = BUFFER_POOL
+        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
+        .lock()
+        .unwrap();
     if let Some(mut buf) = pool.pop() {
         if buf.capacity() < capacity {
             buf.reserve(capacity - buf.capacity());
@@ -41,8 +45,13 @@ pub fn get_buffer(capacity: usize) -> Vec<u8> {
 
 pub fn return_buffer(mut buf: Vec<u8>) {
     // Only pool up to 64 buffers, and don't pool huge ones (e.g., > 5MB)
-    if buf.capacity() > 5 * 1024 * 1024 { return; }
-    let mut pool = BUFFER_POOL.get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64))).lock().unwrap();
+    if buf.capacity() > 5 * 1024 * 1024 {
+        return;
+    }
+    let mut pool = BUFFER_POOL
+        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
+        .lock()
+        .unwrap();
     if pool.len() < 64 {
         buf.clear();
         pool.push(buf);
@@ -212,13 +221,10 @@ async fn recv_frame<T: DeserializeOwned>(stream: &mut TcpStream, max_size: u32) 
     );
 
     let mut buf = vec![0u8; len as usize];
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        stream.read_exact(&mut buf),
-    )
-    .await
-    .context("timeout waiting for frame body")?
-    .context("reading frame body")?;
+    tokio::time::timeout(Duration::from_secs(10), stream.read_exact(&mut buf))
+        .await
+        .context("timeout waiting for frame body")?
+        .context("reading frame body")?;
 
     postcard::from_bytes(&buf).context("deserializing frame")
 }
@@ -246,7 +252,9 @@ async fn send_encrypted(
 
     use bytes::Buf;
     if let Some(mut p) = payload {
-        let p_nonce = session.encrypt_in_place(&mut p).context("encrypting payload")?;
+        let p_nonce = session
+            .encrypt_in_place(&mut p)
+            .context("encrypting payload")?;
         let p_len = (12 + p.len()) as u32;
         let p_len_bytes = p_len.to_le_bytes();
         let mut chained = Buf::chain(&buffer[..16 + total_ct_len], &p_len_bytes[..])
@@ -289,7 +297,9 @@ async fn send_encrypted_no_flush(
 
     use bytes::Buf;
     if let Some(mut p) = payload {
-        let p_nonce = session.encrypt_in_place(&mut p).context("encrypting payload")?;
+        let p_nonce = session
+            .encrypt_in_place(&mut p)
+            .context("encrypting payload")?;
         let p_len = (12 + p.len()) as u32;
         let p_len_bytes = p_len.to_le_bytes();
         let mut chained = Buf::chain(&buffer[..16 + total_ct_len], &p_len_bytes[..])
@@ -333,7 +343,8 @@ async fn recv_encrypted(
     session
         .decrypt_in_place(&mut cipher_buffer)
         .context("decrypting")?;
-    let mut msg: AppMessage = postcard::from_bytes(&cipher_buffer).context("deserializing AppMessage")?;
+    let mut msg: AppMessage =
+        postcard::from_bytes(&cipher_buffer).context("deserializing AppMessage")?;
 
     return_buffer(cipher_buffer); // Return metadata buffer immediately
 
@@ -359,7 +370,9 @@ async fn recv_encrypted(
         .context("timeout waiting for payload frame body")?
         .context("reading payload frame body")?;
 
-        session.decrypt_in_place(&mut p_cipher_buffer).context("decrypting payload")?;
+        session
+            .decrypt_in_place(&mut p_cipher_buffer)
+            .context("decrypting payload")?;
         msg.set_raw_payload(p_cipher_buffer);
     }
 

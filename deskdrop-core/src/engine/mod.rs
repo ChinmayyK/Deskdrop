@@ -580,10 +580,7 @@ pub(crate) struct EngineShared {
         Mutex<
             std::collections::HashMap<
                 uuid::Uuid,
-                (
-                    uuid::Uuid,
-                    tokio::sync::oneshot::Sender<RemoteFilesResult>,
-                ),
+                (uuid::Uuid, tokio::sync::oneshot::Sender<RemoteFilesResult>),
             >,
         >,
     >,
@@ -623,20 +620,23 @@ impl Engine {
                 let identity = IdentityStore::new(&config.identity_path)
                     .load_or_create()
                     .context("loading identity key")?;
-                let trust = TrustStore::load(&config.trust_store_path).context("loading trust store")?;
-                let peer_manager = PeerManager::load(&config.peer_store_path).context("loading peer store")?;
+                let trust =
+                    TrustStore::load(&config.trust_store_path).context("loading trust store")?;
+                let peer_manager =
+                    PeerManager::load(&config.peer_store_path).context("loading peer store")?;
                 let history_path = config.data_dir.join("history.json");
                 let limit = config.history_limit.unwrap_or(500);
-                let history = crate::history::History::load_with_limit(&history_path, limit).unwrap_or_else(
-                    |_| {
+                let history = crate::history::History::load_with_limit(&history_path, limit)
+                    .unwrap_or_else(|_| {
                         let tmp = std::env::temp_dir().join("deskdrop_history_fallback.json");
                         crate::history::History::load_with_limit(&tmp, limit)
                             .expect("cannot create fallback history store")
-                    },
-                );
+                    });
                 Ok::<_, anyhow::Error>((identity, trust, peer_manager, history))
             }
-        }).await.unwrap()?;
+        })
+        .await
+        .unwrap()?;
 
         if config.device_id.is_nil() {
             config.device_id = stable_device_id(identity.public_bytes);
@@ -1262,7 +1262,10 @@ impl Engine {
         &self,
         device_id: Uuid,
     ) -> Option<crate::settings::PeerSettings> {
-        self.shared.settings.lock().unwrap()
+        self.shared
+            .settings
+            .lock()
+            .unwrap()
             .per_peer
             .get(&device_id.to_string())
             .cloned()
@@ -1370,8 +1373,15 @@ impl Engine {
         item_count: u32,
     ) -> Result<[u8; 16]> {
         let mut mgr = self.shared.file_transfers.lock().await;
-        let transfer =
-            mgr.start_outbound_path(path, file_name.clone(), mime_type, target_device, batch_id, is_directory, item_count)?;
+        let transfer = mgr.start_outbound_path(
+            path,
+            file_name.clone(),
+            mime_type,
+            target_device,
+            batch_id,
+            is_directory,
+            item_count,
+        )?;
         let transfer_id = transfer.transfer_id;
         let meta = transfer.meta.clone();
         let size_bytes = meta.size_bytes;
@@ -1607,14 +1617,19 @@ impl Engine {
                 let bg_event_tx = self.shared.event_tx.clone();
                 let bg_transfer_id = transfer_id;
                 let bg_peer_id = peer_id;
-                let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> = std::collections::HashMap::new();
-                            tokio::spawn(async move {
+                let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> =
+                    std::collections::HashMap::new();
+                tokio::spawn(async move {
                     const BATCH_SIZE: usize = 16;
                     'outer: loop {
                         let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
                             if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
+                                (
+                                    t.next_chunk,
+                                    t.last_acked_chunk.unwrap_or(0),
+                                    t.total_chunks,
+                                )
                             } else {
                                 break 'outer;
                             }
@@ -1634,26 +1649,30 @@ impl Engine {
                             None => break 'outer,
                         };
 
-                        
-                                    if let Some((prog, fname)) = progs.last() {
-                                        let now = std::time::Instant::now();
-                                        let last = bg_last_prog_emit.get(&bg_transfer_id).copied().unwrap_or_else(|| now.checked_sub(std::time::Duration::from_secs(1)).unwrap());
-                                        if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
-                                            bg_last_prog_emit.insert(bg_transfer_id, now);
-                                            let _ = bg_event_tx
-                                                .send(EngineEvent::FileTransferProgress {
-                                                    transfer_id: bg_transfer_id,
-                                                    from_device: bg_peer_id,
-                                                    file_name: fname.clone(),
-                                                    percent: prog.percent,
-                                                    bytes_received: prog.bytes_received,
-                                                    total_bytes: prog.total_bytes,
-                                                    speed_bps: prog.speed_bps,
-                                                    eta_secs: prog.eta_secs,
-                                                })
-                                                .await;
-                                        }
-                                    }
+                        if let Some((prog, fname)) = progs.last() {
+                            let now = std::time::Instant::now();
+                            let last = bg_last_prog_emit
+                                .get(&bg_transfer_id)
+                                .copied()
+                                .unwrap_or_else(|| {
+                                    now.checked_sub(std::time::Duration::from_secs(1)).unwrap()
+                                });
+                            if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                                bg_last_prog_emit.insert(bg_transfer_id, now);
+                                let _ = bg_event_tx
+                                    .send(EngineEvent::FileTransferProgress {
+                                        transfer_id: bg_transfer_id,
+                                        from_device: bg_peer_id,
+                                        file_name: fname.clone(),
+                                        percent: prog.percent,
+                                        bytes_received: prog.bytes_received,
+                                        total_bytes: prog.total_bytes,
+                                        speed_bps: prog.speed_bps,
+                                        eta_secs: prog.eta_secs,
+                                    })
+                                    .await;
+                            }
+                        }
 
                         if batch.is_empty() {
                             break;
@@ -2344,7 +2363,7 @@ impl Engine {
                 let sh = self.shared.clone();
                 tokio::spawn(async move {
                     let battery_val = *sh.local_battery.lock().unwrap();
-            if let Some((level, charging)) = battery_val {
+                    if let Some((level, charging)) = battery_val {
                         let _ = tx
                             .send(AppMessage::BatteryStatus {
                                 level,
@@ -2355,7 +2374,7 @@ impl Engine {
                             .await;
                     }
                     let net_val = sh.local_network.lock().unwrap().clone();
-            if let Some(net) = net_val {
+                    if let Some(net) = net_val {
                         let _ = tx
                             .send(AppMessage::NetworkStatus {
                                 network_type: net,
@@ -2477,19 +2496,22 @@ impl Engine {
                         {
                             let _ = tx.send(msg).await;
 
-                            let pin = self.shared
+                            let pin = self
+                                .shared
                                 .peer_manager
                                 .get(target_device)
                                 .and_then(|p| p.pairing_pin.clone())
                                 .unwrap_or_else(|| "------".to_string());
 
-                            let device_name = self.shared
+                            let device_name = self
+                                .shared
                                 .peer_manager
                                 .get(target_device)
                                 .map(|p| p.friendly_name.clone())
                                 .unwrap_or_else(|| "Unknown device".to_string());
 
-                            let _ = self.shared
+                            let _ = self
+                                .shared
                                 .event_tx
                                 .send(EngineEvent::OutgoingPairingWaiting {
                                     device_id: target_device,
@@ -2638,9 +2660,7 @@ impl Engine {
         }).collect()
     }
 
-    pub async fn camera_frames(
-        &self,
-    ) -> Arc<dashmap::DashMap<Uuid, Vec<u8>>> {
+    pub async fn camera_frames(&self) -> Arc<dashmap::DashMap<Uuid, Vec<u8>>> {
         self.shared.camera_frames.clone()
     }
 
@@ -2689,7 +2709,7 @@ impl Engine {
                 if let Err(err) = hist.purge_expired_sensitive_entries() {
                     tracing::warn!(error = %err, "sensitive history pruning failed");
                 }
-                
+
                 disk_prune_counter += 1;
                 // Run the expensive filesystem scan only once every 10 minutes (120 ticks of 5s)
                 if disk_prune_counter >= 120 {
@@ -2699,12 +2719,12 @@ impl Engine {
                         if let Err(err) = hist.purge_expired_retention(retention_days) {
                             tracing::warn!(error = %err, "retention history pruning failed");
                         }
-                        
+
                         let cache_dir_clone = cache_dir.clone();
                         tokio::task::spawn_blocking(move || {
                             let cutoff = std::time::SystemTime::now()
                                 .checked_sub(Duration::from_secs(retention_days * 86400));
-                                
+
                             if let Some(cutoff_time) = cutoff {
                                 if let Ok(entries) = std::fs::read_dir(&cache_dir_clone) {
                                     for entry in entries.flatten() {
@@ -2712,10 +2732,19 @@ impl Engine {
                                             if meta.is_file() {
                                                 if let Ok(modified) = meta.modified() {
                                                     if modified < cutoff_time {
-                                                        if let Err(e) = std::fs::remove_file(entry.path()) {
-                                                            tracing::warn!("Failed to prune old file {:?}: {}", entry.path(), e);
+                                                        if let Err(e) =
+                                                            std::fs::remove_file(entry.path())
+                                                        {
+                                                            tracing::warn!(
+                                                                "Failed to prune old file {:?}: {}",
+                                                                entry.path(),
+                                                                e
+                                                            );
                                                         } else {
-                                                            tracing::info!("Pruned old hoarded file {:?}", entry.path());
+                                                            tracing::info!(
+                                                                "Pruned old hoarded file {:?}",
+                                                                entry.path()
+                                                            );
                                                         }
                                                     }
                                                 }
@@ -3890,7 +3919,8 @@ fn register_session(
         }
 
         let (disk_tx, mut disk_rx) = tokio::sync::mpsc::channel::<DiskTaskMsg>(128);
-        let mut last_disk_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> = std::collections::HashMap::new();
+        let mut last_disk_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> =
+            std::collections::HashMap::new();
 
         let dw_shared = shared.clone();
         let dw_event_tx = shared.event_tx.clone();
@@ -3900,7 +3930,13 @@ fn register_session(
         tokio::spawn(async move {
             while let Some(msg) = disk_rx.recv().await {
                 match msg {
-                    DiskTaskMsg::Chunk { transfer_id, chunk_index, offset, padding, data } => {
+                    DiskTaskMsg::Chunk {
+                        transfer_id,
+                        chunk_index,
+                        offset,
+                        padding,
+                        data,
+                    } => {
                         let io_ctx = {
                             let mut mgr = dw_shared.file_transfers.lock().await;
                             if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
@@ -3909,13 +3945,13 @@ fn register_session(
                                 None
                             }
                         };
-                        
+
                         if let Some((mut file, mut hasher, last_offset)) = io_ctx {
                             let data_len = data.len();
                             let res = tokio::task::spawn_blocking(move || {
                                 use sha2::Digest;
                                 use std::io::{Seek, SeekFrom, Write};
-                                
+
                                 if last_offset != offset {
                                     if let Err(e) = file.seek(SeekFrom::Start(offset)) {
                                         return Err(anyhow::anyhow!("seek error: {}", e));
@@ -3930,8 +3966,10 @@ fn register_session(
                                 }
                                 let new_offset = offset + data.len() as u64;
                                 Ok::<_, anyhow::Error>((file, hasher, new_offset))
-                            }).await.unwrap();
-                            
+                            })
+                            .await
+                            .unwrap();
+
                             match res {
                                 Ok((file, hasher, new_offset)) => {
                                     let mut mgr = dw_shared.file_transfers.lock().await;
@@ -3941,29 +3979,40 @@ fn register_session(
                                         let should_ack = t.should_ack();
                                         let file_name = t.meta.file_name.clone();
                                         drop(mgr);
-                                        
-                                        
+
                                         let now = std::time::Instant::now();
-                                        let last = last_disk_prog_emit.get(&transfer_id).copied().unwrap_or_else(|| now.checked_sub(std::time::Duration::from_secs(1)).unwrap());
-                                        if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                                        let last = last_disk_prog_emit
+                                            .get(&transfer_id)
+                                            .copied()
+                                            .unwrap_or_else(|| {
+                                                now.checked_sub(std::time::Duration::from_secs(1))
+                                                    .unwrap()
+                                            });
+                                        if now.duration_since(last).as_millis() >= 100
+                                            || prog.percent == 100
+                                        {
                                             last_disk_prog_emit.insert(transfer_id, now);
-                                            let _ = dw_event_tx.send(EngineEvent::FileTransferProgress {
-                                                transfer_id,
-                                                from_device: dw_peer_id,
-                                                file_name,
-                                                percent: prog.percent,
-                                                bytes_received: prog.bytes_received,
-                                                total_bytes: prog.total_bytes,
-                                                speed_bps: prog.speed_bps,
-                                                eta_secs: prog.eta_secs,
-                                            }).await;
+                                            let _ = dw_event_tx
+                                                .send(EngineEvent::FileTransferProgress {
+                                                    transfer_id,
+                                                    from_device: dw_peer_id,
+                                                    file_name,
+                                                    percent: prog.percent,
+                                                    bytes_received: prog.bytes_received,
+                                                    total_bytes: prog.total_bytes,
+                                                    speed_bps: prog.speed_bps,
+                                                    eta_secs: prog.eta_secs,
+                                                })
+                                                .await;
                                         }
-                                        
+
                                         if should_ack {
-                                            let _ = dw_outbox_tx.send(AppMessage::FileChunkAck {
-                                                transfer_id,
-                                                last_confirmed_chunk: chunk_index,
-                                            }).await;
+                                            let _ = dw_outbox_tx
+                                                .send(AppMessage::FileChunkAck {
+                                                    transfer_id,
+                                                    last_confirmed_chunk: chunk_index,
+                                                })
+                                                .await;
                                         }
                                     }
                                 }
@@ -3974,13 +4023,21 @@ fn register_session(
                                 }
                             }
                         } else {
-                            tracing::error!("Missing io_ctx for chunk {} of transfer {:?}", chunk_index, transfer_id);
+                            tracing::error!(
+                                "Missing io_ctx for chunk {} of transfer {:?}",
+                                chunk_index,
+                                transfer_id
+                            );
                         }
                     }
-                    DiskTaskMsg::Complete { transfer_id, sha256_checksum } => {
+                    DiskTaskMsg::Complete {
+                        transfer_id,
+                        sha256_checksum,
+                    } => {
                         let file_handle = {
                             let mut mgr = dw_shared.file_transfers.lock().await;
-                            mgr.get_inbound_mut(&transfer_id).and_then(|t| t.file_handle.take())
+                            mgr.get_inbound_mut(&transfer_id)
+                                .and_then(|t| t.file_handle.take())
                         };
 
                         if let Some(mut file) = file_handle {
@@ -3988,7 +4045,8 @@ fn register_session(
                                 use std::io::Write;
                                 let _ = file.flush();
                                 let _ = file.get_ref().sync_all();
-                            }).await;
+                            })
+                            .await;
                         }
 
                         let result = {
@@ -4006,29 +4064,41 @@ fn register_session(
                         };
                         match result {
                             Ok((dest, file_name, file_bytes)) => {
-                                dw_shared.file_transfers.lock().await.remove_inbound(&transfer_id);
+                                dw_shared
+                                    .file_transfers
+                                    .lock()
+                                    .await
+                                    .remove_inbound(&transfer_id);
                                 let hex_tid = hex::encode(transfer_id);
                                 let dest_path_str = dest.to_string_lossy().to_string();
-                                dw_shared.activity.lock().await.record_file_transfer_complete(
-                                    dw_peer_id,
-                                    dw_peer_name.clone(),
-                                    file_name.clone(),
-                                    file_bytes,
-                                    hex_tid,
-                                    Some(dest_path_str),
-                                );
-                                let _ = dw_outbox_tx.send(AppMessage::FileTransferCompleteAck {
-                                    transfer_id,
-                                    success: true,
-                                    error: None,
-                                }).await;
-                                let _ = dw_event_tx.send(EngineEvent::FileTransferComplete {
-                                    transfer_id,
-                                    from_device: dw_peer_id,
-                                    from_name: dw_peer_name.clone(),
-                                    file_name,
-                                    dest_path: dest,
-                                }).await;
+                                dw_shared
+                                    .activity
+                                    .lock()
+                                    .await
+                                    .record_file_transfer_complete(
+                                        dw_peer_id,
+                                        dw_peer_name.clone(),
+                                        file_name.clone(),
+                                        file_bytes,
+                                        hex_tid,
+                                        Some(dest_path_str),
+                                    );
+                                let _ = dw_outbox_tx
+                                    .send(AppMessage::FileTransferCompleteAck {
+                                        transfer_id,
+                                        success: true,
+                                        error: None,
+                                    })
+                                    .await;
+                                let _ = dw_event_tx
+                                    .send(EngineEvent::FileTransferComplete {
+                                        transfer_id,
+                                        from_device: dw_peer_id,
+                                        from_name: dw_peer_name.clone(),
+                                        file_name,
+                                        dest_path: dest,
+                                    })
+                                    .await;
                             }
                             Err(e) => {
                                 {
@@ -4045,16 +4115,20 @@ fn register_session(
                                     hex_tid,
                                     e.clone(),
                                 );
-                                let _ = dw_outbox_tx.send(AppMessage::FileTransferCompleteAck {
-                                    transfer_id,
-                                    success: false,
-                                    error: Some(e.clone()),
-                                }).await;
-                                let _ = dw_event_tx.send(EngineEvent::FileTransferFailed {
-                                    transfer_id,
-                                    from_device: dw_peer_id,
-                                    reason: e,
-                                }).await;
+                                let _ = dw_outbox_tx
+                                    .send(AppMessage::FileTransferCompleteAck {
+                                        transfer_id,
+                                        success: false,
+                                        error: Some(e.clone()),
+                                    })
+                                    .await;
+                                let _ = dw_event_tx
+                                    .send(EngineEvent::FileTransferFailed {
+                                        transfer_id,
+                                        from_device: dw_peer_id,
+                                        reason: e,
+                                    })
+                                    .await;
                             }
                         }
                         pump_transfer_queue(&dw_shared).await;
@@ -4250,7 +4324,8 @@ fn register_session(
 
                             // Persist the incoming item to history.
                             {
-                                let max_bytes = shared.settings.lock().unwrap().max_history_text_bytes;
+                                let max_bytes =
+                                    shared.settings.lock().unwrap().max_history_text_bytes;
                                 let source = display_name.clone();
                                 let _ = shared
                                     .history
@@ -4435,14 +4510,21 @@ fn register_session(
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_transfer_id = transfer_id;
                             let bg_peer_id = peer_id;
-                            let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> = std::collections::HashMap::new();
+                            let mut bg_last_prog_emit: std::collections::HashMap<
+                                [u8; 16],
+                                std::time::Instant,
+                            > = std::collections::HashMap::new();
                             tokio::spawn(async move {
                                 const BATCH_SIZE: usize = 16;
                                 'outer: loop {
                                     let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
                                         if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                            (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
+                                            (
+                                                t.next_chunk,
+                                                t.last_acked_chunk.unwrap_or(0),
+                                                t.total_chunks,
+                                            )
                                         } else {
                                             break 'outer;
                                         }
@@ -4462,11 +4544,18 @@ fn register_session(
                                         None => break 'outer,
                                     };
 
-                                    
                                     if let Some((prog, fname)) = progs.last() {
                                         let now = std::time::Instant::now();
-                                        let last = bg_last_prog_emit.get(&bg_transfer_id).copied().unwrap_or_else(|| now.checked_sub(std::time::Duration::from_secs(1)).unwrap());
-                                        if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                                        let last = bg_last_prog_emit
+                                            .get(&bg_transfer_id)
+                                            .copied()
+                                            .unwrap_or_else(|| {
+                                                now.checked_sub(std::time::Duration::from_secs(1))
+                                                    .unwrap()
+                                            });
+                                        if now.duration_since(last).as_millis() >= 100
+                                            || prog.percent == 100
+                                        {
                                             bg_last_prog_emit.insert(bg_transfer_id, now);
                                             let _ = bg_event_tx
                                                 .send(EngineEvent::FileTransferProgress {
@@ -4568,32 +4657,39 @@ fn register_session(
                                         let file_name = t.meta.file_name.clone();
                                         let last_confirmed = t.last_confirmed_chunk;
                                         drop(mgr);
-                                        
-                                        let _ = shared.event_tx.send(EngineEvent::FileTransferProgress {
-                                            transfer_id,
-                                            from_device: peer_id,
-                                            file_name,
-                                            percent: prog.percent,
-                                            bytes_received: prog.bytes_received,
-                                            total_bytes: prog.total_bytes,
-                                            speed_bps: prog.speed_bps,
-                                            eta_secs: prog.eta_secs,
-                                        }).await;
-                                        if should_ack {
-                                            let _ = rx_session_outbox_tx.send(AppMessage::FileChunkAck {
+
+                                        let _ = shared
+                                            .event_tx
+                                            .send(EngineEvent::FileTransferProgress {
                                                 transfer_id,
-                                                last_confirmed_chunk: last_confirmed,
-                                            }).await;
+                                                from_device: peer_id,
+                                                file_name,
+                                                percent: prog.percent,
+                                                bytes_received: prog.bytes_received,
+                                                total_bytes: prog.total_bytes,
+                                                speed_bps: prog.speed_bps,
+                                                eta_secs: prog.eta_secs,
+                                            })
+                                            .await;
+                                        if should_ack {
+                                            let _ = rx_session_outbox_tx
+                                                .send(AppMessage::FileChunkAck {
+                                                    transfer_id,
+                                                    last_confirmed_chunk: last_confirmed,
+                                                })
+                                                .await;
                                         }
                                     }
                                 } else {
-                                    let _ = disk_tx.send(DiskTaskMsg::Chunk {
-                                        transfer_id,
-                                        chunk_index,
-                                        offset,
-                                        padding,
-                                        data,
-                                    }).await;
+                                    let _ = disk_tx
+                                        .send(DiskTaskMsg::Chunk {
+                                            transfer_id,
+                                            chunk_index,
+                                            offset,
+                                            padding,
+                                            data,
+                                        })
+                                        .await;
                                 }
                             }
                             Err(e) => {
@@ -4629,16 +4725,18 @@ fn register_session(
                                 let event_tx = shared.event_tx.clone();
                                 let tid = transfer_id;
                                 tokio::spawn(async move {
-                                    let _ = event_tx.send(EngineEvent::FileTransferProgress {
-                                        transfer_id: tid,
-                                        from_device: peer_id,
-                                        file_name: fname,
-                                        percent: prog.percent,
-                                        bytes_received: prog.bytes_received,
-                                        total_bytes: prog.total_bytes,
-                                        speed_bps: prog.speed_bps,
-                                        eta_secs: prog.eta_secs,
-                                    }).await;
+                                    let _ = event_tx
+                                        .send(EngineEvent::FileTransferProgress {
+                                            transfer_id: tid,
+                                            from_device: peer_id,
+                                            file_name: fname,
+                                            percent: prog.percent,
+                                            bytes_received: prog.bytes_received,
+                                            total_bytes: prog.total_bytes,
+                                            speed_bps: prog.speed_bps,
+                                            eta_secs: prog.eta_secs,
+                                        })
+                                        .await;
                                 });
                             }
                         }
@@ -4657,10 +4755,12 @@ fn register_session(
                             continue;
                         }
                         // Finalize: verify SHA-256 and write to disk.
-                        let _ = rx_disk_tx.send(DiskTaskMsg::Complete {
-                            transfer_id,
-                            sha256_checksum,
-                        }).await;
+                        let _ = rx_disk_tx
+                            .send(DiskTaskMsg::Complete {
+                                transfer_id,
+                                sha256_checksum,
+                            })
+                            .await;
                     }
                     Ok(AppMessage::FileTransferCompleteAck {
                         transfer_id,
@@ -4808,14 +4908,21 @@ fn register_session(
                             let bg_transfer_id = transfer_id;
                             let bg_event_tx = shared.event_tx.clone();
                             let bg_peer_id = peer_id;
-                            let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> = std::collections::HashMap::new();
+                            let mut bg_last_prog_emit: std::collections::HashMap<
+                                [u8; 16],
+                                std::time::Instant,
+                            > = std::collections::HashMap::new();
                             tokio::spawn(async move {
                                 const BATCH_SIZE: usize = 16;
                                 'outer: loop {
                                     let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
                                         if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                            (t.next_chunk, t.last_acked_chunk.unwrap_or(0), t.total_chunks)
+                                            (
+                                                t.next_chunk,
+                                                t.last_acked_chunk.unwrap_or(0),
+                                                t.total_chunks,
+                                            )
                                         } else {
                                             break 'outer;
                                         }
@@ -4835,11 +4942,18 @@ fn register_session(
                                         None => break 'outer,
                                     };
 
-                                    
                                     if let Some((prog, fname)) = progs.last() {
                                         let now = std::time::Instant::now();
-                                        let last = bg_last_prog_emit.get(&bg_transfer_id).copied().unwrap_or_else(|| now.checked_sub(std::time::Duration::from_secs(1)).unwrap());
-                                        if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                                        let last = bg_last_prog_emit
+                                            .get(&bg_transfer_id)
+                                            .copied()
+                                            .unwrap_or_else(|| {
+                                                now.checked_sub(std::time::Duration::from_secs(1))
+                                                    .unwrap()
+                                            });
+                                        if now.duration_since(last).as_millis() >= 100
+                                            || prog.percent == 100
+                                        {
                                             bg_last_prog_emit.insert(bg_transfer_id, now);
                                             let _ = bg_event_tx
                                                 .send(EngineEvent::FileTransferProgress {
@@ -5329,8 +5443,9 @@ fn register_session(
                         if let Some(sent_at) = maybe_sent_at {
                             let rtt_us = probe::measure_rtt_us(sent_at);
                             let result = ProbeResult::from_samples(vec![rtt_us]);
-                            
-                            shared.quality_probes
+
+                            shared
+                                .quality_probes
                                 .entry(peer_id)
                                 .or_insert_with(|| QualityProbe::new(peer_name.as_str()))
                                 .record(result);
@@ -5407,7 +5522,6 @@ fn register_session(
                         }
                         // Persist in shared state for IPC status polling.
                         {
-                            
                             shared.peer_batteries.insert(
                                 origin_device,
                                 PeerBatteryState {
@@ -5443,7 +5557,6 @@ fn register_session(
                             continue;
                         }
                         {
-                            
                             shared.peer_networks.insert(
                                 origin_device,
                                 PeerNetworkState {
@@ -5481,7 +5594,6 @@ fn register_session(
                             continue;
                         }
                         {
-                            
                             shared.peer_storage.insert(
                                 origin_device,
                                 PeerStorageState {
