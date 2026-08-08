@@ -37,15 +37,15 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub const FILE_CHUNK_SIZE: usize = 1024 * 1024; // 1 MB per chunk — larger chunks reduce per-chunk
+pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks reduce per-chunk
                                                 // overhead (mutex locks, syscalls, encrypt/serialize
-                                                // round-trips) by 2× vs 512 KB.
+                                                // round-trips) by 4× vs 1 MB, vastly increasing MB/s on LAN.
 
 /// Maximum transfer size (4 GB). Rejects announced transfers exceeding this
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 16; // ACK every 16 MB
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 32; // ACK every 32 chunks (128 MB)
 
 pub type TransferId = [u8; 16];
 
