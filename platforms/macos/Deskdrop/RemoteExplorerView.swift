@@ -66,6 +66,9 @@ struct RemoteExplorerView: View {
     @State private var isRenaming = false
     @State private var isDeleting = false
     
+    // Pagination State
+    @State private var displayLimit: Int = 500
+    
     // Library Categories
     private let libraryCategories: [(id: String?, label: String, icon: String)] = [
         (nil, "All Files", "square.grid.2x2.fill"),
@@ -427,19 +430,30 @@ struct SidebarRowView: View {
                         .padding(.top, 12)
                         
                         // Content Layout
+                        let displayedFiles = Array(res.files.prefix(displayLimit))
                         switch viewMode {
                         case .dateGrouped:
-                            dateGroupedView(for: res.files)
+                            dateGroupedView(for: displayedFiles)
                         case .grid:
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 24)], alignment: .leading, spacing: 24) {
-                                ForEach(res.files) { file in fileGridCard(for: file) }
+                                ForEach(displayedFiles) { file in fileGridCard(for: file) }
                             }
                             .padding(.top, 12)
                         case .list:
                             LazyVStack(alignment: .leading, spacing: 6) {
-                                ForEach(res.files) { file in fileListRow(for: file) }
+                                ForEach(displayedFiles) { file in fileListRow(for: file) }
                             }
                             .padding(.top, 12)
+                        }
+                        
+                        if res.files.count > displayLimit {
+                            ProgressView()
+                                .onAppear {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        displayLimit += 500
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 60)
                         }
                     }
                     .padding(24) // Generous macOS 24px padding
@@ -1227,6 +1241,7 @@ struct SidebarRowView: View {
     }
     
     private func loadFiles(forceRefresh: Bool = false) {
+        displayLimit = 500
         let target = device.id
         let cat = selectedCategory
         let src = selectedSource
