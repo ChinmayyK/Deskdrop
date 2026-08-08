@@ -230,8 +230,11 @@ async fn send_encrypted(
 ) -> Result<()> {
     let payload = msg.take_raw_payload();
 
-    let mut buffer = get_buffer(8192); // Reused from pool
-    let serialized_len = postcard::to_slice(msg, &mut buffer[16..]).context("serializing AppMessage")?.len();
+    let serialized = postcard::to_allocvec(msg).context("serializing AppMessage")?;
+    let serialized_len = serialized.len();
+
+    let mut buffer = get_buffer(16 + serialized_len + 16); // Header (16) + body + tag (16)
+    buffer[16..16 + serialized_len].copy_from_slice(&serialized);
 
     let (nonce, tag) = session.encrypt_slice_in_place(&mut buffer[16..16 + serialized_len])?;
     buffer[16 + serialized_len..16 + serialized_len + 16].copy_from_slice(&tag);
@@ -270,8 +273,11 @@ async fn send_encrypted_no_flush(
 ) -> Result<()> {
     let payload = msg.take_raw_payload();
 
-    let mut buffer = get_buffer(8192); // Reused from pool
-    let serialized_len = postcard::to_slice(msg, &mut buffer[16..]).context("serializing AppMessage")?.len();
+    let serialized = postcard::to_allocvec(msg).context("serializing AppMessage")?;
+    let serialized_len = serialized.len();
+
+    let mut buffer = get_buffer(16 + serialized_len + 16); // Header (16) + body + tag (16)
+    buffer[16..16 + serialized_len].copy_from_slice(&serialized);
 
     let (nonce, tag) = session.encrypt_slice_in_place(&mut buffer[16..16 + serialized_len])?;
     buffer[16 + serialized_len..16 + serialized_len + 16].copy_from_slice(&tag);
