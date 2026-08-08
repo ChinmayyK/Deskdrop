@@ -131,17 +131,55 @@ object RemoteFileManager {
     ): Triple<String?, String?, Int> {
         var summaryJson: String? = null
         if (includeSummary) {
-            val baseSize = "${MediaStore.Files.FileColumns.SIZE} > 0"
-            val images = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'image/%'")
-            val videos = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'video/%'")
-            val audio = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'audio/%'")
-            val documents = countFiles(context, "$baseSize AND $DOCUMENTS_SELECTION")
-            val apks = countFiles(context, "$baseSize AND $APKS_SELECTION")
-            val archives = countFiles(context, "$baseSize AND $ARCHIVES_SELECTION")
+            var images = 0
+            var videos = 0
+            var audio = 0
+            var documents = 0
+            var apks = 0
+            var archives = 0
+            var whatsapp = 0
+            var downloads = 0
+            var camera = 0
 
-            val whatsapp = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.DATA} LIKE '%whatsapp%'")
-            val downloads = countFiles(context, "$baseSize AND ${MediaStore.Files.FileColumns.DATA} LIKE '%download%'")
-            val camera = countFiles(context, "$baseSize AND (${MediaStore.Files.FileColumns.DATA} LIKE '%dcim%' OR ${MediaStore.Files.FileColumns.DATA} LIKE '%camera%')")
+            val uri = MediaStore.Files.getContentUri("external")
+            val projection = arrayOf(
+                MediaStore.Files.FileColumns.MIME_TYPE,
+                MediaStore.Files.FileColumns.DATA,
+                MediaStore.Files.FileColumns.DISPLAY_NAME
+            )
+            val selection = "${MediaStore.Files.FileColumns.SIZE} > 0"
+            try {
+                context.contentResolver.query(uri, projection, selection, null, null)?.use { cursor ->
+                    val mimeIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE)
+                    val dataIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
+                    val nameIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME)
+                    
+                    while (cursor.moveToNext()) {
+                        val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) ?: "" else ""
+                        val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
+                        val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
+
+                        val cat = getCategory(mime, name)
+                        val src = getSource(dataPath)
+
+                        when (cat) {
+                            "Images" -> images++
+                            "Videos" -> videos++
+                            "Audio" -> audio++
+                            "Documents" -> documents++
+                            "Apks" -> apks++
+                            "Archives" -> archives++
+                        }
+                        when (src) {
+                            "WhatsApp" -> whatsapp++
+                            "Downloads" -> downloads++
+                            "Camera" -> camera++
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error calculating summary in single pass", e)
+            }
 
             val typeCounts = JSONObject().apply {
                 put("images", images)
