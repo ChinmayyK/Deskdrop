@@ -44,8 +44,8 @@ pub fn get_buffer(capacity: usize) -> Vec<u8> {
 }
 
 pub fn return_buffer(mut buf: Vec<u8>) {
-    // Only pool up to 64 buffers, and don't pool huge ones (e.g., > 5MB)
-    if buf.capacity() > 5 * 1024 * 1024 {
+    // Only pool up to 64 buffers, and don't pool huge ones (e.g., > MAX_FRAME_SIZE)
+    if buf.capacity() > MAX_FRAME_SIZE as usize {
         return;
     }
     let mut pool = BUFFER_POOL

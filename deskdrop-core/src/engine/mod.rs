@@ -3910,7 +3910,7 @@ fn register_session(
                 chunk_index: u32,
                 offset: u64,
                 padding: usize,
-                data: bytes::Bytes,
+                data: Vec<u8>,
             },
             Complete {
                 transfer_id: [u8; 16],
@@ -4622,7 +4622,7 @@ fn register_session(
 
                         let data = if compressed {
                             match lz4_flex::decompress_size_prepended(&payload) {
-                                Ok(d) => d.into(),
+                                Ok(d) => d,
                                 Err(e) => {
                                     tracing::error!("Failed to decompress file chunk: {}", e);
                                     let mut mgr = shared.file_transfers.lock().await;

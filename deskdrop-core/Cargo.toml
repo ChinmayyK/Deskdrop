@@ -79,6 +79,7 @@ ndk-context = "0.1"
 chacha20poly1305 = "0.10"
 tokio-test = "0.4"
 tempfile = "3"
+dhat = "0.3.3"
 
 [dev-dependencies.criterion]
 version = "0.5"
@@ -86,6 +87,10 @@ features = ["html_reports"]
 
 [[bench]]
 name = "benches"
+harness = false
+
+[[bench]]
+name = "allocations"
 harness = false
 
 

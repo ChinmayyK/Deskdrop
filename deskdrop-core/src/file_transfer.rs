@@ -68,7 +68,7 @@ pub enum FileTransferMessage {
         transfer_id: TransferId,
         chunk_index: u32,
         total_chunks: u32,
-        data: bytes::Bytes,
+        data: Vec<u8>,
         #[serde(default)]
         compressed: bool,
     },
@@ -211,7 +211,7 @@ impl OutboundTransfer {
             OutboundSource::Memory(data_bytes) => {
                 let start = (idx as usize) * FILE_CHUNK_SIZE;
                 let end = (start + FILE_CHUNK_SIZE).min(data_bytes.len());
-                data_bytes.slice(start..end)
+                data_bytes.slice(start..end).to_vec()
             }
             OutboundSource::FilePath(path, cached_file) => {
                 if cached_file.is_none() {
@@ -287,7 +287,7 @@ impl OutboundTransfer {
     pub fn process_chunk_data(
         &mut self,
         chunk_index: u32,
-        data: bytes::Bytes,
+        data: Vec<u8>,
         compressed: bool,
     ) -> FileTransferMessage {
         self.next_chunk = chunk_index + 1;
@@ -1357,7 +1357,7 @@ fn read_file_chunk_from_file(
     file: &mut File,
     chunk_index: u32,
     total_bytes: u64,
-) -> Result<bytes::Bytes> {
+) -> Result<Vec<u8>> {
     let offset = chunk_index as u64 * FILE_CHUNK_SIZE as u64;
     let remaining = total_bytes.saturating_sub(offset);
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
@@ -1366,17 +1366,17 @@ fn read_file_chunk_from_file(
     file.seek(SeekFrom::Start(offset))
         .with_context(|| "seeking outbound file".to_string())?;
 
-    let mut buf = vec![0u8; to_read];
+    let mut buf = crate::network::get_buffer(to_read);
     file.read_exact(&mut buf)
         .with_context(|| "reading outbound file chunk".to_string())?;
-    Ok(buf.into())
+    Ok(buf)
 }
 
 pub fn checksum_file(path: &Path) -> Result<String> {
     let mut file = File::open(path)
         .with_context(|| format!("opening file for checksum {}", path.display()))?;
     let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 1024 * 1024];
+    let mut buf = crate::network::get_buffer(1024 * 1024);
 
     loop {
         let read = file
@@ -1387,6 +1387,8 @@ pub fn checksum_file(path: &Path) -> Result<String> {
         }
         hasher.update(&buf[..read]);
     }
+
+    crate::network::return_buffer(buf);
 
     Ok(hex::encode(hasher.finalize()))
 }

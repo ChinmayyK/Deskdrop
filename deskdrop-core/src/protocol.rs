@@ -355,7 +355,7 @@ pub enum AppMessage {
         chunk_index: u32,
         total_chunks: u32,
         #[serde(skip)]
-        data: bytes::Bytes,
+        data: Vec<u8>,
         #[serde(default)]
         compressed: bool,
     },
@@ -561,7 +561,7 @@ pub enum AppMessage {
 impl AppMessage {
     pub fn take_raw_payload(&mut self) -> Option<Vec<u8>> {
         match self {
-            AppMessage::FileChunk { data, .. } => Some(std::mem::take(data).to_vec()),
+            AppMessage::FileChunk { data, .. } => Some(std::mem::take(data)),
             AppMessage::ClipboardPush { content, .. } => {
                 if let Some(c) = std::sync::Arc::get_mut(content) {
                     match c {
@@ -599,7 +599,7 @@ impl AppMessage {
 
     pub fn set_raw_payload(&mut self, payload: Vec<u8>) {
         match self {
-            AppMessage::FileChunk { data, .. } => *data = payload.into(),
+            AppMessage::FileChunk { data, .. } => *data = payload,
             AppMessage::ClipboardPush { content, .. } => {
                 if let Some(c) = std::sync::Arc::get_mut(content) {
                     match c {
