@@ -60,7 +60,6 @@ class MainActivity : ComponentActivity() {
     private val deviceName = mutableStateOf("")
     private val deviceId = mutableStateOf("")
     private val peers = mutableStateOf<List<PeerSnapshot>>(emptyList())
-    private val feed = mutableStateOf<List<ActivityEntry>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
     private val isDarkMode = mutableStateOf(false)
     private val hasCompletedOnboarding = mutableStateOf(false)
@@ -92,18 +91,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private val feedRefreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val feedRefreshRunnable = object : Runnable {
-        override fun run() {
-            rebuildFeed()
-            feedRefreshHandler.postDelayed(this, FEED_REFRESH_MS)
-        }
-    }
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             runOnUiThread {
                 refreshDashboardState()
-                rebuildFeed()
             }
         }
     }
@@ -137,6 +129,13 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
         hasCompletedOnboarding.value = prefs.getBoolean("has_completed_onboarding", false)
+
+        // Request Notification Permission immediately on launch for Android 13+
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1005)
+            }
+        }
         
         // UX FIX: Auto-complete onboarding if we have a trusted peer (user closed app during onboarding previously)
         // We do this ONLY on create so we don't abruptly close the OnboardingScreen while the user is actively using it!
@@ -181,6 +180,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val activeTransfers by TransferManager.activeTransfersFlow.collectAsStateWithLifecycle()
             val activeSpeedTests by TransferManager.activeSpeedTestsFlow.collectAsStateWithLifecycle()
+            val feedState by ActivityFeedManager.feedFlow.collectAsStateWithLifecycle()
 
             AppTheme(useDarkTheme = isDarkMode.value) {
                 var showManualIpDialog by remember { mutableStateOf(false) }
@@ -266,7 +266,7 @@ class MainActivity : ComponentActivity() {
                         deviceName = deviceName.value,
                         deviceId = deviceId.value,
                         peers = peers.value.toImmutableList(),
-                        feed = feed.value.toImmutableList(),
+                        feed = feedState.toImmutableList(),
                         ambientStatus = ambientStatus.value,
                         activeTransfers = activeTransfers.toImmutableList(),
                         activeSpeedTests = activeSpeedTests.toImmutableList(),
@@ -560,12 +560,10 @@ class MainActivity : ComponentActivity() {
             IntentFilter(DeskdropService.ACTION_STATUS_CHANGED),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
-        feedRefreshHandler.post(feedRefreshRunnable)
     }
 
     override fun onStop() {
         unregisterReceiver(statusReceiver)
-        feedRefreshHandler.removeCallbacks(feedRefreshRunnable)
         super.onStop()
     }
 
@@ -599,8 +597,6 @@ class MainActivity : ComponentActivity() {
         ambientStatus.value = if (isConnected) "Secure Connection  •  LAN Active" else "Looking for network..."
     }
 
-    private fun rebuildFeed() {
-        feed.value = ActivityFeedManager.getFeedSnapshot()
     }
 
     private fun showSnack(message: String) {

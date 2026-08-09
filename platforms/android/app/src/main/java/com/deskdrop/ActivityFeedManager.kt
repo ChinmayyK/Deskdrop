@@ -53,12 +53,16 @@ data class ActivityEntry(
     val isApplicable: Boolean get() = kind == ActivityKind.CLIPBOARD_TEXT && !appliedLocally
 }
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
 object ActivityFeedManager {
     const val ACTIVITY_FEED_MAX = 100
 
-    // Global activity feed — readable by UI without binding to the service
-    @JvmField val activityFeed = ArrayDeque<ActivityEntry>()
-    @JvmField val feedLock = Any()
+    private val _feedFlow = MutableStateFlow<List<ActivityEntry>>(emptyList())
+    val feedFlow: StateFlow<List<ActivityEntry>> = _feedFlow.asStateFlow()
 
     fun isUserFacingActivity(kind: ActivityKind): Boolean = when (kind) {
         ActivityKind.FILE_RECEIVED,
@@ -76,20 +80,21 @@ object ActivityFeedManager {
 
     fun addToFeed(entry: ActivityEntry) {
         if (!isUserFacingActivity(entry.kind)) return
-        synchronized(feedLock) {
-            activityFeed.addFirst(entry)
-            while (activityFeed.size > ACTIVITY_FEED_MAX) activityFeed.removeLast()
+        _feedFlow.update { current ->
+            val updated = buildList {
+                add(entry)
+                addAll(current)
+            }
+            if (updated.size > ACTIVITY_FEED_MAX) updated.take(ACTIVITY_FEED_MAX) else updated
         }
     }
     
     fun removeFromFeed(id: Long) {
-        synchronized(feedLock) {
-            activityFeed.removeAll { it.id == id }
+        _feedFlow.update { current ->
+            current.filterNot { it.id == id }
         }
     }
 
-    fun getFeedSnapshot(): List<ActivityEntry> = synchronized(feedLock) {
-        activityFeed.filter { isUserFacingActivity(it.kind) }
-    }
+    fun getFeedSnapshot(): List<ActivityEntry> = _feedFlow.value
 }
 

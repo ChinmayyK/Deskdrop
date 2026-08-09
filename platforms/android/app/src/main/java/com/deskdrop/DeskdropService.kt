@@ -191,6 +191,7 @@ class DeskdropService : Service() {
     private var engineHandle: Long = 0L
     private val handler = Handler(Looper.getMainLooper())
     private var lastClipboardSignature: String? = null
+    private var serviceStartTime = 0L
 
     private fun executeInBackgroundWithWakeLock(tag: String, block: () -> Unit) {
         backgroundExecutor.execute {
@@ -438,6 +439,7 @@ class DeskdropService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        serviceStartTime = System.currentTimeMillis()
         createNotificationChannels()
         registerPairingReceiver()
         
@@ -3346,10 +3348,33 @@ class DeskdropService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val largeIcon = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_round)
+
+        val description = if (connectedPeerIds.isEmpty()) {
+            "Scanning LAN for devices..."
+        } else {
+            "Connected to ${connectedPeerIds.size} device(s)"
+        }
+
+        val pushClipboardIntent = Intent(this, DeskdropService::class.java).apply {
+            action = ACTION_PUSH_CLIPBOARD
+        }
+        val pushClipboardPi = PendingIntent.getService(
+            this, 11,
+            pushClipboardIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         return NotificationCompat.Builder(this, CHAN_SERVICE)
-            .setContentTitle(if (syncEnabled) "Deskdrop (Connected)" else "Deskdrop (Paused)")
-            .setContentText(if (connectedPeerIds.isNotEmpty()) "Syncing with devices" else "Scanning for devices on LAN")
-            .setSmallIcon(android.R.drawable.ic_menu_share)
+            .setContentTitle(if (syncEnabled) "Deskdrop is Active" else "Deskdrop is Paused")
+            .setContentText(description)
+            .setSubText("Background Sync")
+            .setShowWhen(syncEnabled)
+            .setWhen(if (syncEnabled) serviceStartTime else 0L)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(description))
+            .setSmallIcon(R.drawable.ic_cr_activity)
+            .setLargeIcon(largeIcon)
+            .setColor(android.graphics.Color.parseColor("#F59E0B")) // Amber accent
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
@@ -3362,6 +3387,15 @@ class DeskdropService : Service() {
                 syncActionLabel,
                 syncActionPi
             )
+            .apply {
+                if (syncEnabled && connectedPeerIds.isNotEmpty()) {
+                    addAction(
+                        R.drawable.ic_baseline_content_paste_24,
+                        "Push Clipboard",
+                        pushClipboardPi
+                    )
+                }
+            }
             .build()
     }
 
