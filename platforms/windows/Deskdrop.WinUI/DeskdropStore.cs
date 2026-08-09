@@ -753,7 +753,7 @@ namespace Deskdrop.WinUI
                 {
                     bool isRunning = DaemonClient.IsDaemonRunning();
                     
-                    global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
+                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                     {
                         IsDaemonRunning = isRunning;
                     });
@@ -782,7 +782,7 @@ namespace Deskdrop.WinUI
                 catch (Exception ex)
                 {
                     // Handle failure gracefully
-                    global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
+                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                     {
                         StatusLine = $"Error connecting to daemon: {ex.Message}";
                     });
@@ -799,7 +799,7 @@ namespace Deskdrop.WinUI
             var entries = DeserializeList<ActivityEntry>(dataElem, "entries");
             if (entries != null)
             {
-                global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
+                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                 {
                     ActivityFeed = new ObservableCollection<ActivityEntry>(entries.OrderByDescending(e => e.timestamp_ms));
                     OnPropertyChanged(nameof(ActivityCount));
@@ -812,7 +812,7 @@ namespace Deskdrop.WinUI
             var clips = DeserializeList<PendingClipboard>(dataElem, "clipboards");
             if (clips != null)
             {
-                global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
+                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                 {
                     PendingClipboards = new ObservableCollection<PendingClipboard>(clips.OrderByDescending(c => c.timestamp_ms));
                     NotifyPendingClipboardMetrics();
@@ -863,7 +863,7 @@ namespace Deskdrop.WinUI
                 }
             }
 
-            global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
+            App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
             {
                 if (newPeers != null)
                 {

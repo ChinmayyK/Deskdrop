@@ -68,7 +68,7 @@ namespace Deskdrop.WinUI.Views
                         resp = JsonSerializer.Deserialize<RemoteFileListResponse>(dataEl.GetRawText(), options);
                     }
                     
-                    global::Deskdrop.WinUI.Dispatcher.Invoke(() =>
+                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                     {
                         RemoteFiles.Clear();
                         if (resp != null && resp.files != null)

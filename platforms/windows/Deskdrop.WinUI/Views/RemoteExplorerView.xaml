@@ -91,7 +91,7 @@
                         <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}">
                             <ListView.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <Grid/>
+                                    <VirtualizingStackPanel />
                                 </ItemsPanelTemplate>
                             </ListView.ItemsPanel>
                             <ListView.ItemTemplate>
