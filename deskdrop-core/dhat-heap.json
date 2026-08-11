@@ -1,0 +1,238 @@
+{
+"dhatFileVersion": 2,
+"mode": "rust-heap",
+"verb": "Allocated",
+"bklt": true,
+"bkacc": false,
+"tu": "µs",
+"Mtu": "s",
+"tuth": 10,
+"cmd": "/Users/chinmayk/Projects/Deskdrop/target/release/deps/allocations-1d39e0462d70c22c --bench",
+"pid": 59656,
+"tg": 266275,
+"te": 266413,
+"pps": [
+{
+"tb": 11200,
+"tbk": 400,
+"tl": 86,
+"mb": 28,
+"mbk": 1,
+"gb": 0,
+"gbk": 0,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+2,
+3
+]
+},
+{
+"tb": 9,
+"tbk": 1,
+"tl": 266344,
+"mb": 9,
+"mbk": 1,
+"gb": 9,
+"gbk": 1,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+4
+]
+},
+{
+"tb": 9,
+"tbk": 1,
+"tl": 250225,
+"mb": 9,
+"mbk": 1,
+"gb": 9,
+"gbk": 1,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+5
+]
+},
+{
+"tb": 64,
+"tbk": 1,
+"tl": 266366,
+"mb": 64,
+"mbk": 1,
+"gb": 64,
+"gbk": 1,
+"eb": 64,
+"ebk": 1,
+"fs": [
+1,
+6,
+7,
+8
+]
+},
+{
+"tb": 64,
+"tbk": 1,
+"tl": 149128,
+"mb": 64,
+"mbk": 1,
+"gb": 64,
+"gbk": 1,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+9,
+10,
+11,
+12
+]
+},
+{
+"tb": 1024,
+"tbk": 1,
+"tl": 266373,
+"mb": 1024,
+"mbk": 1,
+"gb": 1024,
+"gbk": 1,
+"eb": 1024,
+"ebk": 1,
+"fs": [
+1,
+13,
+14,
+15,
+16,
+8
+]
+},
+{
+"tb": 209715200,
+"tbk": 1,
+"tl": 266338,
+"mb": 209715200,
+"mbk": 1,
+"gb": 209715200,
+"gbk": 1,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+17
+]
+},
+{
+"tb": 556,
+"tbk": 1,
+"tl": 149244,
+"mb": 556,
+"mbk": 1,
+"gb": 556,
+"gbk": 1,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+18,
+19
+]
+},
+{
+"tb": 209715200,
+"tbk": 400,
+"tl": 55793210,
+"mb": 209715200,
+"mbk": 400,
+"gb": 209715200,
+"gbk": 400,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+20
+]
+},
+{
+"tb": 33724,
+"tbk": 8,
+"tl": 149170,
+"mb": 25360,
+"mbk": 2,
+"gb": 16904,
+"gbk": 1,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+21,
+22
+]
+},
+{
+"tb": 209715200,
+"tbk": 1,
+"tl": 130755,
+"mb": 209715200,
+"mbk": 1,
+"gb": 209715200,
+"gbk": 1,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+23
+]
+},
+{
+"tb": 64,
+"tbk": 1,
+"tl": 0,
+"mb": 64,
+"mbk": 1,
+"gb": 64,
+"gbk": 1,
+"eb": 0,
+"ebk": 0,
+"fs": [
+1,
+9,
+10,
+11,
+24
+]
+}
+],
+"ftbl": [
+"[root]",
+"0x104a968b4: __mh_execute_header (???:0:0)",
+"0x104a6fce8: __mh_execute_header (???:0:0)",
+"0x104a6dbcc: __mh_execute_header (???:0:0)",
+"0x104a6cd78: __mh_execute_header (???:0:0)",
+"0x104a6cdc8: __mh_execute_header (???:0:0)",
+"0x104acf12c: __mh_execute_header (???:0:0)",
+"0x104ac4770: __mh_execute_header (???:0:0)",
+"0x104a6cd6c: __mh_execute_header (???:0:0)",
+"0x104accb90: __mh_execute_header (???:0:0)",
+"0x104accad0: __mh_execute_header (???:0:0)",
+"0x104a8c6cc: __mh_execute_header (???:0:0)",
+"0x104a6cf48: __mh_execute_header (???:0:0)",
+"0x104ac4f84: __mh_execute_header (???:0:0)",
+"0x104ad2ab4: __mh_execute_header (???:0:0)",
+"0x104ad2c04: __mh_execute_header (???:0:0)",
+"0x104ac45b8: __mh_execute_header (???:0:0)",
+"0x104a6cda4: __mh_execute_header (???:0:0)",
+"0x104acd228: __mh_execute_header (???:0:0)",
+"0x104a6e414: __mh_execute_header (???:0:0)",
+"0x104a6d238: __mh_execute_header (???:0:0)",
+"0x104acd718: __mh_execute_header (???:0:0)",
+"0x104a6e424: __mh_execute_header (???:0:0)",
+"0x104a6daa0: __mh_execute_header (???:0:0)",
+"0x104a6e1e0: __mh_execute_header (???:0:0)"
+]
+}

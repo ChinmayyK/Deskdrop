@@ -726,12 +726,12 @@ fn determine_source(
     let path_str = path.to_string_lossy();
     if path_str.to_lowercase().contains("whatsapp") {
         RemoteFileSource::WhatsApp
-    } else if pictures_dir.map_or(false, |p| path.starts_with(p))
+    } else if pictures_dir.is_some_and(|p| path.starts_with(p))
         || path_str.to_lowercase().contains("camera")
         || path_str.to_lowercase().contains("dcim")
     {
         RemoteFileSource::Camera
-    } else if downloads_dir.map_or(false, |d| path.starts_with(d)) {
+    } else if downloads_dir.is_some_and(|d| path.starts_with(d)) {
         RemoteFileSource::Downloads
     } else {
         RemoteFileSource::Other

@@ -16,6 +16,7 @@ struct IpcPeerRecord: Codable {
     let trusted: Bool
     let remembered: Bool?
     let sync_enabled: Bool?
+    let remote_sync_enabled: Bool?
     let auto_connect: Bool?
     let last_seen: Int?
     let last_discovery_at: Int?

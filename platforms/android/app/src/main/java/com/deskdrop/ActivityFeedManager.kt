@@ -1,5 +1,9 @@
 package com.deskdrop
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 enum class ActivityKind {
     CLIPBOARD_TEXT, CLIPBOARD_IMAGE, FILE_SENT, FILE_RECEIVED,
@@ -53,13 +57,8 @@ data class ActivityEntry(
     val isApplicable: Boolean get() = kind == ActivityKind.CLIPBOARD_TEXT && !appliedLocally
 }
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-
 object ActivityFeedManager {
-    const val ACTIVITY_FEED_MAX = 100
+    var ACTIVITY_FEED_MAX = 100
 
     private val _feedFlow = MutableStateFlow<List<ActivityEntry>>(emptyList())
     val feedFlow: StateFlow<List<ActivityEntry>> = _feedFlow.asStateFlow()
@@ -95,6 +94,18 @@ object ActivityFeedManager {
         }
     }
 
+    fun updateFeedByTransferId(tid: String, transform: (ActivityEntry) -> ActivityEntry) {
+        _feedFlow.update { current ->
+            val idx = current.indexOfFirst { it.transferId == tid }
+            if (idx != -1) {
+                val mut = current.toMutableList()
+                mut[idx] = transform(mut[idx])
+                mut
+            } else {
+                current
+            }
+        }
+    }
+
     fun getFeedSnapshot(): List<ActivityEntry> = _feedFlow.value
 }
-

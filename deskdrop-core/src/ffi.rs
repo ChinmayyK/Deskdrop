@@ -365,6 +365,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::SpeedTestProgress { .. } => PB_EVENT_SPEED_TEST_PROGRESS,
         EngineEvent::SpeedTestComplete { .. } => PB_EVENT_SPEED_TEST_COMPLETE,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
+        EngineEvent::PeerSyncStateChanged { .. } => PB_EVENT_SYSTEM_HEALTH_UPDATED,
     }
 }
 

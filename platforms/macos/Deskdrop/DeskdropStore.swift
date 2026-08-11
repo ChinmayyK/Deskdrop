@@ -1283,6 +1283,7 @@ final class DeskdropStore: ObservableObject {
             connected:   raw.status == "connected",
             connectionStatus: raw.status,
             syncEnabled: raw.sync_enabled ?? true,
+            remoteSyncEnabled: raw.remote_sync_enabled ?? true,
             autoConnect: raw.auto_connect ?? true,
             lastError:   raw.last_error,
             pairingRequested: raw.pairing_requested ?? false,

@@ -218,4 +218,6 @@ object DeskdropJni {
         data: ByteArray?,
         error: String?
     ): Int
+
+    @JvmStatic external fun setSyncEnabled(handle: Long, enabled: Boolean): Int
 }

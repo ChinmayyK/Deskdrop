@@ -158,6 +158,10 @@ pub enum EngineEvent {
         device_name: Option<String>,
         reason: Option<String>,
     },
+    PeerSyncStateChanged {
+        device_id: Uuid,
+        enabled: bool,
+    },
     /// A remote device wants to send a file — UI should prompt user to accept.
     FileTransferIncoming {
         transfer_id: [u8; 16],
@@ -610,7 +614,7 @@ impl Engine {
         ensure_parent(&config.trust_store_path)?;
         ensure_parent(&config.peer_store_path)?;
         ensure_parent(&config.identity_path)?;
-        if let Some(p) = config.data_dir.parent() {
+        if config.data_dir.parent().is_some() {
             std::fs::create_dir_all(&config.data_dir).ok();
         }
 
@@ -1203,6 +1207,12 @@ impl Engine {
         settings.sync_enabled = enabled;
         let persisted = self.persist_settings_snapshot(settings)?;
         self.apply_settings(persisted).await;
+        let peers = self.shared.peer_manager.active_senders();
+        for (_peer_id, tx) in peers {
+            let _ = tx
+                .send(crate::protocol::AppMessage::DeviceSyncState { enabled })
+                .await;
+        }
         Ok(())
     }
 
@@ -5203,11 +5213,23 @@ fn register_session(
                         // Send an instant ping if they just woke up to update their last_seen_millis
                         // and prevent their local 15s grace period from expiring before our next tick.
                         if !is_asleep {
-                            let mut ping = probe::make_ping();
+                            let ping = probe::make_ping();
                             *rx_ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) =
                                 Some(std::time::Instant::now());
                             let _ = rx_session_outbox_tx.send(ping).await;
                         }
+                    }
+                    Ok(AppMessage::DeviceSyncState { enabled }) => {
+                        touch_last_seen();
+                        tracing::info!(peer = %peer_name, enabled, "received device sync state");
+                        let _ = shared.peer_manager.set_remote_sync_enabled(peer_id, enabled);
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::PeerSyncStateChanged {
+                                device_id: peer_id,
+                                enabled,
+                            })
+                            .await;
                     }
                     Ok(AppMessage::ClipboardAck { seq }) => {
                         touch_last_seen();

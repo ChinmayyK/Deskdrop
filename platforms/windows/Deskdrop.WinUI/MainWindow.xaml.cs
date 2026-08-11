@@ -26,8 +26,8 @@ namespace Deskdrop.WinUI
             }
 
             // Optional: Hide default title bar to mimic macOS frameless look
-            // ExtendsContentIntoTitleBar = true;
-            // SetTitleBar(AppTitleBar);
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
 
             // Resize the window
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);

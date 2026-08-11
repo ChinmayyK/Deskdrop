@@ -93,6 +93,9 @@ pub struct PeerRecord {
     pub trusted: bool,
     pub remembered: bool,
     pub sync_enabled: bool,
+    /// Indicates if the remote peer has globally paused their sync.
+    /// Default true (active). If false, UI should show "Sync Paused".
+    pub remote_sync_enabled: bool,
     pub auto_connect: bool,
 
     // ── Runtime state ─────────────────────────────────────────────────────────
@@ -141,6 +144,7 @@ impl Default for PeerRecord {
             trusted: false,
             remembered: true,
             sync_enabled: true,
+            remote_sync_enabled: true,
             auto_connect: true,
             status: PeerConnectionState::Disconnected,
             last_seen: None,
@@ -388,6 +392,7 @@ impl PeerManager {
                 trusted,
                 remembered: true,
                 sync_enabled: true,
+                remote_sync_enabled: true,
                 auto_connect: true,
                 last_seen: Some(now),
                 last_sync: None,
@@ -658,6 +663,21 @@ impl PeerManager {
         let found = {
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.sync_enabled = enabled;
+                true
+            } else {
+                false
+            }
+        };
+        if found {
+            self.save()?;
+        }
+        Ok(found)
+    }
+
+    pub fn set_remote_sync_enabled(&self, device_id: Uuid, enabled: bool) -> Result<bool> {
+        let found = {
+            if let Some(mut entry) = self.store.get_mut(&device_id) {
+                entry.remote_sync_enabled = enabled;
                 true
             } else {
                 false

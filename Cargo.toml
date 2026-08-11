@@ -19,6 +19,7 @@ codegen-units = 1
 strip = true
 panic = "abort"
 
+[profile.bench]
 [profile.dev.package.sha2]
 opt-level = 3
 [profile.dev.package.aes-gcm]

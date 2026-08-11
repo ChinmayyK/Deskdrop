@@ -175,6 +175,8 @@ namespace Deskdrop.WinUI
         public bool remembered { get => _remembered; set { if (SetProperty(ref _remembered, value)) NotifyPeerStateProperties(); } }
         private bool _sync_enabled = true;
         public bool sync_enabled { get => _sync_enabled; set { if (SetProperty(ref _sync_enabled, value)) NotifyPeerStateProperties(); } }
+        private bool _remote_sync_enabled = true;
+        public bool remote_sync_enabled { get => _remote_sync_enabled; set { if (SetProperty(ref _remote_sync_enabled, value)) NotifyPeerStateProperties(); } }
         private bool _auto_connect;
         public bool auto_connect { get => _auto_connect; set { if (SetProperty(ref _auto_connect, value)) NotifyPeerStateProperties(); } }
         private bool _explicit_disconnect;
@@ -194,6 +196,7 @@ namespace Deskdrop.WinUI
                 if (pairingRequested) return "Wants to pair";
                 if (outgoingPairingWaiting) return "Waiting for response";
                 if (status == "connected" && !sync_enabled) return "Connected - sync paused";
+                if (status == "connected" && !remote_sync_enabled) return "Connected - paused remotely";
                 if (status == "connected") return "Connected";
                 if (status == "connecting") return "Reconnecting";
                 if (explicit_disconnect) return "Disconnected";

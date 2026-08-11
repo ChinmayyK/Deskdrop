@@ -426,6 +426,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         SpeedTestProgress { .. } => 35,
         SpeedTestComplete { .. } => 36,
         Warning(_) => 7,
+        PeerSyncStateChanged { .. } => 16,
     }
 }
 
@@ -1490,6 +1491,24 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_disconnectPeer(
     match rt().block_on(h.engine.disconnect_peer(device_id)) {
         Ok(true) => 1,
         Ok(false) => 0,
+        Err(_) => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_setSyncEnabled(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    enabled: jboolean,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    let b = enabled != 0;
+    match rt().block_on(h.engine.set_sync_enabled(b)) {
+        Ok(_) => 0,
         Err(_) => -1,
     }
 }

@@ -41,6 +41,7 @@ import com.deskdrop.ui.MainScreen
 import com.deskdrop.ui.OnboardingScreen
 import com.deskdrop.ui.theme.AppTheme
 import com.deskdrop.ui.theme.CRTheme
+import com.deskdrop.ui.theme.glassmorphism
 
 class MainActivity : ComponentActivity() {
 
@@ -124,6 +125,12 @@ class MainActivity : ComponentActivity() {
             )
         )
         super.onCreate(savedInstanceState)
+        if (intent?.getBooleanExtra("benchmark", false) == true) {
+            ActivityFeedManager.ACTIVITY_FEED_MAX = 20000
+            for (i in 1..10000) {
+                ActivityFeedManager.addToFeed(ActivityEntry(id = i.toLong(), deviceName = "TestDevice", kind = ActivityKind.CLIPBOARD_TEXT, preview = "Test item $i", contentHash = "hash$i"))
+            }
+        }
         
         // Initialize persistent preferences
         val prefs = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
@@ -187,6 +194,7 @@ class MainActivity : ComponentActivity() {
                 if (showManualIpDialog) {
                     var ipInput by remember { mutableStateOf("") }
                     androidx.compose.material3.AlertDialog(
+                        modifier = Modifier.glassmorphism(cornerRadius = 24.dp),
                         onDismissRequest = { showManualIpDialog = false },
                         title = { Text("Enter Device IP") },
                         text = {
@@ -371,11 +379,11 @@ class MainActivity : ComponentActivity() {
                         }
                         ContextCompat.startForegroundService(this@MainActivity, svc)
                         showSnack("Applied to clipboard")
-                        rebuildFeed()
+                        
                     },
                     onDeleteActivity = { entry ->
                         ActivityFeedManager.removeFromFeed(entry.id)
-                        rebuildFeed()
+                        
                     },
                     onTrustPeer = { peer ->
                         ContextCompat.startForegroundService(this@MainActivity,
@@ -538,7 +546,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshDashboardState()
-        rebuildFeed()
+        
         try {
             startService(Intent(this, DeskdropService::class.java))
         } catch (e: Exception) {
@@ -595,8 +603,6 @@ class MainActivity : ComponentActivity() {
 
         val isConnected = allPeers.any { it.isConnected }
         ambientStatus.value = if (isConnected) "Secure Connection  •  LAN Active" else "Looking for network..."
-    }
-
     }
 
     private fun showSnack(message: String) {

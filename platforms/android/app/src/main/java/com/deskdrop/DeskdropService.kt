@@ -704,6 +704,10 @@ class DeskdropService : Service() {
             else -> Log.w(TAG, "Unknown action: ${intent?.action}")
         }
 
+        // Any time the service receives a command (e.g. app opened, file shared, ping),
+        // ensure our active network locks are held for at least 2 minutes.
+        acquireContinuousLocks()
+
         // Start / re-attach foreground
         return try {
             startForegroundCompat(buildForegroundNotification())
@@ -712,10 +716,9 @@ class DeskdropService : Service() {
             if (!engineStarted.getAndSet(true)) {
                 val deviceName = resolvedDeviceName()
                 val dataDir = File(filesDir, "deskdrop").also { it.mkdirs() }.absolutePath
-                val fileSaveDir = (
-                    getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
-                        ?: filesDir
-                    ).resolve("Deskdrop").apply { mkdirs() }
+                val fileSaveDir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS
+                ).apply { mkdirs() }
                 DeskdropJni.initContext(applicationContext)
                 engineHandle = DeskdropJni.start(
                     deviceName,
@@ -736,8 +739,7 @@ class DeskdropService : Service() {
                 activeEngineHandle = engineHandle
                 Log.i(TAG, "Engine started — $deviceName")
                 startEventDrainThread()
-                acquireMulticastLock()
-                acquireWifiLock()
+                acquireContinuousLocks()
                 // Cache our own UUID prefix so NSD can filter self-connections.
                 myDeviceId = DeskdropJni.getDeviceId(engineHandle)
                 myDeviceUuidPrefix = myDeviceId?.take(8)
@@ -749,8 +751,7 @@ class DeskdropService : Service() {
                 persistStatus()
             } else {
                 // Engine was already running — permission may have just been granted.
-                acquireMulticastLock()
-                acquireWifiLock()
+                acquireContinuousLocks()
                 startBatteryMonitor()
             }
 
@@ -950,10 +951,44 @@ class DeskdropService : Service() {
         Log.i(TAG, "Multicast lock released")
     }
 
+    // ── Continuous Lock Management ────────────────────────────────────────────
+
+    private var idleLockReleaseRunnable: Runnable? = null
+
+    /**
+     * Acquires Wifi and Multicast locks required for active P2P discovery and high-speed transfers.
+     * Schedules them to be automatically released after 2 minutes of idleness to achieve zero overnight battery drain.
+     */
+    private fun acquireContinuousLocks() {
+        handler.post {
+            acquireMulticastLock()
+            acquireWifiLock()
+
+            idleLockReleaseRunnable?.let { handler.removeCallbacks(it) }
+
+            val releaseTask = Runnable {
+                if (TransferManager.activeTransfers.isNotEmpty()) {
+                    // Still active transfers, re-schedule
+                    acquireContinuousLocks()
+                } else {
+                    Log.i(TAG, "Idle timeout reached (2m). Releasing continuous battery-draining locks to allow device sleep.")
+                    releaseMulticastLock()
+                    releaseWifiLock()
+                }
+            }
+            idleLockReleaseRunnable = releaseTask
+            handler.postDelayed(releaseTask, 120_000L) // 2 minutes
+        }
+    }
+
     // ── Sync enable / disable ─────────────────────────────────────────────────
 
     private fun setSyncEnabled(enabled: Boolean) {
         prefs().edit().putBoolean("sync_enabled", enabled).apply()
+        val h = engineHandle
+        if (h != 0L) {
+            DeskdropJni.setSyncEnabled(h, enabled)
+        }
         updateForegroundNotification()
         broadcastStatus()
     }
@@ -989,8 +1024,7 @@ class DeskdropService : Service() {
     private fun restartDiscoveryNow() {
         if (engineHandle == 0L) return
         handler.post {
-            acquireMulticastLock()
-            acquireWifiLock()
+            acquireContinuousLocks()
             stopNsdDiscovery()
             startNsdDiscovery()
             cancelNsdRetry()
@@ -1130,6 +1164,7 @@ class DeskdropService : Service() {
 
             // ── Dedicated file transfer: incoming ─────────────────────────────
             DeskdropJni.CR_EVENT_FILE_TRANSFER_INCOMING -> {
+                acquireContinuousLocks()
                 val tid       = DeskdropJni.eventTransferId(ev) ?: return
                 val from      = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
@@ -1138,7 +1173,7 @@ class DeskdropService : Service() {
                 val fileName  = DeskdropJni.eventTransferFileName(ev) ?: "file"
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev)
                 
-                val isOutboundFeed = synchronized(ActivityFeedManager.feedLock) { ActivityFeedManager.activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
+                val isOutboundFeed = ActivityFeedManager.getFeedSnapshot().any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT }
                 
                 if (isOutboundFeed) {
                     TransferManager.activeTransfers[tid] = TransferProgress(
@@ -1210,7 +1245,7 @@ class DeskdropService : Service() {
                 // Use eventTransferTotalBytes to get the real total even for outbound transfers
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev).let { if (it > 0) it else (existing?.totalBytes ?: 0L) }
                 val peerName = existing?.peerName ?: from
-                val isOutboundFeed = synchronized(ActivityFeedManager.feedLock) { ActivityFeedManager.activityFeed.any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT } }
+                val isOutboundFeed = ActivityFeedManager.getFeedSnapshot().any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT }
                 val isOutbound = TransferManager.pendingOutboundTransferIds.contains(tid) || isOutboundFeed || (existing?.isOutbound ?: true)
                 
                 TransferManager.activeTransfers[tid] = TransferProgress(
@@ -1623,10 +1658,7 @@ class DeskdropService : Service() {
     // ── Activity feed helpers ─────────────────────────────────────────────────
 
     private fun addActivity(entry: ActivityEntry) {
-        synchronized(ActivityFeedManager.feedLock) {
-            ActivityFeedManager.activityFeed.addFirst(entry)
-            while (ActivityFeedManager.activityFeed.size > ACTIVITY_FEED_MAX) ActivityFeedManager.activityFeed.removeLast()
-        }
+        ActivityFeedManager.addToFeed(entry)
         broadcastActivityUpdated()
     }
 
@@ -1637,47 +1669,32 @@ class DeskdropService : Service() {
         speedBps: Long,
         etaSecs: Long
     ) {
-        synchronized(ActivityFeedManager.feedLock) {
-            val idx = ActivityFeedManager.activityFeed.indexOfFirst { it.transferId == tid }
-            if (idx >= 0) {
-                ActivityFeedManager.activityFeed[idx] = ActivityFeedManager.activityFeed[idx].copy(
-                    kind = ActivityKind.FILE_TRANSFER_PROGRESS,
-                    progressPercent = percent,
-                    transferBytesReceived = bytesReceived.coerceAtLeast(0L),
-                    transferSpeedBps = speedBps.coerceAtLeast(0L),
-                    transferEtaSecs = etaSecs
-                )
-            } else {
-                return
-            }
+        ActivityFeedManager.updateFeedByTransferId(tid) { old ->
+            old.copy(
+                kind = ActivityKind.FILE_TRANSFER_PROGRESS,
+                progressPercent = percent,
+                transferBytesReceived = bytesReceived.coerceAtLeast(0L),
+                transferSpeedBps = speedBps.coerceAtLeast(0L),
+                transferEtaSecs = etaSecs
+            )
         }
         broadcastActivityUpdated()
     }
 
     private fun updateActivityTransferComplete(tid: String, destPath: String) {
-        synchronized(ActivityFeedManager.feedLock) {
-            val idx = ActivityFeedManager.activityFeed.indexOfFirst { it.transferId == tid }
-            if (idx >= 0) {
-                ActivityFeedManager.activityFeed[idx] = ActivityFeedManager.activityFeed[idx].copy(
-                    kind = ActivityKind.FILE_TRANSFER_COMPLETE,
-                    progressPercent = 100,
-                    destPath = destPath
-                )
-            } else {
-                return
-            }
+        ActivityFeedManager.updateFeedByTransferId(tid) { old ->
+            old.copy(
+                kind = ActivityKind.FILE_TRANSFER_COMPLETE,
+                progressPercent = 100,
+                destPath = destPath
+            )
         }
         broadcastActivityUpdated()
     }
 
     private fun updateActivityTransferFailed(tid: String) {
-        synchronized(ActivityFeedManager.feedLock) {
-            val idx = ActivityFeedManager.activityFeed.indexOfFirst { it.transferId == tid }
-            if (idx >= 0) {
-                ActivityFeedManager.activityFeed[idx] = ActivityFeedManager.activityFeed[idx].copy(kind = ActivityKind.FILE_TRANSFER_FAILED)
-            } else {
-                return
-            }
+        ActivityFeedManager.updateFeedByTransferId(tid) { old ->
+            old.copy(kind = ActivityKind.FILE_TRANSFER_FAILED)
         }
         broadcastActivityUpdated()
     }
@@ -3106,8 +3123,7 @@ class DeskdropService : Service() {
                 Log.i(TAG, "Network: default network available (wifi/eth=$isWifiOrEth) — reconnecting peers")
                 handler.post {
                     if (isWifiOrEth) {
-                        acquireMulticastLock()
-                        acquireWifiLock()
+                        acquireContinuousLocks()
                     }
                     
                     // Brief delay lets the IP stack settle before mDNS re-registers.

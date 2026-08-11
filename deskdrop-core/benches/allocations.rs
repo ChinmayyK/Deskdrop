@@ -1,12 +1,12 @@
-use dhat::{Dhat, DhatAlloc};
+use dhat::{Profiler, Alloc};
 use deskdrop_core::chunked::{maybe_chunk, Reassembler};
 use deskdrop_core::protocol::ClipboardContent;
 
 #[global_allocator]
-static ALLOC: DhatAlloc = DhatAlloc;
+static ALLOC: Alloc = Alloc;
 
 fn main() {
-    let _profiler = Dhat::start_heap_profiling();
+    let _profiler = Profiler::builder().build();
 
     println!("Benchmarking 200MB Transfer Allocations...");
     let size = 200 * 1024 * 1024; // 200 MB

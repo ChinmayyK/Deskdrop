@@ -321,6 +321,9 @@ pub enum AppMessage {
     DeviceSleepState {
         is_asleep: bool,
     },
+    DeviceSyncState {
+        enabled: bool,
+    },
     ClipboardAck {
         seq: u64,
     },

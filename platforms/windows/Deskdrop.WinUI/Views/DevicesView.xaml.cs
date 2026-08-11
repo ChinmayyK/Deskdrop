@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
 using System.Linq;
+using Microsoft.UI.Xaml.Media.Media3D;
 
 namespace Deskdrop.WinUI.Views
 {
@@ -20,6 +21,38 @@ namespace Deskdrop.WinUI.Views
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
             {
                 mgr.SelectedPeer = peer;
+            }
+        }
+
+        private void OnDeviceCardPointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement element)
+            {
+                var pt = e.GetCurrentPoint(element).Position;
+                var width = element.ActualWidth;
+                var height = element.ActualHeight;
+                
+                var transform = element.Transform3D as PerspectiveTransform3D;
+                if (transform == null)
+                {
+                    transform = new PerspectiveTransform3D() { Depth = 800 };
+                    element.Transform3D = transform;
+                }
+
+                double rx = -((pt.Y - (height / 2)) / (height / 2)) * 5;
+                double ry = ((pt.X - (width / 2)) / (width / 2)) * 5;
+                
+                transform.RotationX = rx;
+                transform.RotationY = ry;
+            }
+        }
+
+        private void OnDeviceCardPointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement element && element.Transform3D is PerspectiveTransform3D transform)
+            {
+                transform.RotationX = 0;
+                transform.RotationY = 0;
             }
         }
 

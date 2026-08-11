@@ -21,6 +21,7 @@ data class PeerSnapshot(
     val pairingRequested: Boolean,
     val pairingPin: String?,
     val lifecycleState: String,
+    val remoteSyncEnabled: Boolean,
 ) {
     val isConnected: Boolean get() = status == "connected" && trusted
     val isConnecting: Boolean get() = status == "connecting"
@@ -58,6 +59,7 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             pairingRequested = obj.optBoolean("pairing_requested", false) || obj.optBoolean("outgoing_pairing_waiting", false),
             pairingPin = if (obj.isNull("pairing_pin")) null else obj.optString("pairing_pin"),
             lifecycleState = obj.optString("lifecycle_state", "discovered"),
+            remoteSyncEnabled = obj.optBoolean("remote_sync_enabled", true),
         )
         
         val existing = uniquePeers[peer.id]

@@ -24,6 +24,7 @@ struct PeerViewModel: Identifiable, Equatable {
     let connected: Bool
     let connectionStatus: String
     let syncEnabled: Bool
+    let remoteSyncEnabled: Bool
     let autoConnect: Bool
     let lastError: String?
     let pairingRequested: Bool
@@ -46,6 +47,7 @@ struct PeerViewModel: Identifiable, Equatable {
             return "Trust required"
         }
         if connected && !syncEnabled { return "Connected · Sync paused" }
+        if connected && !remoteSyncEnabled { return "Connected · Paused remotely" }
         if connected { return "Connected · Syncing" }
         if explicitDisconnect { return "Disconnected" }
         if trusted && remembered && autoConnect { return "Ready to reconnect" }

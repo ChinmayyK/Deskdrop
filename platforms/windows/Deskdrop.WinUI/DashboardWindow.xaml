@@ -27,12 +27,12 @@
                         IsSettingsVisible="False"
                         OpenPaneLength="220"
                         SelectionChanged="NavView_SelectionChanged"
-                        Background="Transparent">
+                        Background="{StaticResource SidebarAcrylicBrush}">
             
             <NavigationView.PaneHeader>
                 <StackPanel Orientation="Horizontal" Spacing="8" Padding="16,14,0,16">
-                    <TextBlock Text="⚡" FontSize="20" Foreground="#0A84FF"/>
-                    <TextBlock Text="DeskDrop" FontSize="18" FontWeight="Bold" Foreground="#1D1D1F"/>
+                    <TextBlock Text="⚡" FontSize="20" Foreground="{StaticResource AppAccentBrush}"/>
+                    <TextBlock Text="DeskDrop" FontSize="18" FontWeight="Bold" Foreground="White"/>
                 </StackPanel>
             </NavigationView.PaneHeader>
 
@@ -69,7 +69,7 @@
             </NavigationView.MenuItems>
 
             <!-- Main center + right inspector area inside clean white surface -->
-            <Grid Background="Transparent" BorderBrush="#E5E5EA" BorderThickness="1,0,0,0">
+            <Grid Background="{StaticResource AppBackgroundBrush}" BorderBrush="#33FFFFFF" BorderThickness="1,0,0,0">
                 <Frame x:Name="ContentFrame" Background="Transparent" />
             </Grid>
         </NavigationView>

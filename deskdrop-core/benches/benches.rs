@@ -65,6 +65,75 @@ fn bench_encryption(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_large_transfers(c: &mut Criterion) {
+    let mut group = c.benchmark_group("simulated_large_transfers");
+    group.sample_size(10); // Keep iterations low for large benchmarks
+
+    // We simulate 100MB, 1GB, 5GB, 20GB by processing chunks of 512KB in a loop
+    for gb_size in [0.1, 1.0, 5.0, 20.0] {
+        let size_bytes = (gb_size * 1024.0 * 1024.0 * 1024.0) as u64;
+        let chunk_size = 512 * 1024;
+        let num_chunks = size_bytes / chunk_size;
+        
+        let chunk_data = vec![0u8; chunk_size as usize];
+        
+        group.throughput(Throughput::Bytes(size_bytes));
+        group.bench_with_input(
+            BenchmarkId::new("encrypt_stream", format!("{}GB", gb_size)),
+            &chunk_data,
+            |b, data| {
+                let alice = EphemeralKeypair::generate();
+                let bob = EphemeralKeypair::generate();
+                let (mut sess, _, _) = alice.derive_session_key(bob.public_bytes).unwrap();
+                
+                b.iter(|| {
+                    for _ in 0..num_chunks {
+                        let _ = sess.encrypt(black_box(data)).unwrap();
+                    }
+                })
+            }
+        );
+    }
+    group.finish();
+}
+
+fn bench_concurrent_transfers(c: &mut Criterion) {
+    let mut group = c.benchmark_group("simulated_concurrent_transfers");
+    group.sample_size(10);
+    
+    for num_concurrent in [1, 5, 10, 20] {
+        let size_per_transfer = 40 * 1024 * 1024; // 40 MB
+        let chunk_size = 512 * 1024;
+        let num_chunks = size_per_transfer / chunk_size;
+        
+        let chunk_data = vec![0u8; chunk_size];
+        
+        group.throughput(Throughput::Bytes((size_per_transfer * num_concurrent) as u64));
+        group.bench_with_input(
+            BenchmarkId::new("concurrent_40MB_encrypt", num_concurrent),
+            &chunk_data,
+            |b, data| {
+                let alice = EphemeralKeypair::generate();
+                let bob = EphemeralKeypair::generate();
+                
+                b.iter(|| {
+                    // Simulate multiple active sessions encrypting at the same time
+                    let mut sessions = (0..num_concurrent)
+                        .map(|_| alice.derive_session_key(bob.public_bytes).unwrap().0)
+                        .collect::<Vec<_>>();
+                        
+                    for _ in 0..num_chunks {
+                        for sess in sessions.iter_mut() {
+                            let _ = sess.encrypt(black_box(data)).unwrap();
+                        }
+                    }
+                })
+            }
+        );
+    }
+    group.finish();
+}
+
 // ── Content hash ──────────────────────────────────────────────────────────────
 
 fn bench_content_hash(c: &mut Criterion) {
@@ -124,6 +193,8 @@ criterion_group!(
     benches,
     bench_handshake,
     bench_encryption,
+    bench_large_transfers,
+    bench_concurrent_transfers,
     bench_content_hash,
     bench_chunk_and_reassemble,
     bench_dedup,

@@ -19,6 +19,7 @@ final class RemoteExplorerPerformanceTests: XCTestCase {
             connected: true,
             connectionStatus: "connected",
             syncEnabled: true,
+            remoteSyncEnabled: true,
             autoConnect: true,
             lastError: nil,
             pairingRequested: false,

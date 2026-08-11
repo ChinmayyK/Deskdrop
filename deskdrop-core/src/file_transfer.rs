@@ -41,9 +41,9 @@ pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger
                                                 // overhead (mutex locks, syscalls, encrypt/serialize
                                                 // round-trips) by 4× vs 1 MB, vastly increasing MB/s on LAN.
 
-/// Maximum transfer size (4 GB). Rejects announced transfers exceeding this
+/// Maximum transfer size (1 TB). Rejects announced transfers exceeding this
 /// limit to prevent disk-bomb attacks via pre-allocation.
-pub const MAX_TRANSFER_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
+pub const MAX_TRANSFER_BYTES: u64 = crate::protocol::MAX_FILE_BYTES;
 
 pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 32; // ACK every 32 chunks (128 MB)
 
@@ -1335,7 +1335,7 @@ fn now_unix() -> u64 {
 pub fn default_save_dir() -> PathBuf {
     #[cfg(target_os = "android")]
     {
-        PathBuf::from("/storage/emulated/0/Download/Deskdrop")
+        PathBuf::from("/storage/emulated/0/Download")
     }
     #[cfg(not(target_os = "android"))]
     {
@@ -1363,12 +1363,22 @@ fn read_file_chunk_from_file(
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
         .context("chunk size exceeds addressable memory")?;
 
+    let mut buf = crate::network::get_buffer(to_read);
+
+    // Fast path: memory map the file to avoid read syscalls
+    if let Ok(mmap) = unsafe { memmap2::MmapOptions::new().map(&*file) } {
+        if let Some(slice) = mmap.get(offset as usize..(offset as usize + to_read)) {
+            buf.copy_from_slice(slice);
+            return Ok(buf);
+        }
+    }
+
+    // Fallback: standard I/O
     file.seek(SeekFrom::Start(offset))
         .with_context(|| "seeking outbound file".to_string())?;
-
-    let mut buf = crate::network::get_buffer(to_read);
     file.read_exact(&mut buf)
         .with_context(|| "reading outbound file chunk".to_string())?;
+    
     Ok(buf)
 }
 
@@ -1376,8 +1386,15 @@ pub fn checksum_file(path: &Path) -> Result<String> {
     let mut file = File::open(path)
         .with_context(|| format!("opening file for checksum {}", path.display()))?;
     let mut hasher = Sha256::new();
-    let mut buf = crate::network::get_buffer(1024 * 1024);
 
+    // Fast path: memory map the entire file
+    if let Ok(mmap) = unsafe { memmap2::MmapOptions::new().map(&file) } {
+        hasher.update(&mmap);
+        return Ok(hex::encode(hasher.finalize()));
+    }
+
+    // Fallback: standard I/O
+    let mut buf = crate::network::get_buffer(1024 * 1024);
     loop {
         let read = file
             .read(&mut buf)
@@ -1387,7 +1404,6 @@ pub fn checksum_file(path: &Path) -> Result<String> {
         }
         hasher.update(&buf[..read]);
     }
-
     crate::network::return_buffer(buf);
 
     Ok(hex::encode(hasher.finalize()))

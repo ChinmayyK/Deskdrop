@@ -815,7 +815,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             id: detail.deviceId, displayName: detail.deviceName,
             platform: nil, trusted: false, remembered: false, connected: false,
             connectionStatus: "disconnected",
-            syncEnabled: true, autoConnect: false, lastError: nil,
+            syncEnabled: true, remoteSyncEnabled: true, autoConnect: false, lastError: nil,
             pairingRequested: false, outgoingPairingWaiting: false, pairingPin: nil,
             explicitDisconnect: false,
             lastSeen: detail.lastSeen, lastDiscoveryAt: nil, lastSync: nil, ip: nil

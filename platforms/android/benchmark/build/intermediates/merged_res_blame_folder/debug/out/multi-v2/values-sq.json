@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.deskdrop.benchmark-mergeDebugResources-15:/values-sq/values-sq.xml",
+            "map": [
+                {
+                    "source": "/Users/chinmayk/.gradle/caches/transforms-3/bda0c27834fb93924e867ed40e13d9d8/transformed/core-1.9.0/res/values-sq/values-sq.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "100",
+                        "endOffsets": "151"
+                    }
+                }
+            ]
+        }
+    ]
+}

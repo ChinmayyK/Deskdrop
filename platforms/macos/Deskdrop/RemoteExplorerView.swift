@@ -95,7 +95,7 @@ struct RemoteExplorerView: View {
             // macOS Native Toolbar
             toolbarView
                 .frame(height: 52)
-                .background(.regularMaterial)
+                .background(.ultraThinMaterial)
             
             Divider().opacity(0.5)
             
@@ -103,14 +103,14 @@ struct RemoteExplorerView: View {
                 // Left Sidebar (Native Finder style)
                 sidebarView
                     .frame(width: 220)
-                    .background(.regularMaterial)
+                    .background(.ultraThinMaterial)
                 
                 Divider().opacity(0.5)
                 
                 // Center Canvas
                 ZStack(alignment: .bottom) {
                     canvasView
-                        .background(CRTheme.surface)
+                        .background(Color.clear)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     
                     // Floating Multi-Select Action Bar
@@ -126,13 +126,14 @@ struct RemoteExplorerView: View {
                     Divider().opacity(0.5)
                     inspectorView
                         .frame(width: 320)
-                        .background(.regularMaterial)
+                        .background(.ultraThinMaterial)
                         .transition(.move(edge: .trailing))
                 }
             }
         }
         .frame(minWidth: 1000, maxWidth: .infinity, minHeight: 650, maxHeight: .infinity)
-        .background(CRTheme.surface) // Fallback behind materials
+        .background(contextAwareBackground) // Context-aware blur backing
+        .preferredColorScheme(.dark)
         .background(
             Button("") {
                 triggerQuickLookForSelectedFile()
@@ -185,6 +186,30 @@ struct RemoteExplorerView: View {
         } message: {
             Text("Are you sure you want to permanently delete \(selectedFiles.count) files from your Android device? This cannot be undone.")
         }
+    }
+    
+    // MARK: - Context Aware Background
+    private var contextAwareBackground: some View {
+        ZStack {
+            Color.black
+            
+            // Subtle tinted blurred circles based on state
+            let color1 = selectedCategory == "Images" ? CRTheme.brandViolet : (selectedCategory == "Videos" ? CRTheme.brandCyan : CRTheme.brandElectric)
+            let color2 = selectedSource == "Downloads" ? CRTheme.accentBlue : (selectedSource == "WhatsApp" ? CRTheme.accentGreen : CRTheme.brandElectric)
+            
+            Circle()
+                .fill(color1.opacity(0.15))
+                .frame(width: 500, height: 500)
+                .blur(radius: 120)
+                .offset(x: -200, y: -150)
+                
+            Circle()
+                .fill(color2.opacity(0.12))
+                .frame(width: 600, height: 600)
+                .blur(radius: 150)
+                .offset(x: 300, y: 200)
+        }
+        .ignoresSafeArea()
     }
     
     // MARK: - Premium Toolbar
@@ -429,13 +454,13 @@ struct SidebarRowView: View {
                         }
                         .padding(.top, 12)
                         
-                        // Content Layout
+                        // Content Layout - Bento Box Style Grid
                         let displayedFiles = Array(res.files.prefix(displayLimit))
                         switch viewMode {
                         case .dateGrouped:
                             dateGroupedView(for: displayedFiles)
                         case .grid:
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 24)], alignment: .leading, spacing: 24) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)], alignment: .center, spacing: 16) {
                                 ForEach(displayedFiles) { file in fileGridCard(for: file) }
                             }
                             .padding(.top, 12)
@@ -463,7 +488,7 @@ struct SidebarRowView: View {
                     ProgressView("Updating index from \(device.name)...")
                         .controlSize(.regular)
                         .padding(24)
-                        .background(.regularMaterial)
+                        .background(.ultraThinMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
             } else if isLoading {

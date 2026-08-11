@@ -32,11 +32,11 @@ val md_theme_light_inversePrimary = Color(0xFF67E8F9)
 val md_theme_light_surfaceTint = Color(0xFF0891B2)
 
 // macOS CRTheme Dark (Vibrant Block-based)
-val md_theme_dark_primary = Color(0xFF06B6D4) // Bright Cyan
+val md_theme_dark_primary = Color(0xFF22C55E) // Accent
 val md_theme_dark_onPrimary = Color(0xFF083344)
 val md_theme_dark_primaryContainer = Color(0xFF155E75)
 val md_theme_dark_onPrimaryContainer = Color(0xFFCFFAFE)
-val md_theme_dark_secondary = Color(0xFF4ADE80) // Bright Green
+val md_theme_dark_secondary = Color(0xFF22C55E) // Accent
 val md_theme_dark_onSecondary = Color(0xFF052E16)
 val md_theme_dark_secondaryContainer = Color(0xFF166534)
 val md_theme_dark_onSecondaryContainer = Color(0xFFDCFCE7)
