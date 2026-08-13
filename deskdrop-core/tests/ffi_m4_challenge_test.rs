@@ -269,7 +269,7 @@ fn test_large_file_lists() {
             display_name: format!("file_{}.dat", i),
             size_bytes: 1024 * i,
             mime_type: "application/octet-stream".into(),
-            date_modified: 1700000000 + i as u64,
+            date_modified: 1700000000 + i,
             category: RemoteFileCategory::Other,
             source: RemoteFileSource::Downloads,
             content_uri: format!("content://media/external/file/{}", i),

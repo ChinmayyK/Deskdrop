@@ -1670,7 +1670,7 @@ impl Engine {
                             if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
                                 bg_last_prog_emit.insert(bg_transfer_id, now);
                                 let _ = bg_event_tx
-                                    .send(EngineEvent::FileTransferProgress {
+                                    .try_send(EngineEvent::FileTransferProgress {
                                         transfer_id: bg_transfer_id,
                                         from_device: bg_peer_id,
                                         file_name: fname.clone(),
@@ -1679,8 +1679,7 @@ impl Engine {
                                         total_bytes: prog.total_bytes,
                                         speed_bps: prog.speed_bps,
                                         eta_secs: prog.eta_secs,
-                                    })
-                                    .await;
+                                    });
                             }
                         }
 
@@ -4003,7 +4002,7 @@ fn register_session(
                                         {
                                             last_disk_prog_emit.insert(transfer_id, now);
                                             let _ = dw_event_tx
-                                                .send(EngineEvent::FileTransferProgress {
+                                                .try_send(EngineEvent::FileTransferProgress {
                                                     transfer_id,
                                                     from_device: dw_peer_id,
                                                     file_name,
@@ -4012,8 +4011,7 @@ fn register_session(
                                                     total_bytes: prog.total_bytes,
                                                     speed_bps: prog.speed_bps,
                                                     eta_secs: prog.eta_secs,
-                                                })
-                                                .await;
+                                                });
                                         }
 
                                         if should_ack {
@@ -4217,7 +4215,7 @@ fn register_session(
 
                             // Run inbound payload through the FilterChain (e.g. executable blocking, etc.)
                             let filter_chain = crate::filter::FilterChain::from_settings(
-                                &*shared.settings.lock().unwrap(),
+                                &shared.settings.lock().unwrap(),
                             );
                             if let crate::filter::Verdict::Deny { reason } =
                                 filter_chain.run(&content)
@@ -4568,7 +4566,7 @@ fn register_session(
                                         {
                                             bg_last_prog_emit.insert(bg_transfer_id, now);
                                             let _ = bg_event_tx
-                                                .send(EngineEvent::FileTransferProgress {
+                                                .try_send(EngineEvent::FileTransferProgress {
                                                     transfer_id: bg_transfer_id,
                                                     from_device: bg_peer_id,
                                                     file_name: fname.clone(),
@@ -4577,8 +4575,7 @@ fn register_session(
                                                     total_bytes: prog.total_bytes,
                                                     speed_bps: prog.speed_bps,
                                                     eta_secs: prog.eta_secs,
-                                                })
-                                                .await;
+                                                });
                                         }
                                     }
 
@@ -4670,7 +4667,7 @@ fn register_session(
 
                                         let _ = shared
                                             .event_tx
-                                            .send(EngineEvent::FileTransferProgress {
+                                            .try_send(EngineEvent::FileTransferProgress {
                                                 transfer_id,
                                                 from_device: peer_id,
                                                 file_name,
@@ -4679,8 +4676,7 @@ fn register_session(
                                                 total_bytes: prog.total_bytes,
                                                 speed_bps: prog.speed_bps,
                                                 eta_secs: prog.eta_secs,
-                                            })
-                                            .await;
+                                            });
                                         if should_ack {
                                             let _ = rx_session_outbox_tx
                                                 .send(AppMessage::FileChunkAck {
@@ -4736,7 +4732,7 @@ fn register_session(
                                 let tid = transfer_id;
                                 tokio::spawn(async move {
                                     let _ = event_tx
-                                        .send(EngineEvent::FileTransferProgress {
+                                        .try_send(EngineEvent::FileTransferProgress {
                                             transfer_id: tid,
                                             from_device: peer_id,
                                             file_name: fname,
@@ -4745,8 +4741,7 @@ fn register_session(
                                             total_bytes: prog.total_bytes,
                                             speed_bps: prog.speed_bps,
                                             eta_secs: prog.eta_secs,
-                                        })
-                                        .await;
+                                        });
                                 });
                             }
                         }
@@ -4966,7 +4961,7 @@ fn register_session(
                                         {
                                             bg_last_prog_emit.insert(bg_transfer_id, now);
                                             let _ = bg_event_tx
-                                                .send(EngineEvent::FileTransferProgress {
+                                                .try_send(EngineEvent::FileTransferProgress {
                                                     transfer_id: bg_transfer_id,
                                                     from_device: bg_peer_id,
                                                     file_name: fname.clone(),
@@ -4975,8 +4970,7 @@ fn register_session(
                                                     total_bytes: prog.total_bytes,
                                                     speed_bps: prog.speed_bps,
                                                     eta_secs: prog.eta_secs,
-                                                })
-                                                .await;
+                                                });
                                         }
                                     }
 
@@ -5130,14 +5124,13 @@ fn register_session(
                             if let Some(dur) = duration_secs {
                                 let _ = shared
                                     .event_tx
-                                    .send(EngineEvent::SpeedTestProgress {
+                                    .try_send(EngineEvent::SpeedTestProgress {
                                         test_id,
                                         peer_id,
                                         direction: "download".to_string(),
                                         bytes_transferred: bytes,
                                         duration_secs: dur,
-                                    })
-                                    .await;
+                                    });
                             }
                         }
                     }
@@ -5162,14 +5155,13 @@ fn register_session(
                         if let Some(dur) = duration_secs {
                             let _ = shared
                                 .event_tx
-                                .send(EngineEvent::SpeedTestProgress {
+                                .try_send(EngineEvent::SpeedTestProgress {
                                     test_id,
                                     peer_id,
                                     direction: "upload".to_string(),
                                     bytes_transferred: received_bytes,
                                     duration_secs: dur,
-                                })
-                                .await;
+                                });
                         }
                     }
                     Ok(AppMessage::SpeedTestComplete { test_id }) => {

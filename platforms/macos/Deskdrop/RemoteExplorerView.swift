@@ -133,7 +133,6 @@ struct RemoteExplorerView: View {
         }
         .frame(minWidth: 1000, maxWidth: .infinity, minHeight: 650, maxHeight: .infinity)
         .background(contextAwareBackground) // Context-aware blur backing
-        .preferredColorScheme(.dark)
         .background(
             Button("") {
                 triggerQuickLookForSelectedFile()
@@ -188,10 +187,9 @@ struct RemoteExplorerView: View {
         }
     }
     
-    // MARK: - Context Aware Background
     private var contextAwareBackground: some View {
         ZStack {
-            Color.black
+            CRTheme.surfaceElevated
             
             // Subtle tinted blurred circles based on state
             let color1 = selectedCategory == "Images" ? CRTheme.brandViolet : (selectedCategory == "Videos" ? CRTheme.brandCyan : CRTheme.brandElectric)
@@ -399,7 +397,7 @@ struct SidebarRowView: View {
                 Image(systemName: icon)
                     .font(.system(size: 14))
                     .frame(width: 20)
-                    .foregroundStyle(isSelected ? Color.white : CRTheme.brandElectric)
+                    .foregroundStyle(isSelected ? CRTheme.ink : CRTheme.brandElectric)
                 
                 Text(label)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
@@ -410,17 +408,17 @@ struct SidebarRowView: View {
                 if let count = count, count > 0 {
                     Text("\(count)")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(isSelected ? Color.white.opacity(0.9) : CRTheme.inkSubtle)
+                        .foregroundStyle(isSelected ? CRTheme.ink : CRTheme.inkSubtle)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .contentShape(Rectangle()) // Makes entire row clickable
             .background(
-                isSelected ? CRTheme.brandElectric :
-                isHovered ? CRTheme.surfaceStrong : Color.clear
+                isSelected ? CRTheme.rowSelected :
+                isHovered ? CRTheme.rowHover : Color.clear
             )
-            .foregroundStyle(isSelected ? Color.white : CRTheme.ink)
+            .foregroundStyle(CRTheme.ink)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .padding(.horizontal, 12)
             .scaleEffect(isHovered && !isSelected ? 1.02 : 1.0)

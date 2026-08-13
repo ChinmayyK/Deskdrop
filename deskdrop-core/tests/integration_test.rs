@@ -80,7 +80,7 @@ async fn two_engines_exchange_text() {
     let engine1 = Engine::start(cfg1, tx1).await.expect("engine1 start");
     let _engine2 = Engine::start(cfg2, tx2).await.expect("engine2 start");
 
-    let port1 = engine1.bound_port().await;
+    let _port1 = engine1.bound_port().await;
     let port2 = _engine2.bound_port().await;
 
     // Wait for engine2 to start listening

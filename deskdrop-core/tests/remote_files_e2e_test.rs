@@ -213,9 +213,7 @@ fn spawn_mock_responder(
             } = event
             {
                 let mut filtered: Vec<RemoteFileEntry> = dataset
-                    .iter()
-                    .cloned()
-                    .filter(|f| {
+                    .iter().filter(|&f| {
                         if let Some(cat) = &category {
                             if *cat != RemoteFileCategory::All && f.category != *cat {
                                 return false;
@@ -232,7 +230,7 @@ fn spawn_mock_responder(
                             }
                         }
                         true
-                    })
+                    }).cloned()
                     .collect();
 
                 let total_matching = filtered.len() as u32;
@@ -984,7 +982,7 @@ async fn test_tier4_scenario_device_reconnect_retry() {
     let port_b2 = engine_b2.bound_port().await;
 
     // Reconnect engine_a to engine_b2
-    let _ = engine_a.reconnect_peer_by_id(dev_b);
+    let _ = engine_a.reconnect_peer_by_id(dev_b).await;
     let _ = engine_b2.connect_to_peer("127.0.0.1".into(), port_a).await;
     engine_a
         .connect_to_peer("127.0.0.1".into(), port_b2)
