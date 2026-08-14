@@ -39,7 +39,7 @@ namespace Deskdrop.WinUI.Native
             catch (Exception ex)
             {
                 var dir = Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
-                try { File.AppendAllText(Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] ContextMenu Error: {ex.Message}\n"); } catch (Exception ex) { App.HandleError(ex); }
+                try { File.AppendAllText(Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] ContextMenu Error: {ex.Message}\n"); } catch (Exception innerEx) { App.HandleError(innerEx); }
             }
         }
     }

@@ -52,7 +52,7 @@ namespace Deskdrop.WinUI
                 else
                 {
                     App.MainDispatcherQueue?.TryEnqueue(() => {
-                        Services.NotificationHelper.ShowToast("Hotkey Error", "Failed to register global hotkey. Another app might be using it.");
+                        // Services.NotificationHelper.ShowToast("Hotkey Error", "Failed to register global hotkey. Another app might be using it.");
                     });
                 }
             }
@@ -74,7 +74,7 @@ namespace Deskdrop.WinUI
                 return id;
             }
             App.MainDispatcherQueue?.TryEnqueue(() => {
-                Services.NotificationHelper.ShowToast("Hotkey Error", "Failed to register global hotkey. Another app might be using it.");
+                // Services.NotificationHelper.ShowToast("Hotkey Error", "Failed to register global hotkey. Another app might be using it.");
             });
             return -1;
         }
