@@ -25,7 +25,9 @@
             
             <!-- Top Module: Device Info & Dashboard -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                    CornerRadius="16" 
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8" 
                     Padding="16">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -34,11 +36,11 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     
-                    <Border Background="#0A84FF" Width="52" Height="52" CornerRadius="12" Grid.Column="0">
-                        <FontIcon Glyph="&#xE896;" Foreground="White" FontSize="26" />
+                    <Border Background="{StaticResource AppAccentBrush}" Width="48" Height="48" CornerRadius="8" Grid.Column="0">
+                        <FontIcon Glyph="&#xE896;" Foreground="White" FontSize="24" />
                     </Border>
                     <StackPanel VerticalAlignment="Center" Grid.Column="1" Margin="16,0,0,0">
-                        <TextBlock Text="Your Device" FontWeight="SemiBold" FontSize="17"/>
+                        <TextBlock Text="Your Device" Style="{ThemeResource SubtitleTextBlockStyle}"/>
                         <TextBlock Text="Discoverable" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="13"/>
                     </StackPanel>
                     
@@ -51,15 +53,17 @@
 
             <!-- Middle Module: Recent Activity -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                    CornerRadius="16" 
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8" 
                     Padding="0,8,0,8">
                 <StackPanel>
                     <TextBlock Text="RECENT ACTIVITY" 
                                FontSize="11" 
-                               FontWeight="Bold" 
+                               FontWeight="SemiBold" 
                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
                                CharacterSpacing="50"
-                               Margin="16,4,16,8"/>
+                               Margin="16,8,16,8"/>
                     <ListView ItemsSource="{x:Bind RecentTransfers, Mode=OneWay}" 
                               SelectionMode="None" 
                               Background="Transparent"
@@ -68,7 +72,7 @@
                             <DataTemplate x:DataType="x:String">
                                 <StackPanel Orientation="Horizontal" Padding="4,8" Spacing="12">
                                     <FontIcon Glyph="&#xE7C3;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                    <TextBlock Text="{x:Bind}" VerticalAlignment="Center" FontSize="14"/>
+                                    <TextBlock Text="{x:Bind}" VerticalAlignment="Center" Style="{ThemeResource BodyTextBlockStyle}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListView.ItemTemplate>
@@ -78,15 +82,15 @@
 
             <!-- Bottom Module: Actions -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                    CornerRadius="16" 
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8" 
                     Padding="16">
                 <Button Content="Pair New Device" 
                         HorizontalAlignment="Stretch" 
                         Click="PairDevice_Click" 
-                        Background="#0A84FF"
-                        Foreground="White"
-                        BorderThickness="0"
-                        CornerRadius="8"
+                        Style="{ThemeResource AccentButtonStyle}"
+                        CornerRadius="4"
                         Height="36"
                         FontWeight="Medium"/>
             </Border>
