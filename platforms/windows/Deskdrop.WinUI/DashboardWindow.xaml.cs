@@ -7,6 +7,9 @@ namespace Deskdrop.WinUI
     public sealed partial class DashboardWindow : Window
     {
         public static new DashboardWindow? Current { get; private set; }
+        public DeskdropStore mgr => DeskdropStore.Shared;
+        public string localMachineName => System.Environment.MachineName;
+        public System.Windows.Input.ICommand ShowMainWindowCommand => ((App)App.Current).ShowMainWindowCommand;
 
         public DashboardWindow()
         {
@@ -90,6 +93,44 @@ namespace Deskdrop.WinUI
                     break;
                 }
             }
+        }
+
+
+
+        private void OnTitleBarScanClicked(object sender, RoutedEventArgs e)
+        {
+            mgr.UpdateStateFromDaemon();
+        }
+
+        private async void OnTitleBarSendClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.FileTypeFilter.Add("*");
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads;
+                var files = await picker.PickMultipleFilesAsync();
+                if (files != null && files.Count > 0)
+                {
+                    var firstConnected = mgr.ConnectedPeers.FirstOrDefault();
+                    foreach (var file in files)
+                    {
+                        DaemonClient.SendFilePath(firstConnected?.device_id, file.Path, file.Name, file.ContentType);
+                    }
+                    NavigateTo("Transfers");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
+        private void Quit_Click(object sender, RoutedEventArgs e)
+        {
+            ((App)App.Current).ExitApplicationCommand?.Execute(null);
         }
     }
 }

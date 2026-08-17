@@ -21,7 +21,6 @@ public partial class App : Application
     private Window? _window;
     
     // Tray Icon Properties
-    public H.NotifyIcon.TaskbarIcon? TrayIcon { get; private set; }
     public static Microsoft.UI.Dispatching.DispatcherQueue? MainDispatcherQueue { get; private set; }
     public static bool IsShuttingDown { get; private set; } = false;
     
@@ -98,7 +97,7 @@ public partial class App : Application
                         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
                         _window.Activate();
                     }
-                    catch (Exception ex) { App.HandleError(ex); }
+                    catch (Exception innerEx) { App.HandleError(innerEx); }
                 }
                 catch (Exception ex)
                 {
@@ -108,7 +107,7 @@ public partial class App : Application
                         _window = MainWindow;
                         MainWindow.Activate();
                     }
-                    catch (Exception ex) { App.HandleError(ex); }
+                    catch (Exception innerEx) { App.HandleError(innerEx); }
                 }
             });
         });
@@ -119,7 +118,7 @@ public partial class App : Application
             var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             queue?.TryEnqueue(() =>
             {
-                try { TrayIcon?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
+                try { DashboardWindow.Current?.TrayIcon?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 if (_engineHandle != IntPtr.Zero)
                 {
                     try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { App.HandleError(ex); }
@@ -134,6 +133,7 @@ public partial class App : Application
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
         var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
+        System.IO.Directory.CreateDirectory(dir);
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] OnLaunched started\n");
 
         try
@@ -171,20 +171,22 @@ public partial class App : Application
                 });
             }
 
-
             Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
             ClipboardReady.TrySetResult(Clipboard);
 
             MainDispatcherQueue ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
-            // Initialize the Tray Icon entirely in C# to avoid x:Bind issues in App.xaml
-            TrayIcon = new H.NotifyIcon.TaskbarIcon
+            try
             {
-                ToolTipText = "Deskdrop",
-                IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
-                LeftClickCommand = ShowMainWindowCommand,
-                DoubleClickCommand = ShowMainWindowCommand
-            };
+                MainWindow = new DashboardWindow();
+                _window = MainWindow;
+                _window.Activate();
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow crash: " + ex.ToString() + "\n");
+                if (ex.InnerException != null) System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "Inner: " + ex.InnerException.ToString() + "\n");
+            }
 
             DeskdropStore.Shared.PropertyChanged += (s, e) =>
             {
@@ -194,33 +196,13 @@ public partial class App : Application
                     var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                     queue?.TryEnqueue(() =>
                     {
-                        if (TrayIcon != null)
+                        if (DashboardWindow.Current?.TrayIcon != null)
                         {
-                            TrayIcon.ToolTipText = $"Deskdrop — {count} device(s) connected";
+                            DashboardWindow.Current.TrayIcon.ToolTipText = $"Deskdrop — {count} device(s) connected";
                         }
                     });
                 }
             };
-
-            var menu = new MenuFlyout();
-            var openItem = new MenuFlyoutItem { Text = "Open Deskdrop", Command = ShowMainWindowCommand };
-            openItem.Icon = new FontIcon { Glyph = "\uE8A7" };
-            var quitItem = new MenuFlyoutItem { Text = "Quit", Command = ExitApplicationCommand };
-            quitItem.Icon = new FontIcon { Glyph = "\uE711" };
-
-            menu.Items.Add(openItem);
-            menu.Items.Add(new MenuFlyoutSeparator());
-            menu.Items.Add(quitItem);
-
-            TrayIcon.ContextFlyout = menu;
-            TrayIcon.ForceCreate();
-            
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] TrayIcon created. Creating MainWindow...\n");
-
-            MainWindow = new DashboardWindow();
-            _window = MainWindow;
-            _window.Activate();
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow activated.\n");
 
             try
             {

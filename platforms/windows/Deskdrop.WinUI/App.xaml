@@ -11,33 +11,99 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
 
-            <Color x:Key="AppBackgroundColor">#0F172A</Color>
-            <Color x:Key="AppSurfaceColor">#1E293B</Color>
-            <Color x:Key="AppAccentColor">#22C55E</Color>
+            <!-- Global Converters -->
+            <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+            <local:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibilityConverter"/>
+            <local:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+            <local:MultiplyConverter x:Key="MultiplyConverter"/>
+            <local:BoolToFolderIconConverter x:Key="BoolToFolderIconConverter"/>
+            <local:BoolToItemCountDotConverter x:Key="BoolToItemCountDotConverter"/>
+            <local:ItemCountTextConverter x:Key="ItemCountTextConverter"/>
+            <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+            <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+            <local:InverseCountToVisibilityConverter x:Key="InverseCountToVisibilityConverter"/>
+            <local:PlatformToGlyphConverter x:Key="PlatformToGlyphConverter"/>
+            <local:BatteryGlyphConverter x:Key="BatteryGlyphConverter"/>
+            <local:NetworkTypeToGlyphConverter x:Key="NetworkTypeToGlyphConverter"/>
+            <local:FileTypeToGlyphConverter x:Key="FileTypeToGlyphConverter"/>
+            <local:BoolToVisibleConverter x:Key="BoolToVisibleConverter"/>
+            <local:StringToBrushConverter x:Key="StringToBrushConverter"/>
+
+            <!-- Standard Semantic Colors matching Fluent Design -->
+            <SolidColorBrush x:Key="AppAccentBrush" Color="#0078D4" />
+            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#2B88D8" />
+            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#260078D4" />
             
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackgroundColor}" />
-            <SolidColorBrush x:Key="AppSurfaceBrush" Color="{StaticResource AppSurfaceColor}" />
-            <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource AppAccentColor}" />
+            <SolidColorBrush x:Key="AppSuccessBrush" Color="#107C41" />
+            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#26107C41" />
+
+            <SolidColorBrush x:Key="AppWarningBrush" Color="#D83B01" />
+            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#26D83B01" />
+
+            <SolidColorBrush x:Key="AppDangerBrush" Color="#D13438" />
+            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#26D13438" />
+
+            <SolidColorBrush x:Key="AppVioletBrush" Color="#7C3AED" />
+            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#267C3AED" />
+
+            <SolidColorBrush x:Key="AppCyanBrush" Color="#0284C7" />
+            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#260284C7" />
+
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0B1120" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#1E293B" />
+            <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#24334A" />
+            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#20FFFFFF" />
+            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#3DFFFFFF" />
 
             <AcrylicBrush x:Key="SidebarAcrylicBrush"
-                          BackgroundSource="HostBackdrop"
-                          TintColor="{StaticResource AppBackgroundColor}"
+                          TintColor="#0F172A"
                           TintOpacity="0.75"
-                          FallbackColor="{StaticResource AppBackgroundColor}" />
+                          FallbackColor="#0F172A" />
                           
             <AcrylicBrush x:Key="ModalAcrylicBrush"
-                          BackgroundSource="HostBackdrop"
-                          TintColor="{StaticResource AppSurfaceColor}"
-                          TintOpacity="0.85"
-                          FallbackColor="{StaticResource AppSurfaceColor}" />
+                          TintColor="#0B1120"
+                          TintOpacity="0.88"
+                          FallbackColor="#0B1120" />
 
+            <!-- Global Control Styles -->
             <Style TargetType="ListViewItem" x:Key="SpacedListViewItemStyle">
-                <Setter Property="Margin" Value="0,4,0,4"/>
-                <Setter Property="Padding" Value="12,8"/>
-                <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+                <Setter Property="Margin" Value="0,3,0,3"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="CornerRadius" Value="10"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            </Style>
+
+            <Style TargetType="Button" x:Key="PrimaryAccentButtonStyle">
+                <Setter Property="Background" Value="{StaticResource AppAccentBrush}"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="FontSize" Value="13"/>
                 <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="Padding" Value="14,7"/>
+                <Setter Property="BorderThickness" Value="0"/>
+            </Style>
+
+            <Style TargetType="Button" x:Key="SecondarySubtleButtonStyle">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}"/>
+                <Setter Property="FontWeight" Value="Medium"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="Padding" Value="14,7"/>
                 <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="BorderBrush" Value="#22FFFFFF"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+            </Style>
+
+            <Style TargetType="Button" x:Key="DestructiveButtonStyle">
+                <Setter Property="Background" Value="{StaticResource AppDangerSubtleBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource AppDangerBrush}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="Padding" Value="14,7"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="BorderBrush" Value="{StaticResource AppDangerSubtleBrush}"/>
             </Style>
         </ResourceDictionary>
     </Application.Resources>
