@@ -8,52 +8,72 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,36">
+        <StackPanel Spacing="20" MaxWidth="1000" HorizontalAlignment="Stretch">
+            
+            <!-- Header -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Activity Feed" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" CharacterSpacing="-15"/>
+                <TextBlock Text="Full audit log of clipboard history, transfers, and system events" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,24">
-            <TextBlock Text="Recent Activity" FontSize="28" FontWeight="Bold" Margin="0,0,0,8"/>
-            <TextBlock Text="Your clipboard history and recent timeline." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="14"/>
-            <AutoSuggestBox x:Name="TxtSearch" PlaceholderText="Search timeline..." TextChanged="TxtSearch_TextChanged" Margin="0,16,0,0" MaxWidth="400" HorizontalAlignment="Left" />
-        </StackPanel>
+            <!-- Search Bar -->
+            <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="14,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE721;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <AutoSuggestBox x:Name="TxtSearch" PlaceholderText="Filter timeline entries, paths, and text..." 
+                                    BorderThickness="0" Background="Transparent" 
+                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="13.5" 
+                                    Grid.Column="1" VerticalAlignment="Center"
+                                    TextChanged="TxtSearch_TextChanged"/>
+                </Grid>
+            </Border>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <!-- Activity List -->
             <ListView SelectionMode="None" Padding="0" x:Name="TimelineList">
-                <ListView.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <VirtualizingStackPanel />
-                    </ItemsPanelTemplate>
-                </ListView.ItemsPanel>
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="root:HistoryItem">
-                        <Button Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" CornerRadius="12" Margin="0,0,0,12" Padding="16" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="HistoryItem_Click">
+                        <Border Background="{StaticResource AppSurfaceBrush}" 
+                                BorderBrush="{StaticResource AppBorderSubtleBrush}" 
+                                BorderThickness="1" CornerRadius="12" Padding="16,14" Margin="0,0,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="{x:Bind display_text}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{x:Bind path}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                <!-- Icon -->
+                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{StaticResource AppBorderSubtleBrush}" Margin="0,0,14,0">
+                                    <FontIcon Glyph="&#xEC42;" FontSize="16" Foreground="{StaticResource AppAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+
+                                <!-- Details -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="{x:Bind display_text}" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{x:Bind path}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                                 
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                    <Button Background="Transparent" BorderThickness="0" Click="BtnPinItem_Click" Padding="8" CornerRadius="8" AutomationProperties.Name="Pin Item">
-                                        <FontIcon Glyph="&#xE718;" FontSize="16"/>
+                                <!-- Action Buttons -->
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Background="Transparent" BorderThickness="0" Click="BtnPinItem_Click" Padding="8" CornerRadius="8" ToolTipService.ToolTip="Pin / Unpin">
+                                        <FontIcon Glyph="&#xE718;" FontSize="14" Foreground="{StaticResource AppAccentBrush}"/>
                                     </Button>
-                                    <Button Background="Transparent" BorderThickness="0" Click="BtnDeleteItem_Click" Padding="8" CornerRadius="8" Foreground="#FF3B30" AutomationProperties.Name="Delete Item">
-                                        <FontIcon Glyph="&#xE74D;" FontSize="16"/>
+                                    <Button Background="Transparent" BorderThickness="0" Click="BtnDeleteItem_Click" Padding="8" CornerRadius="8" ToolTipService.ToolTip="Delete">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="{StaticResource AppDangerBrush}"/>
                                     </Button>
                                 </StackPanel>
                             </Grid>
-                        </Button>
+                        </Border>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-        </ScrollViewer>
-    </Grid>
+
+        </StackPanel>
+    </ScrollViewer>
 </Page>
+

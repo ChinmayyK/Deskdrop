@@ -8,46 +8,118 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Background="Transparent">
-        <Grid.ColumnDefinitions>
-            <!-- Center Main Launchpad Content -->
-            <ColumnDefinition Width="*"/>
-            <!-- Right Device Inspector Panel -->
-            <ColumnDefinition Width="320"/>
-        </Grid.ColumnDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,36">
+        <StackPanel Spacing="24" MaxWidth="1100" HorizontalAlignment="Stretch">
+            
+            <!-- Hero Header Bar -->
+            <Grid Margin="0,4,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-        <!-- CENTER LAUNCHPAD CONTENT -->
-        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="40,28,40,40">
-            <StackPanel Spacing="0">
-                
-                <!-- Search Bar -->
-                <Border Background="#F2F2F7" CornerRadius="10" Padding="14,10" Margin="0,0,0,28">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE721;" FontSize="14" Foreground="#6E6E73" Grid.Column="0"/>
-                        <TextBox PlaceholderText="Search Files, Clipboard, Devices..." 
-                                 BorderThickness="0" Background="Transparent" 
-                                 Foreground="#1D1D1F" FontSize="14" 
-                                 Grid.Column="1" Margin="8,0,0,0"/>
-                    </Grid>
-                </Border>
-
-                <!-- Hero Header -->
-                <TextBlock Text="Your screens, acting as one." 
-                           FontSize="28" FontWeight="Bold" Foreground="#1D1D1F" 
-                           CharacterSpacing="-10" Margin="0,0,0,6"/>
-                
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,24">
-                    <Border Width="8" Height="8" CornerRadius="4" Background="#34C759" VerticalAlignment="Center"/>
-                    <TextBlock Text="Connected over Local Wi-Fi." FontSize="14" Foreground="#6E6E73"/>
+                <StackPanel Grid.Column="0" Spacing="6">
+                    <TextBlock Text="Ecosystem" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" CharacterSpacing="-15"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Border Width="8" Height="8" CornerRadius="4" Background="{StaticResource AppSuccessBrush}" VerticalAlignment="Center"/>
+                        <TextBlock Text="Connected over Encrypted Local Network" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
                 </StackPanel>
 
-                <!-- DYNAMIC PEER DISCOVERY & PAIRING SECTION -->
-                <TextBlock Text="Devices &amp; Pairing" FontSize="17" FontWeight="Bold" Foreground="#1D1D1F" Margin="0,0,0,14"/>
-                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.Peers, Mode=OneWay}" Margin="0,0,0,28">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Button Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnScanNearbyClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE72C;" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="Scan Nearby" FontSize="13"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource PrimaryAccentButtonStyle}" Click="OnShowQRCodeClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xED14;" FontSize="13" Foreground="#FFFFFF"/>
+                            <TextBlock Text="Pair with QR" FontSize="13"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- 1. ATTENTION / PENDING PAIRING SECTION (Shown when pairing requested) -->
+            <ItemsControl ItemsSource="{x:Bind mgr.Peers, Mode=OneWay}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="winui:PeerViewModel">
+                        <Border Visibility="{x:Bind pairingRequested, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                Background="{StaticResource AppWarningSubtleBrush}" 
+                                BorderBrush="{StaticResource AppWarningBrush}" 
+                                BorderThickness="1.5" CornerRadius="14" Padding="20,16" Margin="0,0,0,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Warning Icon -->
+                                <Border Grid.Column="0" Width="48" Height="48" CornerRadius="24" Background="{StaticResource AppWarningBrush}" Margin="0,0,16,0">
+                                    <FontIcon Glyph="&#xE7BA;" FontSize="22" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+
+                                <!-- Details & PIN -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" FontSize="16" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                    <TextBlock Text="Wants to pair with this Windows PC" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0" Visibility="{x:Bind pairingRequested, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                        <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderStrongBrush}" BorderThickness="1" CornerRadius="6" Padding="10,4">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="SECURITY PIN:" FontSize="10" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{x:Bind pairingPin, Mode=OneWay}" FontSize="14" FontWeight="Bold" FontFamily="Consolas" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Action Buttons -->
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <Button Content="Decline" Style="{StaticResource DestructiveButtonStyle}" Click="OnPairingRejectClicked"/>
+                                    <Button Content="Accept" Style="{StaticResource PrimaryAccentButtonStyle}" Background="{StaticResource AppSuccessBrush}" Click="OnPairingAcceptClicked"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- 2. ACTIVE TRANSFERS BANNER STRIP -->
+            <Border Visibility="{x:Bind mgr.HasActiveTransfers, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                    Background="{StaticResource AppAccentSubtleBrush}" 
+                    BorderBrush="{StaticResource AppAccentBrush}" 
+                    BorderThickness="1" CornerRadius="12" Padding="16,12" 
+                    Tapped="OnActiveTransfersBannerClicked">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE896;" FontSize="18" Foreground="{StaticResource AppAccentBrush}" Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Active File Transfers in Progress" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <TextBlock Text="Click to view transfer speed and details in Transfers tab" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    <FontIcon Glyph="&#xE76C;" FontSize="13" Foreground="{StaticResource AppAccentBrush}" Grid.Column="2" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- 3. CONNECTED & REMEMBERED DEVICES SECTION -->
+            <StackPanel Spacing="12">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE8EA;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
+                    <TextBlock Text="Remembered Devices" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <Border Background="{StaticResource AppSurfaceBrush}" CornerRadius="10" Padding="8,2" Margin="4,0,0,0">
+                        <TextBlock Text="{x:Bind mgr.Peers.Count, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- Devices Grid / List -->
+                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.Peers, Mode=OneWay}">
                     <ListView.ItemContainerTransitions>
                         <TransitionCollection>
                             <AddDeleteThemeTransition/>
@@ -56,51 +128,140 @@
                     </ListView.ItemContainerTransitions>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="winui:PeerViewModel">
-                            <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="14" Padding="16" Margin="0,0,0,10" Tapped="OnPeerCardTapped" PointerMoved="OnDeviceCardPointerMoved" PointerExited="OnDeviceCardPointerExited">
+                            <Border Background="{StaticResource AppSurfaceBrush}" 
+                                    BorderBrush="{StaticResource AppBorderSubtleBrush}" 
+                                    BorderThickness="1" CornerRadius="14" Padding="18,16" Margin="0,0,0,10"
+                                    Tapped="OnPeerCardTapped"
+                                    PointerMoved="OnDeviceCardPointerMoved" 
+                                    PointerExited="OnDeviceCardPointerExited">
                                 <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    
-                                    <!-- Device Icon -->
-                                    <Border Width="44" Height="44" CornerRadius="22" Background="#E3F2FD" Grid.Column="0" Margin="0,0,14,0">
-                                        <FontIcon Glyph="&#xE8EA;" FontSize="20" Foreground="#0A84FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    
-                                    <!-- Device Info -->
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                                        <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" FontSize="15" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                        <TextBlock Text="{x:Bind ConnectionText, Mode=OneWay}" FontSize="13" Foreground="#6E6E73"/>
-                                    </StackPanel>
-                                    
-                                    <!-- Action Buttons & PIN -->
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                        <!-- PIN Display -->
-                                        <StackPanel Visibility="{x:Bind pairingRequested, Mode=OneWay}" VerticalAlignment="Center" Margin="0,0,8,0">
-                                            <TextBlock Text="PIN" FontSize="10" FontWeight="Bold" Foreground="#8E8E93" HorizontalAlignment="Center"/>
-                                            <TextBlock Text="{x:Bind pairingPin, Mode=OneWay}" FontSize="18" FontWeight="Bold" Foreground="#1D1D1F"/>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Top Row: Avatar + Info + Action Icons -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Device Avatar -->
+                                        <Border Width="48" Height="48" CornerRadius="24" Background="{StaticResource AppAccentSubtleBrush}" Grid.Column="0" Margin="0,0,16,0">
+                                            <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}" 
+                                                      FontSize="22" Foreground="{StaticResource AppAccentBrush}" 
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+
+                                        <!-- Device Details & Telemetry -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" FontSize="15.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                                
+                                                <!-- Online Status Pill -->
+                                                <Border CornerRadius="8" Padding="7,2" Background="{StaticResource AppBorderSubtleBrush}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                        <Ellipse Width="6" Height="6" Fill="{x:Bind ConnectionColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"/>
+                                                        <TextBlock Text="{x:Bind ConnectionText, Mode=OneWay}" FontSize="11" FontWeight="Medium" Foreground="{x:Bind ConnectionColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"/>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- Battery Level Pill -->
+                                                <Border Visibility="{x:Bind ShowBattery, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" CornerRadius="8" Padding="7,2" Background="{StaticResource AppSuccessSubtleBrush}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                        <FontIcon Glyph="{x:Bind BatteryLevel, Converter={StaticResource BatteryGlyphConverter}, Mode=OneWay}" FontSize="11" Foreground="{StaticResource AppSuccessBrush}"/>
+                                                        <TextBlock Text="{x:Bind BatteryLevel, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AppSuccessBrush}"/>
+                                                        <TextBlock Text="%" FontSize="10" Foreground="{StaticResource AppSuccessBrush}"/>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- Storage Free Pill -->
+                                                <Border Visibility="{x:Bind ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" CornerRadius="8" Padding="7,2" Background="{StaticResource AppBorderSubtleBrush}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                        <FontIcon Glyph="&#xE7F4;" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                        <TextBlock Text="{x:Bind StorageFreeText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+
+                                            <!-- Subtitle info: Trust status + Last seen -->
+                                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind TrustText, Mode=OneWay}" FontSize="12" Foreground="{x:Bind TrustColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"/>
+                                                <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                                <TextBlock Text="{x:Bind LastSeenText, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                            </StackPanel>
                                         </StackPanel>
-                                        
-                                        <!-- Accept / Reject Buttons for incoming pairing -->
-                                        <Button Content="Accept" Background="#34C759" Foreground="#FFFFFF" CornerRadius="8" Padding="14,6" Visibility="{x:Bind pairingRequested, Mode=OneWay}" Click="OnPairingAcceptClicked"/>
-                                        <Button Content="Reject" Background="#FF3B30" Foreground="#FFFFFF" CornerRadius="8" Padding="14,6" Visibility="{x:Bind pairingRequested, Mode=OneWay}" Click="OnPairingRejectClicked"/>
-                                        
-                                        <!-- Pair Button if not trusted -->
-                                        <Button Content="Pair Device" Background="#0A84FF" Foreground="#FFFFFF" CornerRadius="8" Padding="14,6" Visibility="{x:Bind ShowConnectButton, Mode=OneWay}" Click="OnPairDeviceClicked"/>
-                                    </StackPanel>
+
+                                        <!-- Action Buttons Toolbar -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <!-- Ping Device -->
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17" 
+                                                    Background="{StaticResource AppBorderSubtleBrush}" BorderThickness="0"
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                                    ToolTipService.ToolTip="Ping Device (Play Sound / Vibrate)"
+                                                    Click="OnPingDeviceClicked">
+                                                <FontIcon Glyph="&#xEA8F;" FontSize="13" Foreground="{StaticResource AppAccentBrush}"/>
+                                            </Button>
+
+                                            <!-- Send Files to Device -->
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17" 
+                                                    Background="{StaticResource AppAccentSubtleBrush}" BorderThickness="0"
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                                    ToolTipService.ToolTip="Send Files to this Device"
+                                                    Click="OnSendFilesToDeviceClicked">
+                                                <FontIcon Glyph="&#xE898;" FontSize="13" Foreground="{StaticResource AppAccentBrush}"/>
+                                            </Button>
+
+                                            <!-- Remote File Explorer -->
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17" 
+                                                    Background="{StaticResource AppVioletSubtleBrush}" BorderThickness="0"
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                                    ToolTipService.ToolTip="Browse Remote Files"
+                                                    Click="OnExploreDeviceClicked">
+                                                <FontIcon Glyph="&#xE8B7;" FontSize="13" Foreground="{StaticResource AppVioletBrush}"/>
+                                            </Button>
+
+                                            <!-- Speed Test -->
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17" 
+                                                    Background="{StaticResource AppCyanSubtleBrush}" BorderThickness="0"
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                                    ToolTipService.ToolTip="Run Local Speed Benchmark"
+                                                    Click="OnSpeedTestDeviceClicked">
+                                                <FontIcon Glyph="&#xE916;" FontSize="13" Foreground="{StaticResource AppCyanBrush}"/>
+                                            </Button>
+
+                                            <!-- Connect Button if trusted but offline -->
+                                            <Button Content="Connect" Style="{StaticResource PrimaryAccentButtonStyle}" 
+                                                    Visibility="{x:Bind ShowConnectButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                                    Click="OnPairDeviceClicked"/>
+
+                                            <!-- Disconnect -->
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17" 
+                                                    Background="{StaticResource AppDangerSubtleBrush}" BorderThickness="0"
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                                    ToolTipService.ToolTip="Disconnect"
+                                                    Click="OnDisconnectClicked">
+                                                <FontIcon Glyph="&#xE711;" FontSize="12" Foreground="{StaticResource AppDangerBrush}"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
                                 </Grid>
                             </Border>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+            </StackPanel>
 
-                <!-- Launchpad Section Title -->
-                <TextBlock Text="Launchpad" FontSize="17" FontWeight="Bold" Foreground="#1D1D1F" Margin="0,0,0,16"/>
+            <!-- 4. DISCOVERY & QUICK TOOLS LAUNCHPAD (2x2 Grid) -->
+            <StackPanel Spacing="12">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xEC42;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
+                    <TextBlock Text="Discovery &amp; Quick Tools" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                </StackPanel>
 
-                <!-- 3x2 Launchpad Grid -->
-                <Grid Margin="0,0,0,36">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -108,158 +269,157 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- 1. Transfer Files -->
-                    <Border Grid.Row="0" Grid.Column="0" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="0,0,8,16" Tapped="OnTransferFilesTapped">
-                        <StackPanel HorizontalAlignment="Center" Spacing="12">
-                            <Border Width="52" Height="52" CornerRadius="26" Background="#E3F2FD" HorizontalAlignment="Center">
-                                <FontIcon Glyph="&#xE896;" FontSize="22" Foreground="#0A84FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="Transfer Files" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
-                        </StackPanel>
+                    <!-- Card 1: Magic Link QR Pairing -->
+                    <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource AppSurfaceBrush}" 
+                            BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="14" 
+                            Padding="20" Margin="0,0,8,12" Tapped="OnShowQRCodeClicked"
+                            PointerMoved="OnDeviceCardPointerMoved" PointerExited="OnDeviceCardPointerExited">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="22" Background="{StaticResource AppAccentSubtleBrush}">
+                                    <FontIcon Glyph="&#xED14;" FontSize="20" Foreground="{StaticResource AppAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <Button Grid.Column="1" HorizontalAlignment="Right" Content="Show QR" Style="{StaticResource PrimaryAccentButtonStyle}" Click="OnShowQRCodeClicked"/>
+                            </Grid>
+                            <StackPanel Grid.Row="1" Margin="0,14,0,0" Spacing="4">
+                                <TextBlock Text="Magic Link Pairing" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Scan QR code with your phone camera or Deskdrop mobile app to pair securely without typing IPs." 
+                                           FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" LineHeight="18"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
-                    <!-- 2. Browse Device -->
-                    <Border Grid.Row="0" Grid.Column="1" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="8,0,8,16" Tapped="OnBrowseDeviceTapped">
-                        <StackPanel HorizontalAlignment="Center" Spacing="12">
-                            <Border Width="52" Height="52" CornerRadius="26" Background="#EDE7F6" HorizontalAlignment="Center">
-                                <FontIcon Glyph="&#xE8F1;" FontSize="22" Foreground="#7C3AED" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="Browse Device" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
-                        </StackPanel>
+                    <!-- Card 2: Quick File Transfer -->
+                    <Border Grid.Row="0" Grid.Column="1" Background="{StaticResource AppSurfaceBrush}" 
+                            BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="14" 
+                            Padding="20" Margin="8,0,0,12" Tapped="OnTransferFilesTapped"
+                            PointerMoved="OnDeviceCardPointerMoved" PointerExited="OnDeviceCardPointerExited">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="22" Background="{StaticResource AppVioletSubtleBrush}">
+                                    <FontIcon Glyph="&#xE898;" FontSize="20" Foreground="{StaticResource AppVioletBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <Button Grid.Column="1" HorizontalAlignment="Right" Content="Send File" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnTransferFilesTapped"/>
+                            </Grid>
+                            <StackPanel Grid.Row="1" Margin="0,14,0,0" Spacing="4">
+                                <TextBlock Text="Quick File Transfer" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Push documents, photos, folders, and videos directly across your local encrypted network." 
+                                           FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" LineHeight="18"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
-                    <!-- 3. Clipboard -->
-                    <Border Grid.Row="0" Grid.Column="2" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="8,0,0,16" Tapped="OnClipboardTapped">
-                        <StackPanel HorizontalAlignment="Center" Spacing="12">
-                            <Border Width="52" Height="52" CornerRadius="26" Background="#FFEBEE" HorizontalAlignment="Center">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="22" Foreground="#E11D48" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="Clipboard" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
-                        </StackPanel>
+                    <!-- Card 3: Clipboard Bridge -->
+                    <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource AppSurfaceBrush}" 
+                            BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="14" 
+                            Padding="20" Margin="0,0,8,0" Tapped="OnClipboardTapped"
+                            PointerMoved="OnDeviceCardPointerMoved" PointerExited="OnDeviceCardPointerExited">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="22" Background="{StaticResource AppSuccessSubtleBrush}">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="20" Foreground="{StaticResource AppSuccessBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <Button Grid.Column="1" HorizontalAlignment="Right" Content="Open Bridge" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnClipboardTapped"/>
+                            </Grid>
+                            <StackPanel Grid.Row="1" Margin="0,14,0,0" Spacing="4">
+                                <TextBlock Text="Clipboard Bridge" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Instantly sync clipboard text, links, and screenshots between your PC and mobile devices." 
+                                           FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" LineHeight="18"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
-                    <!-- 4. Speed Test -->
-                    <Border Grid.Row="1" Grid.Column="0" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="0,0,8,0" Tapped="OnSpeedTestTapped">
-                        <StackPanel HorizontalAlignment="Center" Spacing="12">
-                            <Border Width="52" Height="52" CornerRadius="26" Background="#E0F2FE" HorizontalAlignment="Center">
-                                <FontIcon Glyph="&#xE916;" FontSize="22" Foreground="#0284C7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="Speed Test" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 5. Remote Control -->
-                    <Border Grid.Row="1" Grid.Column="1" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="8,0,8,0" Tapped="OnRemoteControlTapped">
-                        <StackPanel HorizontalAlignment="Center" Spacing="12">
-                            <Border Width="52" Height="52" CornerRadius="26" Background="#FEF3C7" HorizontalAlignment="Center">
-                                <FontIcon Glyph="&#xE81C;" FontSize="22" Foreground="#D97706" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="Remote Control" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 6. Settings -->
-                    <Border Grid.Row="1" Grid.Column="2" Background="#F5F5F7" CornerRadius="16" Padding="20" Margin="8,0,0,0" Tapped="OnSettingsTapped">
-                        <StackPanel HorizontalAlignment="Center" Spacing="12">
-                            <Border Width="52" Height="52" CornerRadius="26" Background="#F3F4F6" HorizontalAlignment="Center">
-                                <FontIcon Glyph="&#xE713;" FontSize="22" Foreground="#4B5563" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <TextBlock Text="Settings" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Center"/>
-                        </StackPanel>
+                    <!-- Card 4: Speed Benchmark -->
+                    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource AppSurfaceBrush}" 
+                            BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="14" 
+                            Padding="20" Margin="8,0,0,0" Tapped="OnSpeedTestTapped"
+                            PointerMoved="OnDeviceCardPointerMoved" PointerExited="OnDeviceCardPointerExited">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="22" Background="{StaticResource AppCyanSubtleBrush}">
+                                    <FontIcon Glyph="&#xE916;" FontSize="20" Foreground="{StaticResource AppCyanBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <Button Grid.Column="1" HorizontalAlignment="Right" Content="Run Test" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnSpeedTestTapped"/>
+                            </Grid>
+                            <StackPanel Grid.Row="1" Margin="0,14,0,0" Spacing="4">
+                                <TextBlock Text="Network Speed Test" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Benchmark real-time throughput and latency to your connected phone or laptop." 
+                                           FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" LineHeight="18"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
                 </Grid>
+            </StackPanel>
 
-                <!-- Recent Activity Section -->
-                <TextBlock Text="Recent Activity" FontSize="17" FontWeight="Bold" Foreground="#1D1D1F" Margin="0,0,0,16"/>
+            <!-- 5. RECENT ACTIVITY PREVIEW -->
+            <StackPanel Spacing="12">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE81C;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
+                    <TextBlock Text="Recent Activity" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                </StackPanel>
+
                 <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.ActivityFeed, Mode=OneWay}">
-                    <ListView.ItemContainerTransitions>
-                        <TransitionCollection>
-                            <AddDeleteThemeTransition/>
-                            <RepositionThemeTransition IsStaggeringEnabled="False"/>
-                        </TransitionCollection>
-                    </ListView.ItemContainerTransitions>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="winui:ActivityEntry">
-                            <Border Background="#F5F5F7" CornerRadius="12" Padding="16,12" Margin="0,0,0,8">
+                            <Border Background="{StaticResource AppSurfaceBrush}" 
+                                    BorderBrush="{StaticResource AppBorderSubtleBrush}" 
+                                    BorderThickness="1" CornerRadius="10" Padding="14,10" Margin="0,0,0,6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontSize="13.5" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                        <TextBlock Text="{x:Bind Source, Mode=OneWay}" FontSize="12" Foreground="#8E8E93"/>
+                                    <Border Grid.Column="0" Width="32" Height="32" CornerRadius="16" Background="{StaticResource AppBorderSubtleBrush}" Margin="0,0,12,0">
+                                        <FontIcon Glyph="&#xE8C8;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{x:Bind Source, Mode=OneWay}" FontSize="11.5" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                                     </StackPanel>
-                                    <TextBlock Grid.Column="1" Text="{x:Bind RelativeTime, Mode=OneWay}" FontSize="12" Foreground="#8E8E93" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime, Mode=OneWay}" FontSize="11.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
                                 </Grid>
                             </Border>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
             </StackPanel>
-        </ScrollViewer>
 
-        <!-- RIGHT INSPECTOR PANEL (`#FAFAFC`) -->
-        <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
-            <StackPanel Spacing="28">
-                <!-- Device Header -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay, FallbackValue='No Device Selected'}" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Border Width="8" Height="8" CornerRadius="4" Background="{x:Bind mgr.SelectedPeer.ConnectionColor, Mode=OneWay, FallbackValue='#8E8E93'}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.ConnectionText, Mode=OneWay, FallbackValue='Offline'}" FontSize="13" Foreground="#6E6E73"/>
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Battery Section -->
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.BatteryLevel, Mode=OneWay, FallbackValue='--'}" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
-                    </Grid>
-                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Border Width="100" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
-                    </Border>
-                </StackPanel>
-
-                <!-- Storage Section -->
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.StorageFreeText, Mode=OneWay, FallbackValue='--'}" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                    </Grid>
-                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Grid>
-                            <Border Width="40" Height="8" CornerRadius="4,0,0,4" Background="#FF9500" HorizontalAlignment="Left"/>
-                            <Border Width="95" Height="8" Background="#AF52DE" HorizontalAlignment="Left" Margin="40,0,0,0"/>
-                        </Grid>
-                    </Border>
-                    <!-- Legend -->
-                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#FF9500"/>
-                            <TextBlock Text="Images" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#AF52DE"/>
-                            <TextBlock Text="Videos" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#E5E5EA"/>
-                            <TextBlock Text="Other" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Device Controls -->
-                <StackPanel Spacing="10" Margin="0,12,0,0">
-                    <Button Content="Disconnect" Width="270" Background="#F2F2F7" Foreground="#1D1D1F" CornerRadius="10" Padding="14,10" Click="OnDisconnectClicked"/>
-                    <Button Content="Forget Device" Width="270" Background="#FFEBEE" Foreground="#FF3B30" CornerRadius="10" Padding="14,10" Click="OnForgetClicked"/>
-                </StackPanel>
-            </StackPanel>
-        </Border>
-    </Grid>
+        </StackPanel>
+    </ScrollViewer>
 </Page>
+

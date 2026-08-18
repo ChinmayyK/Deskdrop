@@ -142,6 +142,8 @@ namespace Deskdrop.WinUI.Views
         private void OnShortcutPicturesClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Pictures");
         private void OnShortcutDownloadsClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Download");
         private void OnShortcutDocumentsClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Documents");
+        private void OnShortcutMusicClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Music");
+        private void OnShortcutMoviesClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Movies");
 
         private void OnItemClicked(object sender, RoutedEventArgs e)
         {

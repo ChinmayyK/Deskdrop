@@ -70,20 +70,62 @@ namespace Deskdrop.WinUI.Views
             {
                 _activeFilter = tag;
                 
-                // Update chip styling
-                ChipAll.Background = new SolidColorBrush(_activeFilter == "All" ? Microsoft.UI.Colors.DodgerBlue : Microsoft.UI.Colors.Transparent);
-                ChipAll.Foreground = new SolidColorBrush(_activeFilter == "All" ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black);
+                var accentBrush = (Brush)Application.Current.Resources["AppAccentBrush"];
+                var surfaceBrush = (Brush)Application.Current.Resources["AppSurfaceBrush"];
+                var primaryText = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
+                var secondaryText = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+
+                ChipAll.Background = _activeFilter == "All" ? accentBrush : surfaceBrush;
+                ChipAll.Foreground = _activeFilter == "All" ? new SolidColorBrush(Microsoft.UI.Colors.White) : secondaryText;
                 
-                ChipText.Background = new SolidColorBrush(_activeFilter == "Text" ? Microsoft.UI.Colors.DodgerBlue : Microsoft.UI.Colors.Transparent);
-                ChipText.Foreground = new SolidColorBrush(_activeFilter == "Text" ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black);
+                ChipText.Background = _activeFilter == "Text" ? accentBrush : surfaceBrush;
+                ChipText.Foreground = _activeFilter == "Text" ? new SolidColorBrush(Microsoft.UI.Colors.White) : secondaryText;
                 
-                ChipImage.Background = new SolidColorBrush(_activeFilter == "Image" ? Microsoft.UI.Colors.DodgerBlue : Microsoft.UI.Colors.Transparent);
-                ChipImage.Foreground = new SolidColorBrush(_activeFilter == "Image" ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black);
+                ChipImage.Background = _activeFilter == "Image" ? accentBrush : surfaceBrush;
+                ChipImage.Foreground = _activeFilter == "Image" ? new SolidColorBrush(Microsoft.UI.Colors.White) : secondaryText;
                 
-                ChipFile.Background = new SolidColorBrush(_activeFilter == "File" ? Microsoft.UI.Colors.DodgerBlue : Microsoft.UI.Colors.Transparent);
-                ChipFile.Foreground = new SolidColorBrush(_activeFilter == "File" ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black);
+                ChipFile.Background = _activeFilter == "File" ? accentBrush : surfaceBrush;
+                ChipFile.Foreground = _activeFilter == "File" ? new SolidColorBrush(Microsoft.UI.Colors.White) : secondaryText;
 
                 UpdateFilter();
+            }
+        }
+
+        private async void OnPushLocalClipboardClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dataPackageView = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+                if (dataPackageView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+                {
+                    var text = await dataPackageView.GetTextAsync();
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        var firstConnected = mgr.ConnectedPeers.FirstOrDefault();
+                        if (firstConnected != null)
+                        {
+                            mgr.SendPushText(text, firstConnected.device_id);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
+        private void OnCopyActivityTextClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is ActivityEntry entry)
+            {
+                var text = !string.IsNullOrEmpty(entry.text_preview) ? entry.text_preview : entry.Title;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                    dp.SetText(text);
+                    Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
+                }
             }
         }
 

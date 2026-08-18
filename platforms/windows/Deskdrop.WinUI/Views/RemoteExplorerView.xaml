@@ -10,181 +10,169 @@
 
     <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
+            <!-- Left Library Navigation Shortcuts -->
+            <ColumnDefinition Width="210"/>
+            <!-- Center File Browser Canvas -->
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="320"/>
         </Grid.ColumnDefinitions>
 
-        <!-- CENTER REMOTE EXPLORER CONTENT -->
-        <Grid Grid.Column="0">
+        <!-- 1. LEFT SHORTCUTS SIDEBAR -->
+        <Border Grid.Column="0" Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="0,0,1,0" Padding="14,20,14,20">
+            <StackPanel Spacing="6">
+                <TextBlock Text="REMOTE STORAGE" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="8,0,0,8" CharacterSpacing="50"/>
+
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutRootClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE8B7;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
+                        <TextBlock Text="Root (/)" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutDCIMClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE722;" FontSize="15" Foreground="{StaticResource AppWarningBrush}"/>
+                        <TextBlock Text="Camera / DCIM" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutPicturesClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xEB9F;" FontSize="15" Foreground="{StaticResource AppCyanBrush}"/>
+                        <TextBlock Text="Pictures" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutDownloadsClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE896;" FontSize="15" Foreground="{StaticResource AppSuccessBrush}"/>
+                        <TextBlock Text="Downloads" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutDocumentsClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE8A5;" FontSize="15" Foreground="{StaticResource AppVioletBrush}"/>
+                        <TextBlock Text="Documents" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutMusicClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE8D6;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
+                        <TextBlock Text="Music" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutMoviesClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE714;" FontSize="15" Foreground="{StaticResource AppWarningBrush}"/>
+                        <TextBlock Text="Movies" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- 2. MAIN FILE EXPLORER CANVAS -->
+        <Grid Grid.Column="1" Padding="24,20,24,24">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Top Header Bar -->
-            <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="#E5E5EA" Padding="28,16">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Back button and Device Title -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                        <Button Content="&lt;" Background="#F2F2F7" BorderThickness="0" CornerRadius="8" Padding="12,6" Click="OnBackClicked"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay, FallbackValue='No Device'}" FontSize="16" FontWeight="Bold" Foreground="#1D1D1F" VerticalAlignment="Center"/>
-                        <Border Width="6" Height="6" CornerRadius="3" Background="{x:Bind mgr.SelectedPeer.ConnectionColor, Mode=OneWay, FallbackValue='#8E8E93'}" VerticalAlignment="Center"/>
-                    </StackPanel>
-
-                    <!-- Path Bar / Search -->
-                    <Border Grid.Column="1" Background="#F2F2F7" CornerRadius="8" Padding="12,6" Margin="24,0" VerticalAlignment="Center">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <FontIcon Glyph="&#xE8DA;" FontSize="13" Foreground="#6E6E73" Grid.Column="0"/>
-                            <TextBox x:Name="PathBox" Text="/" BorderThickness="0" Background="Transparent" Foreground="#1D1D1F" FontSize="13" Grid.Column="1" Margin="8,0,0,0" KeyDown="OnPathKeyDown"/>
-                            <Button Grid.Column="2" Content="Go" Background="Transparent" Foreground="#0A84FF" BorderThickness="0" Padding="8,2" Click="OnGoClicked"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Transfer Action -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <Button Content="&#xE149;" FontFamily="Segoe MDL2 Assets" Foreground="#6E6E73" Background="Transparent" BorderThickness="0" Padding="8" ToolTipService.ToolTip="Refresh" Click="OnRefreshClicked"/>
-                        <Button Content="📁 Send Files to Device..." Background="#0A84FF" Foreground="#FFFFFF" BorderThickness="0" CornerRadius="8" Padding="14,6" Click="OnSendFilesClicked"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <!-- Explorer Body (Left Library Sidebar + Center Grid) -->
-            <Grid Grid.Row="1">
+            <!-- Top Navigation & Path Toolbar -->
+            <Grid Grid.Row="0" Margin="0,0,0,16">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="190"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Left Library / Shortcuts Sub-Sidebar -->
-                <Border Grid.Column="0" Background="#FAFAFC" BorderThickness="0,0,1,0" BorderBrush="#E5E5EA" Padding="12,20">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="Quick Shortcuts" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" Margin="6,0,0,4"/>
-                        
-                        <Button Content="Root Directory (/)" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="#E6F2FF" Foreground="#0A84FF" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutRootClicked"/>
-                        <Button Content="DCIM / Camera" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Foreground="#1D1D1F" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutDCIMClicked"/>
-                        <Button Content="Pictures" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Foreground="#1D1D1F" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutPicturesClicked"/>
-                        <Button Content="Downloads" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Foreground="#1D1D1F" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutDownloadsClicked"/>
-                        <Button Content="Documents" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Foreground="#1D1D1F" CornerRadius="8" Padding="10,8" BorderThickness="0" Click="OnShortcutDocumentsClicked"/>
-                    </StackPanel>
+                <!-- Back / Up / Refresh Buttons -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" Margin="0,0,12,0">
+                    <Button Width="36" Height="36" Padding="0" CornerRadius="18" Background="{StaticResource AppSurfaceBrush}" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" ToolTipService.ToolTip="Back / Up Directory" Click="OnBackClicked">
+                        <FontIcon Glyph="&#xE72B;" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </Button>
+                    <Button Width="36" Height="36" Padding="0" CornerRadius="18" Background="{StaticResource AppSurfaceBrush}" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" ToolTipService.ToolTip="Refresh Files" Click="OnRefreshClicked">
+                        <FontIcon Glyph="&#xE72C;" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    </Button>
+                </StackPanel>
+
+                <!-- Breadcrumb / Path Bar -->
+                <Border Grid.Column="1" Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="8" Padding="12,4">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE8B7;" FontSize="14" Foreground="{StaticResource AppAccentBrush}" Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBox x:Name="PathBox" Text="/" FontSize="13" BorderThickness="0" Background="Transparent" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Grid.Column="1" KeyDown="OnPathKeyDown"/>
+                        <Button Grid.Column="2" Content="Go" Padding="10,3" FontSize="11.5" Style="{StaticResource PrimaryAccentButtonStyle}" Click="OnGoClicked"/>
+                    </Grid>
                 </Border>
 
-                <!-- Center Files Area -->
-                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="28,20">
-                    <StackPanel Spacing="16">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Contents" FontSize="14" FontWeight="Bold" Foreground="#1D1D1F"/>
-                            <TextBlock Text="{x:Bind RemoteFiles.Count, Mode=OneWay}" FontSize="13" Foreground="#6E6E73"/>
-                            <TextBlock Text="items" FontSize="13" Foreground="#6E6E73"/>
-                        </StackPanel>
-
-                        <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}">
-                            <ListView.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <VirtualizingStackPanel />
-                                </ItemsPanelTemplate>
-                            </ListView.ItemsPanel>
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="winui:RemoteFile">
-                                    <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,8">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            
-                                            <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="#EBF4FF" Margin="0,0,14,0">
-                                                <FontIcon Glyph="&#xE8B7;" FontSize="20" Foreground="{x:Bind IconColor, Mode=OneWay}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                                <TextBlock Text="{x:Bind display_name, Mode=OneWay}" FontSize="14.5" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <TextBlock Text="{x:Bind IconKind, Mode=OneWay}" FontSize="12.5" Foreground="#6E6E73"/>
-                                                    <TextBlock Text="·" FontSize="12.5" Foreground="#6E6E73"/>
-                                                    <TextBlock Text="{x:Bind FormattedSize, Mode=OneWay}" FontSize="12.5" Foreground="#6E6E73"/>
-                                                    <TextBlock Text="·" FontSize="12.5" Foreground="#6E6E73"/>
-                                                    <TextBlock Text="{x:Bind FormattedDate, Mode=OneWay}" FontSize="12.5" Foreground="#8E8E93"/>
-                                                </StackPanel>
-                                            </StackPanel>
-
-                                            <!-- Open folder button OR download file button -->
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                                <Button Content="Open" Background="#0A84FF" Foreground="#FFFFFF" CornerRadius="8" Padding="14,6" Click="OnItemClicked"/>
-                                                <Button Content="Download" Background="#34C759" Foreground="#FFFFFF" CornerRadius="8" Padding="14,6" Click="OnDownloadClicked"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-                    </StackPanel>
-                </ScrollViewer>
-            </Grid>
-        </Grid>
-
-        <!-- RIGHT INSPECTOR PANEL (`#FAFAFC`) -->
-        <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
-            <StackPanel Spacing="28">
-                <!-- Device Header -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay, FallbackValue='No Device Selected'}" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
+                <!-- Upload / Send Files Button -->
+                <Button Grid.Column="2" Style="{StaticResource PrimaryAccentButtonStyle}" Margin="12,0,0,0" Click="OnSendFilesClicked">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Border Width="8" Height="8" CornerRadius="4" Background="{x:Bind mgr.SelectedPeer.ConnectionColor, Mode=OneWay, FallbackValue='#8E8E93'}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.ConnectionText, Mode=OneWay, FallbackValue='Offline'}" FontSize="13" Foreground="#6E6E73"/>
+                        <FontIcon Glyph="&#xE898;" FontSize="13" Foreground="#FFFFFF"/>
+                        <TextBlock Text="Upload File" FontSize="13"/>
                     </StackPanel>
-                </StackPanel>
+                </Button>
+            </Grid>
 
-                <!-- Battery Section -->
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.BatteryLevel, Mode=OneWay, FallbackValue='--'}" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
-                    </Grid>
-                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Border Width="100" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
-                    </Border>
+            <!-- Device Connection Status Bar -->
+            <Grid Grid.Row="1" Margin="0,0,0,14">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="Browsing:" FontSize="12.5" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                    <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay}" FontSize="12.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                    <TextBlock Text="{x:Bind RemoteFiles.Count, Mode=OneWay}" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource AppAccentBrush}"/>
+                    <TextBlock Text="items" FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
+            </Grid>
 
-                <!-- Storage Section -->
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.StorageFreeText, Mode=OneWay, FallbackValue='--'}" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                    </Grid>
-                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Grid>
-                            <Border Width="40" Height="8" CornerRadius="4,0,0,4" Background="#FF9500" HorizontalAlignment="Left"/>
-                            <Border Width="95" Height="8" Background="#AF52DE" HorizontalAlignment="Left" Margin="40,0,0,0"/>
-                        </Grid>
-                    </Border>
-                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#FF9500"/>
-                            <TextBlock Text="Images" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#AF52DE"/>
-                            <TextBlock Text="Videos" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#E5E5EA"/>
-                            <TextBlock Text="Other" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-            </StackPanel>
-        </Border>
+            <!-- Files List -->
+            <ListView Grid.Row="2" SelectionMode="None" Padding="0" ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="winui:RemoteFile">
+                        <Border Background="{StaticResource AppSurfaceBrush}" 
+                                BorderBrush="{StaticResource AppBorderSubtleBrush}" 
+                                BorderThickness="1" CornerRadius="10" Padding="14,10" Margin="0,0,0,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Type Icon -->
+                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" Background="{StaticResource AppBorderSubtleBrush}" Margin="0,0,12,0">
+                                    <FontIcon Glyph="{x:Bind name, Converter={StaticResource FileTypeToGlyphConverter}, Mode=OneWay}" FontSize="16" Foreground="{StaticResource AppAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+
+                                <!-- Name & Modified Date -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{x:Bind name, Mode=OneWay}" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{x:Bind FormattedDate, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                </StackPanel>
+
+                                <!-- Formatted Size -->
+                                <TextBlock Grid.Column="2" Text="{x:Bind FormattedSize, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+
+                                <!-- Action Buttons -->
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <!-- Open Directory -->
+                                    <Button Content="Open" Style="{StaticResource PrimaryAccentButtonStyle}" Padding="10,5" FontSize="12" Visibility="{x:Bind is_dir, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" Click="OnItemClicked"/>
+                                    <!-- Download File -->
+                                    <Button Content="Download" Style="{StaticResource SecondarySubtleButtonStyle}" Padding="10,5" FontSize="12" Visibility="{x:Bind is_dir, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}" Click="OnDownloadClicked"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
     </Grid>
 </Page>

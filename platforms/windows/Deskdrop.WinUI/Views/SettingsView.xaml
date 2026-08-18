@@ -8,170 +8,175 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Background="Transparent">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="320"/>
-        </Grid.ColumnDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,36">
+        <StackPanel Spacing="24" MaxWidth="900" HorizontalAlignment="Stretch">
 
-        <!-- CENTER SETTINGS CONTENT -->
-        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="40,28,40,40">
-            <StackPanel Spacing="0">
-                <TextBlock Text="Settings" FontSize="28" FontWeight="Bold" Foreground="#1D1D1F" CharacterSpacing="-10" Margin="0,0,0,20"/>
+            <!-- Header -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Settings" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" CharacterSpacing="-15"/>
+                <TextBlock Text="Configure identity, network protocols, sync behaviors, and security" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
 
-                <!-- Top Segmented Tab Bar -->
-                <Border Background="#F8F9FB" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="12" Padding="4" HorizontalAlignment="Left" Margin="0,0,0,32">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Border Background="#0A84FF" CornerRadius="8" Padding="16,8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="🎛️" FontSize="14"/>
-                                <TextBlock Text="General" FontSize="13.5" FontWeight="SemiBold" Foreground="#FFFFFF"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Padding="16,8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="🔄" FontSize="14"/>
-                                <TextBlock Text="Sync" FontSize="13.5" FontWeight="SemiBold" Foreground="#6E6E73"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Padding="16,8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="🌐" FontSize="14"/>
-                                <TextBlock Text="Network" FontSize="13.5" FontWeight="SemiBold" Foreground="#6E6E73"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Padding="16,8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="🛡️" FontSize="14"/>
-                                <TextBlock Text="Security" FontSize="13.5" FontWeight="SemiBold" Foreground="#6E6E73"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Border>
+            <!-- 1. IDENTITY & GENERAL SECTION -->
+            <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE7F4;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
+                    <TextBlock Text="Device &amp; System" FontSize="14.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                </StackPanel>
 
-                <!-- IDENTITY Section -->
-                <TextBlock Text="🎙️ IDENTITY" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" CharacterSpacing="60" Margin="0,0,0,12"/>
-                <Border Background="#F5F5F7" CornerRadius="16" Padding="20,6" Margin="0,0,0,28">
+                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20,8">
                     <StackPanel Spacing="0">
-                        <Grid Padding="0,16">
+                        <!-- Device Name -->
+                        <Grid Padding="0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="3">
-                                <TextBlock Text="Device name" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                <TextBlock Text="How this PC appears to other Deskdrop peers." FontSize="12" Foreground="#6E6E73"/>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="Device Name" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="How this PC appears to other Deskdrop devices on the local network" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>
-                            <Border Grid.Column="1" Background="#FFFFFF" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="8" Padding="14,6">
-                                <TextBlock Text="{x:Bind DeviceName, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F"/>
+                            <Border Grid.Column="1" Background="{StaticResource AppBorderSubtleBrush}" CornerRadius="6" Padding="12,6">
+                                <TextBlock Text="{x:Bind DeviceName, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             </Border>
                         </Grid>
 
-                        <Border Height="1" Background="#E5E5EA"/>
+                        <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
 
-                        <Grid Padding="0,16">
+                        <!-- Start on Login -->
+                        <Grid Padding="0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="3">
-                                <TextBlock Text="Start on login" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                <TextBlock Text="Launch Deskdrop automatically when Windows starts." FontSize="12" Foreground="#6E6E73"/>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="Launch on Windows Startup" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Run Deskdrop silently in the background and system tray on boot" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>
                             <ToggleSwitch Grid.Column="1" IsOn="True" MinWidth="0" Toggled="OnStartupToggled"/>
                         </Grid>
 
-                        <Border Height="1" Background="#E5E5EA"/>
+                        <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
 
-                        <Grid Padding="0,16">
+                        <!-- Network Rescan -->
+                        <Grid Padding="0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="3">
-                                <TextBlock Text="Rescan Network" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                                <TextBlock Text="Force discovery of nearby Deskdrop devices over Wi-Fi." FontSize="12" Foreground="#6E6E73"/>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="Rescan Network" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Force UDP broadcast discovery of nearby Deskdrop peers" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>
-                            <Button Grid.Column="1" Content="Rescan Now" Background="#FFFFFF" BorderBrush="#E5E5EA" Foreground="#0A84FF" CornerRadius="8" Click="OnRescanClicked"/>
+                            <Button Grid.Column="1" Content="Rescan Now" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnRescanClicked"/>
                         </Grid>
                     </StackPanel>
                 </Border>
+            </StackPanel>
 
-                <!-- AMBIENT CONTINUITY Section -->
-                <TextBlock Text="⭐ AMBIENT CONTINUITY" FontSize="11" FontWeight="Bold" Foreground="#8E8E93" CharacterSpacing="60" Margin="0,0,0,12"/>
-                <Border Background="#F5F5F7" CornerRadius="16" Padding="20,16" Margin="0,0,0,40">
+            <!-- 2. CONTINUITY & SYNC SECTION -->
+            <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE8C8;" FontSize="15" Foreground="{StaticResource AppSuccessBrush}"/>
+                    <TextBlock Text="Continuity &amp; Sync" FontSize="14.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                </StackPanel>
+
+                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20,8">
+                    <StackPanel Spacing="0">
+                        <!-- Auto Sync Clipboard -->
+                        <Grid Padding="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="Automatic Clipboard Sync" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Seamlessly share text and links with trusted connected devices" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsOn="{x:Bind mgr.SyncEnabled, Mode=TwoWay}" MinWidth="0"/>
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
+
+                        <!-- Downloads Folder -->
+                        <Grid Padding="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="Download Directory" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Where files received from mobile devices will be saved" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Open Folder" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnOpenDownloadsClicked"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- 3. SECURITY SECTION -->
+            <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE72E;" FontSize="15" Foreground="{StaticResource AppWarningBrush}"/>
+                    <TextBlock Text="Security &amp; Encryption" FontSize="14.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                </StackPanel>
+
+                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20,8">
+                    <StackPanel Spacing="0">
+                        <!-- TOFU PIN Verification -->
+                        <Grid Padding="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="TOFU Security PIN Verification" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Require matching a 6-digit PIN on both devices before establishing trust" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsOn="True" MinWidth="0"/>
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
+
+                        <!-- Forget All Devices -->
+                        <Grid Padding="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="Revoke All Trusted Devices" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Clear local pairing keys and require re-pairing for all devices" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Revoke All" Style="{StaticResource DestructiveButtonStyle}" Click="OnRevokeAllClicked"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- 4. ABOUT & DIAGNOSTICS SECTION -->
+            <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE946;" FontSize="15" Foreground="{StaticResource AppCyanBrush}"/>
+                    <TextBlock Text="About &amp; Diagnostics" FontSize="14.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                </StackPanel>
+
+                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20,16">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Spacing="3">
-                            <TextBlock Text="Screenshot &amp; Clipboard Sync" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F"/>
-                            <TextBlock Text="Instantly sync clipboard and screenshots across connected devices." FontSize="12" Foreground="#6E6E73"/>
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <TextBlock Text="Deskdrop for Windows" FontSize="14" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                            <TextBlock Text="Version 4.0.0 • Native WinUI 3 &amp; Rust Core" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="Local Daemon: Running (Healthy)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AppSuccessBrush}"/>
                         </StackPanel>
-                        <CheckBox Grid.Column="1" IsChecked="{x:Bind mgr.SyncEnabled, Mode=TwoWay}" MinWidth="0"/>
+                        <Button Grid.Column="1" Content="View Logs" Style="{StaticResource SecondarySubtleButtonStyle}" VerticalAlignment="Center" Click="OnViewLogsClicked"/>
                     </Grid>
                 </Border>
-
-                <!-- Bottom Action Buttons -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
-                    <Button Content="Revert" Background="#FFFFFF" BorderBrush="#E5E5EA" Foreground="#1D1D1F" CornerRadius="8" Padding="18,8" Click="OnRevertClicked"/>
-                    <Button Content="Save Changes" Background="#0A84FF" Foreground="#FFFFFF" BorderThickness="0" CornerRadius="8" Padding="18,8" Click="OnSaveClicked"/>
-                </StackPanel>
             </StackPanel>
-        </ScrollViewer>
 
-        <!-- RIGHT INSPECTOR PANEL (`#FAFAFC`) -->
-        <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
-            <StackPanel Spacing="28">
-                <!-- Device Header -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay, FallbackValue='No Device Selected'}" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Border Width="8" Height="8" CornerRadius="4" Background="{x:Bind mgr.SelectedPeer.ConnectionColor, Mode=OneWay, FallbackValue='#8E8E93'}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.ConnectionText, Mode=OneWay, FallbackValue='Offline'}" FontSize="13" Foreground="#6E6E73"/>
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Battery Section -->
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.BatteryLevel, Mode=OneWay, FallbackValue='--'}" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
-                    </Grid>
-                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Border Width="100" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
-                    </Border>
-                </StackPanel>
-
-                <!-- Storage Section -->
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.StorageFreeText, Mode=OneWay, FallbackValue='--'}" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                    </Grid>
-                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Grid>
-                            <Border Width="40" Height="8" CornerRadius="4,0,0,4" Background="#FF9500" HorizontalAlignment="Left"/>
-                            <Border Width="95" Height="8" Background="#AF52DE" HorizontalAlignment="Left" Margin="40,0,0,0"/>
-                        </Grid>
-                    </Border>
-                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#FF9500"/>
-                            <TextBlock Text="Images" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#AF52DE"/>
-                            <TextBlock Text="Videos" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#E5E5EA"/>
-                            <TextBlock Text="Other" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-            </StackPanel>
-        </Border>
-    </Grid>
+        </StackPanel>
+    </ScrollViewer>
 </Page>

@@ -8,163 +8,131 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Background="Transparent">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="320"/>
-        </Grid.ColumnDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,36">
+        <StackPanel Spacing="20" MaxWidth="1100" HorizontalAlignment="Stretch">
 
-        <!-- CENTER CLIPBOARD CONTENT -->
-        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="40,28,40,40">
-            <StackPanel Spacing="0">
-                <!-- Top Search Bar -->
-                <Border Background="#F2F2F7" CornerRadius="10" Padding="14,10" Margin="0,0,0,20">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE721;" FontSize="14" Foreground="#6E6E73" Grid.Column="0"/>
-                        <TextBox x:Name="SearchBox" PlaceholderText="Search copied text, links, files, and images across devices..." 
-                                 BorderThickness="0" Background="Transparent" 
-                                 Foreground="#1D1D1F" FontSize="14" 
-                                 Grid.Column="1" Margin="8,0,0,0"
-                                 TextChanged="OnSearchTextChanged"/>
-                        <Border Grid.Column="2" Background="#FFFFFF" BorderThickness="1" BorderBrush="#E5E5EA" CornerRadius="5" Padding="6,2">
-                            <TextBlock Text="⌘F" FontSize="11" FontWeight="SemiBold" Foreground="#6E6E73"/>
-                        </Border>
-                    </Grid>
-                </Border>
+            <!-- Top Header & Search Bar -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-                <!-- Pending Approvals Section -->
-                <StackPanel Visibility="{x:Bind mgr.HasPendingClipboards, Mode=OneWay}" Margin="0,0,0,24">
-                    <TextBlock Text="PENDING REMOTE CLIPBOARDS" FontSize="11" FontWeight="Bold" Foreground="#0055CC" CharacterSpacing="60" Margin="0,0,0,10"/>
-                    <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.PendingClipboards, Mode=OneWay}">
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="winui:PendingClipboard">
-                                <Border Background="#EBF4FF" BorderBrush="#B9D5FF" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,10">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Width="40" Height="40" CornerRadius="20" Background="#0055CC" Margin="0,0,14,0">
-                                            <FontIcon Glyph="&#xE8C8;" FontSize="18" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                                            <TextBlock Text="{x:Bind Preview, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F" MaxLines="2" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{x:Bind from_device, Mode=OneWay}" FontSize="12.5" Foreground="#0055CC"/>
-                                        </StackPanel>
-                                        <Button Grid.Column="2" Content="Apply to Windows Clipboard" Background="#0055CC" Foreground="#FFFFFF" CornerRadius="8" Padding="14,8" VerticalAlignment="Center" Click="OnApplyPendingClicked"/>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <TextBlock Text="Clipboard Bridge" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" CharacterSpacing="-15"/>
+                    <TextBlock Text="Cross-device clipboard history and real-time synchronization" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
 
-                <!-- Filter Chips -->
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,24">
-                    <Button x:Name="ChipAll" Content="All" Background="#0A84FF" Foreground="#FFFFFF" CornerRadius="16" Padding="14,6" BorderThickness="0" Click="OnFilterChipClicked"/>
-                    <Button x:Name="ChipText" Content="Text" Background="#F2F2F7" Foreground="#1D1D1F" CornerRadius="16" Padding="14,6" BorderThickness="0" Click="OnFilterChipClicked"/>
-                    <Button x:Name="ChipImage" Content="Image" Background="#F2F2F7" Foreground="#1D1D1F" CornerRadius="16" Padding="14,6" BorderThickness="0" Click="OnFilterChipClicked"/>
-                    <Button x:Name="ChipFile" Content="File" Background="#F2F2F7" Foreground="#1D1D1F" CornerRadius="16" Padding="14,6" BorderThickness="0" Click="OnFilterChipClicked"/>
-                </StackPanel>
+                <!-- Push Clipboard Quick Button -->
+                <Button Grid.Column="1" Style="{StaticResource PrimaryAccentButtonStyle}" VerticalAlignment="Center" Click="OnPushLocalClipboardClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE8C8;" FontSize="13" Foreground="#FFFFFF"/>
+                        <TextBlock Text="Push Clipboard" FontSize="13"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
 
-                <!-- Filtered Clipboard History Feed -->
-                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind FilteredFeed, Mode=OneWay}">
+            <!-- Search & Shortcut Bar -->
+            <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="14,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE721;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBox x:Name="SearchBox" PlaceholderText="Search copied text, links, code snippets, and files..." 
+                             BorderThickness="0" Background="Transparent" 
+                             Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="13.5" 
+                             Grid.Column="1" VerticalAlignment="Center"
+                             TextChanged="OnSearchTextChanged"/>
+                    <Border Grid.Column="2" Background="{StaticResource AppBorderSubtleBrush}" CornerRadius="6" Padding="6,2" VerticalAlignment="Center">
+                        <TextBlock Text="Ctrl+F" FontSize="10.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- 1. PENDING REMOTE CLIPBOARDS BANNER -->
+            <StackPanel Visibility="{x:Bind mgr.HasPendingClipboards, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" Spacing="10">
+                <TextBlock Text="PENDING REMOTE CLIPBOARDS" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AppAccentBrush}" CharacterSpacing="60"/>
+                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.PendingClipboards, Mode=OneWay}">
                     <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="winui:ActivityEntry">
-                            <Border Background="#F8F9FB" BorderBrush="#E5E5EA" BorderThickness="1" CornerRadius="12" Padding="16,14" Margin="0,0,0,10">
+                        <DataTemplate x:DataType="winui:PendingClipboard">
+                            <Border Background="{StaticResource AppAccentSubtleBrush}" BorderBrush="{StaticResource AppAccentBrush}" BorderThickness="1" CornerRadius="12" Padding="16,14" Margin="0,0,0,8">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    
-                                    <!-- Icon -->
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="#F2F2F7" Margin="0,0,14,0">
-                                        <FontIcon Glyph="&#xE8C8;" FontSize="18" Foreground="#6E6E73" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="20" Background="{StaticResource AppAccentBrush}" Margin="0,0,14,0">
+                                        <FontIcon Glyph="&#xE8C8;" FontSize="18" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
-                                    
-                                    <!-- Content -->
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                                        <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="#1D1D1F" MaxLines="2" TextTrimming="CharacterEllipsis"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <Border CornerRadius="4" Padding="6,2" Background="#E5E5EA">
-                                                <TextBlock Text="{x:Bind TypeLabel, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" Foreground="#4B5563"/>
-                                            </Border>
-                                            <TextBlock Text="•" FontSize="12" Foreground="#8E8E93" VerticalAlignment="Center"/>
-                                            <TextBlock Text="{x:Bind Source, Mode=OneWay}" FontSize="12" Foreground="#6E6E73" VerticalAlignment="Center"/>
-                                            <TextBlock Text="•" FontSize="12" Foreground="#8E8E93" VerticalAlignment="Center"/>
-                                            <TextBlock Text="{x:Bind RelativeTime, Mode=OneWay}" FontSize="12" Foreground="#8E8E93" VerticalAlignment="Center"/>
-                                        </StackPanel>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                                        <TextBlock Text="{x:Bind Preview, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{x:Bind from_device, Mode=OneWay}" FontSize="12" Foreground="{StaticResource AppAccentBrush}"/>
                                     </StackPanel>
-                                    
-                                    <!-- Apply Button if actionable -->
-                                    <Button Grid.Column="2" Content="Apply" Background="#34C759" Foreground="#FFFFFF" CornerRadius="8" Padding="12,6" VerticalAlignment="Center" Visibility="{x:Bind CanApply, Mode=OneWay}" Click="OnApplyActivityClicked"/>
+                                    <Button Grid.Column="2" Content="Apply to Windows Clipboard" Style="{StaticResource PrimaryAccentButtonStyle}" VerticalAlignment="Center" Click="OnApplyPendingClicked"/>
                                 </Grid>
                             </Border>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
             </StackPanel>
-        </ScrollViewer>
 
-        <!-- RIGHT INSPECTOR PANEL (`#FAFAFC`) -->
-        <Border Grid.Column="1" Background="#FAFAFC" BorderThickness="1,0,0,0" BorderBrush="#E5E5EA" Padding="24,28,24,28">
-            <StackPanel Spacing="28">
-                <!-- Device Header -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay, FallbackValue='No Device Selected'}" FontSize="20" FontWeight="Bold" Foreground="#1D1D1F"/>
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Border Width="8" Height="8" CornerRadius="4" Background="{x:Bind mgr.SelectedPeer.ConnectionColor, Mode=OneWay, FallbackValue='#8E8E93'}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.ConnectionText, Mode=OneWay, FallbackValue='Offline'}" FontSize="13" Foreground="#6E6E73"/>
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Battery Section -->
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <TextBlock Text="Battery" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.BatteryLevel, Mode=OneWay, FallbackValue='--'}" FontSize="13" FontWeight="Bold" Foreground="#1D1D1F" HorizontalAlignment="Right"/>
-                    </Grid>
-                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Border Width="100" Height="8" CornerRadius="4" Background="#34C759" HorizontalAlignment="Left"/>
-                    </Border>
-                </StackPanel>
-
-                <!-- Storage Section -->
-                <StackPanel Spacing="8">
-                    <Grid>
-                        <TextBlock Text="Storage" FontSize="13" FontWeight="SemiBold" Foreground="#1D1D1F" HorizontalAlignment="Left"/>
-                        <TextBlock Text="{x:Bind mgr.SelectedPeer.StorageFreeText, Mode=OneWay, FallbackValue='--'}" FontSize="12.5" FontWeight="Medium" Foreground="#6E6E73" HorizontalAlignment="Right"/>
-                    </Grid>
-                    <Border Height="8" CornerRadius="4" Background="#E5E5EA">
-                        <Grid>
-                            <Border Width="40" Height="8" CornerRadius="4,0,0,4" Background="#FF9500" HorizontalAlignment="Left"/>
-                            <Border Width="95" Height="8" Background="#AF52DE" HorizontalAlignment="Left" Margin="40,0,0,0"/>
-                        </Grid>
-                    </Border>
-                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#FF9500"/>
-                            <TextBlock Text="Images" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#AF52DE"/>
-                            <TextBlock Text="Videos" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#E5E5EA"/>
-                            <TextBlock Text="Other" FontSize="11" FontWeight="Medium" Foreground="#6E6E73"/>
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
+            <!-- 2. FILTER CHIPS -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="ChipAll" Content="All" Background="{StaticResource AppAccentBrush}" Foreground="#FFFFFF" CornerRadius="16" Padding="14,6" BorderThickness="0" Click="OnFilterChipClicked"/>
+                <Button x:Name="ChipText" Content="Text" Background="{StaticResource AppSurfaceBrush}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="16" Padding="14,6" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" Click="OnFilterChipClicked"/>
+                <Button x:Name="ChipImage" Content="Image" Background="{StaticResource AppSurfaceBrush}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="16" Padding="14,6" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" Click="OnFilterChipClicked"/>
+                <Button x:Name="ChipFile" Content="File" Background="{StaticResource AppSurfaceBrush}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="16" Padding="14,6" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" Click="OnFilterChipClicked"/>
             </StackPanel>
-        </Border>
-    </Grid>
+
+            <!-- 3. CLIPBOARD HISTORY STREAM -->
+            <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind FilteredFeed, Mode=OneWay}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="winui:ActivityEntry">
+                        <Border Background="{StaticResource AppSurfaceBrush}" 
+                                BorderBrush="{StaticResource AppBorderSubtleBrush}" 
+                                BorderThickness="1" CornerRadius="12" Padding="16,14" Margin="0,0,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Content Type Icon -->
+                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{StaticResource AppBorderSubtleBrush}" Margin="0,0,14,0">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                
+                                <!-- Content Body -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <Border CornerRadius="4" Padding="6,2" Background="{StaticResource AppBorderSubtleBrush}">
+                                            <TextBlock Text="{x:Bind TypeLabel, Mode=OneWay}" FontSize="10.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </Border>
+                                        <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                        <TextBlock Text="{x:Bind Source, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                        <TextBlock Text="{x:Bind RelativeTime, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                
+                                <!-- Action Buttons -->
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Content="Copy" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnCopyActivityTextClicked"/>
+                                    <Button Content="Apply" Style="{StaticResource PrimaryAccentButtonStyle}" Background="{StaticResource AppSuccessBrush}" Visibility="{x:Bind CanApply, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" Click="OnApplyActivityClicked"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+        </StackPanel>
+    </ScrollViewer>
 </Page>
+

@@ -6,8 +6,6 @@ namespace Deskdrop.WinUI.Views
 {
     public sealed partial class ActivityView : Page
     {
-        private DeskdropStore _mgr;
-
         public ActivityView()
         {
             this.InitializeComponent();

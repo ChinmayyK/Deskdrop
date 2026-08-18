@@ -24,6 +24,56 @@ namespace Deskdrop.WinUI.Views
             DaemonClient.RescanPeers();
         }
 
+        private void OnOpenDownloadsClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var downloadsPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = downloadsPath,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
+        private void OnRevokeAllClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                foreach (var peer in mgr.Peers)
+                {
+                    mgr.ForgetPeer(peer.device_id);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
+        private void OnViewLogsClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
+                System.IO.Directory.CreateDirectory(dir);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = dir,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
         private void OnRevertClicked(object sender, RoutedEventArgs e)
         {
             mgr.UpdateStateFromDaemon();
