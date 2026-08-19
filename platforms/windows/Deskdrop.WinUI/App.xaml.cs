@@ -166,35 +166,13 @@ public partial class App : Application
                 MainWindow = new DashboardWindow();
                 _window = MainWindow;
                 _window.Activate();
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow created and activated successfully\n");
             }
             catch (Exception ex)
             {
                 System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow crash: " + ex.ToString() + "\n");
                 if (ex.InnerException != null) System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "Inner: " + ex.InnerException.ToString() + "\n");
             }
-
-            try
-            {
-                var mainHwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
-                _ = new Deskdrop.WinUI.Services.TrayService(mainHwnd);
-            }
-            catch (Exception ex)
-            {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] TrayService error: " + ex.Message + "\n");
-            }
-
-            DeskdropStore.Shared.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(DeskdropStore.Peers))
-                {
-                    var count = DeskdropStore.Shared.Peers.Count;
-                    var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                    queue?.TryEnqueue(() =>
-                    {
-                        Deskdrop.WinUI.Services.TrayService.Current?.UpdateTooltip($"Deskdrop — {count} device(s) connected");
-                    });
-                }
-            };
 
             try
             {
