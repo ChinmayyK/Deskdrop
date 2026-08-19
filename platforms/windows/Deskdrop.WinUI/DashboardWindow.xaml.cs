@@ -29,6 +29,10 @@ namespace Deskdrop.WinUI
             _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             _appWindow.Title = "Deskdrop";
             _appWindow.IsShownInSwitchers = true;
+
+            this.ExtendsContentIntoTitleBar = true;
+            this.SetTitleBar(AppTitleBar);
+
             _appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
             _appWindow.Move(new Windows.Graphics.PointInt32(120, 80));
             _appWindow.Show(true);

@@ -10,68 +10,27 @@
     Title="Deskdrop">
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="42"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <!-- Custom Fluent TitleBar Area -->
-        <Grid x:Name="AppTitleBar" Grid.Row="0" Background="Transparent" VerticalAlignment="Stretch" Padding="14,0,140,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- Brand Icon & App Title -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <Border Width="24" Height="24" CornerRadius="6" Background="{StaticResource AppAccentBrush}">
-                    <TextBlock Text="⚡" FontSize="13" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-                <TextBlock Text="Deskdrop" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
-                <Border Background="{StaticResource AppBorderSubtleBrush}" CornerRadius="4" Padding="5,2" Margin="4,0,0,0">
-                    <TextBlock Text="WINDOWS" FontSize="9.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" CharacterSpacing="50"/>
-                </Border>
-            </StackPanel>
-
-            <!-- Center Live Status Pill -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="10,4">
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <Ellipse Width="7" Height="7" Fill="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"/>
-                        <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}" FontSize="11.5" FontWeight="Medium" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Quick Action Buttons -->
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                <Button Background="Transparent" BorderThickness="0" Padding="8,4" CornerRadius="6" ToolTipService.ToolTip="Scan for Nearby Devices" Click="OnTitleBarScanClicked">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <FontIcon Glyph="&#xE72C;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                        <TextBlock Text="Scan" FontSize="11.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    </StackPanel>
-                </Button>
-                <Button Background="{StaticResource AppAccentSubtleBrush}" BorderThickness="1" BorderBrush="{StaticResource AppAccentBrush}" Padding="10,4" CornerRadius="6" ToolTipService.ToolTip="Send Files to Connected Devices" Click="OnTitleBarSendClicked">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <FontIcon Glyph="&#xE898;" FontSize="12" Foreground="{StaticResource AppAccentBrush}"/>
-                        <TextBlock Text="Send File" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource AppAccentBrush}"/>
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </Grid>
-
         <!-- Modern NavigationView Workspace Sidebar -->
         <NavigationView x:Name="NavView"
-                        Grid.Row="1"
                         PaneDisplayMode="Left"
                         IsPaneToggleButtonVisible="False"
                         IsBackButtonVisible="Collapsed"
                         IsSettingsVisible="False"
-                        OpenPaneLength="210"
+                        OpenPaneLength="220"
                         SelectionChanged="NavView_SelectionChanged"
                         Background="{StaticResource SidebarAcrylicBrush}">
             
+            <NavigationView.PaneHeader>
+                <Grid Height="48" VerticalAlignment="Top">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="14,8,0,0">
+                        <Border Width="24" Height="24" CornerRadius="6" Background="{StaticResource AppAccentBrush}">
+                            <TextBlock Text="⚡" FontSize="13" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="Deskdrop" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+            </NavigationView.PaneHeader>
+
             <NavigationView.MenuItems>
                 <NavigationViewItemHeader Content="WORKSPACE" Margin="10,6,0,4" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                 
@@ -128,9 +87,9 @@
                 </Border>
             </NavigationView.PaneFooter>
 
-            <!-- Main center content frame inside clean mica/acrylic surface -->
+            <!-- Main center content frame inside clean surface -->
             <Grid Background="{StaticResource AppBackgroundBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1,0,0,0">
-                <Frame x:Name="ContentFrame" Background="Transparent">
+                <Frame x:Name="ContentFrame" Background="Transparent" Margin="0,48,0,0">
                     <Frame.ContentTransitions>
                         <TransitionCollection>
                             <NavigationThemeTransition />
@@ -139,5 +98,40 @@
                 </Frame>
             </Grid>
         </NavigationView>
+
+        <!-- Custom Fluent TitleBar Draggable Overlay (Matches MacOS Toolbar layout) -->
+        <Grid x:Name="AppTitleBar" Height="48" VerticalAlignment="Top" Background="Transparent" Padding="0,0,140,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Center Live Status Pill (Centered in right content pane) -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Margin="0,8,0,0">
+                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="10,4">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" Fill="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"/>
+                        <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}" FontSize="11.5" FontWeight="Medium" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Quick Action Buttons -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,8,0,0">
+                <Button Background="Transparent" BorderThickness="0" Padding="8,4" CornerRadius="6" ToolTipService.ToolTip="Scan for Nearby Devices" Click="OnTitleBarScanClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <FontIcon Glyph="&#xE72C;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock Text="Scan" FontSize="11.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </Button>
+                <Button Background="{StaticResource AppAccentSubtleBrush}" BorderThickness="1" BorderBrush="{StaticResource AppAccentBrush}" Padding="10,4" CornerRadius="6" ToolTipService.ToolTip="Send Files to Connected Devices" Click="OnTitleBarSendClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <FontIcon Glyph="&#xE898;" FontSize="12" Foreground="{StaticResource AppAccentBrush}"/>
+                        <TextBlock Text="Send File" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource AppAccentBrush}"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>
