@@ -11,6 +11,8 @@ namespace Deskdrop.WinUI
         public string localMachineName => System.Environment.MachineName;
         public System.Windows.Input.ICommand ShowMainWindowCommand => ((App)App.Current).ShowMainWindowCommand;
 
+        private Microsoft.UI.Windowing.AppWindow? _appWindow;
+
         public DashboardWindow()
         {
             var dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
@@ -24,14 +26,14 @@ namespace Deskdrop.WinUI
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DashboardWindow HWND=0x" + hwnd.ToString("X") + "\n");
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
-            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-            appWindow.Title = "Deskdrop";
-            appWindow.IsShownInSwitchers = true;
-            appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
-            appWindow.Move(new Windows.Graphics.PointInt32(120, 80));
-            appWindow.Show(true);
+            _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+            _appWindow.Title = "Deskdrop";
+            _appWindow.IsShownInSwitchers = true;
+            _appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
+            _appWindow.Move(new Windows.Graphics.PointInt32(120, 80));
+            _appWindow.Show(true);
 
-            appWindow.Closing += (s, e) =>
+            _appWindow.Closing += (s, e) =>
             {
                 System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] appWindow.Closing fired. IsShuttingDown=" + App.IsShuttingDown + "\n");
                 if (!App.IsShuttingDown)
@@ -47,11 +49,9 @@ namespace Deskdrop.WinUI
                 if (Current == this) Current = null;
             };
 
-            NavView.Loaded += (s, e) =>
-            {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] NavView.Loaded fired\n");
-                // Don't auto-navigate immediately so we can test DashboardWindow rendering
-            };
+            // Set initial page in ContentFrame
+            ContentFrame.Navigate(typeof(Views.DevicesView));
+            NavView.SelectedItem = NavDevices;
         }
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]

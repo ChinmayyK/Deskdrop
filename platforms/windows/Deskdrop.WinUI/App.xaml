@@ -55,15 +55,8 @@
             <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#20FFFFFF" />
             <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#3DFFFFFF" />
 
-            <AcrylicBrush x:Key="SidebarAcrylicBrush"
-                          TintColor="#0F172A"
-                          TintOpacity="0.75"
-                          FallbackColor="#0F172A" />
-                          
-            <AcrylicBrush x:Key="ModalAcrylicBrush"
-                          TintColor="#0B1120"
-                          TintOpacity="0.88"
-                          FallbackColor="#0B1120" />
+            <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="#0F172A"/>
+            <SolidColorBrush x:Key="ModalAcrylicBrush" Color="#0B1120"/>
 
             <!-- Global Control Styles -->
             <Style TargetType="ListViewItem" x:Key="SpacedListViewItemStyle">
