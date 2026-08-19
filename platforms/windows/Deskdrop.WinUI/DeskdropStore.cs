@@ -670,14 +670,17 @@ namespace Deskdrop.WinUI
             set { _statusLine = value; OnPropertyChanged(); }
         }
 
-        public int ConnectedCount => Peers.Count(p => p.IsConnected);
-        public int TrustedCount => Peers.Count(p => p.is_trusted);
-        public int AttentionCount => Peers.Count(p => !p.is_trusted || p.pairingRequested || p.outgoingPairingWaiting);
-        public int ActivityCount => ActivityFeed.Count;
-        public int PendingClipboardCount => PendingClipboards.Count;
+        public int PeerCount => Peers?.Count ?? 0;
+        public bool HasPeers => Peers != null && Peers.Count > 0;
+        public bool HasNoPeers => !HasPeers;
+        public int ConnectedCount => Peers?.Count(p => p.IsConnected) ?? 0;
+        public int TrustedCount => Peers?.Count(p => p.is_trusted) ?? 0;
+        public int AttentionCount => Peers?.Count(p => !p.is_trusted || p.pairingRequested || p.outgoingPairingWaiting) ?? 0;
+        public int ActivityCount => ActivityFeed?.Count ?? 0;
+        public int PendingClipboardCount => PendingClipboards?.Count ?? 0;
         public bool HasPendingClipboards => PendingClipboardCount > 0;
-        public bool HasActiveTransfers => ActiveTransfers.Count > 0;
-        public bool HasActiveSpeedTests => ActiveSpeedTests.Count > 0;
+        public bool HasActiveTransfers => (ActiveTransfers?.Count ?? 0) > 0;
+        public bool HasActiveSpeedTests => (ActiveSpeedTests?.Count ?? 0) > 0;
         private bool _otpShieldEnabled = true;
         public bool OtpShieldEnabled { get => _otpShieldEnabled; set => SetProperty(ref _otpShieldEnabled, value); }
         private bool _syncEnabled = true;
@@ -1008,6 +1011,9 @@ namespace Deskdrop.WinUI
             }
             OnPropertyChanged(nameof(SelectedPeer));
             SelectedPeer?.NotifyAll();
+            OnPropertyChanged(nameof(PeerCount));
+            OnPropertyChanged(nameof(HasPeers));
+            OnPropertyChanged(nameof(HasNoPeers));
             OnPropertyChanged(nameof(ConnectedCount));
             OnPropertyChanged(nameof(TrustedCount));
             OnPropertyChanged(nameof(AttentionCount));

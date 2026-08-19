@@ -13,49 +13,44 @@ namespace Deskdrop.WinUI
 
         public DashboardWindow()
         {
+            var dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DashboardWindow constructor starting\n");
+            
             Current = this;
             this.InitializeComponent();
 
-            ExtendsContentIntoTitleBar = true;
-            SetTitleBar(AppTitleBar);
-            
-            if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
-            {
-                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
-            }
-            else if (Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported())
-            {
-                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
-            }
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] InitializeComponent completed\n");
 
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DashboardWindow HWND=0x" + hwnd.ToString("X") + "\n");
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             appWindow.Title = "Deskdrop";
             appWindow.IsShownInSwitchers = true;
             appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
-
-
+            appWindow.Move(new Windows.Graphics.PointInt32(120, 80));
+            appWindow.Show(true);
 
             appWindow.Closing += (s, e) =>
             {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] appWindow.Closing fired. IsShuttingDown=" + App.IsShuttingDown + "\n");
                 if (!App.IsShuttingDown)
                 {
                     e.Cancel = true;
-                    // Minimize to taskbar using robust Win32 call
                     ShowWindow(hwnd, 6 /* SW_MINIMIZE */);
                 }
             };
 
             this.Closed += (s, e) =>
             {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DashboardWindow.Closed fired!\n");
                 if (Current == this) Current = null;
             };
 
-            // Default to exact 3-panel Devices/Launchpad view matching macOS
             NavView.Loaded += (s, e) =>
             {
-                NavView.SelectedItem = NavDevices;
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] NavView.Loaded fired\n");
+                // Don't auto-navigate immediately so we can test DashboardWindow rendering
             };
         }
 
@@ -82,45 +77,45 @@ namespace Deskdrop.WinUI
 
         private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
         {
+            var dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
             if (args.SelectedItem is NavigationViewItem item)
             {
-                switch (item.Tag)
+                var tag = item.Tag as string;
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] NavView_SelectionChanged: " + tag + "\n");
+                try
                 {
-                    case "Devices":
-                        ContentFrame.Navigate(typeof(DevicesView));
-                        break;
-                    case "DevicePeer":
-                        ContentFrame.Navigate(typeof(RemoteExplorerView));
-                        break;
-                    case "Clipboard":
-                        ContentFrame.Navigate(typeof(ClipboardView));
-                        break;
-                    case "Transfers":
-                        ContentFrame.Navigate(typeof(TransfersView));
-                        break;
-                    case "Settings":
-                        ContentFrame.Navigate(typeof(SettingsView));
-                        break;
-                    case "Activity":
-                        ContentFrame.Navigate(typeof(ActivityView));
-                        break;
+                    Type pageType = tag switch
+                    {
+                        "Devices" => typeof(DevicesView),
+                        "DevicePeer" => typeof(RemoteExplorerView),
+                        "Clipboard" => typeof(ClipboardView),
+                        "Transfers" => typeof(TransfersView),
+                        "Settings" => typeof(SettingsView),
+                        "Activity" => typeof(ActivityView),
+                        _ => typeof(DevicesView)
+                    };
+
+                    if (ContentFrame.CurrentSourcePageType != pageType)
+                    {
+                        ContentFrame.Navigate(pageType);
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] Navigation Error for " + tag + ": " + ex.ToString() + "\n");
                 }
             }
         }
 
         public void NavigateTo(string tag)
         {
-            foreach (var item in NavView.MenuItems)
+            var item = NavView.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == tag)
+                       ?? NavView.FooterMenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == tag);
+            if (item != null && NavView.SelectedItem != item)
             {
-                if (item is NavigationViewItem navItem && navItem.Tag as string == tag)
-                {
-                    NavView.SelectedItem = navItem;
-                    break;
-                }
+                NavView.SelectedItem = item;
             }
         }
-
-
 
         private void OnTitleBarScanClicked(object sender, RoutedEventArgs e)
         {

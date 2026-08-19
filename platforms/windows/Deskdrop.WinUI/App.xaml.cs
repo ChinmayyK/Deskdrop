@@ -145,6 +145,8 @@ public partial class App : Application
             var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
             ProcessActivationArgs(activatedArgs);
 
+            // Test without auto-launching deskdrop_start to isolate native core vs UI
+            /*
             if (!DaemonClient.IsDaemonRunning())
             {
                 System.Threading.Tasks.Task.Run(() =>
@@ -157,6 +159,7 @@ public partial class App : Application
                     }
                 });
             }
+            */
 
             Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
             ClipboardReady.TrySetResult(Clipboard);

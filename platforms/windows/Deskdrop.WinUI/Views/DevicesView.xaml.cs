@@ -13,7 +13,10 @@ namespace Deskdrop.WinUI.Views
 
         public DevicesView()
         {
+            var dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DevicesView constructor starting\n");
             this.InitializeComponent();
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DevicesView InitializeComponent done\n");
         }
 
         private void OnPeerCardTapped(object sender, TappedRoutedEventArgs e)
@@ -26,20 +29,10 @@ namespace Deskdrop.WinUI.Views
 
         private void OnDeviceCardPointerMoved(object sender, PointerRoutedEventArgs e)
         {
-            if (sender is FrameworkElement element)
-            {
-                element.CenterPoint = new System.Numerics.Vector3((float)(element.ActualWidth / 2), (float)(element.ActualHeight / 2), 0f);
-                element.Scale = new System.Numerics.Vector3(1.02f, 1.02f, 1.0f);
-            }
         }
 
         private void OnDeviceCardPointerExited(object sender, PointerRoutedEventArgs e)
         {
-            if (sender is FrameworkElement element)
-            {
-                element.CenterPoint = new System.Numerics.Vector3((float)(element.ActualWidth / 2), (float)(element.ActualHeight / 2), 0f);
-                element.Scale = new System.Numerics.Vector3(1.0f, 1.0f, 1.0f);
-            }
         }
 
         private void OnPairingAcceptClicked(object sender, RoutedEventArgs e)

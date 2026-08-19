@@ -90,29 +90,23 @@ where
     info!("Windows IPC server on {}", get_pipe_name());
 
     tokio::spawn(async move {
+        let mut is_first = true;
         loop {
-            // Create a new pipe instance to listen on.
-            let server = {
-                let mut sec_attrs = SecurePipeAttributes::new();
-                let mut opts = ServerOptions::new();
-                opts.access_inbound(true)
-                    .access_outbound(true)
-                    .pipe_mode(PipeMode::Byte)
-                    .max_instances(MAX_INSTANCES);
+            let server = ServerOptions::new()
+                .first_pipe_instance(is_first)
+                .access_inbound(true)
+                .access_outbound(true)
+                .pipe_mode(PipeMode::Byte)
+                .max_instances(MAX_INSTANCES)
+                .create(get_pipe_name());
 
-                unsafe {
-                    opts.create_with_security_attributes_raw(
-                        get_pipe_name(),
-                        sec_attrs.as_mut_ptr(),
-                    )
-                }
-            };
+            is_first = false;
 
             let server = match server {
                 Ok(s) => s,
                 Err(e) => {
                     warn!("Named pipe create error: {}", e);
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                     continue;
                 }
             };
