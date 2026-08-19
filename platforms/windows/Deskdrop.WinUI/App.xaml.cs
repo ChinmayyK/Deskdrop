@@ -145,21 +145,8 @@ public partial class App : Application
             var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
             ProcessActivationArgs(activatedArgs);
 
-            // Test without auto-launching deskdrop_start to isolate native core vs UI
-            /*
-            if (!DaemonClient.IsDaemonRunning())
-            {
-                System.Threading.Tasks.Task.Run(() =>
-                {
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Starting native engine via deskdrop_start...\n");
-                    _engineHandle = NativeCore.deskdrop_start(null, 0);
-                    if (_engineHandle == IntPtr.Zero)
-                    {
-                        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ERROR: deskdrop_start returned null handle!\n");
-                    }
-                });
-            }
-            */
+            // In-process native core FFI is bypassed; the UI runs as a robust standalone desktop client communicating over IPC
+
 
             Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
             ClipboardReady.TrySetResult(Clipboard);
@@ -184,6 +171,7 @@ public partial class App : Application
                 if (ex.InnerException != null) System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "Inner: " + ex.InnerException.ToString() + "\n");
             }
 
+            /*
             try
             {
                 GlobalHotKeyManager.Shared.Register(true, true, false, false, 0x56, () => {
@@ -195,6 +183,7 @@ public partial class App : Application
                 });
             }
             catch (Exception ex) { App.HandleError(ex); }
+            */
         }
         catch (Exception ex)
         {
