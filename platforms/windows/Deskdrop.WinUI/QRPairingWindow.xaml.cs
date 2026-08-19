@@ -25,27 +25,20 @@ namespace Deskdrop.WinUI
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             appWindow.Resize(new Windows.Graphics.SizeInt32(280, 340));
 
-            // Generate the QR Code dynamically with real Device ID and Token
+            // Generate the QR Code dynamically with local IP (Legacy Format for compatibility)
             try
             {
-                var status = DaemonClient.Status();
-                var fp = status?.RootElement.GetProperty("local_fingerprint").GetString();
-                
-                var tokenDoc = DaemonClient.GenerateQrToken();
-                var token = tokenDoc?.RootElement.GetProperty("token").GetString();
-                
                 var name = System.Net.WebUtility.UrlEncode(System.Environment.MachineName);
                 var ip = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList.FirstOrDefault(x => x.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?.ToString();
                 
-                if (fp != null && token != null)
+                if (!string.IsNullOrEmpty(ip))
                 {
-                    string uri = $"deskdrop://pair?id={fp}&token={token}&name={name}";
-                    if (!string.IsNullOrEmpty(ip)) uri += $"&ip={ip}&port=47823";
+                    string uri = $"deskdrop://pair?ip={ip}&port=47823&name={name}";
                     _ = GenerateQRCodeAsync(uri);
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("Failed to fetch fingerprint or token for QR.");
+                    System.Diagnostics.Debug.WriteLine("Failed to fetch local IP for QR.");
                 }
             }
             catch (Exception ex)
