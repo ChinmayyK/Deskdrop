@@ -9,8 +9,19 @@
     <RootNamespace>Deskdrop.Tray</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="..\Deskdrop.WinUI\Assets\**" Link="Assets\%(RecursiveDir)%(Filename)%(Extension)">
+    <!-- Pin System.Drawing.Common to 8.0.x to match .NET 8 runtime -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.12" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Copy icon assets into Assets\ subdirectory in the output -->
+    <None Include="..\Deskdrop.WinUI\Assets\AppIcon.ico" Link="Assets\AppIcon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </None>
+    <None Include="..\Deskdrop.WinUI\Assets\logo.ico" Link="Assets\logo.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Deskdrop.WinUI\Assets\dark_logo.ico" Link="Assets\dark_logo.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

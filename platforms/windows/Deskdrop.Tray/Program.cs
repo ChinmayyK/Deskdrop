@@ -21,39 +21,97 @@ namespace Deskdrop.Tray
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern IntPtr FindWindowW(string? lpClassName, string? lpWindowName);
 
+        private static string _logPath = "";
+
+        private static void Log(string msg)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_logPath))
+                {
+                    var dir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "Deskdrop");
+                    Directory.CreateDirectory(dir);
+                    _logPath = Path.Combine(dir, "tray_debug.txt");
+                }
+                File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\r\n");
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Search for an .ico file by trying multiple candidate paths.
+        /// The self-contained publish may place assets in Assets\ subfolder OR flat in the root.
+        /// </summary>
+        private static string? FindIconFile(string baseDir)
+        {
+            string[] candidates = new[]
+            {
+                Path.Combine(baseDir, "Assets", "AppIcon.ico"),
+                Path.Combine(baseDir, "AppIcon.ico"),
+                Path.Combine(baseDir, "Assets", "app_icon.ico"),
+                Path.Combine(baseDir, "app_icon.ico"),
+                Path.Combine(baseDir, "Assets", "dark_logo.ico"),
+                Path.Combine(baseDir, "dark_logo.ico"),
+                Path.Combine(baseDir, "Assets", "logo.ico"),
+                Path.Combine(baseDir, "logo.ico"),
+                Path.Combine(baseDir, "Assets", "TrayIcon.ico"),
+                Path.Combine(baseDir, "TrayIcon.ico"),
+            };
+
+            foreach (var path in candidates)
+            {
+                Log($"  Checking: {path} => {(File.Exists(path) ? "FOUND" : "not found")}");
+                if (File.Exists(path))
+                    return path;
+            }
+            return null;
+        }
+
         [STAThread]
         public static void Main()
         {
+            Log("=== Deskdrop.Tray starting ===");
+            Log($"PID: {Environment.ProcessId}");
+            Log($"BaseDirectory: {AppContext.BaseDirectory}");
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            using var notifyIcon = new NotifyIcon();
+            var notifyIcon = new NotifyIcon();
 
+            // --- Icon setup ---
             var baseDir = AppContext.BaseDirectory;
-            var icoPath = Path.Combine(baseDir, "Assets", "AppIcon.ico");
-            if (File.Exists(icoPath))
+            var icoPath = FindIconFile(baseDir);
+
+            if (icoPath != null)
             {
+                Log($"Using icon: {icoPath} (size: {new FileInfo(icoPath).Length} bytes)");
                 try
                 {
-                    notifyIcon.Icon = new Icon(icoPath, 32, 32);
+                    notifyIcon.Icon = new Icon(icoPath, SystemInformation.SmallIconSize);
+                    Log("Icon loaded successfully via new Icon(path, size)");
                 }
-                catch
+                catch (Exception ex)
                 {
-                    notifyIcon.Icon = SystemIcons.Application;
+                    Log($"Icon load failed: {ex.Message}");
+                    notifyIcon.Icon = SystemIcons.Information;
                 }
             }
             else
             {
-                notifyIcon.Icon = SystemIcons.Application;
+                Log("WARNING: No .ico file found anywhere! Using SystemIcons.Information");
+                notifyIcon.Icon = SystemIcons.Information;
             }
 
-            notifyIcon.Text = "Deskdrop - Connected & Ready";
+            notifyIcon.Text = "Deskdrop";
 
+            // --- Context menu ---
             var menu = new ContextMenuStrip();
             var openItem = new ToolStripMenuItem("Open Deskdrop", null, (s, e) => OpenDeskdropWindow());
             openItem.Font = new Font(openItem.Font, FontStyle.Bold);
             menu.Items.Add(openItem);
-
             menu.Items.Add(new ToolStripMenuItem("Settings...", null, (s, e) => OpenDeskdropWindow()));
             menu.Items.Add(new ToolStripMenuItem("Rescan Network", null, async (s, e) =>
             {
@@ -68,32 +126,35 @@ namespace Deskdrop.Tray
             menu.Items.Add(new ToolStripMenuItem("Quit Deskdrop", null, (s, e) =>
             {
                 notifyIcon.Visible = false;
+                notifyIcon.Dispose();
                 try
                 {
                     foreach (var p in Process.GetProcessesByName("Deskdrop"))
-                    {
                         p.Kill();
-                    }
                 }
                 catch { }
                 Application.Exit();
             }));
 
             notifyIcon.ContextMenuStrip = menu;
-
             notifyIcon.MouseClick += (s, e) =>
             {
                 if (e.Button == MouseButtons.Left)
-                {
                     OpenDeskdropWindow();
-                }
             };
             notifyIcon.DoubleClick += (s, e) => OpenDeskdropWindow();
 
+            // --- Make it visible ---
             notifyIcon.Visible = true;
-            notifyIcon.ShowBalloonTip(2000, "Deskdrop", "Deskdrop is running in your System Tray", ToolTipIcon.Info);
+            Log($"NotifyIcon.Visible = {notifyIcon.Visible}");
+            Log($"NotifyIcon.Icon is null = {notifyIcon.Icon == null}");
+            if (notifyIcon.Icon != null)
+                Log($"NotifyIcon.Icon size = {notifyIcon.Icon.Width}x{notifyIcon.Icon.Height}");
 
-            // Named pipe for tooltip & notifications
+            notifyIcon.ShowBalloonTip(3000, "Deskdrop", "Deskdrop is running in your system tray.", ToolTipIcon.Info);
+            Log("Balloon tip shown. Entering Application.Run()...");
+
+            // --- IPC listener thread ---
             var ipcThread = new Thread(() =>
             {
                 while (true)
@@ -149,9 +210,7 @@ namespace Deskdrop.Tray
                 }
 
                 if (hWnd == IntPtr.Zero)
-                {
                     hWnd = FindWindowW(null, "DeskDrop Dashboard");
-                }
 
                 if (hWnd != IntPtr.Zero)
                 {
