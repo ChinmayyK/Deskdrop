@@ -38,7 +38,7 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                 <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="10,4">
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <Ellipse Width="7" Height="7" Fill="{x:Bind mgr.HeaderStatusBrushObject, Mode=OneWay}"/>
+                        <Ellipse Width="7" Height="7" Fill="{x:Bind local:DashboardWindow.GetBrushFromHex(mgr.HeaderStatusBrush), Mode=OneWay}"/>
                         <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}" FontSize="11.5" FontWeight="Medium" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     </StackPanel>
                 </Border>

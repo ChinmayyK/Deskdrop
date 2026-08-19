@@ -123,24 +123,26 @@ public partial class App : Application
 
         try
         {
-            // SINGLE INSTANCE MANAGEMENT
-            var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("DeskdropMainInstance");
-            var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
-
-            if (!mainInstance.IsCurrent)
+            // Clean Single Instance using Mutex
+            _singleInstanceMutex = new Mutex(true, "Local\\Deskdrop_WinUI_App_Unique_Key", out bool createdNew);
+            if (!createdNew)
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Secondary instance detected. Redirecting to main instance...\n");
-                System.Threading.Tasks.Task.Run(async () => await mainInstance.RedirectActivationToAsync(activatedArgs)).Wait();
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Secondary instance detected. Bringing existing window to front and exiting.\n");
+                var existingHwnd = FindWindowW(null, "Deskdrop");
+                if (existingHwnd == IntPtr.Zero) existingHwnd = FindWindowW(null, "DeskDrop Dashboard");
+                if (existingHwnd != IntPtr.Zero)
+                {
+                    ShowWindow(existingHwnd, 9 /* SW_RESTORE */);
+                    SetForegroundWindow(existingHwnd);
+                }
                 Environment.Exit(0);
                 return;
             }
 
-            // We are the main instance. Hook up to receive subsequent activations.
-            Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().Activated += OnAppActivated;
-
             Deskdrop.WinUI.Native.ContextMenuIntegration.RegisterContextMenu();
 
             // Process initial launch arguments
+            var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
             ProcessActivationArgs(activatedArgs);
 
             if (!DaemonClient.IsDaemonRunning())
@@ -166,7 +168,12 @@ public partial class App : Application
                 MainWindow = new DashboardWindow();
                 _window = MainWindow;
                 _window.Activate();
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow created and activated successfully\n");
+                
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
+                ShowWindow(hwnd, 5 /* SW_SHOW */);
+                SetForegroundWindow(hwnd);
+                
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow created, activated, and displayed successfully\n");
             }
             catch (Exception ex)
             {
@@ -242,11 +249,16 @@ public partial class App : Application
         }
     }
 
+    private static System.Threading.Mutex? _singleInstanceMutex;
+
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern IntPtr FindWindowW(string? lpClassName, string? lpWindowName);
 
     public static void HandleError(Exception ex, [System.Runtime.CompilerServices.CallerMemberName] string callerName = "")
     {

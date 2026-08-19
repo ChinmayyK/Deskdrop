@@ -693,21 +693,6 @@ namespace Deskdrop.WinUI
                 return "Looking for devices";
             }
         }
-        private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _brushStopped = new(Windows.UI.Color.FromArgb(255, 255, 59, 48));
-        private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _brushConnected = new(Windows.UI.Color.FromArgb(255, 52, 199, 89));
-        private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _brushAttention = new(Windows.UI.Color.FromArgb(255, 255, 149, 0));
-        private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _brushIdle = new(Windows.UI.Color.FromArgb(255, 142, 142, 147));
-
-        public Microsoft.UI.Xaml.Media.Brush HeaderStatusBrushObject
-        {
-            get
-            {
-                if (!IsDaemonRunning) return _brushStopped;
-                if (ConnectedCount > 0) return _brushConnected;
-                if (AttentionCount > 0) return _brushAttention;
-                return _brushIdle;
-            }
-        }
 
         public string HeaderStatusBrush
         {

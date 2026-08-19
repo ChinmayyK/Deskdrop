@@ -42,9 +42,8 @@ namespace Deskdrop.WinUI
                 if (!App.IsShuttingDown)
                 {
                     e.Cancel = true;
-                    // Minimize to taskbar instead of hiding
-                    var presenter = appWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
-                    presenter?.Minimize();
+                    // Minimize to taskbar using robust Win32 call
+                    ShowWindow(hwnd, 6 /* SW_MINIMIZE */);
                 }
             };
 
@@ -58,7 +57,27 @@ namespace Deskdrop.WinUI
             {
                 NavView.SelectedItem = NavDevices;
             };
-            ContentFrame.Navigate(typeof(DevicesView));
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        public static Microsoft.UI.Xaml.Media.Brush GetBrushFromHex(string hex)
+        {
+            if (string.IsNullOrWhiteSpace(hex)) return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            try
+            {
+                if (hex.StartsWith("#")) hex = hex.Substring(1);
+                if (hex.Length == 6)
+                {
+                    byte r = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
+                    byte g = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
+                    byte b = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
+                    return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
+                }
+            }
+            catch { }
+            return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }
 
         private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
