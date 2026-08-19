@@ -73,7 +73,7 @@
      above to opt out.
   -->
   <ItemGroup>
-    <PackageReference Include="H.NotifyIcon.WinUI" Version="2.3.2" />
+    <ProjectReference Include="..\Deskdrop.TrayHelper\Deskdrop.TrayHelper.csproj" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />
