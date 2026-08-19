@@ -1,25 +1,43 @@
 using System;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Pipes;
 using Microsoft.UI.Xaml;
-using Deskdrop.TrayHelper;
 
 namespace Deskdrop.WinUI.Services
 {
     public class TrayService : IDisposable
     {
-        private readonly TrayManager? _manager;
-
         public static TrayService? Current { get; private set; }
 
         public TrayService()
         {
             Current = this;
+            EnsureTrayProcessRunning();
+        }
+
+        public TrayService(IntPtr unusedHwnd) : this()
+        {
+        }
+
+        private void EnsureTrayProcessRunning()
+        {
             try
             {
-                _manager = new TrayManager();
-                _manager.OpenRequested += OnOpenRequested;
-                _manager.SettingsRequested += OnSettingsRequested;
-                _manager.RescanRequested += OnRescanRequested;
-                _manager.ExitRequested += OnExitRequested;
+                var procs = Process.GetProcessesByName("Deskdrop.Tray");
+                if (procs.Length == 0)
+                {
+                    var baseDir = AppContext.BaseDirectory;
+                    var trayExe = Path.Combine(baseDir, "Deskdrop.Tray.exe");
+                    if (File.Exists(trayExe))
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = trayExe,
+                            UseShellExecute = true
+                        });
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -27,53 +45,34 @@ namespace Deskdrop.WinUI.Services
             }
         }
 
-        public TrayService(IntPtr unusedHwnd) : this()
-        {
-        }
-
-        private void OnOpenRequested()
-        {
-            App.MainDispatcherQueue?.TryEnqueue(() =>
-            {
-                ((App)Application.Current).ShowMainWindowCommand?.Execute(null);
-            });
-        }
-
-        private void OnSettingsRequested()
-        {
-            App.MainDispatcherQueue?.TryEnqueue(() =>
-            {
-                ((App)Application.Current).ShowMainWindowCommand?.Execute(null);
-                DashboardWindow.Current?.NavigateTo("Settings");
-            });
-        }
-
-        private void OnRescanRequested()
-        {
-            DaemonClient.RescanPeers();
-        }
-
-        private void OnExitRequested()
-        {
-            App.MainDispatcherQueue?.TryEnqueue(() =>
-            {
-                ((App)Application.Current).ExitApplicationCommand?.Execute(null);
-            });
-        }
-
         public void UpdateTooltip(string text)
         {
-            _manager?.UpdateTooltip(text);
+            SendIpcMessage("TIP:" + text);
         }
 
         public void ShowNotification(string title, string text)
         {
-            _manager?.ShowNotification(title, text);
+            SendIpcMessage("NOTIFY:" + text);
+        }
+
+        private void SendIpcMessage(string message)
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    using var client = new NamedPipeClientStream(".", "Deskdrop_Tray_Pipe", PipeDirection.Out);
+                    client.Connect(200);
+                    using var writer = new StreamWriter(client);
+                    writer.WriteLine(message);
+                    writer.Flush();
+                }
+                catch { }
+            });
         }
 
         public void Dispose()
         {
-            _manager?.Dispose();
         }
     }
 }
