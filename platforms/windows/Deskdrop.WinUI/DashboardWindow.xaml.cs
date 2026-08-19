@@ -33,6 +33,8 @@ namespace Deskdrop.WinUI
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
 
+
+
             appWindow.Closing += (s, e) =>
             {
                 if (!App.IsShuttingDown)

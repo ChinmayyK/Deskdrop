@@ -111,7 +111,7 @@ namespace Deskdrop.WinUI.Views
         {
             if (e.Key == Windows.System.VirtualKey.Enter && PathBox != null)
             {
-                LoadRemoteDirectory(PathBox.Text.Trim());
+                _ = LoadRemoteDirectory(PathBox.Text.Trim());
             }
         }
 
@@ -119,7 +119,7 @@ namespace Deskdrop.WinUI.Views
         {
             if (PathBox != null)
             {
-                LoadRemoteDirectory(PathBox.Text.Trim());
+                _ = LoadRemoteDirectory(PathBox.Text.Trim());
             }
         }
 
@@ -128,22 +128,22 @@ namespace Deskdrop.WinUI.Views
             var peer = mgr.SelectedPeer;
             if (peer != null)
             {
-                mgr.PickAndSendFiles(peer.device_id);
+                _ = mgr.PickAndSendFiles(peer.device_id);
             }
         }
 
         private void OnRefreshClicked(object sender, RoutedEventArgs e)
         {
-            LoadRemoteDirectory(_currentPath, true);
+            _ = LoadRemoteDirectory(_currentPath, true);
         }
 
-        private void OnShortcutRootClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/");
-        private void OnShortcutDCIMClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/DCIM/Camera");
-        private void OnShortcutPicturesClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Pictures");
-        private void OnShortcutDownloadsClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Download");
-        private void OnShortcutDocumentsClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Documents");
-        private void OnShortcutMusicClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Music");
-        private void OnShortcutMoviesClicked(object sender, RoutedEventArgs e) => LoadRemoteDirectory("/Movies");
+        private void OnShortcutRootClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/");
+        private void OnShortcutDCIMClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/DCIM/Camera");
+        private void OnShortcutPicturesClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Pictures");
+        private void OnShortcutDownloadsClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Download");
+        private void OnShortcutDocumentsClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Documents");
+        private void OnShortcutMusicClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Music");
+        private void OnShortcutMoviesClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Movies");
 
         private void OnItemClicked(object sender, RoutedEventArgs e)
         {
@@ -152,7 +152,7 @@ namespace Deskdrop.WinUI.Views
                 if (item.is_dir)
                 {
                     var nextPath = _currentPath.TrimEnd('/') + "/" + item.name;
-                    LoadRemoteDirectory(nextPath);
+                    _ = LoadRemoteDirectory(nextPath);
                 }
             }
         }

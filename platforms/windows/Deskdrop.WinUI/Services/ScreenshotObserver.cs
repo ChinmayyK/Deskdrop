@@ -7,7 +7,7 @@ namespace Deskdrop.WinUI.Services
     public class ScreenshotObserver : IDisposable
     {
         private readonly ClipboardManager _clipboardManager;
-        private readonly FileSystemWatcher _desktopWatcher;
+        private readonly FileSystemWatcher? _desktopWatcher;
         private readonly FileSystemWatcher? _screenshotsWatcher;
 
         public ScreenshotObserver(ClipboardManager clipboardManager)

@@ -5,7 +5,6 @@
     xmlns:local="using:Deskdrop.WinUI"
     xmlns:views="using:Deskdrop.WinUI.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:tb="using:H.NotifyIcon"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Title="DeskDrop Dashboard">
@@ -15,23 +14,6 @@
             <RowDefinition Height="42"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-
-        <!-- System Tray Notification Icon -->
-        <tb:TaskbarIcon
-            x:Name="TrayIcon"
-            x:FieldModifier="public"
-            ToolTipText="Deskdrop"
-            IconSource="/Assets/TrayIcon.ico"
-            LeftClickCommand="{x:Bind ShowMainWindowCommand}"
-            DoubleClickCommand="{x:Bind ShowMainWindowCommand}">
-            <tb:TaskbarIcon.ContextFlyout>
-                <MenuFlyout>
-                    <MenuFlyoutItem Text="Open Deskdrop" Command="{x:Bind ShowMainWindowCommand}"/>
-                    <MenuFlyoutSeparator/>
-                    <MenuFlyoutItem Text="Quit Deskdrop" Command="{x:Bind ((local:App)local:App.Current).ExitApplicationCommand}"/>
-                </MenuFlyout>
-            </tb:TaskbarIcon.ContextFlyout>
-        </tb:TaskbarIcon>
 
         <!-- Custom Fluent TitleBar Area -->
         <Grid x:Name="AppTitleBar" Grid.Row="0" Background="Transparent" VerticalAlignment="Stretch" Padding="14,0,140,0">

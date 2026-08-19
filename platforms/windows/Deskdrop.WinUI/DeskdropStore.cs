@@ -561,8 +561,6 @@ namespace Deskdrop.WinUI
             PropertyNameCaseInsensitive = true
         };
 
-        private DispatcherTimer? _pollTimer;
-
         private DeskdropStore()
         {
             Peers = new ObservableCollection<PeerViewModel>();
@@ -1064,7 +1062,7 @@ namespace Deskdrop.WinUI
                 {
                     foreach (var f in files)
                     {
-                        System.Threading.Tasks.Task.Run(() => DaemonClient.PushFile(targetDeviceId, f.Path));
+                        _ = System.Threading.Tasks.Task.Run(() => DaemonClient.PushFile(targetDeviceId, f.Path));
                     }
                 }
             }

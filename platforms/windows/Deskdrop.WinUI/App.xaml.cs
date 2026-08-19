@@ -28,7 +28,6 @@ public partial class App : Application
     public System.Windows.Input.ICommand ShowMainWindowCommand { get; }
     public System.Windows.Input.ICommand ExitApplicationCommand { get; }
 
-    private static System.Threading.Mutex? _singleInstanceMutex;
     private static IntPtr _engineHandle = IntPtr.Zero;
     public static IntPtr EngineHandle => _engineHandle;
     public static Deskdrop.WinUI.Services.ClipboardManager? Clipboard { get; private set; }
@@ -118,7 +117,7 @@ public partial class App : Application
             var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             queue?.TryEnqueue(() =>
             {
-                try { DashboardWindow.Current?.TrayIcon?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
+                try { Deskdrop.WinUI.Services.TrayService.Current?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 if (_engineHandle != IntPtr.Zero)
                 {
                     try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { App.HandleError(ex); }
@@ -188,6 +187,16 @@ public partial class App : Application
                 if (ex.InnerException != null) System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "Inner: " + ex.InnerException.ToString() + "\n");
             }
 
+            try
+            {
+                var mainHwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
+                _ = new Deskdrop.WinUI.Services.TrayService(mainHwnd);
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] TrayService error: " + ex.Message + "\n");
+            }
+
             DeskdropStore.Shared.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(DeskdropStore.Peers))
@@ -196,10 +205,7 @@ public partial class App : Application
                     var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                     queue?.TryEnqueue(() =>
                     {
-                        if (DashboardWindow.Current?.TrayIcon != null)
-                        {
-                            DashboardWindow.Current.TrayIcon.ToolTipText = $"Deskdrop — {count} device(s) connected";
-                        }
+                        Deskdrop.WinUI.Services.TrayService.Current?.UpdateTooltip($"Deskdrop — {count} device(s) connected");
                     });
                 }
             };
@@ -287,7 +293,7 @@ public class RelayCommand : System.Windows.Input.ICommand
 {
     private readonly Action _execute;
     public RelayCommand(Action execute) => _execute = execute;
-    public event EventHandler? CanExecuteChanged;
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
     public bool CanExecute(object? parameter) => true;
     public void Execute(object? parameter) => _execute();
 }

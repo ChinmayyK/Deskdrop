@@ -18,10 +18,7 @@ namespace Deskdrop.WinUI.Services
         private string _lastText = string.Empty;
         private readonly DispatcherTimer _pollTimer;
 
-        private uint _lastSequenceNumber;
-
         public ObservableCollection<HistoryItem> History { get; set; } = new ObservableCollection<HistoryItem>();
-        public event Action<string>? QuickContextUpdated;
 
         public ClipboardManager()
         {

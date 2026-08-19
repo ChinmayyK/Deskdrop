@@ -13,7 +13,7 @@ namespace Deskdrop.WinUI
 {
     public sealed partial class QuickAccessWindow : Window
     {
-        public event EventHandler DashboardRequested;
+        public event EventHandler? DashboardRequested;
         private DispatcherTimer _searchDebounceTimer;
 
         public QuickAccessWindow()
@@ -42,7 +42,7 @@ namespace Deskdrop.WinUI
             DeskdropStore.Shared.PropertyChanged += OnStoreChanged;
             this.Closed += (s, e) => {
                 DeskdropStore.Shared.PropertyChanged -= OnStoreChanged;
-                _searchDebounceTimer.Stop();
+                _searchDebounceTimer?.Stop();
             };
 
             _searchDebounceTimer = new DispatcherTimer();
@@ -50,7 +50,7 @@ namespace Deskdrop.WinUI
             _searchDebounceTimer.Tick += SearchDebounceTimer_Tick;
         }
 
-        private void OnStoreChanged(object sender, PropertyChangedEventArgs e)
+        private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
         {
             DispatcherQueue?.TryEnqueue(() => {
                 try
@@ -94,7 +94,7 @@ namespace Deskdrop.WinUI
             _searchDebounceTimer.Start();
         }
 
-        private void SearchDebounceTimer_Tick(object sender, object e)
+        private void SearchDebounceTimer_Tick(object? sender, object e)
         {
             _searchDebounceTimer.Stop();
             try
