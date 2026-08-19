@@ -4,7 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Deskdrop.WinUI"
-    RequestedTheme="Dark">
+    RequestedTheme="Light">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -29,34 +29,34 @@
             <local:BoolToVisibleConverter x:Key="BoolToVisibleConverter"/>
             <local:StringToBrushConverter x:Key="StringToBrushConverter"/>
 
-            <!-- Standard Semantic Colors matching macOS Dark Mode -->
-            <SolidColorBrush x:Key="AppAccentBrush" Color="#0A84FF" />
-            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#5E5CE6" />
-            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#260A84FF" />
+            <!-- Standard Semantic Colors matching macOS Light Mode -->
+            <SolidColorBrush x:Key="AppAccentBrush" Color="#007AFF" />
+            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#5856D6" />
+            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#1A007AFF" />
             
-            <SolidColorBrush x:Key="AppSuccessBrush" Color="#32D74B" />
-            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#2632D74B" />
+            <SolidColorBrush x:Key="AppSuccessBrush" Color="#34C759" />
+            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#1A34C759" />
 
-            <SolidColorBrush x:Key="AppWarningBrush" Color="#FF9F0A" />
-            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#26FF9F0A" />
+            <SolidColorBrush x:Key="AppWarningBrush" Color="#FF9500" />
+            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#1AFF9500" />
 
-            <SolidColorBrush x:Key="AppDangerBrush" Color="#FF453A" />
-            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#26FF453A" />
+            <SolidColorBrush x:Key="AppDangerBrush" Color="#FF3B30" />
+            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#1AFF3B30" />
 
-            <SolidColorBrush x:Key="AppVioletBrush" Color="#BF5AF2" />
-            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#26BF5AF2" />
+            <SolidColorBrush x:Key="AppVioletBrush" Color="#AF52DE" />
+            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#1AAF52DE" />
 
-            <SolidColorBrush x:Key="AppCyanBrush" Color="#64D2FF" />
-            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#2664D2FF" />
+            <SolidColorBrush x:Key="AppCyanBrush" Color="#32ADE6" />
+            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#1A32ADE6" />
 
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#1E1E1E" />
-            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#2C2C2E" />
-            <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#3A3A3C" />
-            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#1EFFFFFF" />
-            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#F2F2F7" />
+            <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#1A000000" />
+            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#33000000" />
 
-            <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="#282828"/>
-            <SolidColorBrush x:Key="ModalAcrylicBrush" Color="#1E1E1E"/>
+            <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="#F5F5F7"/>
+            <SolidColorBrush x:Key="ModalAcrylicBrush" Color="#FFFFFF"/>
 
             <!-- Global Control Styles -->
             <Style TargetType="ListViewItem" x:Key="SpacedListViewItemStyle">
