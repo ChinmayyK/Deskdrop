@@ -28,7 +28,14 @@ namespace Deskdrop.WinUI.Services
                 if (procs.Length == 0)
                 {
                     var baseDir = AppContext.BaseDirectory;
-                    var trayExe = Path.Combine(baseDir, "Deskdrop.Tray.exe");
+                    // Tray lives in its own subdirectory to avoid DLL version conflicts
+                    // (WinUI uses System.Drawing.Common v9.x, Tray needs v8.x for WinForms)
+                    var trayExe = Path.Combine(baseDir, "tray", "Deskdrop.Tray.exe");
+                    if (!File.Exists(trayExe))
+                    {
+                        // Fallback: same directory (dev/debug scenario)
+                        trayExe = Path.Combine(baseDir, "Deskdrop.Tray.exe");
+                    }
                     if (File.Exists(trayExe))
                     {
                         Process.Start(new ProcessStartInfo

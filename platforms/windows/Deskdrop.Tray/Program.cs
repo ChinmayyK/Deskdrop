@@ -194,7 +194,13 @@ namespace Deskdrop.Tray
         private static void OpenDeskdropWindow()
         {
             var baseDir = AppContext.BaseDirectory;
-            var exePath = Path.Combine(baseDir, "Deskdrop.exe");
+            // Tray lives in a 'tray' subdirectory; Deskdrop.exe is in the parent
+            var exePath = Path.Combine(baseDir, "..", "Deskdrop.exe");
+            if (!File.Exists(exePath))
+            {
+                // Fallback: same directory
+                exePath = Path.Combine(baseDir, "Deskdrop.exe");
+            }
 
             var procs = Process.GetProcessesByName("Deskdrop");
             if (procs.Length > 0)
@@ -224,7 +230,7 @@ namespace Deskdrop.Tray
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = exePath,
+                    FileName = Path.GetFullPath(exePath),
                     UseShellExecute = true
                 });
             }
