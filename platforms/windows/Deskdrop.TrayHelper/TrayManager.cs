@@ -19,6 +19,11 @@ namespace Deskdrop.TrayHelper
 
         public static TrayManager? Instance { get; private set; }
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool DestroyIcon(IntPtr hIcon);
+
+        private IntPtr _createdHicon = IntPtr.Zero;
+
         public TrayManager()
         {
             Instance = this;
@@ -33,28 +38,46 @@ namespace Deskdrop.TrayHelper
                 {
                     _notifyIcon = new NotifyIcon();
 
-                    // Load standard system small icon (16x16 or 32x32)
+                    // Load high-resolution 32-bit ARGB vibrant icon directly from PNG asset
                     var baseDir = AppContext.BaseDirectory;
-                    var icoPath = Path.Combine(baseDir, "Assets", "TrayIcon.ico");
-                    var appIcoPath = Path.Combine(baseDir, "Assets", "AppIcon.ico");
-                    var smallSize = SystemInformation.SmallIconSize;
-
-                    try
+                    var pngPath = Path.Combine(baseDir, "Assets", "Square44x44Logo.scale-200.png");
+                    if (!File.Exists(pngPath))
                     {
-                        if (File.Exists(icoPath))
+                        pngPath = Path.Combine(baseDir, "Assets", "Square150x150Logo.scale-200.png");
+                    }
+
+                    if (File.Exists(pngPath))
+                    {
+                        try
                         {
-                            _notifyIcon.Icon = new Icon(icoPath, smallSize.Width, smallSize.Height);
+                            using (var srcBmp = (Bitmap)Image.FromFile(pngPath))
+                            {
+                                var smallSize = SystemInformation.SmallIconSize;
+                                int w = Math.Max(16, smallSize.Width);
+                                int h = Math.Max(16, smallSize.Height);
+
+                                using (var targetBmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+                                {
+                                    using (var g = Graphics.FromImage(targetBmp))
+                                    {
+                                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                                        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                                        g.DrawImage(srcBmp, new Rectangle(0, 0, w, h));
+                                    }
+
+                                    _createdHicon = targetBmp.GetHicon();
+                                    _notifyIcon.Icon = Icon.FromHandle(_createdHicon);
+                                }
+                            }
                         }
-                        else if (File.Exists(appIcoPath))
+                        catch (Exception ex)
                         {
-                            _notifyIcon.Icon = new Icon(appIcoPath, smallSize.Width, smallSize.Height);
-                        }
-                        else
-                        {
+                            Log("PNG icon load failed: " + ex.Message);
                             _notifyIcon.Icon = SystemIcons.Application;
                         }
                     }
-                    catch
+                    else
                     {
                         _notifyIcon.Icon = SystemIcons.Application;
                     }
@@ -153,6 +176,11 @@ namespace Deskdrop.TrayHelper
                     _notifyIcon.Visible = false;
                     _notifyIcon.Dispose();
                     _notifyIcon = null;
+                }
+                if (_createdHicon != IntPtr.Zero)
+                {
+                    DestroyIcon(_createdHicon);
+                    _createdHicon = IntPtr.Zero;
                 }
                 Application.ExitThread();
             }
