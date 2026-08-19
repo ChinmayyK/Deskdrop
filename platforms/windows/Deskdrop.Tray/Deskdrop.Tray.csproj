@@ -8,4 +8,9 @@
     <AssemblyName>Deskdrop.Tray</AssemblyName>
     <RootNamespace>Deskdrop.Tray</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <Content Include="..\Deskdrop.WinUI\Assets\**" Link="Assets\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
