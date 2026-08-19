@@ -73,6 +73,8 @@ public partial class App : Application
                     if (MainWindow == null || DashboardWindow.Current == null)
                     {
                         MainWindow = new DashboardWindow();
+                        _window = MainWindow;
+                        MainWindow.Activate();
                     }
                     else
                     {
@@ -81,32 +83,24 @@ public partial class App : Application
                             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
                             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
                             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+                            appWindow.IsShownInSwitchers = true;
                             appWindow.Show();
+                            appWindow.MoveInZOrderAtTop();
+                            ShowWindow(hwnd, 9 /* SW_RESTORE */);
+                            SetForegroundWindow(hwnd);
                             MainWindow.Activate();
                         }
                         catch
                         {
                             MainWindow = new DashboardWindow();
+                            _window = MainWindow;
+                            MainWindow.Activate();
                         }
                     }
-                    _window = MainWindow;
-                    MainWindow.Activate();
-                    try
-                    {
-                        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
-                        _window.Activate();
-                    }
-                    catch (Exception innerEx) { App.HandleError(innerEx); }
                 }
                 catch (Exception ex)
                 {
-                    try
-                    {
-                        MainWindow = new DashboardWindow();
-                        _window = MainWindow;
-                        MainWindow.Activate();
-                    }
-                    catch (Exception innerEx) { App.HandleError(innerEx); }
+                    App.HandleError(ex);
                 }
             });
         });
@@ -277,6 +271,12 @@ public partial class App : Application
             }
         }
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     public static void HandleError(Exception ex, [System.Runtime.CompilerServices.CallerMemberName] string callerName = "")
     {

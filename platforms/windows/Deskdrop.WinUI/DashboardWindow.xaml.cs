@@ -40,6 +40,7 @@ namespace Deskdrop.WinUI
                 if (!App.IsShuttingDown)
                 {
                     e.Cancel = true;
+                    appWindow.IsShownInSwitchers = false;
                     appWindow.Hide();
                 }
             };

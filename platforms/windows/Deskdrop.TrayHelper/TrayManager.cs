@@ -65,9 +65,9 @@ namespace Deskdrop.TrayHelper
 
                     _notifyIcon.ContextMenuStrip = menu;
 
-                    _notifyIcon.Click += (s, e) =>
+                    _notifyIcon.MouseClick += (s, e) =>
                     {
-                        if (e is MouseEventArgs me && me.Button == MouseButtons.Left)
+                        if (e.Button == MouseButtons.Left)
                         {
                             OpenRequested?.Invoke();
                         }
