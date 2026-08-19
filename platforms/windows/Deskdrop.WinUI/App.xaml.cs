@@ -106,7 +106,7 @@ public partial class App : Application
                 try { Deskdrop.WinUI.Services.TrayService.Current?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 if (_engineHandle != IntPtr.Zero)
                 {
-                    try { NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { App.HandleError(ex); }
+                    try { Deskdrop.WinUI.NativeCore.deskdrop_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { App.HandleError(ex); }
                 }
                 try { GlobalHotKeyManager.Shared.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 try { Application.Current.Exit(); } catch (Exception ex) { App.HandleError(ex); }
@@ -145,8 +145,19 @@ public partial class App : Application
             var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
             ProcessActivationArgs(activatedArgs);
 
-            // In-process native core FFI is bypassed; the UI runs as a robust standalone desktop client communicating over IPC
-
+            // Initialize the in-process native core FFI
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    _engineHandle = Deskdrop.WinUI.NativeCore.deskdrop_start(System.Environment.MachineName, 0);
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Native engine started gracefully. Handle: " + _engineHandle + "\n");
+                }
+                catch (Exception ex)
+                {
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Native engine start failed: " + ex.Message + "\n");
+                }
+            });
 
             Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
             ClipboardReady.TrySetResult(Clipboard);

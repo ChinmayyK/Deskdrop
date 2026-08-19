@@ -25,8 +25,33 @@ namespace Deskdrop.WinUI
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             appWindow.Resize(new Windows.Graphics.SizeInt32(280, 340));
 
-            // Generate the QR Code
-            _ = GenerateQRCodeAsync("deskdrop://pair?id=win-device-1234");
+            // Generate the QR Code dynamically with real Device ID and Token
+            try
+            {
+                var status = DaemonClient.Status();
+                var fp = status?.RootElement.GetProperty("local_fingerprint").GetString();
+                
+                var tokenDoc = DaemonClient.GenerateQrToken();
+                var token = tokenDoc?.RootElement.GetProperty("token").GetString();
+                
+                var name = System.Net.WebUtility.UrlEncode(System.Environment.MachineName);
+                var ip = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList.FirstOrDefault(x => x.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?.ToString();
+                
+                if (fp != null && token != null)
+                {
+                    string uri = $"deskdrop://pair?id={fp}&token={token}&name={name}";
+                    if (!string.IsNullOrEmpty(ip)) uri += $"&ip={ip}&port=47823";
+                    _ = GenerateQRCodeAsync(uri);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("Failed to fetch fingerprint or token for QR.");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error preparing QR data: {ex.Message}");
+            }
         }
 
         private async Task GenerateQRCodeAsync(string payload)
