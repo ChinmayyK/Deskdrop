@@ -206,32 +206,43 @@ namespace Deskdrop.WinUI
 
     public sealed class StringToBrushConverter : IValueConverter
     {
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Microsoft.UI.Xaml.Media.SolidColorBrush> _cache = new();
+        private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _transparent = new(Microsoft.UI.Colors.Transparent);
+
+        public static Microsoft.UI.Xaml.Media.SolidColorBrush ToSolidColorBrush(string? hex)
+        {
+            var h = hex?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(h)) return _transparent;
+
+            return _cache.GetOrAdd(h, key =>
+            {
+                try
+                {
+                    string cleaned = key.StartsWith("#") ? key.Substring(1) : key;
+                    if (cleaned.Length == 6)
+                    {
+                        byte r = byte.Parse(cleaned.Substring(0, 2), NumberStyles.HexNumber);
+                        byte g = byte.Parse(cleaned.Substring(2, 2), NumberStyles.HexNumber);
+                        byte b = byte.Parse(cleaned.Substring(4, 2), NumberStyles.HexNumber);
+                        return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
+                    }
+                    if (cleaned.Length == 8)
+                    {
+                        byte a = byte.Parse(cleaned.Substring(0, 2), NumberStyles.HexNumber);
+                        byte r = byte.Parse(cleaned.Substring(2, 2), NumberStyles.HexNumber);
+                        byte g = byte.Parse(cleaned.Substring(4, 2), NumberStyles.HexNumber);
+                        byte b = byte.Parse(cleaned.Substring(6, 2), NumberStyles.HexNumber);
+                        return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(a, r, g, b));
+                    }
+                }
+                catch { }
+                return _transparent;
+            });
+        }
+
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            var hex = value?.ToString()?.Trim() ?? "";
-            if (string.IsNullOrWhiteSpace(hex)) return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            
-            try
-            {
-                if (hex.StartsWith("#")) hex = hex.Substring(1);
-                if (hex.Length == 6)
-                {
-                    byte r = byte.Parse(hex.Substring(0, 2), NumberStyles.HexNumber);
-                    byte g = byte.Parse(hex.Substring(2, 2), NumberStyles.HexNumber);
-                    byte b = byte.Parse(hex.Substring(4, 2), NumberStyles.HexNumber);
-                    return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
-                }
-                else if (hex.Length == 8)
-                {
-                    byte a = byte.Parse(hex.Substring(0, 2), NumberStyles.HexNumber);
-                    byte r = byte.Parse(hex.Substring(2, 2), NumberStyles.HexNumber);
-                    byte g = byte.Parse(hex.Substring(4, 2), NumberStyles.HexNumber);
-                    byte b = byte.Parse(hex.Substring(6, 2), NumberStyles.HexNumber);
-                    return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(a, r, g, b));
-                }
-            }
-            catch {}
-            return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            return ToSolidColorBrush(value?.ToString());
         }
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
