@@ -40,8 +40,9 @@ namespace Deskdrop.WinUI
                 if (!App.IsShuttingDown)
                 {
                     e.Cancel = true;
-                    appWindow.IsShownInSwitchers = false;
-                    appWindow.Hide();
+                    // Minimize to taskbar instead of hiding
+                    var presenter = appWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
+                    presenter?.Minimize();
                 }
             };
 

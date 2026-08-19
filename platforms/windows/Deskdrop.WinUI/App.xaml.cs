@@ -62,9 +62,6 @@ public partial class App : Application
 
         ShowMainWindowCommand = new RelayCommand(() =>
         {
-            var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] ShowMainWindowCommand invoked\n"); } catch (Exception ex) { App.HandleError(ex); }
-
             var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             queue?.TryEnqueue(() =>
             {
@@ -81,11 +78,6 @@ public partial class App : Application
                         try
                         {
                             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
-                            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
-                            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-                            appWindow.IsShownInSwitchers = true;
-                            appWindow.Show();
-                            appWindow.MoveInZOrderAtTop();
                             ShowWindow(hwnd, 9 /* SW_RESTORE */);
                             SetForegroundWindow(hwnd);
                             MainWindow.Activate();

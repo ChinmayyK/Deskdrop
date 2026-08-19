@@ -40,35 +40,6 @@ namespace Deskdrop.Tray
             catch { }
         }
 
-        /// <summary>
-        /// Search for an .ico file by trying multiple candidate paths.
-        /// The self-contained publish may place assets in Assets\ subfolder OR flat in the root.
-        /// </summary>
-        private static string? FindIconFile(string baseDir)
-        {
-            string[] candidates = new[]
-            {
-                Path.Combine(baseDir, "Assets", "AppIcon.ico"),
-                Path.Combine(baseDir, "AppIcon.ico"),
-                Path.Combine(baseDir, "Assets", "app_icon.ico"),
-                Path.Combine(baseDir, "app_icon.ico"),
-                Path.Combine(baseDir, "Assets", "dark_logo.ico"),
-                Path.Combine(baseDir, "dark_logo.ico"),
-                Path.Combine(baseDir, "Assets", "logo.ico"),
-                Path.Combine(baseDir, "logo.ico"),
-                Path.Combine(baseDir, "Assets", "TrayIcon.ico"),
-                Path.Combine(baseDir, "TrayIcon.ico"),
-            };
-
-            foreach (var path in candidates)
-            {
-                Log($"  Checking: {path} => {(File.Exists(path) ? "FOUND" : "not found")}");
-                if (File.Exists(path))
-                    return path;
-            }
-            return null;
-        }
-
         [STAThread]
         public static void Main()
         {
@@ -81,33 +52,46 @@ namespace Deskdrop.Tray
 
             var notifyIcon = new NotifyIcon();
 
-            // --- Icon setup ---
+            // Try loading icon from file, fall back to a very visible system icon
+            Icon? appIcon = null;
             var baseDir = AppContext.BaseDirectory;
-            var icoPath = FindIconFile(baseDir);
+            string[] iconCandidates = {
+                Path.Combine(baseDir, "Assets", "AppIcon.ico"),
+                Path.Combine(baseDir, "AppIcon.ico"),
+                Path.Combine(baseDir, "Assets", "dark_logo.ico"),
+                Path.Combine(baseDir, "dark_logo.ico"),
+            };
 
-            if (icoPath != null)
+            foreach (var path in iconCandidates)
             {
-                Log($"Using icon: {icoPath} (size: {new FileInfo(icoPath).Length} bytes)");
-                try
+                if (File.Exists(path))
                 {
-                    notifyIcon.Icon = new Icon(icoPath, SystemInformation.SmallIconSize);
-                    Log("Icon loaded successfully via new Icon(path, size)");
+                    try
+                    {
+                        appIcon = new Icon(path, SystemInformation.SmallIconSize);
+                        Log($"Loaded icon from: {path}");
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Failed to load {path}: {ex.Message}");
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Log($"Icon load failed: {ex.Message}");
-                    notifyIcon.Icon = SystemIcons.Information;
-                }
+            }
+
+            if (appIcon != null)
+            {
+                notifyIcon.Icon = appIcon;
             }
             else
             {
-                Log("WARNING: No .ico file found anywhere! Using SystemIcons.Information");
-                notifyIcon.Icon = SystemIcons.Information;
+                Log("No icon file found, using SystemIcons.Shield");
+                notifyIcon.Icon = SystemIcons.Shield;
             }
 
             notifyIcon.Text = "Deskdrop";
 
-            // --- Context menu ---
+            // Context menu
             var menu = new ContextMenuStrip();
             var openItem = new ToolStripMenuItem("Open Deskdrop", null, (s, e) => OpenDeskdropWindow());
             openItem.Font = new Font(openItem.Font, FontStyle.Bold);
@@ -144,17 +128,16 @@ namespace Deskdrop.Tray
             };
             notifyIcon.DoubleClick += (s, e) => OpenDeskdropWindow();
 
-            // --- Make it visible ---
             notifyIcon.Visible = true;
             Log($"NotifyIcon.Visible = {notifyIcon.Visible}");
-            Log($"NotifyIcon.Icon is null = {notifyIcon.Icon == null}");
+            Log($"NotifyIcon.Icon null = {notifyIcon.Icon == null}");
             if (notifyIcon.Icon != null)
                 Log($"NotifyIcon.Icon size = {notifyIcon.Icon.Width}x{notifyIcon.Icon.Height}");
 
             notifyIcon.ShowBalloonTip(3000, "Deskdrop", "Deskdrop is running in your system tray.", ToolTipIcon.Info);
-            Log("Balloon tip shown. Entering Application.Run()...");
+            Log("Balloon sent. Entering Application.Run()...");
 
-            // --- IPC listener thread ---
+            // IPC listener
             var ipcThread = new Thread(() =>
             {
                 while (true)
@@ -194,13 +177,9 @@ namespace Deskdrop.Tray
         private static void OpenDeskdropWindow()
         {
             var baseDir = AppContext.BaseDirectory;
-            // Tray lives in a 'tray' subdirectory; Deskdrop.exe is in the parent
             var exePath = Path.Combine(baseDir, "..", "Deskdrop.exe");
             if (!File.Exists(exePath))
-            {
-                // Fallback: same directory
                 exePath = Path.Combine(baseDir, "Deskdrop.exe");
-            }
 
             var procs = Process.GetProcessesByName("Deskdrop");
             if (procs.Length > 0)
@@ -214,13 +193,12 @@ namespace Deskdrop.Tray
                         break;
                     }
                 }
-
                 if (hWnd == IntPtr.Zero)
                     hWnd = FindWindowW(null, "DeskDrop Dashboard");
 
                 if (hWnd != IntPtr.Zero)
                 {
-                    ShowWindow(hWnd, 9 /* SW_RESTORE */);
+                    ShowWindow(hWnd, 9);
                     SetForegroundWindow(hWnd);
                     return;
                 }
