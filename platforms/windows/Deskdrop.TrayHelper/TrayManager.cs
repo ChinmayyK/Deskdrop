@@ -33,24 +33,33 @@ namespace Deskdrop.TrayHelper
                 {
                     _notifyIcon = new NotifyIcon();
 
-                    // Load icon
+                    // Load standard system small icon (16x16 or 32x32)
                     var baseDir = AppContext.BaseDirectory;
                     var icoPath = Path.Combine(baseDir, "Assets", "TrayIcon.ico");
-                    if (!File.Exists(icoPath))
-                    {
-                        icoPath = Path.Combine(baseDir, "Assets", "AppIcon.ico");
-                    }
+                    var appIcoPath = Path.Combine(baseDir, "Assets", "AppIcon.ico");
+                    var smallSize = SystemInformation.SmallIconSize;
 
-                    if (File.Exists(icoPath))
+                    try
                     {
-                        _notifyIcon.Icon = new Icon(icoPath);
+                        if (File.Exists(icoPath))
+                        {
+                            _notifyIcon.Icon = new Icon(icoPath, smallSize.Width, smallSize.Height);
+                        }
+                        else if (File.Exists(appIcoPath))
+                        {
+                            _notifyIcon.Icon = new Icon(appIcoPath, smallSize.Width, smallSize.Height);
+                        }
+                        else
+                        {
+                            _notifyIcon.Icon = SystemIcons.Application;
+                        }
                     }
-                    else
+                    catch
                     {
                         _notifyIcon.Icon = SystemIcons.Application;
                     }
 
-                    _notifyIcon.Text = "Deskdrop - Ready";
+                    _notifyIcon.Text = "Deskdrop - Connected & Ready";
 
                     // Context Menu
                     var menu = new ContextMenuStrip();
@@ -77,6 +86,12 @@ namespace Deskdrop.TrayHelper
 
                     _notifyIcon.Visible = true;
                     Log("NotifyIcon successfully registered and visible in System Tray!");
+
+                    try
+                    {
+                        _notifyIcon.ShowBalloonTip(2000, "Deskdrop", "Deskdrop is active in your system tray", ToolTipIcon.Info);
+                    }
+                    catch { }
 
                     _readyEvent.Set();
 
