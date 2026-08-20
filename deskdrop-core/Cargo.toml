@@ -29,7 +29,7 @@ postcard = { version = "1", features = ["alloc", "use-std"] }
 aes-gcm = "0.10"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 rand = "0.8"
-sha2 = { version = "0.10", features = ["asm"] }
+sha2 = "0.10"
 hmac = "0.12"
 hkdf = { version = "0.12", features = ["std"] }
 hex = "0.4"
