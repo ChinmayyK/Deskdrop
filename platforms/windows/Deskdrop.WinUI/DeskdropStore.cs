@@ -176,7 +176,7 @@ namespace Deskdrop.WinUI
         private string _friendly_name = "";
         public string friendly_name { get => _friendly_name; set { if (SetProperty(ref _friendly_name, value)) OnPropertyChanged(nameof(DisplayName)); } }
         private string? _platform;
-        public string? platform { get => _platform; set { if (SetProperty(ref _platform, value)) OnPropertyChanged(nameof(DeviceIcon)); } }
+        public string? platform { get => _platform; set { if (SetProperty(ref _platform, value)) { OnPropertyChanged(nameof(DeviceIcon)); OnPropertyChanged(nameof(IsCameraCapable)); OnPropertyChanged(nameof(ShowCameraButton)); } } }
         private string _status = "";
         public string status { get => _status; set { if(SetProperty(ref _status, value)) NotifyPeerStateProperties(); } }
         private bool _is_trusted;
@@ -232,6 +232,19 @@ namespace Deskdrop.WinUI
         public bool ShowDisconnectButton => status == "connected";
         public bool ShowConnectButton => status != "connected" && is_trusted;
         public bool ShowForgetButton => true;
+
+        // Continuity Camera is phone-to-desktop only: the mobile app is the
+        // frame source (deskdrop_push_video_frame), desktop platforms have
+        // no camera stream to show. Same platform-string matching as DeviceIcon.
+        public bool IsCameraCapable
+        {
+            get
+            {
+                var p = (platform ?? friendly_name).ToLowerInvariant();
+                return !(p.Contains("windows") || p.Contains("mac") || p.Contains("linux"));
+            }
+        }
+        public bool ShowCameraButton => IsConnected && IsCameraCapable;
 
         private string? _pairingPin;
         [System.Text.Json.Serialization.JsonPropertyName("pairing_pin")]
@@ -313,6 +326,7 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(ShowDisconnectButton));
             OnPropertyChanged(nameof(ShowConnectButton));
             OnPropertyChanged(nameof(ShowForgetButton));
+            OnPropertyChanged(nameof(ShowCameraButton));
         }
 
         public void NotifyAll()
@@ -696,6 +710,8 @@ namespace Deskdrop.WinUI
         public bool OtpShieldEnabled { get => _otpShieldEnabled; set => SetProperty(ref _otpShieldEnabled, value); }
         private bool _syncEnabled = true;
         public bool SyncEnabled { get => _syncEnabled; set { if (SetProperty(ref _syncEnabled, value)) DaemonClient.SetSyncEnabled(value); } }
+        private bool _requireTofuConfirmation = true;
+        public bool RequireTofuConfirmation { get => _requireTofuConfirmation; set { if (SetProperty(ref _requireTofuConfirmation, value)) DaemonClient.PatchSettings(new { require_tofu_confirmation = value }); } }
         public string DaemonStatusText => IsDaemonRunning ? "Running" : "Stopped";
         public string HeaderStatusText
         {
@@ -794,6 +810,26 @@ namespace Deskdrop.WinUI
                         if (pending != null && pending.RootElement.TryGetProperty("data", out var pendDataElem))
                         {
                             ParsePendingClipboards(pendDataElem);
+                        }
+
+                        var settings = DaemonClient.GetSettings();
+                        if (settings != null && settings.RootElement.TryGetProperty("data", out var settingsDataElem))
+                        {
+                            if (settingsDataElem.TryGetProperty("require_tofu_confirmation", out var tofuElem))
+                            {
+                                bool tofu = tofuElem.GetBoolean();
+                                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                                {
+                                    // Set the backing field directly (not the public setter) so
+                                    // loading the daemon's current value doesn't turn around and
+                                    // PatchSettings it straight back.
+                                    if (_requireTofuConfirmation != tofu)
+                                    {
+                                        _requireTofuConfirmation = tofu;
+                                        OnPropertyChanged(nameof(RequireTofuConfirmation));
+                                    }
+                                });
+                            }
                         }
                     }
                 }
@@ -1032,10 +1068,28 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(HeaderStatusBrush));
         }
 
+        private bool _sleepImmunityActive;
+
         private void NotifyTransferMetrics()
         {
             OnPropertyChanged(nameof(HasActiveTransfers));
             OnPropertyChanged(nameof(HasActiveSpeedTests));
+
+            // Prevent Modern Standby / display sleep for as long as a
+            // transfer or speed test is in flight, mirroring macOS's
+            // ProcessInfo.beginActivity and Android's wake lock behaviour.
+            bool shouldStayAwake = HasActiveTransfers || HasActiveSpeedTests;
+            if (shouldStayAwake != _sleepImmunityActive)
+            {
+                _sleepImmunityActive = shouldStayAwake;
+                try
+                {
+                    NativeCore.SetThreadExecutionState(shouldStayAwake
+                        ? (NativeCore.ES_CONTINUOUS | NativeCore.ES_SYSTEM_REQUIRED)
+                        : NativeCore.ES_CONTINUOUS);
+                }
+                catch (Exception ex) { App.HandleError(ex); }
+            }
         }
 
         private void NotifyPendingClipboardMetrics()

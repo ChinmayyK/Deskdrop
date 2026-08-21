@@ -25,18 +25,27 @@ if (Get-Command "adb" -ErrorAction SilentlyContinue) {
     Write-Host "[-] adb not found in PATH. Skipping Android uninstall." -ForegroundColor Yellow
 }
 
-# 1. Ensure the native DLL is in the correct target directory
-$targetDir = "..\..\..\target\release"
-if (-not (Test-Path $targetDir)) {
-    New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+# 1. Build the native core fresh from source. Never use the checked-in
+#    release/windows/deskdrop_core.dll snapshot here - it is a historical
+#    release artifact, not a build input, and using it silently links the
+#    WinUI app against a stale/mismatched core (wrong IPC pipe protocol,
+#    missing IPC commands, etc).
+Write-Host "[*] Building deskdrop-core (release) from current source..." -ForegroundColor Cyan
+Push-Location "..\..\.."
+cargo build --release -p deskdrop-core
+$cargoExitCode = $LASTEXITCODE
+Pop-Location
+
+if ($cargoExitCode -ne 0) {
+    Write-Host "[-] cargo build failed. Please check the errors above." -ForegroundColor Red
+    Exit
 }
 
-$dllSource = "..\..\..\release\windows\deskdrop_core.dll"
-if (Test-Path $dllSource) {
-    Copy-Item $dllSource -Destination $targetDir -Force
-    Write-Host "[+] Native backend linked successfully."
+if (Test-Path "..\..\..\target\release\deskdrop_core.dll") {
+    Write-Host "[+] Native backend built successfully."
 } else {
-    Write-Host "[!] Warning: Could not find pre-built deskdrop_core.dll in release/windows." -ForegroundColor Yellow
+    Write-Host "[-] deskdrop_core.dll not found in target\release after build." -ForegroundColor Red
+    Exit
 }
 
 # 2. Check for .NET SDK

@@ -80,6 +80,34 @@ namespace Deskdrop.WinUI.Services
 
         public void Dispose()
         {
+            try
+            {
+                // Ask the tray process to exit gracefully first (synchronously,
+                // so we don't race the fallback Kill() below against an
+                // async fire-and-forget send).
+                try
+                {
+                    using var client = new NamedPipeClientStream(".", "Deskdrop_Tray_Pipe", PipeDirection.Out);
+                    client.Connect(200);
+                    using var writer = new StreamWriter(client);
+                    writer.WriteLine("QUIT");
+                    writer.Flush();
+                }
+                catch { }
+
+                foreach (var proc in Process.GetProcessesByName("Deskdrop.Tray"))
+                {
+                    try
+                    {
+                        if (!proc.WaitForExit(500))
+                        {
+                            proc.Kill();
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex) { App.HandleError(ex); }
         }
     }
 }

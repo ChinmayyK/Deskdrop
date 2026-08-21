@@ -9,14 +9,50 @@ namespace Deskdrop.WinUI.Views
         public DeskdropStore mgr => DeskdropStore.Shared;
         public string DeviceName => Environment.MachineName;
 
+        private const string StartupRegistryKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private const string StartupRegistryValueName = "Deskdrop";
+
         public SettingsView()
         {
             this.InitializeComponent();
+            StartupToggle.IsOn = IsLaunchAtStartupEnabled();
+        }
+
+        private static bool IsLaunchAtStartupEnabled()
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(StartupRegistryKeyPath, writable: false);
+                return key?.GetValue(StartupRegistryValueName) != null;
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+                return false;
+            }
         }
 
         private void OnStartupToggled(object sender, RoutedEventArgs e)
         {
-            // Windows startup registry logic can be invoked here when toggled
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(StartupRegistryKeyPath, writable: true);
+                if (key == null) return;
+
+                if (StartupToggle.IsOn)
+                {
+                    var exePath = Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+                    key.SetValue(StartupRegistryValueName, $"\"{exePath}\"");
+                }
+                else
+                {
+                    key.DeleteValue(StartupRegistryValueName, throwOnMissingValue: false);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+            }
         }
 
         private void OnRescanClicked(object sender, RoutedEventArgs e)

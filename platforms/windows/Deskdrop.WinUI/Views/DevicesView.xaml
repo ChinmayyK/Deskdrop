@@ -110,13 +110,28 @@
 
             <!-- 3. CONNECTED & REMEMBERED DEVICES SECTION -->
             <StackPanel Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE8EA;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
-                    <TextBlock Text="Remembered Devices" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                    <Border Background="{StaticResource AppSurfaceBrush}" CornerRadius="10" Padding="8,2" Margin="4,0,0,0">
-                        <TextBlock Text="{x:Bind mgr.PeerCount, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    </Border>
-                </StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE8EA;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
+                        <TextBlock Text="Remembered Devices" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <Border Background="{StaticResource AppSurfaceBrush}" CornerRadius="10" Padding="8,2" Margin="4,0,0,0">
+                            <TextBlock Text="{x:Bind mgr.PeerCount, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </Border>
+                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource SecondarySubtleButtonStyle}"
+                            Visibility="{x:Bind mgr.ConnectedCount, Converter={StaticResource CountToVisibilityConverter}, Mode=OneWay}"
+                            ToolTipService.ToolTip="Disconnect all connected devices"
+                            Click="OnDisconnectAllClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE711;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="Disconnect All" FontSize="12.5"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
 
                 <!-- Devices Grid / List -->
                 <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.Peers, Mode=OneWay}">
@@ -218,12 +233,21 @@
                                             </Button>
 
                                             <!-- Speed Test -->
-                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17" 
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17"
                                                     Background="{StaticResource AppCyanSubtleBrush}" BorderThickness="0"
-                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
                                                     ToolTipService.ToolTip="Run Local Speed Benchmark"
                                                     Click="OnSpeedTestDeviceClicked">
                                                 <FontIcon Glyph="&#xE916;" FontSize="13" Foreground="{StaticResource AppCyanBrush}"/>
+                                            </Button>
+
+                                            <!-- Continuity Camera -->
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17"
+                                                    Background="{StaticResource AppVioletSubtleBrush}" BorderThickness="0"
+                                                    Visibility="{x:Bind ShowCameraButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                                    ToolTipService.ToolTip="View Continuity Camera"
+                                                    Click="OnViewCameraClicked">
+                                                <FontIcon Glyph="&#xE722;" FontSize="13" Foreground="{StaticResource AppVioletBrush}"/>
                                             </Button>
 
                                             <!-- Connect Button if trusted but offline -->
@@ -232,12 +256,41 @@
                                                     Click="OnPairDeviceClicked"/>
 
                                             <!-- Disconnect -->
-                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17" 
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17"
                                                     Background="{StaticResource AppDangerSubtleBrush}" BorderThickness="0"
-                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" 
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
                                                     ToolTipService.ToolTip="Disconnect"
                                                     Click="OnDisconnectClicked">
                                                 <FontIcon Glyph="&#xE711;" FontSize="12" Foreground="{StaticResource AppDangerBrush}"/>
+                                            </Button>
+
+                                            <!-- More Actions: Pause/Resume Sync, Forget Device -->
+                                            <Button Width="34" Height="34" Padding="0" CornerRadius="17"
+                                                    Background="{StaticResource AppBorderSubtleBrush}" BorderThickness="0"
+                                                    ToolTipService.ToolTip="More Actions">
+                                                <FontIcon Glyph="&#xE712;" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <Button.Flyout>
+                                                    <MenuFlyout Placement="Bottom">
+                                                        <MenuFlyoutItem Text="Pause Sync" Click="OnPauseSyncClicked"
+                                                                        Visibility="{x:Bind sync_enabled, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                                            <MenuFlyoutItem.Icon>
+                                                                <FontIcon Glyph="&#xE769;"/>
+                                                            </MenuFlyoutItem.Icon>
+                                                        </MenuFlyoutItem>
+                                                        <MenuFlyoutItem Text="Resume Sync" Click="OnResumeSyncClicked"
+                                                                        Visibility="{x:Bind sync_enabled, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}">
+                                                            <MenuFlyoutItem.Icon>
+                                                                <FontIcon Glyph="&#xE768;"/>
+                                                            </MenuFlyoutItem.Icon>
+                                                        </MenuFlyoutItem>
+                                                        <MenuFlyoutSeparator/>
+                                                        <MenuFlyoutItem Text="Forget Device" Click="OnForgetDeviceMenuClicked">
+                                                            <MenuFlyoutItem.Icon>
+                                                                <FontIcon Glyph="&#xE74D;"/>
+                                                            </MenuFlyoutItem.Icon>
+                                                        </MenuFlyoutItem>
+                                                    </MenuFlyout>
+                                                </Button.Flyout>
                                             </Button>
                                         </StackPanel>
                                     </Grid>

@@ -53,7 +53,7 @@
                                 <TextBlock Text="Launch on Windows Startup" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 <TextBlock Text="Run Deskdrop silently in the background and system tray on boot" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>
-                            <ToggleSwitch Grid.Column="1" IsOn="True" MinWidth="0" Toggled="OnStartupToggled"/>
+                            <ToggleSwitch x:Name="StartupToggle" Grid.Column="1" MinWidth="0" Toggled="OnStartupToggled"/>
                         </Grid>
 
                         <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
@@ -133,7 +133,7 @@
                                 <TextBlock Text="TOFU Security PIN Verification" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 <TextBlock Text="Require matching a 6-digit PIN on both devices before establishing trust" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>
-                            <ToggleSwitch Grid.Column="1" IsOn="True" MinWidth="0"/>
+                            <ToggleSwitch Grid.Column="1" IsOn="{x:Bind mgr.RequireTofuConfirmation, Mode=TwoWay}" MinWidth="0"/>
                         </Grid>
 
                         <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>

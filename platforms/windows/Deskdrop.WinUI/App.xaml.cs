@@ -162,6 +162,12 @@ public partial class App : Application
             Clipboard = new Deskdrop.WinUI.Services.ClipboardManager();
             ClipboardReady.TrySetResult(Clipboard);
 
+            try
+            {
+                _ = new Deskdrop.WinUI.Services.TrayService();
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+
             MainDispatcherQueue ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             try

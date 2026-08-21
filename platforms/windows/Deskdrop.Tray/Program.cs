@@ -148,6 +148,13 @@ namespace Deskdrop.Tray
                         server.WaitForConnection();
                         using var reader = new StreamReader(server);
                         var line = reader.ReadLine();
+                        if (!string.IsNullOrEmpty(line) && line == "QUIT")
+                        {
+                            notifyIcon.Visible = false;
+                            notifyIcon.Dispose();
+                            Application.Exit();
+                            return;
+                        }
                         if (!string.IsNullOrEmpty(line) && notifyIcon.Visible)
                         {
                             if (line.StartsWith("TIP:"))
@@ -193,6 +200,8 @@ namespace Deskdrop.Tray
                         break;
                     }
                 }
+                if (hWnd == IntPtr.Zero)
+                    hWnd = FindWindowW(null, "Deskdrop");
                 if (hWnd == IntPtr.Zero)
                     hWnd = FindWindowW(null, "DeskDrop Dashboard");
 

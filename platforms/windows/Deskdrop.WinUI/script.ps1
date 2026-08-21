@@ -1,1 +1,0 @@
-$file = "$env:LOCALAPPDATA\Deskdrop\error.log"; $reader = [System.IO.File]::OpenText($file); $reader.BaseStream.Seek(-10000, [System.IO.SeekOrigin]::End) | Out-Null; $text = $reader.ReadToEnd(); $text

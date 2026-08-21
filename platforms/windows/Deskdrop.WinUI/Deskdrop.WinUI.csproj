@@ -39,16 +39,22 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Native Rust DLL built by cargo build (release) or pre-built -->
+    <!--
+      Native Rust DLL. Intentionally has only two sources, both built from
+      current source:
+        1. A DLL dropped directly next to this project (manual dev override).
+        2. The `cargo build` release output for deskdrop-core.
+      Do NOT add a fallback onto release/windows/deskdrop_core.dll - that
+      directory holds a historical release snapshot, not a build input, and
+      silently linking against it ships a stale/mismatched core (see commits
+      3aa1fb2 / 18fdadb, which patched the C# IPC protocol to match that
+      stale DLL instead of rebuilding it).
+    -->
     <None Include="deskdrop_core.dll" Condition="Exists('deskdrop_core.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>deskdrop_core.dll</Link>
     </None>
     <None Include="..\..\..\target\release\deskdrop_core.dll" Condition="!Exists('deskdrop_core.dll') and Exists('..\..\..\target\release\deskdrop_core.dll')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>deskdrop_core.dll</Link>
-    </None>
-    <None Include="..\..\..\release\windows\deskdrop_core.dll" Condition="!Exists('deskdrop_core.dll') and !Exists('..\..\..\target\release\deskdrop_core.dll') and Exists('..\..\..\release\windows\deskdrop_core.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>deskdrop_core.dll</Link>
     </None>
@@ -73,13 +79,39 @@
      above to opt out.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\Deskdrop.TrayHelper\Deskdrop.TrayHelper.csproj" />
+    <!--
+      Deskdrop.Tray is a standalone companion exe (own process, own
+      System.Drawing.Common v8.x) that renders the system tray icon.
+      It must stay out-of-process: WinUI here pins System.Drawing.Common to
+      v9.x, and loading tray code in-process against that version is the
+      exact .NET 9 assembly crash that motivated splitting it out in the
+      first place. ReferenceOutputAssembly=false means this is a build-order
+      dependency only - its exe is copied into tray\ by the target below,
+      never linked into this assembly.
+    -->
+    <ProjectReference Include="..\Deskdrop.Tray\Deskdrop.Tray.csproj" ReferenceOutputAssembly="false" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.1" />
   </ItemGroup>
+
+  <!--
+    Copy the built Deskdrop.Tray companion exe (and its dependencies) into a
+    tray\ subfolder of this project's own output, so TrayService.cs's
+    EnsureTrayProcessRunning() can find and launch it at
+    <baseDir>\tray\Deskdrop.Tray.exe. Runs after both Build and Publish so
+    `dotnet run`, `dotnet build`, and `dotnet publish` all produce a working
+    tray icon.
+  -->
+  <Target Name="CopyTrayApp" AfterTargets="Build;Publish">
+    <ItemGroup>
+      <TrayAppFiles Include="..\Deskdrop.Tray\bin\$(Configuration)\net8.0-windows10.0.26100.0\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TrayAppFiles)" DestinationFolder="$(OutDir)tray\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'@(TrayAppFiles)' != ''" />
+    <Copy SourceFiles="@(TrayAppFiles)" DestinationFolder="$(PublishDir)tray\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and '@(TrayAppFiles)' != ''" />
+  </Target>
 
   <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution

@@ -43,7 +43,10 @@ namespace Deskdrop.WinUI
                 if (!App.IsShuttingDown)
                 {
                     e.Cancel = true;
-                    ShowWindow(hwnd, 6 /* SW_MINIMIZE */);
+                    // Hide to the system tray rather than minimizing to the
+                    // taskbar - Deskdrop.Tray (see App.xaml.cs / TrayService)
+                    // restores the window from here via FindWindow + SW_RESTORE.
+                    _appWindow.Hide();
                 }
             };
 

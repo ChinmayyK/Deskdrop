@@ -26,7 +26,9 @@ namespace Deskdrop.WinUI
         {
             get
             {
-                return "deskdrop";
+                var localAppData = Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "default";
+                var sanitized = localAppData.Replace('\\', '_').Replace(':', '_');
+                return "deskdrop_" + sanitized;
             }
         }
         private const int    TimeoutMs   = 1000;

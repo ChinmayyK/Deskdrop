@@ -75,6 +75,35 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
+        private void OnForgetDeviceMenuClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
+            {
+                mgr.ForgetPeer(peer.device_id);
+            }
+        }
+
+        private void OnPauseSyncClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
+            {
+                DaemonClient.PauseSyncPeer(peer.device_id);
+            }
+        }
+
+        private void OnResumeSyncClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
+            {
+                DaemonClient.ResumeSyncPeer(peer.device_id);
+            }
+        }
+
+        private void OnDisconnectAllClicked(object sender, RoutedEventArgs e)
+        {
+            DaemonClient.DisconnectAllPeers();
+        }
+
         private void OnScanNearbyClicked(object sender, RoutedEventArgs e)
         {
             mgr.UpdateStateFromDaemon();
@@ -149,6 +178,22 @@ namespace Deskdrop.WinUI.Views
             {
                 DaemonClient.StartSpeedTest(peer.device_id, 10);
                 DashboardWindow.Current?.NavigateTo("Transfers");
+            }
+        }
+
+        private void OnViewCameraClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
+            {
+                try
+                {
+                    var cameraWindow = new CameraPreviewWindow(peer.device_id);
+                    cameraWindow.Activate();
+                }
+                catch (Exception ex)
+                {
+                    App.HandleError(ex);
+                }
             }
         }
 
