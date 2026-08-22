@@ -23,9 +23,7 @@
             <NavigationView.PaneHeader>
                 <Grid Height="48" VerticalAlignment="Top">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="14,8,0,0">
-                        <Border Width="24" Height="24" CornerRadius="6" Background="{StaticResource AppAccentBrush}">
-                            <TextBlock Text="⚡" FontSize="13" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <Image Width="24" Height="24" Stretch="Uniform" Source="Assets/Square44x44Logo.scale-200.png"/>
                         <TextBlock Text="Deskdrop" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Grid>

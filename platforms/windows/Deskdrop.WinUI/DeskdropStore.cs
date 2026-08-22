@@ -603,9 +603,22 @@ namespace Deskdrop.WinUI
             StartPolling();
         }
 
+        private System.Threading.Timer? _pollTimer;
+
         private void StartPolling()
         {
             UpdateStateFromDaemon();
+
+            // The native engine starts asynchronously (see App.xaml.cs
+            // OnLaunched Task.Run), so its IPC pipe often isn't up yet for
+            // this first check - a one-shot poll can permanently freeze the
+            // header on "Engine stopped" even once the engine is healthy.
+            // Keep re-checking so the status self-corrects.
+            _pollTimer = new System.Threading.Timer(
+                _ => UpdateStateFromDaemon(),
+                null,
+                TimeSpan.FromSeconds(3),
+                TimeSpan.FromSeconds(5));
         }
 
 
@@ -789,7 +802,7 @@ namespace Deskdrop.WinUI
                     
                     App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                     {
-                        IsDaemonRunning = isRunning;
+                        try { IsDaemonRunning = isRunning; } catch (Exception ex) { App.HandleError(ex); }
                     });
 
                     if (isRunning)
@@ -855,8 +868,12 @@ namespace Deskdrop.WinUI
             {
                 App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                 {
-                    ActivityFeed = new ObservableCollection<ActivityEntry>(entries.OrderByDescending(e => e.timestamp_ms));
-                    OnPropertyChanged(nameof(ActivityCount));
+                    try
+                    {
+                        ActivityFeed = new ObservableCollection<ActivityEntry>(entries.OrderByDescending(e => e.timestamp_ms));
+                        OnPropertyChanged(nameof(ActivityCount));
+                    }
+                    catch (Exception ex) { App.HandleError(ex); }
                 });
             }
         }
@@ -868,8 +885,12 @@ namespace Deskdrop.WinUI
             {
                 App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                 {
-                    PendingClipboards = new ObservableCollection<PendingClipboard>(clips.OrderByDescending(c => c.timestamp_ms));
-                    NotifyPendingClipboardMetrics();
+                    try
+                    {
+                        PendingClipboards = new ObservableCollection<PendingClipboard>(clips.OrderByDescending(c => c.timestamp_ms));
+                        NotifyPendingClipboardMetrics();
+                    }
+                    catch (Exception ex) { App.HandleError(ex); }
                 });
             }
         }
@@ -919,6 +940,8 @@ namespace Deskdrop.WinUI
 
             App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
             {
+                try
+                {
                 if (newPeers != null)
                 {
                     Peers = new ObservableCollection<PeerViewModel>(newPeers);
@@ -1008,6 +1031,8 @@ namespace Deskdrop.WinUI
                 {
                     ActiveCall = null;
                 }
+                }
+                catch (Exception ex) { App.HandleError(ex); }
             });
         }
 

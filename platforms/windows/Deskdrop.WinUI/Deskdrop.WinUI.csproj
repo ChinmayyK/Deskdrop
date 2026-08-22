@@ -17,6 +17,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Deskdrop</AssemblyName>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
@@ -107,7 +108,10 @@
   -->
   <Target Name="CopyTrayApp" AfterTargets="Build;Publish">
     <ItemGroup>
-      <TrayAppFiles Include="..\Deskdrop.Tray\bin\$(Configuration)\net8.0-windows10.0.26100.0\**\*.*" />
+      <!-- Deskdrop.Tray now builds self-contained win-x64, so its output lives
+           in a win-x64\ RID subfolder; point straight at it so files land
+           flat in tray\, where EnsureTrayProcessRunning() looks for them. -->
+      <TrayAppFiles Include="..\Deskdrop.Tray\bin\$(Configuration)\net8.0-windows10.0.26100.0\win-x64\**\*.*" />
     </ItemGroup>
     <Copy SourceFiles="@(TrayAppFiles)" DestinationFolder="$(OutDir)tray\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'@(TrayAppFiles)' != ''" />
     <Copy SourceFiles="@(TrayAppFiles)" DestinationFolder="$(PublishDir)tray\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and '@(TrayAppFiles)' != ''" />

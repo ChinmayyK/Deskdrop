@@ -103,6 +103,7 @@ namespace Deskdrop.WinUI.Services
                         }
                     }
                 }
+                catch (Exception ex) { App.HandleError(ex); }
                 finally
                 {
                     NativeCore.deskdrop_free_event(ev);

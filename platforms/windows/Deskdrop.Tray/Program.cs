@@ -21,6 +21,37 @@ namespace Deskdrop.Tray
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern IntPtr FindWindowW(string? lpClassName, string? lpWindowName);
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int RegisterWindowMessage(string lpString);
+
+        // Hidden message-only window so the tray icon can survive
+        // explorer.exe crashing/restarting: Windows broadcasts
+        // "TaskbarCreated" to every top-level window when a new taskbar
+        // is created, which is the documented way to know your icon was
+        // wiped and needs to be re-added.
+        private sealed class TrayMessageWindow : NativeWindow
+        {
+            private readonly int _taskbarCreatedMsg;
+            private readonly Action _onTaskbarCreated;
+
+            public TrayMessageWindow(Action onTaskbarCreated)
+            {
+                _taskbarCreatedMsg = RegisterWindowMessage("TaskbarCreated");
+                _onTaskbarCreated = onTaskbarCreated;
+                CreateHandle(new CreateParams());
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                if (_taskbarCreatedMsg != 0 && m.Msg == _taskbarCreatedMsg)
+                {
+                    try { _onTaskbarCreated(); } catch { }
+                }
+                base.WndProc(ref m);
+            }
+        }
+
+        private static TrayMessageWindow? _messageWindow;
         private static string _logPath = "";
 
         private static void Log(string msg)
@@ -40,22 +71,12 @@ namespace Deskdrop.Tray
             catch { }
         }
 
-        [STAThread]
-        public static void Main()
+        private static Icon LoadTrayIcon()
         {
-            Log("=== Deskdrop.Tray starting ===");
-            Log($"PID: {Environment.ProcessId}");
-            Log($"BaseDirectory: {AppContext.BaseDirectory}");
-
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
-            var notifyIcon = new NotifyIcon();
-
-            // Try loading icon from file, fall back to a very visible system icon
-            Icon? appIcon = null;
             var baseDir = AppContext.BaseDirectory;
             string[] iconCandidates = {
+                Path.Combine(baseDir, "Assets", "TrayIcon.ico"),
+                Path.Combine(baseDir, "TrayIcon.ico"),
                 Path.Combine(baseDir, "Assets", "AppIcon.ico"),
                 Path.Combine(baseDir, "AppIcon.ico"),
                 Path.Combine(baseDir, "Assets", "dark_logo.ico"),
@@ -68,9 +89,9 @@ namespace Deskdrop.Tray
                 {
                     try
                     {
-                        appIcon = new Icon(path, SystemInformation.SmallIconSize);
+                        var icon = new Icon(path, SystemInformation.SmallIconSize);
                         Log($"Loaded icon from: {path}");
-                        break;
+                        return icon;
                     }
                     catch (Exception ex)
                     {
@@ -79,17 +100,39 @@ namespace Deskdrop.Tray
                 }
             }
 
-            if (appIcon != null)
-            {
-                notifyIcon.Icon = appIcon;
-            }
-            else
-            {
-                Log("No icon file found, using SystemIcons.Shield");
-                notifyIcon.Icon = SystemIcons.Shield;
-            }
+            Log("No icon file found, using SystemIcons.Shield");
+            return SystemIcons.Shield;
+        }
 
+        [STAThread]
+        public static void Main()
+        {
+            Log("=== Deskdrop.Tray starting ===");
+            Log($"PID: {Environment.ProcessId}");
+            Log($"BaseDirectory: {AppContext.BaseDirectory}");
+
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            // Catch exceptions from UI-thread event handlers (menu clicks,
+            // tray clicks) here instead of letting them crash the process -
+            // this helper must never disappear.
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += (s, e) => Log($"ThreadException (swallowed): {e.Exception}");
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+                Log($"UnhandledException (terminating={e.IsTerminating}): {e.ExceptionObject}");
+
+            var notifyIcon = new NotifyIcon();
+            notifyIcon.Icon = LoadTrayIcon();
             notifyIcon.Text = "Deskdrop";
+
+            _messageWindow = new TrayMessageWindow(() =>
+            {
+                Log("TaskbarCreated received (explorer restarted) - re-adding tray icon");
+                notifyIcon.Visible = false;
+                notifyIcon.Icon = LoadTrayIcon();
+                notifyIcon.Visible = true;
+            });
 
             // Context menu
             var menu = new ContextMenuStrip();
@@ -183,43 +226,50 @@ namespace Deskdrop.Tray
 
         private static void OpenDeskdropWindow()
         {
-            var baseDir = AppContext.BaseDirectory;
-            var exePath = Path.Combine(baseDir, "..", "Deskdrop.exe");
-            if (!File.Exists(exePath))
-                exePath = Path.Combine(baseDir, "Deskdrop.exe");
-
-            var procs = Process.GetProcessesByName("Deskdrop");
-            if (procs.Length > 0)
+            try
             {
-                IntPtr hWnd = IntPtr.Zero;
-                foreach (var p in procs)
+                var baseDir = AppContext.BaseDirectory;
+                var exePath = Path.Combine(baseDir, "..", "Deskdrop.exe");
+                if (!File.Exists(exePath))
+                    exePath = Path.Combine(baseDir, "Deskdrop.exe");
+
+                var procs = Process.GetProcessesByName("Deskdrop");
+                if (procs.Length > 0)
                 {
-                    if (p.MainWindowHandle != IntPtr.Zero)
+                    IntPtr hWnd = IntPtr.Zero;
+                    foreach (var p in procs)
                     {
-                        hWnd = p.MainWindowHandle;
-                        break;
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                        {
+                            hWnd = p.MainWindowHandle;
+                            break;
+                        }
+                    }
+                    if (hWnd == IntPtr.Zero)
+                        hWnd = FindWindowW(null, "Deskdrop");
+                    if (hWnd == IntPtr.Zero)
+                        hWnd = FindWindowW(null, "DeskDrop Dashboard");
+
+                    if (hWnd != IntPtr.Zero)
+                    {
+                        ShowWindow(hWnd, 9);
+                        SetForegroundWindow(hWnd);
+                        return;
                     }
                 }
-                if (hWnd == IntPtr.Zero)
-                    hWnd = FindWindowW(null, "Deskdrop");
-                if (hWnd == IntPtr.Zero)
-                    hWnd = FindWindowW(null, "DeskDrop Dashboard");
 
-                if (hWnd != IntPtr.Zero)
+                if (File.Exists(exePath))
                 {
-                    ShowWindow(hWnd, 9);
-                    SetForegroundWindow(hWnd);
-                    return;
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = Path.GetFullPath(exePath),
+                        UseShellExecute = true
+                    });
                 }
             }
-
-            if (File.Exists(exePath))
+            catch (Exception ex)
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = Path.GetFullPath(exePath),
-                    UseShellExecute = true
-                });
+                Log($"OpenDeskdropWindow failed: {ex.Message}");
             }
         }
     }

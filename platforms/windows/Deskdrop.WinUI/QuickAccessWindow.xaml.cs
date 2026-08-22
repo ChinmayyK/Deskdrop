@@ -35,6 +35,7 @@ namespace Deskdrop.WinUI
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+            Deskdrop.WinUI.Services.WindowIconHelper.Apply(appWindow);
             appWindow.Resize(new Windows.Graphics.SizeInt32(360, 600));
 
             TimelineList.ItemsSource = DeskdropStore.Shared.History;

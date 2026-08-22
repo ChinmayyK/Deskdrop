@@ -27,8 +27,15 @@ namespace Deskdrop.WinUI
             System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DashboardWindow HWND=0x" + hwnd.ToString("X") + "\n");
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+            Deskdrop.WinUI.Services.WindowIconHelper.Apply(_appWindow);
             _appWindow.Title = "Deskdrop";
-            _appWindow.IsShownInSwitchers = true;
+            // Deskdrop lives in the system tray, not the taskbar/alt-tab -
+            // it's opened via the tray icon (see TrayService/App.xaml.cs).
+            // IsShownInSwitchers alone doesn't reliably drop the taskbar
+            // button for an unowned top-level window, so also apply the
+            // classic WS_EX_TOOLWINDOW/~WS_EX_APPWINDOW combination directly.
+            _appWindow.IsShownInSwitchers = false;
+            HideFromTaskbar(hwnd);
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(AppTitleBar);
@@ -63,6 +70,40 @@ namespace Deskdrop.WinUI
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private const int GWL_EXSTYLE = -20;
+        private const long WS_EX_TOOLWINDOW = 0x00000080;
+        private const long WS_EX_APPWINDOW = 0x00040000;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", SetLastError = true)]
+        private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+        private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtr", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+        private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        private static long GetWindowLongSafe(IntPtr hWnd, int nIndex) =>
+            IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex).ToInt64() : GetWindowLong32(hWnd, nIndex);
+
+        private static void SetWindowLongSafe(IntPtr hWnd, int nIndex, long newLong)
+        {
+            if (IntPtr.Size == 8) SetWindowLongPtr64(hWnd, nIndex, new IntPtr(newLong));
+            else SetWindowLong32(hWnd, nIndex, (int)newLong);
+        }
+
+        private static void HideFromTaskbar(IntPtr hwnd)
+        {
+            try
+            {
+                var exStyle = GetWindowLongSafe(hwnd, GWL_EXSTYLE);
+                exStyle |= WS_EX_TOOLWINDOW;
+                exStyle &= ~WS_EX_APPWINDOW;
+                SetWindowLongSafe(hwnd, GWL_EXSTYLE, exStyle);
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+        }
 
         public static Microsoft.UI.Xaml.Media.Brush GetBrushFromHex(string hex)
         {
