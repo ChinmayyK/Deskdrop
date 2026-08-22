@@ -1,6 +1,8 @@
 use crate::activity::ActivityFeed;
 use crate::dedup::hash_content;
 use crate::discovery::{Discovery, PeerEvent, PeerInfo};
+use crate::discovery_manager::{DiscoveryEvent, DiscoveryManager};
+use crate::lan_probe::spawn_lan_probe;
 use crate::file_transfer::{default_save_dir, FileTransferManager};
 use crate::identity::IdentityStore;
 use crate::mesh::{ClipboardApplyPolicy, MeshRouter};
@@ -720,6 +722,7 @@ impl Engine {
         spawn_listener_supervisor(shared.clone(), listener_rx);
         if let Some((_, discovery_rx)) = discovery_pair {
             spawn_discovery_supervisor(shared.clone(), discovery_rx);
+            spawn_firewall_free_discovery(shared.clone());
         }
 
         let initial_bind = {
@@ -3003,6 +3006,47 @@ fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Disco
     });
 }
 
+/// Spawn the firewall-free discovery pipeline: active outbound-only probing
+/// that keeps working even when the OS firewall silently blocks unsolicited
+/// inbound traffic (mDNS replies, UDP beacon replies) on locked-down
+/// networks with no admin rights available to add an exception.
+///
+/// This is purely additive alongside `spawn_discovery_supervisor`'s mDNS
+/// path — on networks where mDNS already works fine, this just finds the
+/// same peers a second way and does nothing extra once they're connected.
+fn spawn_firewall_free_discovery(shared: EngineShared) {
+    let (manager, discovery_handle, mut output_rx) = DiscoveryManager::new(shared.config.device_id);
+    tokio::spawn(manager.run());
+
+    spawn_lan_probe(shared.config.port, discovery_handle);
+
+    tokio::spawn(async move {
+        while let Some(event) = output_rx.recv().await {
+            match event {
+                DiscoveryEvent::PeerAppeared(peer) | DiscoveryEvent::PeerUpdated(peer) => {
+                    if let Err(err) = on_peer_found_via(
+                        shared.clone(),
+                        peer.device_id,
+                        peer.device_name,
+                        peer.addrs,
+                        peer.port,
+                        peer.source,
+                    )
+                    .await
+                    {
+                        warn!(error = %err, "firewall-free discovery connect failed");
+                    }
+                }
+                DiscoveryEvent::PeerDisappeared { .. } => {
+                    // Active probes are re-swept periodically; a stale entry
+                    // simply won't be re-reported. Nothing to do here — the
+                    // mDNS path already owns disconnect/lost-peer handling.
+                }
+            }
+        }
+    });
+}
+
 async fn run_server_loop(shared: EngineShared, server: Server) {
     loop {
         match server.accept().await {
@@ -3305,29 +3349,79 @@ fn peer_display_rank(
 }
 
 async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
-    let trusted = shared.trust.lock().await.is_trusted(peer.device_id);
+    on_peer_found_via(
+        shared,
+        peer.device_id,
+        peer.device_name,
+        peer.addrs,
+        peer.port,
+        DiscoverySource::Mdns,
+    )
+    .await
+}
 
-    for ip in peer.addrs {
-        let addr = SocketAddr::new(ip, peer.port);
+/// Shared handling for any discovery layer: upsert the peer record and,
+/// if appropriate, kick off a connection attempt. `source` records which
+/// layer produced this sighting (mDNS, UDP beacon, active LAN probe, ...).
+async fn on_peer_found_via(
+    shared: EngineShared,
+    device_id: Uuid,
+    device_name: String,
+    addrs: Vec<IpAddr>,
+    port: u16,
+    source: DiscoverySource,
+) -> Result<()> {
+    // Probe-based layers (LanProbe, HotspotProbe) only confirm that *something*
+    // accepts a TCP connection on the port — the real device identity isn't
+    // known until the handshake completes, so `device_id` here is a synthetic
+    // placeholder derived from the IP. `connect_once` enforces that the
+    // handshake's peer ID matches `expected_device_id`, so passing the
+    // placeholder would make it reject every single connection as an
+    // "identity changed" mismatch. Treat these exactly like a manual
+    // "connect to this address, whoever answers" attempt instead.
+    if matches!(
+        source,
+        DiscoverySource::LanProbe | DiscoverySource::HotspotProbe
+    ) {
+        for ip in addrs {
+            let addr = SocketAddr::new(ip, port);
+            if !mark_probe_connect_inflight(addr) {
+                continue; // already attempting this address
+            }
+            let shared_clone = shared.clone();
+            tokio::spawn(async move {
+                if let Err(err) = connect_loop(shared_clone, vec![addr], None, source).await {
+                    warn!(addr = %addr, error = %err, "probe-discovered peer connection failed");
+                }
+                clear_probe_connect_inflight(addr);
+            });
+        }
+        return Ok(());
+    }
+
+    let trusted = shared.trust.lock().await.is_trusted(device_id);
+
+    for ip in addrs {
+        let addr = SocketAddr::new(ip, port);
 
         let _ = shared.peer_manager.upsert_peer(
-            peer.device_id,
-            peer.device_name.clone(),
+            device_id,
+            device_name.clone(),
             addr,
             trusted,
-            DiscoverySource::Mdns,
+            source,
         );
 
-        if !should_initiate_session(&shared, peer.device_id, DiscoverySource::Mdns).await {
+        if !should_initiate_session(&shared, device_id, source).await {
             continue;
         }
 
-        if shared.peer_manager.live_endpoint(peer.device_id) == Some(addr) {
+        if shared.peer_manager.live_endpoint(device_id) == Some(addr) {
             continue;
         }
 
         if matches!(
-            shared.peer_manager.get(peer.device_id),
+            shared.peer_manager.get(device_id),
             Some(record)
                 if record.status == PeerConnectionState::Connecting
                     && record.socket_addrs().contains(&addr)
@@ -3337,15 +3431,10 @@ async fn on_peer_found(shared: EngineShared, peer: PeerInfo) -> Result<()> {
 
         let shared_clone = shared.clone();
         tokio::spawn(async move {
-            if let Err(err) = connect_loop(
-                shared_clone,
-                vec![addr],
-                Some(peer.device_id),
-                DiscoverySource::Mdns,
-            )
-            .await
+            if let Err(err) =
+                connect_loop(shared_clone, vec![addr], Some(device_id), source).await
             {
-                warn!(peer_id = %peer.device_id, error = %err, "discovered peer connection failed");
+                warn!(peer_id = %device_id, error = %err, "discovered peer connection failed");
             }
         });
     }
@@ -6202,6 +6291,22 @@ fn register_session(
     Ok(())
 }
 
+/// Addresses currently being connected to via a probe-discovered (unconfirmed
+/// identity) sighting. Prevents a slow handshake from overlapping with the
+/// next sweep's rediscovery of the same address before it resolves.
+fn probe_connect_inflight() -> &'static dashmap::DashSet<SocketAddr> {
+    static SET: std::sync::OnceLock<dashmap::DashSet<SocketAddr>> = std::sync::OnceLock::new();
+    SET.get_or_init(dashmap::DashSet::new)
+}
+
+fn mark_probe_connect_inflight(addr: SocketAddr) -> bool {
+    probe_connect_inflight().insert(addr)
+}
+
+fn clear_probe_connect_inflight(addr: SocketAddr) {
+    probe_connect_inflight().remove(&addr);
+}
+
 async fn should_initiate_session(
     shared: &EngineShared,
     peer_id: Uuid,
@@ -6219,7 +6324,8 @@ async fn should_initiate_session(
         | DiscoverySource::Unknown
         | DiscoverySource::UdpBeacon
         | DiscoverySource::UdpMulticast
-        | DiscoverySource::HotspotProbe => {
+        | DiscoverySource::HotspotProbe
+        | DiscoverySource::LanProbe => {
             // Both sides attempt connection eagerly. If both succeed, the
             // lower-ID peer's session wins via replace_live_session (the
             // existing dedup logic). This is critical for asymmetric routing

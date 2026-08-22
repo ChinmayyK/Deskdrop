@@ -49,6 +49,12 @@ pub enum DiscoverySource {
     UdpMulticast,
     /// Discovered via hotspot gateway probing (Android/iPhone hotspot).
     HotspotProbe,
+    /// Discovered via active outbound TCP connect sweep of the local subnet.
+    /// Unlike mDNS/UDP beacons, this never listens for unsolicited inbound
+    /// traffic, so it keeps working even when a firewall policy blocks that
+    /// (e.g. locked-down corporate networks) without requiring any firewall
+    /// exception or admin rights.
+    LanProbe,
     #[default]
     Unknown,
 }

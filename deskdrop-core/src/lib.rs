@@ -44,6 +44,7 @@ pub mod history;
 pub mod hotspot_probe;
 pub mod identity;
 pub mod ipc;
+pub mod lan_probe;
 pub mod mesh;
 pub mod metrics;
 pub mod network;

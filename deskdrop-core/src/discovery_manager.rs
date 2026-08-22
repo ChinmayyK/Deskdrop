@@ -40,6 +40,9 @@ pub fn staleness_timeout(source: DiscoverySource) -> Duration {
         // Hotspot probes are short-lived — we re-probe frequently because
         // the hotspot host may change IPs or go away without notice.
         DiscoverySource::HotspotProbe => Duration::from_secs(6),
+        // LAN sweeps run on a slower cadence than hotspot probes (see
+        // `lan_probe.rs`), so give results a longer runway before eviction.
+        DiscoverySource::LanProbe => Duration::from_secs(45),
         DiscoverySource::Manual => Duration::from_secs(u64::MAX), // never expires
         DiscoverySource::Unknown => Duration::from_secs(15),
     }
@@ -180,9 +183,10 @@ impl MergedPeer {
                 DiscoverySource::Manual => 0,
                 DiscoverySource::Mdns => 1,
                 DiscoverySource::HotspotProbe => 2,
-                DiscoverySource::UdpBeacon => 3,
-                DiscoverySource::UdpMulticast => 4,
-                DiscoverySource::Unknown => 5,
+                DiscoverySource::LanProbe => 3,
+                DiscoverySource::UdpBeacon => 4,
+                DiscoverySource::UdpMulticast => 5,
+                DiscoverySource::Unknown => 6,
             }
         };
         let mut sorted = self.sources.clone();
@@ -237,6 +241,12 @@ impl MergedPeer {
             .any(|s| s.source == DiscoverySource::HotspotProbe)
         {
             DiscoverySource::HotspotProbe
+        } else if self
+            .sources
+            .iter()
+            .any(|s| s.source == DiscoverySource::LanProbe)
+        {
+            DiscoverySource::LanProbe
         } else if self
             .sources
             .iter()
