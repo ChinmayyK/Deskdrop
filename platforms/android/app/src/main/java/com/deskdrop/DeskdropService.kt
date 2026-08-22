@@ -527,8 +527,11 @@ class DeskdropService : Service() {
                 if (!ip.isNullOrBlank()) {
                     if (engineHandle != 0L) {
                         println("DeskdropService_DEBUG: Triggering connectToPeer immediately")
-                        val result = DeskdropJni.connectToPeer(engineHandle, ip, port)
-                        Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
+                        val h = engineHandle
+                        serviceScope.launch {
+                            val result = DeskdropJni.connectToPeer(h, ip, port)
+                            Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
+                        }
                     } else {
                         println("DeskdropService_DEBUG: Engine not ready, queuing manual connect to $ip:$port")
                         Log.i(TAG, "Engine not ready, queuing manual connect to $ip:$port")
@@ -541,9 +544,12 @@ class DeskdropService : Service() {
             ACTION_RECONNECT_PEER -> {
                 val targetId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID)
                 if (!targetId.isNullOrBlank() && engineHandle != 0L) {
-                    DeskdropJni.reconnectPeer(engineHandle, targetId)
-                    restartDiscoveryNow()
-                    Log.i(TAG, "Reconnecting to peer $targetId & restarted discovery")
+                    val h = engineHandle
+                    serviceScope.launch {
+                        DeskdropJni.reconnectPeer(h, targetId)
+                        restartDiscoveryNow()
+                        Log.i(TAG, "Reconnecting to peer $targetId & restarted discovery")
+                    }
                 } else {
                     Log.e(TAG, "Failed to reconnect: targetId=$targetId, engineHandle=$engineHandle")
                 }
@@ -557,9 +563,11 @@ class DeskdropService : Service() {
                 val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
                 val h = engineHandle
                 if (h != 0L) {
-                    val result = DeskdropJni.forgetPeer(h, deviceId)
-                    Log.i(TAG, "Manual forget request for $deviceId: result=$result")
-                    persistStatus()
+                    serviceScope.launch {
+                        val result = DeskdropJni.forgetPeer(h, deviceId)
+                        Log.i(TAG, "Manual forget request for $deviceId: result=$result")
+                        persistStatus()
+                    }
                 }
                 // Also eagerly remove from shared preferences so UI updates immediately
                 val prefs = prefs()
@@ -585,9 +593,11 @@ class DeskdropService : Service() {
                 val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
                 val h = engineHandle
                 if (h != 0L) {
-                    val result = DeskdropJni.sendPairingRequest(h, deviceId)
-                    Log.i(TAG, "Manual pairing request for $deviceId: result=$result")
-                    persistStatus()
+                    serviceScope.launch {
+                        val result = DeskdropJni.sendPairingRequest(h, deviceId)
+                        Log.i(TAG, "Manual pairing request for $deviceId: result=$result")
+                        persistStatus()
+                    }
                 }
                 return START_STICKY
             }
@@ -596,17 +606,19 @@ class DeskdropService : Service() {
                 val accepted = intent?.getBooleanExtra(PairingActivity.EXTRA_APPROVED, false) ?: false
                 val h = engineHandle
                 if (h != 0L) {
-                    val result = DeskdropJni.respondToPairing(h, deviceId, accepted)
-                    Log.i(TAG, "Pairing response for $deviceId accepted=$accepted result=$result")
-                    persistStatus()
-                    notificationManager.cancel(NOTIF_ID_TOFU)
-                    sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
-                    if (accepted) {
-                        runCatching {
-                            val toDashboard = Intent(this@DeskdropService, MainActivity::class.java).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    serviceScope.launch {
+                        val result = DeskdropJni.respondToPairing(h, deviceId, accepted)
+                        Log.i(TAG, "Pairing response for $deviceId accepted=$accepted result=$result")
+                        persistStatus()
+                        notificationManager.cancel(NOTIF_ID_TOFU)
+                        sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
+                        if (accepted) {
+                            runCatching {
+                                val toDashboard = Intent(this@DeskdropService, MainActivity::class.java).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                }
+                                startActivity(toDashboard)
                             }
-                            startActivity(toDashboard)
                         }
                     }
                 }
@@ -616,9 +628,11 @@ class DeskdropService : Service() {
                 val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
                 val h = engineHandle
                 if (h != 0L) {
-                    val result = DeskdropJni.disconnectPeer(h, deviceId)
-                    Log.i(TAG, "Manual disconnect request for $deviceId: result=$result")
-                    persistStatus()
+                    serviceScope.launch {
+                        val result = DeskdropJni.disconnectPeer(h, deviceId)
+                        Log.i(TAG, "Manual disconnect request for $deviceId: result=$result")
+                        persistStatus()
+                    }
                 }
                 return START_STICKY
             }
@@ -2473,9 +2487,11 @@ class DeskdropService : Service() {
         val deviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return
         val h = engineHandle
         if (h != 0L) {
-            val result = DeskdropJni.trustPeer(h, deviceId)
-            Log.i(TAG, "Manual trust request for $deviceId: result=$result")
-            persistStatus()
+            serviceScope.launch {
+                val result = DeskdropJni.trustPeer(h, deviceId)
+                Log.i(TAG, "Manual trust request for $deviceId: result=$result")
+                persistStatus()
+            }
         }
     }
 
@@ -2486,12 +2502,14 @@ class DeskdropService : Service() {
         if (h != 0L) {
             val ip = intent.getStringExtra("ip")
             val port = intent.getIntExtra("port", 47823)
-            if (ip != null && ip.isNotBlank()) {
-                DeskdropJni.connectToPeer(h, ip, port)
+            serviceScope.launch {
+                if (ip != null && ip.isNotBlank()) {
+                    DeskdropJni.connectToPeer(h, ip, port)
+                }
+                val result = DeskdropJni.trustPeerFromQr(h, deviceId, token)
+                Log.i(TAG, "QR trust request for $deviceId: result=$result")
+                persistStatus()
             }
-            val result = DeskdropJni.trustPeerFromQr(h, deviceId, token)
-            Log.i(TAG, "QR trust request for $deviceId: result=$result")
-            persistStatus()
         }
     }
 
@@ -2499,9 +2517,11 @@ class DeskdropService : Service() {
         val deviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return
         val h = engineHandle
         if (h != 0L) {
-            val result = DeskdropJni.rejectPeer(h, deviceId)
-            Log.i(TAG, "Manual reject request for $deviceId: result=$result")
-            persistStatus()
+            serviceScope.launch {
+                val result = DeskdropJni.rejectPeer(h, deviceId)
+                Log.i(TAG, "Manual reject request for $deviceId: result=$result")
+                persistStatus()
+            }
         }
     }
 
