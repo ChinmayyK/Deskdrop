@@ -1,4 +1,4 @@
-# Rust build artifacts
+﻿# Rust build artifacts
 target/
 **/*.rs.bk
 # Cargo.lock is committed for this workspace to ensure reproducible CI builds
@@ -22,6 +22,7 @@ obj/
 *.sln.docstates
 platforms/windows/**/bin/
 platforms/windows/**/obj/
+platforms/windows/**/deskdrop_core.dll
 *.msi
 
 # Allow Rust source bins under deskdrop-core
@@ -34,7 +35,9 @@ platforms/windows/**/obj/
 *.ap_
 *.dex
 platforms/android/.gradle/
+platforms/android/**/build/
 platforms/android/app/build/
+platforms/android/benchmark/build/
 platforms/android/local.properties
 *.hprof
 
@@ -42,14 +45,19 @@ platforms/android/local.properties
 *.deb
 *.rpm
 
-# Editor
+# Editor & AI Assistants
 .idea/
 .vscode/
+.claude/
+.gemini/
+.cursor/
+.agents/
+.copilot/
 *.swp
 *.swo
 *~
 
-# Secrets / keys — never commit these
+# Secrets / keys - never commit these
 *.pem
 *.key
 *.p12
@@ -58,6 +66,9 @@ platforms/android/local.properties
 *.jks
 trust.json
 settings.json
+
+# Diagnostics / Bugreports
+bugreport-*.zip
 
 # Logs
 *.log
