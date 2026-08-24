@@ -440,22 +440,52 @@ fun HomeTab(
                     color = CRTheme.textHigh(isDark)
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     var showQrDialog by remember { mutableStateOf(false) }
 
-                    // Show QR Code Action
                     Row(
                         modifier = Modifier
-                            .crPressScale(0.95f)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(20.dp))
                             .clickable { showQrDialog = true }
-                            .minimumInteractiveComponentSize()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.QrCode, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
+                        Icon(imageVector = Icons.Default.QrCode, contentDescription = null, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Show QR", style = CRTypography.caption, color = CRTheme.blueSoft)
+                        Text("Show", style = CRTypography.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = CRTheme.textHigh(isDark), maxLines = 1, softWrap = false)
+                    }
+
+                    Box(modifier = Modifier.width(1.dp).height(16.dp).background(CRTheme.stroke(isDark).copy(alpha = 0.5f)))
+
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable { onActionPairMagicLink() }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = null, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Scan", style = CRTypography.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = CRTheme.textHigh(isDark), maxLines = 1, softWrap = false)
+                    }
+                    
+                    Box(modifier = Modifier.width(1.dp).height(16.dp).background(CRTheme.stroke(isDark).copy(alpha = 0.5f)))
+                    
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable { onManualIp() }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.Language, contentDescription = null, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("IP", style = CRTypography.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = CRTheme.textHigh(isDark), maxLines = 1, softWrap = false)
                     }
 
                     if (showQrDialog) {
@@ -481,11 +511,13 @@ fun HomeTab(
                                                     }
                                                 }
                                                 bitmap = bmp
-                                            } catch (e: Exception) { bitmap = null }
+                                            } catch (e: Exception) {
+                                                e.printStackTrace()
+                                            }
                                         }
                                     }
-                                    val localBitmap = bitmap
-                                    if (localBitmap != null) {
+                                    if (bitmap != null) {
+                                        val localBitmap = bitmap!!
                                         androidx.compose.foundation.Image(
                                             bitmap = localBitmap.asImageBitmap(),
                                             contentDescription = "QR Code",
@@ -497,44 +529,9 @@ fun HomeTab(
                                 }
                             },
                             confirmButton = {
-                                TextButton(onClick = { showQrDialog = false }) { Text("Close") }
+                                androidx.compose.material3.TextButton(onClick = { showQrDialog = false }) { Text("Close") }
                             }
                         )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Inline Add Action (Scan QR)
-                    Row(
-                        modifier = Modifier
-                            .crPressScale(0.95f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onActionPairMagicLink() }
-                            .minimumInteractiveComponentSize()
-                            .background(CRTheme.brandElectric.copy(alpha = 0.15f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = null, tint = CRTheme.brandElectric, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Scan QR", style = CRTypography.caption, color = CRTheme.brandElectric)
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Manual IP Action
-                    Row(
-                        modifier = Modifier
-                            .crPressScale(0.95f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onManualIp() }
-                            .minimumInteractiveComponentSize()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(imageVector = Icons.Default.Language, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("IP", style = CRTypography.caption, color = CRTheme.blueSoft)
                     }
                 }
             }
@@ -542,19 +539,35 @@ fun HomeTab(
             Spacer(modifier = Modifier.height(12.dp)) // Related gap
 
             if (!quickContextText.isNullOrBlank()) {
-                androidx.compose.material3.Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = CRTheme.surfaceElevated(isDark))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                        .crGlassCard(isDark = isDark, cornerRadius = 24.dp, elevated = true)
+                        .padding(20.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("JUST COPIED", style = CRTypography.caption, color = CRTheme.blueSoft)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(quickContextText, maxLines = 2, overflow = TextOverflow.Ellipsis, color = CRTheme.textHigh(isDark))
-                        Spacer(modifier = Modifier.height(12.dp))
-                        androidx.compose.material3.Button(onClick = onActionSendQuickContext, modifier = Modifier.fillMaxWidth()) {
-                            Text("Send to Ecosystem")
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, tint = CRTheme.brandElectric, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("JUST COPIED", style = CRTypography.label, color = CRTheme.brandElectric)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(quickContextText, maxLines = 2, overflow = TextOverflow.Ellipsis, style = CRTypography.bodyMedium, color = CRTheme.textHigh(isDark), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onActionSendQuickContext() }
+                            .background(CRTheme.brandElectric)
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Send to Ecosystem", style = CRTypography.label, color = Color.White)
                     }
                 }
             }
@@ -673,8 +686,7 @@ fun QuickActionsGrid(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(if (isDark) Color(0xFF1E1E1E) else Color(0xFFF5F5F5))
+                    .crGlassCard(isDark = isDark, cornerRadius = 24.dp, elevated = true)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -693,21 +705,33 @@ fun QuickActionsGrid(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (index == 0) CRTheme.brandElectric.copy(alpha=0.1f) else Color.Transparent)
-                            .clickable { onApplyClipboard(entry) }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .crGlassCard(
+                                isDark = isDark, 
+                                cornerRadius = 12.dp, 
+                                elevated = index == 0, 
+                                highlighted = index == 0, 
+                                dashed = false, 
+                                onClick = { onApplyClipboard(entry) }
+                            )
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = entry.preview,
+                            text = entry.preview.trimStart(),
                             style = CRTypography.bodyMedium,
-                            color = if (index == 0) CRTheme.brandElectric else CRTheme.textMedium(isDark),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                            color = if (index == 0) CRTheme.brandElectric else CRTheme.textHigh(isDark),
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = CRTheme.textMedium(isDark).copy(alpha=0.5f), modifier = Modifier.size(14.dp))
+                        Icon(
+                            Icons.Default.ContentCopy, 
+                            contentDescription = null, 
+                            tint = if (index == 0) CRTheme.brandElectric else CRTheme.textMedium(isDark), 
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }

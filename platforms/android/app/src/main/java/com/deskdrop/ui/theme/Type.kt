@@ -10,11 +10,15 @@ import com.deskdrop.R
 
 val OutfitFontFamily = FontFamily(
     Font(R.font.outfit_regular, FontWeight.Normal),
+    Font(R.font.outfit_bold, FontWeight.Medium),
+    Font(R.font.outfit_bold, FontWeight.SemiBold),
     Font(R.font.outfit_bold, FontWeight.Bold)
 )
 
 val InterFontFamily = FontFamily(
     Font(R.font.inter_regular, FontWeight.Normal),
+    Font(R.font.inter_bold, FontWeight.Medium),
+    Font(R.font.inter_bold, FontWeight.SemiBold),
     Font(R.font.inter_bold, FontWeight.Bold)
 )
 

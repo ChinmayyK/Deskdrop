@@ -41,19 +41,19 @@ object CRTheme {
     val bgLight = Color(0xFFF5F6FA)
     val bgDark = Color(0xFF000000)
     
-    val surfaceLight = Color.White.copy(alpha = 0.72f)
-    val surfaceDark = Color(0xFF1C1C1E).copy(alpha = 0.72f)
+    val surfaceLight = Color.White.copy(alpha = 0.90f)
+    val surfaceDark = Color(0xFF1C1C1E).copy(alpha = 0.85f)
     
-    val surfaceElevatedLight = Color.White.copy(alpha = 0.9f)
-    val surfaceElevatedDark = Color(0xFF2C2C2E).copy(alpha = 0.9f)
+    val surfaceElevatedLight = Color.White.copy(alpha = 1.0f)
+    val surfaceElevatedDark = Color(0xFF2C2C2E).copy(alpha = 1.0f)
     
     val textHighLight = Color(0xFF111827)
     val textHighDark = Color(0xFFF9FAFB)
-    val textMediumLight = Color(0xFF6B7280)
-    val textMediumDark = Color(0xFFA1A1AA)
+    val textMediumLight = Color(0xFF4B5563) // Darkened for contrast
+    val textMediumDark = Color(0xFFD4D4D8)  // Lightened for contrast
     
-    val strokeLight = Color(0xFFE5E7EB)
-    val strokeDark = Color(0xFF27272A)
+    val strokeLight = Color(0xFFD1D5DB)     // Darkened stroke
+    val strokeDark = Color(0xFF3F3F46)      // Lightened stroke
     
     // STRICT ACCENT PALETTE
     val blueSoft = Color(0xFF0066FF)
@@ -97,7 +97,7 @@ object CRTypography {
     )
     val bodyMedium = TextStyle(
         fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
+        fontWeight = FontWeight.Medium,
         fontSize = 15.sp
     )
     val label = TextStyle(
@@ -108,7 +108,7 @@ object CRTypography {
     )
     val caption = TextStyle(
         fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
+        fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         letterSpacing = 0.3.sp,
         fontFeatureSettings = "tnum"
@@ -205,52 +205,52 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.linearGradient(
-                    colors = if (isDark) {
-                        listOf(Color(0xFF15151A), Color(0xFF0A0A0C), Color(0xFF000000))
-                    } else {
-                        listOf(Color(0xFFE5E5EA), Color(0xFFF2F4F8), Color(0xFFFFFFFF))
-                    },
-                    start = Offset(0f, 0f),
-                    end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                )
+                if (isDark) {
+                    androidx.compose.ui.graphics.SolidColor(Color.Black)
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(Color(0xFFE5E5EA), Color(0xFFF2F4F8), Color(0xFFFFFFFF)),
+                        start = Offset(0f, 0f),
+                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                    )
+                }
             )
     ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            val centerOffset = Offset(size.width * 0.3f, size.height * (0.2f + (breatheShift * 0.1f)))
-            val centerOffset2 = Offset(size.width * 0.8f, size.height * (0.6f - (breatheShift * 0.1f)))
-            
-            if (hasConnectedDevices) {
-                // Orb 1 (Electric Blue)
-                drawCircle(
-                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(electricColor.copy(alpha = if (isDark) 0.2f else 0.15f), Color.Transparent),
-                        center = centerOffset,
-                        radius = size.width * 0.8f
-                    ),
-                    radius = size.width * 0.8f,
-                    center = centerOffset
-                )
-                // Orb 2 (Violet)
-                drawCircle(
-                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(violetColor.copy(alpha = if (isDark) 0.15f else 0.12f), Color.Transparent),
-                        center = centerOffset2,
-                        radius = size.width * 0.7f
-                    ),
-                    radius = size.width * 0.7f,
-                    center = centerOffset2
-                )
-            } else {
-                drawCircle(
-                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf((if (isDark) Color.White else Color.Black).copy(alpha = 0.06f), Color.Transparent),
-                        center = centerOffset,
-                        radius = size.width * 0.8f
-                    ),
-                    radius = size.width * 0.8f,
-                    center = centerOffset
-                )
+        if (!isDark) {
+            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                val centerOffset = Offset(size.width * 0.3f, size.height * (0.2f + (breatheShift * 0.1f)))
+                val centerOffset2 = Offset(size.width * 0.8f, size.height * (0.6f - (breatheShift * 0.1f)))
+                
+                if (hasConnectedDevices) {
+                    drawCircle(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(electricColor.copy(alpha = 0.15f), Color.Transparent),
+                            center = centerOffset,
+                            radius = size.width * 0.8f
+                        ),
+                        radius = size.width * 0.8f,
+                        center = centerOffset
+                    )
+                    drawCircle(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(violetColor.copy(alpha = 0.12f), Color.Transparent),
+                            center = centerOffset2,
+                            radius = size.width * 0.7f
+                        ),
+                        radius = size.width * 0.7f,
+                        center = centerOffset2
+                    )
+                } else {
+                    drawCircle(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.06f), Color.Transparent),
+                            center = centerOffset,
+                            radius = size.width * 0.8f
+                        ),
+                        radius = size.width * 0.8f,
+                        center = centerOffset
+                    )
+                }
             }
         }
         SubtleNoiseOverlay(isDark = isDark)
