@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.8] - 2026-08-24
+### Fixed
+- **Core:** Fixed a bug where untrusted discovery beacons (mDNS/UDP) were incorrectly saved as "remembered" peers, causing phantom devices to appear in the Known Devices list.
+
 ## [1.2.7] - 2026-08-24
 ### Fixed
 - **Core:** Fix intermittent e2e test failure (test_tier4_scenario_device_reconnect_retry).

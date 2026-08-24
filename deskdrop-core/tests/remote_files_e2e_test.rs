@@ -983,7 +983,10 @@ async fn test_tier4_scenario_device_reconnect_retry() {
     let port_a = engine_a.bound_port().await;
 
     // Let engine_b2 connect to engine_a
-    engine_b2.connect_to_peer("127.0.0.1".into(), port_a).await.unwrap();
+    engine_b2
+        .connect_to_peer("127.0.0.1".into(), port_a)
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Retried query should succeed

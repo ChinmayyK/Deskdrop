@@ -1,4 +1,9 @@
-#![allow(dead_code, clippy::type_complexity, clippy::too_many_arguments, clippy::manual_checked_ops)]
+#![allow(
+    dead_code,
+    clippy::type_complexity,
+    clippy::too_many_arguments,
+    clippy::manual_checked_ops
+)]
 //! # deskdrop-core
 //!
 //! Proximity-Based Shared Clipboard — Rust engine library.

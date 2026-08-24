@@ -3403,12 +3403,27 @@ async fn on_peer_found_via(
     for ip in addrs {
         let addr = SocketAddr::new(ip, port);
 
-        let _ =
-            shared
-                .peer_manager
-                .upsert_peer(device_id, device_name.clone(), addr, trusted, source);
+        let record = shared
+            .peer_manager
+            .upsert_peer(device_id, device_name.clone(), addr, trusted, source)
+            .ok();
 
         if !should_initiate_session(&shared, device_id, source).await {
+            continue;
+        }
+
+        // A device we've never paired with (not trusted, not remembered, no
+        // pairing in flight) re-announces itself via mDNS/UDP every few
+        // seconds, re-entering this function each time. Without a cooldown
+        // that spawns an unbounded stream of connect_loop tasks/sockets for
+        // every stranger on the network. Devices we actually have a
+        // relationship with keep the existing eager-retry behavior.
+        let has_relationship = trusted
+            || record
+                .as_ref()
+                .map(|r| r.remembered || r.pairing_requested || r.outgoing_pairing_waiting)
+                .unwrap_or(false);
+        if !has_relationship && !allow_discovery_connect_attempt(device_id, addr) {
             continue;
         }
 
@@ -6300,6 +6315,36 @@ fn mark_probe_connect_inflight(addr: SocketAddr) -> bool {
 
 fn clear_probe_connect_inflight(addr: SocketAddr) {
     probe_connect_inflight().remove(&addr);
+}
+
+/// Cooldown before re-attempting a connection to a discovery-sighted device
+/// we have no relationship with (see `on_peer_found_via`). Bounds how often
+/// we open a socket to a stranger who just happens to be re-announcing
+/// itself on the network.
+const DISCOVERY_CONNECT_COOLDOWN: Duration = Duration::from_secs(60);
+
+fn discovery_connect_attempts() -> &'static dashmap::DashMap<(Uuid, SocketAddr), Instant> {
+    static MAP: std::sync::OnceLock<dashmap::DashMap<(Uuid, SocketAddr), Instant>> =
+        std::sync::OnceLock::new();
+    MAP.get_or_init(dashmap::DashMap::new)
+}
+
+fn allow_discovery_connect_attempt(device_id: Uuid, addr: SocketAddr) -> bool {
+    let map = discovery_connect_attempts();
+    let now = Instant::now();
+    if let Some(last) = map.get(&(device_id, addr)) {
+        if now.duration_since(*last) < DISCOVERY_CONNECT_COOLDOWN {
+            return false;
+        }
+    }
+    // Entries only matter within the cooldown window; opportunistically drop
+    // everything older so this map can't grow unbounded over a long-running
+    // daemon (mirrors the peer_manager 1000-entry cap's intent).
+    if map.len() > 2000 {
+        map.retain(|_, last| now.duration_since(*last) < DISCOVERY_CONNECT_COOLDOWN);
+    }
+    map.insert((device_id, addr), now);
+    true
 }
 
 async fn should_initiate_session(

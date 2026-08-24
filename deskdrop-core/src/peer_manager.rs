@@ -280,6 +280,20 @@ impl PeerManager {
             peer.status = PeerConnectionState::Disconnected;
         }
 
+        // One-time migration: a prior bug (see upsert_peer_ext) hard-coded
+        // `remembered: true` on every bare mDNS/UDP sighting, so peer stores
+        // written before this fix are full of phantom "known" devices that
+        // were never actually paired. Correct that on load: `remembered`
+        // should only be true if the peer has an actual relationship with
+        // the user (trusted, or pairing is currently in flight) - the same
+        // invariant `upsert_peer_ext` now maintains for newly-discovered
+        // peers going forward.
+        for peer in store.peers.values_mut() {
+            if !peer.trusted && !peer.pairing_requested && !peer.outgoing_pairing_waiting {
+                peer.remembered = false;
+            }
+        }
+
         let store_dashmap = dashmap::DashMap::new();
         for (k, v) in store.peers {
             store_dashmap.insert(k, v);
@@ -396,7 +410,12 @@ impl PeerManager {
                 ips: vec![endpoint.ip()],
                 port: endpoint.port(),
                 trusted,
-                remembered: true,
+                // A bare discovery sighting (mDNS/UDP beacon) is not a
+                // relationship with the user yet — only mark it "remembered"
+                // (and thus shown as a known device, see PeerViewModel.IsKnown
+                // on the Windows client) if it's already trusted. Otherwise it
+                // surfaces as a transient "Nearby" entry until the user pairs.
+                remembered: trusted,
                 sync_enabled: true,
                 remote_sync_enabled: true,
                 auto_connect: true,
@@ -981,7 +1000,11 @@ impl PeerManager {
                 if record.trusted {
                     return true;
                 }
-                // Remove untrusted + disconnected peers not seen in 24h
+                // Always keep remembered peers (see doc comment above).
+                if record.remembered {
+                    return true;
+                }
+                // Remove untrusted, unremembered + disconnected peers not seen in 24h
                 let last_activity = record.last_seen.or(record.last_discovery_at).unwrap_or(0);
                 if now.saturating_sub(last_activity) > STALE_THRESHOLD_SECS {
                     return false;
@@ -1082,6 +1105,130 @@ mod tests {
         assert_eq!(manager.active_senders().len(), 0);
         manager.set_sync_enabled(id, true).unwrap();
         assert_eq!(manager.active_senders().len(), 1);
+    }
+
+    #[test]
+    fn untrusted_discovery_sighting_is_not_remembered() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        let peer = manager
+            .upsert_peer(
+                id,
+                "device-abcd1234".into(),
+                SocketAddr::from(([192, 168, 1, 30], 47823)),
+                false,
+                DiscoverySource::UdpBeacon,
+            )
+            .unwrap();
+        assert!(
+            !peer.remembered,
+            "bare discovery sighting must not be treated as a known/paired device"
+        );
+        assert!(!peer.trusted);
+    }
+
+    #[test]
+    fn trusted_upsert_is_remembered() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        let peer = manager
+            .upsert_peer(
+                id,
+                "Laptop".into(),
+                SocketAddr::from(([192, 168, 1, 31], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+        assert!(peer.remembered);
+    }
+
+    #[test]
+    fn load_migrates_legacy_remembered_phantom_peers() {
+        let file = NamedTempFile::new().unwrap();
+        let id = Uuid::new_v4();
+        {
+            let manager = PeerManager::load(file.path()).unwrap();
+            manager
+                .upsert_peer(
+                    id,
+                    "device-abcd1234".into(),
+                    SocketAddr::from(([192, 168, 1, 40], 47823)),
+                    false,
+                    DiscoverySource::UdpBeacon,
+                )
+                .unwrap();
+            // Simulate a peer store written by the pre-fix code, which
+            // hard-coded `remembered: true` on every bare discovery sighting.
+            if let Some(mut entry) = manager.store.get_mut(&id) {
+                entry.remembered = true;
+            }
+            manager.save().unwrap();
+        }
+        let reloaded = PeerManager::load(file.path()).unwrap();
+        let peer = reloaded.get(id).unwrap();
+        assert!(
+            !peer.remembered,
+            "legacy phantom peer must be demoted to Nearby on load"
+        );
+        assert!(!peer.trusted);
+    }
+
+    #[test]
+    fn load_keeps_remembered_for_in_flight_pairing() {
+        let file = NamedTempFile::new().unwrap();
+        let id = Uuid::new_v4();
+        {
+            let manager = PeerManager::load(file.path()).unwrap();
+            manager
+                .upsert_peer(
+                    id,
+                    "Nearby Laptop".into(),
+                    SocketAddr::from(([192, 168, 1, 41], 47823)),
+                    false,
+                    DiscoverySource::Mdns,
+                )
+                .unwrap();
+            if let Some(mut entry) = manager.store.get_mut(&id) {
+                entry.remembered = true;
+                entry.pairing_requested = true;
+            }
+            manager.save().unwrap();
+        }
+        let reloaded = PeerManager::load(file.path()).unwrap();
+        let peer = reloaded.get(id).unwrap();
+        assert!(
+            peer.remembered,
+            "a peer with pairing genuinely in flight must not be demoted"
+        );
+    }
+
+    #[test]
+    fn prune_keeps_remembered_untrusted_peers_past_staleness_window() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        manager
+            .upsert_peer(
+                id,
+                "Mid-pairing device".into(),
+                SocketAddr::from(([192, 168, 1, 32], 47823)),
+                false,
+                DiscoverySource::Manual,
+            )
+            .unwrap();
+        // Simulate a peer the user actually cares about (e.g. mid-pairing)
+        // that just hasn't been seen recently.
+        if let Some(mut entry) = manager.store.get_mut(&id) {
+            entry.remembered = true;
+            entry.last_seen = Some(0);
+            entry.last_discovery_at = Some(0);
+        }
+        let pruned = manager.prune_stale_peers();
+        assert_eq!(pruned, 0);
+        assert!(manager.get(id).is_some());
     }
 
     #[test]
