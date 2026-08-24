@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.5] - 2026-08-24
+### Added
+- **Core:** Added camera stream request API to FFI.
+- **Android:** Redesigned Ecosystem header with a sleek segmented control.
+- **Android:** Upgraded "JUST COPIED" card styling and contrast.
+- **Android:** Disabled mesh gradient in pure dark mode for a true black background.
+- **Windows:** Comprehensive UI overhaul for the WinUI dashboard and dialogs.
+
 ## [Unreleased]
 
 ### Added (v4)
