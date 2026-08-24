@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.7] - 2026-08-24
+### Fixed
+- **Core:** Fix intermittent e2e test failure (test_tier4_scenario_device_reconnect_retry).
+
 ## [1.2.6] - 2026-08-24
 ### Fixed
 - **Core:** Fix formatting errors that broke CI pipeline (rustfmt).

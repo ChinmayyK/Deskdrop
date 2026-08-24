@@ -902,7 +902,7 @@ fn scan_local_files_for_remote_query(
     let total_matching = matching_entries.len() as u32;
 
     let mut sorted_entries = matching_entries;
-    sorted_entries.sort_by(|a, b| b.date_modified.cmp(&a.date_modified));
+    sorted_entries.sort_by_key(|a| std::cmp::Reverse(a.date_modified));
 
     let result_files = if summary_only {
         Vec::new()

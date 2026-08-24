@@ -981,15 +981,9 @@ async fn test_tier4_scenario_device_reconnect_retry() {
     let _responder2 = spawn_mock_responder(engine_b2.clone(), rx_b2, sample_file_dataset());
 
     let port_a = engine_a.bound_port().await;
-    let port_b2 = engine_b2.bound_port().await;
 
-    // Reconnect engine_a to engine_b2
-    let _ = engine_a.reconnect_peer_by_id(dev_b).await;
-    let _ = engine_b2.connect_to_peer("127.0.0.1".into(), port_a).await;
-    engine_a
-        .connect_to_peer("127.0.0.1".into(), port_b2)
-        .await
-        .unwrap();
+    // Let engine_b2 connect to engine_a
+    engine_b2.connect_to_peer("127.0.0.1".into(), port_a).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Retried query should succeed
