@@ -4,175 +4,373 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Deskdrop.WinUI.Views"
     xmlns:winui="using:Deskdrop.WinUI"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:services="using:Deskdrop.WinUI.Services"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Background="Transparent">
+    <Grid>
         <Grid.ColumnDefinitions>
-            <!-- Left Library Navigation Shortcuts -->
-            <ColumnDefinition Width="210"/>
-            <!-- Center File Browser Canvas -->
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="196" />
+            <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- 1. LEFT SHORTCUTS SIDEBAR -->
-        <Border Grid.Column="0" Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="0,0,1,0" Padding="14,20,14,20">
-            <StackPanel Spacing="6">
-                <TextBlock Text="REMOTE STORAGE" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="8,0,0,8" CharacterSpacing="50"/>
+        <!--
+            Library shortcuts. Deliberately monochrome: seven differently
+            coloured folder icons made this read as a toy. Colour is reserved
+            for state and the accent; navigation is structure, so it gets
+            weight and spacing instead.
+        -->
+        <Border Grid.Column="0"
+                Background="{ThemeResource AppSurfaceSubtleBrush}"
+                BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                BorderThickness="0,0,1,0"
+                Padding="10,16,10,16">
+            <StackPanel Spacing="2">
+                <TextBlock Text="LIBRARIES" Style="{StaticResource AppOverline}" Margin="10,0,0,8" />
 
-                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutRootClicked">
+                <Button Style="{StaticResource AppNavRowButton}" Click="OnShortcutRootClicked">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE8B7;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
-                        <TextBlock Text="Root (/)" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <FontIcon Glyph="&#xE8B7;" FontSize="15"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="All files" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutDCIMClicked">
+                <Button Style="{StaticResource AppNavRowButton}" Click="OnShortcutDCIMClicked">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE722;" FontSize="15" Foreground="{StaticResource AppWarningBrush}"/>
-                        <TextBlock Text="Camera / DCIM" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <FontIcon Glyph="&#xE722;" FontSize="15"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="Camera" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutPicturesClicked">
+                <Button Style="{StaticResource AppNavRowButton}" Click="OnShortcutPicturesClicked">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xEB9F;" FontSize="15" Foreground="{StaticResource AppCyanBrush}"/>
-                        <TextBlock Text="Pictures" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <FontIcon Glyph="&#xEB9F;" FontSize="15"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="Pictures" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutDownloadsClicked">
+                <Button Style="{StaticResource AppNavRowButton}" Click="OnShortcutDownloadsClicked">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE896;" FontSize="15" Foreground="{StaticResource AppSuccessBrush}"/>
-                        <TextBlock Text="Downloads" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <FontIcon Glyph="&#xE896;" FontSize="15"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="Downloads" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutDocumentsClicked">
+                <Button Style="{StaticResource AppNavRowButton}" Click="OnShortcutDocumentsClicked">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE8A5;" FontSize="15" Foreground="{StaticResource AppVioletBrush}"/>
-                        <TextBlock Text="Documents" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <FontIcon Glyph="&#xE8A5;" FontSize="15"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="Documents" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutMusicClicked">
+                <Button Style="{StaticResource AppNavRowButton}" Click="OnShortcutMusicClicked">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE8D6;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
-                        <TextBlock Text="Music" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <FontIcon Glyph="&#xE8D6;" FontSize="15"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="Music" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8" Click="OnShortcutMoviesClicked">
+                <Button Style="{StaticResource AppNavRowButton}" Click="OnShortcutMoviesClicked">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE714;" FontSize="15" Foreground="{StaticResource AppWarningBrush}"/>
-                        <TextBlock Text="Movies" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                        <FontIcon Glyph="&#xE714;" FontSize="15"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="Videos" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
             </StackPanel>
         </Border>
 
-        <!-- 2. MAIN FILE EXPLORER CANVAS -->
-        <Grid Grid.Column="1" Padding="24,20,24,24">
+        <!-- ================================ BROWSER -->
+        <Grid Grid.Column="1" Padding="20,16,20,0" RowSpacing="14">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- Top Navigation & Path Toolbar -->
-            <Grid Grid.Row="0" Margin="0,0,0,16">
+            <!--
+                Explorer-style command bar: navigation on the left, location
+                in the middle, the one write action on the right. The
+                breadcrumb replaces a raw editable path as the default view -
+                typing a path is still available behind the location button,
+                the way Explorer keeps it behind Ctrl+L.
+            -->
+            <Grid Grid.Row="0" ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Back / Up / Refresh Buttons -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" Margin="0,0,12,0">
-                    <Button Width="36" Height="36" Padding="0" CornerRadius="18" Background="{StaticResource AppSurfaceBrush}" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" ToolTipService.ToolTip="Back / Up Directory" Click="OnBackClicked">
-                        <FontIcon Glyph="&#xE72B;" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                    <Button Style="{StaticResource AppIconButton}"
+                            ToolTipService.ToolTip="Up one folder"
+                            AutomationProperties.Name="Up one folder"
+                            Click="OnBackClicked">
+                        <FontIcon Glyph="&#xE72B;" FontSize="14" />
                     </Button>
-                    <Button Width="36" Height="36" Padding="0" CornerRadius="18" Background="{StaticResource AppSurfaceBrush}" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" ToolTipService.ToolTip="Refresh Files" Click="OnRefreshClicked">
-                        <FontIcon Glyph="&#xE72C;" FontSize="13" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <Button Style="{StaticResource AppIconButton}"
+                            ToolTipService.ToolTip="Refresh this folder"
+                            AutomationProperties.Name="Refresh this folder"
+                            Click="OnRefreshClicked">
+                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
                     </Button>
                 </StackPanel>
 
-                <!-- Breadcrumb / Path Bar -->
-                <Border Grid.Column="1" Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="8" Padding="12,4">
-                    <Grid>
+                <Border Grid.Column="1"
+                        Background="{ThemeResource AppSurfaceBrush}"
+                        BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSmall}"
+                        Padding="10,2"
+                        MinHeight="32">
+                    <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <FontIcon Glyph="&#xE8B7;" FontSize="14" Foreground="{StaticResource AppAccentBrush}" Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="PathBox" Text="/" FontSize="13" BorderThickness="0" Background="Transparent" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Grid.Column="1" KeyDown="OnPathKeyDown"/>
-                        <Button Grid.Column="2" Content="Go" Padding="10,3" FontSize="11.5" Style="{StaticResource PrimaryAccentButtonStyle}" Click="OnGoClicked"/>
+
+                        <controls:BreadcrumbBar x:Name="PathBreadcrumb"
+                                                Grid.Column="0"
+                                                VerticalAlignment="Center"
+                                                ItemsSource="{x:Bind PathSegments, Mode=OneWay}"
+                                                ItemClicked="OnBreadcrumbItemClicked" />
+
+                        <Button Grid.Column="1"
+                                Style="{StaticResource AppIconButtonSmall}"
+                                ToolTipService.ToolTip="Go to a path"
+                                AutomationProperties.Name="Go to a path">
+                            <FontIcon Glyph="&#xE8AC;" FontSize="12" />
+                            <Button.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <StackPanel Width="320" Spacing="10">
+                                        <TextBlock Text="Go to path" Style="{StaticResource AppBodyStrong}" />
+                                        <TextBox x:Name="PathBox" Text="/" FontSize="13"
+                                                 KeyDown="OnPathKeyDown"
+                                                 AutomationProperties.Name="Remote path" />
+                                        <Button Style="{StaticResource AppPrimaryButton}"
+                                                HorizontalAlignment="Right"
+                                                Content="Go"
+                                                Click="OnGoClicked" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                     </Grid>
                 </Border>
 
-                <!-- Upload / Send Files Button -->
-                <Button Grid.Column="2" Style="{StaticResource PrimaryAccentButtonStyle}" Margin="12,0,0,0" Click="OnSendFilesClicked">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE898;" FontSize="13" Foreground="#FFFFFF"/>
-                        <TextBlock Text="Upload File" FontSize="13"/>
+                <Button Grid.Column="2" Style="{StaticResource AppAccentSubtleButton}"
+                        ToolTipService.ToolTip="Send files to this device"
+                        Click="OnSendFilesClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE898;" FontSize="13" />
+                        <TextBlock Text="Upload" />
                     </StackPanel>
                 </Button>
             </Grid>
 
-            <!-- Device Connection Status Bar -->
-            <Grid Grid.Row="1" Margin="0,0,0,14">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="Browsing:" FontSize="12.5" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                    <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay}" FontSize="12.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                    <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                    <TextBlock Text="{x:Bind RemoteFiles.Count, Mode=OneWay}" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource AppAccentBrush}"/>
-                    <TextBlock Text="items" FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
-            </Grid>
+            <!-- Context line: which device, how much is here, how much room
+                 is left on it. -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay}"
+                           Style="{StaticResource AppSecondary}"
+                           FontWeight="SemiBold" />
+                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                <!-- Set from UpdateEmptyStates(); x:Bind to RemoteFiles.Count
+                     would never hear CollectionChanged. -->
+                <TextBlock x:Name="ItemCountText" Text="" Style="{StaticResource AppCaption}" />
+                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}"
+                           Visibility="{x:Bind mgr.SelectedPeer.ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                <TextBlock Text="{x:Bind mgr.SelectedPeer.StorageFreeText, Mode=OneWay}"
+                           Style="{StaticResource AppCaption}"
+                           Visibility="{x:Bind mgr.SelectedPeer.ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+            </StackPanel>
 
-            <!-- Files List -->
-            <ListView Grid.Row="2" SelectionMode="None" Padding="0" ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}">
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="winui:RemoteFile">
-                        <Border Background="{StaticResource AppSurfaceBrush}" 
-                                BorderBrush="{StaticResource AppBorderSubtleBrush}" 
-                                BorderThickness="1" CornerRadius="10" Padding="14,10" Margin="0,0,0,6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Type Icon -->
-                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" Background="{StaticResource AppBorderSubtleBrush}" Margin="0,0,12,0">
-                                    <FontIcon Glyph="{x:Bind name, Converter={StaticResource FileTypeToGlyphConverter}, Mode=OneWay}" FontSize="16" Foreground="{StaticResource AppAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-
-                                <!-- Name & Modified Date -->
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="{x:Bind name, Mode=OneWay}" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{x:Bind FormattedDate, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                                </StackPanel>
-
-                                <!-- Formatted Size -->
-                                <TextBlock Grid.Column="2" Text="{x:Bind FormattedSize, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,16,0"/>
-
-                                <!-- Action Buttons -->
-                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <!-- Open Directory -->
-                                    <Button Content="Open" Style="{StaticResource PrimaryAccentButtonStyle}" Padding="10,5" FontSize="12" Visibility="{x:Bind is_dir, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" Click="OnItemClicked"/>
-                                    <!-- Download File -->
-                                    <Button Content="Download" Style="{StaticResource SecondarySubtleButtonStyle}" Padding="10,5" FontSize="12" Visibility="{x:Bind is_dir, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}" Click="OnDownloadClicked"/>
-                                </StackPanel>
-                            </Grid>
+            <Grid Grid.Row="2">
+                <!-- Two distinct empty states: no device to browse, versus a
+                     folder that is genuinely empty. They call for different
+                     actions, so they can't share one message. -->
+                <Border x:Name="NoDeviceState"
+                        Style="{StaticResource AppCardLarge}"
+                        Padding="28,32"
+                        VerticalAlignment="Top"
+                        Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="380">
+                        <Border Width="44" Height="44"
+                                CornerRadius="{StaticResource RadiusLarge}"
+                                Background="{ThemeResource AppAccentSubtleBrush}"
+                                HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE8EA;" FontSize="19"
+                                      Foreground="{ThemeResource AppAccentBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="No device to browse"
+                                       Style="{StaticResource AppSectionTitle}" HorizontalAlignment="Center" />
+                            <TextBlock Style="{StaticResource AppSecondary}"
+                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                                       Text="Connect a device on the Devices page, then come back to browse its files from here." />
+                        </StackPanel>
+                        <Button Style="{StaticResource AppPrimaryButton}"
+                                Content="Go to Devices"
+                                HorizontalAlignment="Center"
+                                Click="OnGoToDevicesClicked" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="EmptyFolderState"
+                        Padding="4,40"
+                        VerticalAlignment="Top"
+                        Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center" Spacing="8">
+                        <FontIcon Glyph="&#xE8B7;" FontSize="22"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                  HorizontalAlignment="Center" />
+                        <TextBlock Text="This folder is empty"
+                                   Style="{StaticResource AppSecondary}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <!--
+                    File rows. Thumbnails where the device can produce them,
+                    a glyph otherwise; size and date right-aligned so the eye
+                    can run down the column. Double-click and Enter open a
+                    folder, right-click gives the full menu - desktop
+                    conventions rather than a button per row.
+                -->
+                <ListView x:Name="FileList"
+                          SelectionMode="None"
+                          Padding="0,0,0,20"
+                          IsItemClickEnabled="False"
+                          ItemContainerStyle="{StaticResource AppPlainListItem}"
+                          ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}"
+                          ContainerContentChanging="OnFileContainerContentChanging">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="winui:RemoteFile">
+                            <Border Background="Transparent"
+                                    BorderThickness="0,0,0,1"
+                                    BorderBrush="{ThemeResource AppDividerBrush}"
+                                    CornerRadius="0"
+                                    Padding="8,8"
+                                    DoubleTapped="OnFileRowDoubleTapped"
+                                    services:HoverEffects.EnableCardHover="True">
+
+                                <Border.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="Open" Click="OnItemClicked"
+                                                        Visibility="{x:Bind is_dir, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                            <MenuFlyoutItem.Icon>
+                                                <FontIcon Glyph="&#xE8B7;" />
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutItem Text="Download to this PC" Click="OnDownloadClicked"
+                                                        Visibility="{x:Bind is_dir, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}">
+                                            <MenuFlyoutItem.Icon>
+                                                <FontIcon Glyph="&#xE896;" />
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutSeparator />
+                                        <MenuFlyoutItem Text="Rename" Click="OnRenameRemoteFileClicked">
+                                            <MenuFlyoutItem.Icon>
+                                                <FontIcon Glyph="&#xE8AC;" />
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutItem Text="Delete" Click="OnDeleteRemoteFileClicked">
+                                            <MenuFlyoutItem.Icon>
+                                                <FontIcon Glyph="&#xE74D;" />
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                    </MenuFlyout>
+                                </Border.ContextFlyout>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Grid Grid.Column="0" Width="36" Height="36"
+                                          CornerRadius="{StaticResource RadiusSmall}"
+                                          Background="{ThemeResource AppSurfaceSubtleBrush}">
+                                        <FontIcon Glyph="{x:Bind name, Converter={StaticResource FileTypeToGlyphConverter}, Mode=OneWay}"
+                                                  FontSize="16"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Visibility="{x:Bind HasThumbnail, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}" />
+                                        <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"
+                                               Visibility="{x:Bind HasThumbnail, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                                    </Grid>
+
+                                    <TextBlock Grid.Column="1" Text="{x:Bind name, Mode=OneWay}"
+                                               Style="{StaticResource AppBody}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Column="2" Text="{x:Bind FormattedDate, Mode=OneWay}"
+                                               Style="{StaticResource AppCaption}"
+                                               VerticalAlignment="Center"
+                                               MinWidth="140" TextAlignment="Right" />
+
+                                    <TextBlock Grid.Column="3" Text="{x:Bind FormattedSize, Mode=OneWay}"
+                                               Style="{StaticResource AppCaption}"
+                                               VerticalAlignment="Center"
+                                               MinWidth="80" TextAlignment="Right"
+                                               Margin="0,0,8,0" />
+
+                                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2"
+                                                VerticalAlignment="Center"
+                                                services:RevealEffects.RevealOnHover="True">
+                                        <Button Style="{StaticResource AppIconButtonSmall}"
+                                                Visibility="{x:Bind is_dir, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                                ToolTipService.ToolTip="Open"
+                                                AutomationProperties.Name="Open folder"
+                                                Click="OnItemClicked">
+                                            <FontIcon Glyph="&#xE76C;" FontSize="12" />
+                                        </Button>
+                                        <Button Style="{StaticResource AppIconButtonSmall}"
+                                                Visibility="{x:Bind is_dir, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}"
+                                                ToolTipService.ToolTip="Download to this PC"
+                                                AutomationProperties.Name="Download to this PC"
+                                                Click="OnDownloadClicked">
+                                            <FontIcon Glyph="&#xE896;" FontSize="12" />
+                                        </Button>
+                                        <Button Style="{StaticResource AppIconButtonSmall}"
+                                                ToolTipService.ToolTip="More actions"
+                                                AutomationProperties.Name="More actions for this item">
+                                            <FontIcon Glyph="&#xE712;" FontSize="12" />
+                                            <Button.Flyout>
+                                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                    <MenuFlyoutItem Text="Rename" Click="OnRenameRemoteFileClicked">
+                                                        <MenuFlyoutItem.Icon>
+                                                            <FontIcon Glyph="&#xE8AC;" />
+                                                        </MenuFlyoutItem.Icon>
+                                                    </MenuFlyoutItem>
+                                                    <MenuFlyoutItem Text="Delete" Click="OnDeleteRemoteFileClicked">
+                                                        <MenuFlyoutItem.Icon>
+                                                            <FontIcon Glyph="&#xE74D;" />
+                                                        </MenuFlyoutItem.Icon>
+                                                    </MenuFlyoutItem>
+                                                </MenuFlyout>
+                                            </Button.Flyout>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
         </Grid>
     </Grid>
 </Page>

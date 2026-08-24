@@ -8,175 +8,360 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,36">
-        <StackPanel Spacing="24" MaxWidth="900" HorizontalAlignment="Stretch">
+    <!--
+        Windows settings pattern: a single scrolling column of labelled
+        groups, each group one card of hairline-separated rows. Every row is
+        icon / title / description / control, in that order, at a consistent
+        52px minimum height.
 
-            <!-- Header -->
-            <StackPanel Spacing="4">
-                <TextBlock Text="Settings" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" CharacterSpacing="-15"/>
-                <TextBlock Text="Configure identity, network protocols, sync behaviors, and security" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-            </StackPanel>
+        The previous page mixed 12px and 16px paddings, three heading sizes
+        and a coloured icon per section, which made a short settings list feel
+        like six unrelated panels.
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{StaticResource PagePadding}"
+                    Spacing="24"
+                    MaxWidth="860"
+                    HorizontalAlignment="Center">
 
-            <!-- 1. IDENTITY & GENERAL SECTION -->
-            <StackPanel Spacing="10">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE7F4;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
-                    <TextBlock Text="Device &amp; System" FontSize="14.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                </StackPanel>
+            <!-- ============================ GENERAL -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="General" Style="{StaticResource AppSectionTitle}" />
 
-                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20,8">
-                    <StackPanel Spacing="0">
-                        <!-- Device Name -->
-                        <Grid Padding="0,12">
+                <Border Style="{StaticResource AppGroupCard}">
+                    <StackPanel>
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="Device Name" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="How this PC appears to other Deskdrop devices on the local network" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <FontIcon Grid.Column="0" Glyph="&#xE790;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Appearance" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Match Windows, or lock Deskdrop to light or dark"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <Border Grid.Column="1" Background="{StaticResource AppBorderSubtleBrush}" CornerRadius="6" Padding="12,6">
-                                <TextBlock Text="{x:Bind DeviceName, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                            </Border>
+                            <ComboBox x:Name="ThemeSelector" Grid.Column="2" MinWidth="130"
+                                      VerticalAlignment="Center"
+                                      SelectionChanged="OnThemeSelectionChanged"
+                                      AutomationProperties.Name="Appearance">
+                                <ComboBoxItem Content="Light" />
+                                <ComboBoxItem Content="Dark" />
+                                <ComboBoxItem Content="Use system setting" />
+                            </ComboBox>
                         </Grid>
 
-                        <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
+                        <Border Style="{StaticResource AppDivider}" Margin="16,0" />
 
-                        <!-- Start on Login -->
-                        <Grid Padding="0,12">
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="Launch on Windows Startup" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Run Deskdrop silently in the background and system tray on boot" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <FontIcon Grid.Column="0" Glyph="&#xE7E8;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Start with Windows" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Run quietly in the system tray after you sign in"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <ToggleSwitch x:Name="StartupToggle" Grid.Column="1" MinWidth="0" Toggled="OnStartupToggled"/>
+                            <ToggleSwitch x:Name="StartupToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnStartupToggled"
+                                          AutomationProperties.Name="Start with Windows" />
                         </Grid>
 
-                        <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
+                        <Border Style="{StaticResource AppDivider}" Margin="16,0" />
 
-                        <!-- Network Rescan -->
-                        <Grid Padding="0,12">
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="Rescan Network" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Force UDP broadcast discovery of nearby Deskdrop peers" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <FontIcon Grid.Column="0" Glyph="&#xE7F4;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="This PC's name" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="How this computer appears to your other devices"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <Button Grid.Column="1" Content="Rescan Now" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnRescanClicked"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- 2. CONTINUITY & SYNC SECTION -->
-            <StackPanel Spacing="10">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE8C8;" FontSize="15" Foreground="{StaticResource AppSuccessBrush}"/>
-                    <TextBlock Text="Continuity &amp; Sync" FontSize="14.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                </StackPanel>
-
-                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20,8">
-                    <StackPanel Spacing="0">
-                        <!-- Auto Sync Clipboard -->
-                        <Grid Padding="0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="Automatic Clipboard Sync" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Seamlessly share text and links with trusted connected devices" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="1" IsOn="{x:Bind mgr.SyncEnabled, Mode=TwoWay}" MinWidth="0"/>
-                        </Grid>
-
-                        <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
-
-                        <!-- Downloads Folder -->
-                        <Grid Padding="0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="Download Directory" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Where files received from mobile devices will be saved" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                            </StackPanel>
-                            <Button Grid.Column="1" Content="Open Folder" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnOpenDownloadsClicked"/>
+                            <TextBlock Grid.Column="2" Text="{x:Bind DeviceName, Mode=OneWay}"
+                                       Style="{StaticResource AppMetric}"
+                                       VerticalAlignment="Center" />
                         </Grid>
                     </StackPanel>
                 </Border>
             </StackPanel>
 
-            <!-- 3. SECURITY SECTION -->
-            <StackPanel Spacing="10">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE72E;" FontSize="15" Foreground="{StaticResource AppWarningBrush}"/>
-                    <TextBlock Text="Security &amp; Encryption" FontSize="14.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                </StackPanel>
+            <!-- ============================ DEVICES -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Devices and discovery" Style="{StaticResource AppSectionTitle}" />
 
-                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20,8">
-                    <StackPanel Spacing="0">
-                        <!-- TOFU PIN Verification -->
-                        <Grid Padding="0,12">
+                <Border Style="{StaticResource AppGroupCard}">
+                    <StackPanel>
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="TOFU Security PIN Verification" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Require matching a 6-digit PIN on both devices before establishing trust" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <FontIcon Grid.Column="0" Glyph="&#xE8EA;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Paired devices" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="{x:Bind mgr.EcosystemSummaryText, Mode=OneWay}"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <ToggleSwitch Grid.Column="1" IsOn="{x:Bind mgr.RequireTofuConfirmation, Mode=TwoWay}" MinWidth="0"/>
+                            <Button Grid.Column="2" Style="{StaticResource AppSecondaryButton}"
+                                    Content="Manage"
+                                    VerticalAlignment="Center"
+                                    Click="OnManageDevicesClicked" />
                         </Grid>
 
-                        <Border Height="1" Background="{StaticResource AppBorderSubtleBrush}"/>
+                        <Border Style="{StaticResource AppDivider}" Margin="16,0" />
 
-                        <!-- Forget All Devices -->
-                        <Grid Padding="0,12">
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="Revoke All Trusted Devices" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                <TextBlock Text="Clear local pairing keys and require re-pairing for all devices" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <FontIcon Grid.Column="0" Glyph="&#xE72C;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Network discovery" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Broadcast on the local network to find nearby devices"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <Button Grid.Column="1" Content="Revoke All" Style="{StaticResource DestructiveButtonStyle}" Click="OnRevokeAllClicked"/>
+                            <Button Grid.Column="2" Style="{StaticResource AppSecondaryButton}"
+                                    Content="Rescan now"
+                                    VerticalAlignment="Center"
+                                    Click="OnRescanClicked" />
                         </Grid>
                     </StackPanel>
                 </Border>
             </StackPanel>
 
-            <!-- 4. ABOUT & DIAGNOSTICS SECTION -->
-            <StackPanel Spacing="10">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE946;" FontSize="15" Foreground="{StaticResource AppCyanBrush}"/>
-                    <TextBlock Text="About &amp; Diagnostics" FontSize="14.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                </StackPanel>
+            <!-- ============================ TRANSFERS -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Transfers" Style="{StaticResource AppSectionTitle}" />
 
-                <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="20,16">
-                    <Grid>
+                <Border Style="{StaticResource AppGroupCard}">
+                    <StackPanel>
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xED25;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Where received files are saved" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Incoming files always land in your Windows Downloads folder"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Style="{StaticResource AppSecondaryButton}"
+                                    Content="Open folder"
+                                    VerticalAlignment="Center"
+                                    Click="OnOpenDownloadsClicked" />
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="16,0" />
+
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xEB9F;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Send new screenshots automatically" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Push screenshots to your connected devices as you take them"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="ScreenshotSyncToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnScreenshotSyncToggled"
+                                          AutomationProperties.Name="Send new screenshots automatically" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- ============================ CLIPBOARD -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Clipboard" Style="{StaticResource AppSectionTitle}" />
+
+                <Border Style="{StaticResource AppGroupCard}">
+                    <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Spacing="4">
-                            <TextBlock Text="Deskdrop for Windows" FontSize="14" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                            <TextBlock Text="Version 4.0.0 • Native WinUI 3 &amp; Rust Core" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                            <TextBlock Text="Local Daemon: Running (Healthy)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AppSuccessBrush}"/>
+                        <FontIcon Grid.Column="0" Glyph="&#xE8C8;" FontSize="16"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                  VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="Share clipboard automatically" Style="{StaticResource AppBodyStrong}" />
+                            <TextBlock Text="Copy on one device, paste on another, without confirming each time"
+                                       Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button Grid.Column="1" Content="View Logs" Style="{StaticResource SecondarySubtleButtonStyle}" VerticalAlignment="Center" Click="OnViewLogsClicked"/>
+                        <ToggleSwitch Grid.Column="2" IsOn="{x:Bind mgr.SyncEnabled, Mode=TwoWay}" MinWidth="0"
+                                      VerticalAlignment="Center"
+                                      AutomationProperties.Name="Share clipboard automatically" />
                     </Grid>
                 </Border>
             </StackPanel>
 
+            <!-- ============================ SECURITY -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Security" Style="{StaticResource AppSectionTitle}" />
+
+                <Border Style="{StaticResource AppGroupCard}">
+                    <StackPanel>
+                        <!-- Encryption isn't a setting - it's a fact about how
+                             this works. Stating it plainly buys more trust
+                             than a toggle that can't be turned off. -->
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE72E;" FontSize="16"
+                                      Foreground="{ThemeResource AppSuccessBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="End-to-end encryption" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Every transfer stays on your local network and is encrypted between paired devices"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Border Grid.Column="2" Style="{StaticResource AppChip}"
+                                    Background="{ThemeResource AppSuccessSubtleBrush}"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="Always on" Style="{StaticResource AppCaption}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource AppSuccessBrush}" />
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="16,0" />
+
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE928;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Confirm a code when pairing" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Require a matching six-digit code on both devices before trusting a new one"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind mgr.RequireTofuConfirmation, Mode=TwoWay}" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          AutomationProperties.Name="Confirm a code when pairing" />
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="16,0" />
+
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE74D;" FontSize="16"
+                                      Foreground="{ThemeResource AppDangerBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Forget all devices" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Clear every pairing key on this PC. Each device will have to pair again."
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Style="{StaticResource AppDestructiveButton}"
+                                    Content="Forget all"
+                                    VerticalAlignment="Center"
+                                    Click="OnRevokeAllClicked" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- ============================ ADVANCED -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Advanced" Style="{StaticResource AppSectionTitle}" />
+
+                <Border Style="{StaticResource AppGroupCard}">
+                    <StackPanel>
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE9D9;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Local service" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="The background engine that talks to your other devices"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Style="{StaticResource AppChip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <Border Width="7" Height="7" CornerRadius="4"
+                                                VerticalAlignment="Center"
+                                                Background="{x:Bind winui:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind mgr.DaemonStatusText, Mode=OneWay}"
+                                                   Style="{StaticResource AppCaption}" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+                                <Button Style="{StaticResource AppSecondaryButton}"
+                                        Content="View logs"
+                                        Click="OnViewLogsClicked" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="16,0" />
+
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE946;" FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Deskdrop for Windows" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Version 4.0.0  &#183;  Native WinUI 3 with a Rust core"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Page>

@@ -90,7 +90,20 @@
       dependency only - its exe is copied into tray\ by the target below,
       never linked into this assembly.
     -->
-    <ProjectReference Include="..\Deskdrop.Tray\Deskdrop.Tray.csproj" ReferenceOutputAssembly="false" />
+    <!--
+      SkipGetTargetFrameworkProperties is required alongside
+      ReferenceOutputAssembly="false" here: newer SDKs (observed on
+      8.0.4xx) run their self-contained-executable compatibility check
+      (NETSDK1151) against a referenced project's target-framework
+      properties regardless of ReferenceOutputAssembly, so building
+      against Deskdrop.Tray (a self-contained exe) fails that check even
+      though its assembly is never actually linked in. Skipping target-
+      framework property retrieval for this reference avoids the check;
+      it's safe here because we only need this as a build-order dependency
+      (see CopyTrayApp below), not an assembly reference.
+      https://aka.ms/netsdk1151
+    -->
+    <ProjectReference Include="..\Deskdrop.Tray\Deskdrop.Tray.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />

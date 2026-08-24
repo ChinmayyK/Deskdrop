@@ -32,14 +32,51 @@ public partial class App : Application
     public static IntPtr EngineHandle => _engineHandle;
     public static Deskdrop.WinUI.Services.ClipboardManager? Clipboard { get; private set; }
     public static System.Threading.Tasks.TaskCompletionSource<Deskdrop.WinUI.Services.ClipboardManager> ClipboardReady { get; } = new();
+    private static Deskdrop.WinUI.Services.GlobalDragMonitor? _dragMonitor;
+    private static Deskdrop.WinUI.Services.ScreenshotObserver? _screenshotObserver;
+
+    // Lets Settings flip screenshot auto-sync on/off live, without an app
+    // restart, while still persisting the choice for next launch.
+    public static void SetScreenshotSyncEnabled(bool enabled)
+    {
+        try
+        {
+            Deskdrop.WinUI.Services.LocalSettingsStore.SetBool("ScreenshotSyncEnabled", enabled);
+            if (enabled && _screenshotObserver == null && Clipboard != null)
+            {
+                _screenshotObserver = new Deskdrop.WinUI.Services.ScreenshotObserver(Clipboard);
+            }
+            else if (!enabled && _screenshotObserver != null)
+            {
+                _screenshotObserver.Dispose();
+                _screenshotObserver = null;
+            }
+        }
+        catch (Exception ex) { App.HandleError(ex); }
+    }
+
+    public static bool ScreenshotSyncEnabled =>
+        Deskdrop.WinUI.Services.LocalSettingsStore.GetBool("ScreenshotSyncEnabled");
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int SetCurrentProcessExplicitAppUserModelID(string AppID);
 
     public App()
     {
         MainDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
         System.IO.Directory.CreateDirectory(dir);
-        
+
         System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App constructor started\n");
+
+        // Unpackaged Win32/WinUI3 apps need to explicitly claim an
+        // AppUserModelID before the notification platform will reliably
+        // deliver toasts for that ID (NotificationHelper.AppUserModelID) -
+        // without this, ToastNotifier.Show() can silently no-op instead of
+        // throwing, which is very easy to mistake for "notifications are
+        // broken" when it's really just missing identity registration.
+        try { SetCurrentProcessExplicitAppUserModelID(NotificationHelper.AppUserModelID); }
+        catch (Exception ex) { App.HandleError(ex); }
 
         this.UnhandledException += (s, e) =>
         {
@@ -123,11 +160,22 @@ public partial class App : Application
 
         try
         {
-            // Clean Single Instance using Mutex
-            _singleInstanceMutex = new Mutex(true, "Local\\Deskdrop_WinUI_App_Unique_Key", out bool createdNew);
-            if (!createdNew)
+            // Single instance via AppInstance key redirection (not a raw
+            // Mutex): a Mutex can only tell a second launch "someone's
+            // already running" and exit - it has no way to hand that
+            // second launch's activation args (e.g. the file path from
+            // Explorer's "Send via Deskdrop") to the first instance. This
+            // redirects the whole AppActivationArguments to the existing
+            // instance's OnAppActivated, so ProcessActivationArgs actually
+            // sees it instead of the file silently getting dropped whenever
+            // Deskdrop was already running in the tray (the common case).
+            _keyInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("Deskdrop_Main_Instance");
+            var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+
+            if (!_keyInstance.IsCurrent)
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Secondary instance detected. Bringing existing window to front and exiting.\n");
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Secondary instance detected. Redirecting activation to existing instance.\n");
+                _keyInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
                 var existingHwnd = FindWindowW(null, "Deskdrop");
                 if (existingHwnd == IntPtr.Zero) existingHwnd = FindWindowW(null, "DeskDrop Dashboard");
                 if (existingHwnd != IntPtr.Zero)
@@ -139,11 +187,23 @@ public partial class App : Application
                 return;
             }
 
+            _keyInstance.Activated += OnAppActivated;
+
             Deskdrop.WinUI.Native.ContextMenuIntegration.RegisterContextMenu();
+            Deskdrop.WinUI.Native.ContextMenuIntegration.RegisterUriProtocol();
+            NotificationHelper.EnsureRegistered();
 
             // Process initial launch arguments
-            var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
             ProcessActivationArgs(activatedArgs);
+
+            // Best-effort: add the firewall rules Deskdrop needs for LAN
+            // discovery/transfer if they're missing. May trigger a UAC
+            // prompt on first run - never block startup on it.
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { Deskdrop.WinUI.FirewallHelper.EnsureRules(); }
+                catch (Exception ex) { App.HandleError(ex); }
+            });
 
             // Initialize the in-process native core FFI
             System.Threading.Tasks.Task.Run(() =>
@@ -168,6 +228,12 @@ public partial class App : Application
             }
             catch (Exception ex) { App.HandleError(ex); }
 
+            try
+            {
+                _dragMonitor = new Deskdrop.WinUI.Services.GlobalDragMonitor(Clipboard);
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+
             MainDispatcherQueue ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             try
@@ -175,11 +241,11 @@ public partial class App : Application
                 MainWindow = new DashboardWindow();
                 _window = MainWindow;
                 _window.Activate();
-                
+
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
                 ShowWindow(hwnd, 5 /* SW_SHOW */);
                 SetForegroundWindow(hwnd);
-                
+
                 System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow created, activated, and displayed successfully\n");
             }
             catch (Exception ex)
@@ -188,19 +254,28 @@ public partial class App : Application
                 if (ex.InnerException != null) System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "Inner: " + ex.InnerException.ToString() + "\n");
             }
 
-            /*
             try
             {
+                if (ScreenshotSyncEnabled)
+                {
+                    _screenshotObserver = new Deskdrop.WinUI.Services.ScreenshotObserver(Clipboard);
+                }
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+
+            try
+            {
+                // Ctrl+Shift+V: Quick Access (clipboard timeline + device list)
                 GlobalHotKeyManager.Shared.Register(true, true, false, false, 0x56, () => {
                     var queue = MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                     queue?.TryEnqueue(() => { try { new QuickAccessWindow().Activate(); } catch (Exception ex) { App.HandleError(ex); } });
                 });
+                // Ctrl+K: bring the main Dashboard window to the front
                 GlobalHotKeyManager.Shared.Register(true, false, false, false, 0x4B, () => {
                     ShowMainWindowCommand?.Execute(null);
                 });
             }
             catch (Exception ex) { App.HandleError(ex); }
-            */
         }
         catch (Exception ex)
         {
@@ -212,6 +287,27 @@ public partial class App : Application
         ProcessActivationArgs(e);
     }
 
+    // Shared dispatch for deskdrop://accept/{id} and deskdrop://reject/{id}
+    // (still used as plain argument strings even though the notification
+    // API that carries them changed) - called from both a cold launch
+    // (ProcessActivationArgs, AppNotification/Protocol kinds) and a click
+    // while already running (NotificationHelper.OnNotificationInvoked).
+    public static void HandleDeskdropUri(string uriString)
+    {
+        if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri) || uri.Scheme != "deskdrop") return;
+        if (uri.Host != "accept" && uri.Host != "reject") return;
+
+        var transferId = uri.AbsolutePath.Trim('/');
+        if (string.IsNullOrEmpty(transferId)) return;
+
+        try
+        {
+            if (uri.Host == "accept") DaemonClient.AcceptFileTransfer(transferId);
+            else DaemonClient.RejectFileTransfer(transferId, "user_declined");
+        }
+        catch (Exception ex) { App.HandleError(ex); }
+    }
+
     private void ProcessActivationArgs(Microsoft.Windows.AppLifecycle.AppActivationArguments activatedArgs)
     {
         var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
@@ -219,9 +315,23 @@ public partial class App : Application
         {
             var protocolArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
             var uri = protocolArgs?.Uri;
-            if (uri != null && uri.Scheme == "deskdrop")
+            if (uri != null)
             {
                 System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via protocol: " + uri.ToString() + "\n");
+                HandleDeskdropUri(uri.ToString());
+            }
+        }
+        else if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.AppNotification)
+        {
+            // Cold-launch equivalent of NotificationHelper.OnNotificationInvoked:
+            // the app wasn't running when an Accept/Reject notification
+            // button was clicked, so Windows launched it fresh with this
+            // activation kind instead of raising that in-process event.
+            if (activatedArgs.Data is Microsoft.Windows.AppNotifications.AppNotificationActivatedEventArgs notifArgs
+                && notifArgs.Arguments.TryGetValue("action", out var action) && !string.IsNullOrEmpty(action))
+            {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via AppNotification: " + action + "\n");
+                HandleDeskdropUri(action);
             }
         }
         else if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.CommandLineLaunch)
@@ -258,7 +368,7 @@ public partial class App : Application
         }
     }
 
-    private static System.Threading.Mutex? _singleInstanceMutex;
+    private static Microsoft.Windows.AppLifecycle.AppInstance? _keyInstance;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);

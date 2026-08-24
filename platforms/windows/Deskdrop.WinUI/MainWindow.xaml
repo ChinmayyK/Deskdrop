@@ -2,99 +2,151 @@
     x:Class="Deskdrop.WinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Deskdrop.WinUI"
+    xmlns:services="using:Deskdrop.WinUI.Services"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Deskdrop Control Center">
+    Title="Deskdrop">
 
     <Window.SystemBackdrop>
-        <MicaBackdrop/>
+        <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid Background="Transparent">
+    <!--
+        The tray popup. Its job is to answer "is everything connected?" and
+        offer the two things you'd open it for - send something, or pair
+        something. Anything deeper belongs in the dashboard, so this stays a
+        glance surface rather than a miniature copy of the app.
+    -->
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Custom TitleBar Area (Invisible, just for dragging) -->
-        <Border x:Name="AppTitleBar" Height="32" Grid.Row="0" Background="Transparent" />
+        <Border x:Name="AppTitleBar" Height="36" Grid.Row="0" Background="Transparent" />
 
-        <!-- Main Content -->
-        <StackPanel Grid.Row="1" Padding="16,0,16,16" Spacing="12">
-            
-            <!-- Top Module: Device Info & Dashboard -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8" 
-                    Padding="16">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <Border Background="{StaticResource AppAccentBrush}" Width="48" Height="48" CornerRadius="8" Grid.Column="0">
-                        <FontIcon Glyph="&#xE896;" Foreground="White" FontSize="24" />
-                    </Border>
-                    <StackPanel VerticalAlignment="Center" Grid.Column="1" Margin="16,0,0,0">
-                        <TextBlock Text="Your Device" Style="{ThemeResource SubtitleTextBlockStyle}"/>
-                        <TextBlock Text="Discoverable" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="13"/>
-                    </StackPanel>
-                    
-                    <!-- Open Dashboard Button -->
-                    <Button Grid.Column="2" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Open Full Dashboard" AutomationProperties.Name="Open Full Dashboard" Click="BtnOpenDashboard_Click">
-                        <FontIcon Glyph="&#xE713;" FontSize="18"/>
-                    </Button>
-                </Grid>
-            </Border>
+        <!-- Identity and live state -->
+        <Grid Grid.Row="1" Padding="16,4,12,14" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-            <!-- Middle Module: Recent Activity -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8" 
-                    Padding="0,8,0,8">
+            <Grid Grid.Column="0" Width="36" Height="36">
+                <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
+                        CornerRadius="{StaticResource RadiusMedium}" />
+                <FontIcon Glyph="&#xE7F4;" FontSize="17"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Border Width="11" Height="11" CornerRadius="6"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                        Margin="0,0,-2,-2"
+                        BorderThickness="2"
+                        BorderBrush="{ThemeResource AppBackgroundBrush}"
+                        Background="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"
+                        services:PulseEffects.EnablePulse="{x:Bind mgr.IsSearching, Mode=OneWay}" />
+            </Grid>
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                <TextBlock Text="{x:Bind localMachineName, Mode=OneTime}"
+                           Style="{StaticResource AppBodyStrong}" FontSize="14" />
+                <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}"
+                           Style="{StaticResource AppSecondary}" />
+            </StackPanel>
+
+            <Button Grid.Column="2" Style="{StaticResource AppIconButton}"
+                    VerticalAlignment="Center"
+                    ToolTipService.ToolTip="Open the Deskdrop dashboard"
+                    AutomationProperties.Name="Open the Deskdrop dashboard"
+                    Click="BtnOpenDashboard_Click">
+                <FontIcon Glyph="&#xE8A7;" FontSize="15" />
+            </Button>
+        </Grid>
+
+        <!-- Recent activity, from the live feed. This used to display two
+             hardcoded placeholder strings. -->
+        <Grid Grid.Row="2" Padding="16,0,16,0" RowSpacing="6">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="RECENT" Style="{StaticResource AppOverline}" />
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="RECENT ACTIVITY" 
-                               FontSize="11" 
-                               FontWeight="SemiBold" 
-                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
-                               CharacterSpacing="50"
-                               Margin="16,8,16,8"/>
-                    <ListView ItemsSource="{x:Bind RecentTransfers, Mode=OneWay}" 
-                              SelectionMode="None" 
-                              Background="Transparent"
-                              BorderThickness="0">
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="x:String">
-                                <StackPanel Orientation="Horizontal" Padding="4,8" Spacing="12">
-                                    <FontIcon Glyph="&#xE7C3;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                    <TextBlock Text="{x:Bind}" VerticalAlignment="Center" Style="{ThemeResource BodyTextBlockStyle}"/>
-                                </StackPanel>
+                    <ItemsControl ItemsSource="{x:Bind mgr.RecentActivity, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:ActivityEntry">
+                                <Border BorderThickness="0,1,0,0"
+                                        BorderBrush="{ThemeResource AppDividerBrush}"
+                                        Padding="0,9">
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Grid.Column="0"
+                                                  Glyph="{x:Bind local:ActivityKindToGlyphConverter.ToGlyph(kind), Mode=OneWay}"
+                                                  FontSize="13"
+                                                  Foreground="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(AccentColor), Mode=OneWay}"
+                                                  VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Title, Mode=OneWay}"
+                                                   Style="{StaticResource AppSecondary}"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime, Mode=OneWay}"
+                                                   Style="{StaticResource AppCaption}"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </StackPanel>
-            </Border>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
-            <!-- Bottom Module: Actions -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8" 
-                    Padding="16">
-                <Button Content="Pair New Device" 
-                        HorizontalAlignment="Stretch" 
-                        Click="PairDevice_Click" 
-                        Style="{ThemeResource AccentButtonStyle}"
-                        CornerRadius="4"
-                        Height="36"
-                        FontWeight="Medium"/>
-            </Border>
-            
-        </StackPanel>
+                    <Border BorderThickness="0,1,0,0"
+                            BorderBrush="{ThemeResource AppDividerBrush}"
+                            Padding="0,14"
+                            Visibility="{x:Bind local:BoolToVisibleConverter.ToVisibility(mgr.HasNoRecentActivity), Mode=OneWay}">
+                        <TextBlock Style="{StaticResource AppSecondary}"
+                                   TextWrapping="Wrap"
+                                   Text="Nothing recent. Transfers and clipboard syncs will show up here." />
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- One primary action, one supporting action. -->
+        <Grid Grid.Row="3" Padding="16,14,16,16" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Style="{StaticResource AppPrimaryButton}"
+                    HorizontalAlignment="Stretch"
+                    Click="SendFile_Click"
+                    ToolTipService.ToolTip="Choose files to send">
+                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE898;" FontSize="13" />
+                    <TextBlock Text="Send file" />
+                </StackPanel>
+            </Button>
+            <Button Grid.Column="1" Style="{StaticResource AppSecondaryButton}"
+                    HorizontalAlignment="Stretch"
+                    Click="PairDevice_Click"
+                    ToolTipService.ToolTip="Show a pairing code for a new device">
+                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xED14;" FontSize="13" />
+                    <TextBlock Text="Pair device" />
+                </StackPanel>
+            </Button>
+        </Grid>
     </Grid>
 </Window>

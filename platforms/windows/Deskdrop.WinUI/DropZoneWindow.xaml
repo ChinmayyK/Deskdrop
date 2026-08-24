@@ -5,42 +5,82 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Drop Zone">
+    Title="Drop files">
 
+    <!--
+        A floating drop target that sits over whatever the user is dragging
+        from, so it deliberately stays dark-glass in both themes (see the
+        AppScrim* tokens) - it has to read against arbitrary desktop content,
+        not against our own canvas.
+
+        Copy is plain: "Drop to Broadcast" and "active mesh" told the user
+        nothing about where their file was going.
+    -->
     <Grid Background="Transparent">
         <Border x:Name="AppTitleBar" Height="32" VerticalAlignment="Top" Background="Transparent" />
-        
-        <Border x:Name="DropGrid" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="16" BorderBrush="#40FFFFFF" BorderThickness="1.5" Background="#80000000" AllowDrop="True" DragEnter="DropGrid_DragEnter" DragLeave="DropGrid_DragLeave" Drop="DropGrid_Drop" Width="300" Height="300">
-            
+
+        <Border x:Name="DropGrid"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                CornerRadius="{StaticResource RadiusLarge}"
+                BorderBrush="{ThemeResource AppScrimBorderBrush}"
+                BorderThickness="1.5"
+                Background="{ThemeResource AppScrimStrongBrush}"
+                AllowDrop="True"
+                DragEnter="DropGrid_DragEnter"
+                DragLeave="DropGrid_DragLeave"
+                Drop="DropGrid_Drop"
+                Width="300" Height="300">
+
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Header Status Bar -->
-                <Grid Grid.Row="0" Margin="16,16,16,0">
-                    <Border HorizontalAlignment="Left" CornerRadius="12" BorderBrush="#40FFFFFF" BorderThickness="1" Padding="12,6">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse Fill="#34C759" Width="8" Height="8" VerticalAlignment="Center"/>
-                            <TextBlock Text="Devices Ready" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <Grid Grid.Row="0" Margin="14,14,10,0">
+                    <Border HorizontalAlignment="Left"
+                            CornerRadius="{StaticResource RadiusPill}"
+                            Background="{ThemeResource AppScrimSubtleBrush}"
+                            BorderBrush="{ThemeResource AppScrimBorderBrush}"
+                            BorderThickness="1"
+                            Padding="10,5">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <Ellipse Fill="{ThemeResource AppSuccessBrush}" Width="7" Height="7" VerticalAlignment="Center" />
+                            <TextBlock Text="Ready to receive" Foreground="White"
+                                       FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </StackPanel>
                     </Border>
-                    
-                    <Button HorizontalAlignment="Right" Foreground="White" Style="{ThemeResource TransparentButtonStyle}" Click="CloseButton_Click" ToolTipService.ToolTip="Close" AutomationProperties.Name="Close">
-                        <FontIcon Glyph="&#xE711;" FontSize="12"/>
+
+                    <Button HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Foreground="White"
+                            Style="{StaticResource AppIconButton}"
+                            Click="CloseButton_Click"
+                            ToolTipService.ToolTip="Close"
+                            AutomationProperties.Name="Close the drop target">
+                        <FontIcon Glyph="&#xE711;" FontSize="12" />
                     </Button>
                 </Grid>
 
-                <!-- Drop Area Target -->
                 <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-                    <Border CornerRadius="32" Width="64" Height="64" Background="#1AFFFFFF" BorderBrush="#40FFFFFF" BorderThickness="1.5">
-                        <FontIcon Glyph="&#xE8B7;" Foreground="White" FontSize="28"/>
+                    <Border CornerRadius="{StaticResource RadiusLarge}"
+                            Width="64" Height="64"
+                            Background="{ThemeResource AppScrimSubtleBrush}"
+                            BorderBrush="{ThemeResource AppScrimBorderBrush}"
+                            BorderThickness="1.5">
+                        <FontIcon Glyph="&#xE898;" Foreground="White" FontSize="26"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    
-                    <StackPanel Spacing="4">
-                        <TextBlock x:Name="DropTitleText" Text="Drop to Broadcast" Foreground="White" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="DropSubText" Text="Wireless transfer to nearby devices" Foreground="#8CFFFFFF" FontSize="12" FontWeight="Medium" HorizontalAlignment="Center"/>
+
+                    <StackPanel Spacing="5">
+                        <TextBlock x:Name="DropTitleText" Text="Drop files to send"
+                                   Foreground="White" FontSize="16" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock x:Name="DropSubText"
+                                   Text="They'll go straight to your connected devices"
+                                   Foreground="{ThemeResource AppScrimTextSecondaryBrush}"
+                                   FontSize="12"
+                                   HorizontalAlignment="Center" TextAlignment="Center"
+                                   TextWrapping="Wrap" MaxWidth="200" />
                     </StackPanel>
                 </StackPanel>
             </Grid>

@@ -197,6 +197,17 @@ namespace Deskdrop.WinUI
 
     public sealed class BoolToVisibleConverter : IValueConverter
     {
+        // Exposed as a static method, not just Convert(), because WinUI 3's
+        // x:Bind codegen calls SetConverterLookupRoot(this) for ANY {x:Bind
+        // ..., Converter={StaticResource ...}} in a file - anywhere in the
+        // file, not just at the binding site - and `this` is the code-behind
+        // instance. That's fine in a Page (FrameworkElement), but every
+        // Window-rooted file in this app fails to compile with "cannot
+        // convert from Window to FrameworkElement" the moment Converter= is
+        // used anywhere in it. Calling the static method directly from
+        // x:Bind sidesteps the lookup-root mechanism entirely.
+        public static Visibility ToVisibility(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
+
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             return (value is bool b && b) ? Visibility.Visible : Visibility.Collapsed;
@@ -243,6 +254,95 @@ namespace Deskdrop.WinUI
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             return ToSolidColorBrush(value?.ToString());
+        }
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
+    }
+
+    // 0-100 -> a pixel width, for the hand-drawn meters (battery pip,
+    // storage bar) where a full ProgressBar would be visually far heavier
+    // than the single number it carries. `parameter` is the track width in
+    // DIPs, so the same converter serves a 22px battery and a 120px bar.
+    public sealed class PercentToWidthConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            double percent = value switch
+            {
+                int i => i,
+                long l => l,
+                double d => d,
+                _ => 0,
+            };
+
+            if (percent < 0) percent = 0;
+            if (percent > 100) percent = 100;
+
+            double track = 100;
+            if (parameter != null &&
+                double.TryParse(parameter.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed) &&
+                parsed > 0)
+            {
+                track = parsed;
+            }
+
+            return track * percent / 100.0;
+        }
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
+    }
+
+    // Activity-feed kinds -> Segoe Fluent Icons. ActivityEntry.TypeIcon
+    // already maps the same kinds to platform-neutral icon *names* shared
+    // with the macOS/Android clients; this is the Windows glyph table for
+    // that set, kept separate so neither side has to compromise.
+    //
+    // Glyphs are built from code points rather than written as literals so
+    // this file stays pure ASCII and survives any tooling that re-encodes it.
+    public sealed class ActivityKindToGlyphConverter : IValueConverter
+    {
+        private static string G(int codePoint) => char.ConvertFromUtf32(codePoint);
+
+        // Static entry point for x:Bind sites in Window-rooted XAML - see the
+        // comment on BoolToVisibleConverter.ToVisibility for why Converter=
+        // can't be used there.
+        public static string ToGlyph(string? kind) => kind switch
+        {
+            "remote_clipboard_available" => G(0xE77F), // Paste
+            "clipboard_applied" => G(0xE73E),         // CheckMark
+            "clipboard_text" => G(0xE8C8),            // Copy
+            "clipboard_image" => G(0xEB9F),           // Photo
+            "file_transfer_started" => G(0xE898),     // Upload
+            "file_transfer_complete" => G(0xE896),    // Download
+            "file_transfer_failed" => G(0xE783),      // Error
+            "peer_connected" => G(0xE701),            // Wifi
+            "peer_disconnected" => G(0xEB55),         // Network offline
+            "sync_paused" => G(0xE769),               // Pause
+            "sync_resumed" => G(0xE768),              // Play
+            "remote_notification" => G(0xE946),       // Info
+            _ => G(0xEC42),                           // Generic event
+        };
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            return ToGlyph(value?.ToString());
+        }
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
+    }
+
+    // Dims an element instead of collapsing it, so a de-emphasised row keeps
+    // its place in the layout and nothing reflows when the state flips.
+    // `parameter` overrides the "false" opacity; default 0.45.
+    public sealed class BoolToOpacityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool b && b) return 1.0;
+
+            if (parameter != null &&
+                double.TryParse(parameter.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var dimmed))
+            {
+                return dimmed;
+            }
+            return 0.45;
         }
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }

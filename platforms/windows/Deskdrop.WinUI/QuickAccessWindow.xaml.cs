@@ -14,6 +14,7 @@ namespace Deskdrop.WinUI
     public sealed partial class QuickAccessWindow : Window
     {
         public event EventHandler? DashboardRequested;
+        public DeskdropStore mgr => DeskdropStore.Shared;
         private DispatcherTimer _searchDebounceTimer;
 
         public QuickAccessWindow()
@@ -21,6 +22,7 @@ namespace Deskdrop.WinUI
             this.InitializeComponent();
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
+            Deskdrop.WinUI.Services.ThemeService.Register(this);
 
             if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
             {
@@ -148,7 +150,11 @@ namespace Deskdrop.WinUI
             catch (Exception ex) { App.HandleError(ex); }
         }
 
-        private void HistoryItem_Click(object sender, RoutedEventArgs e)
+        // Bound to Tapped on the whole row rather than Click on a row-sized
+        // Button: the row now hosts its own pin/delete buttons, and nesting
+        // buttons inside a button made those two unreachable in some hit-test
+        // orders.
+        private void HistoryItem_Click(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             if (((FrameworkElement)sender).DataContext is HistoryItem item)
             {

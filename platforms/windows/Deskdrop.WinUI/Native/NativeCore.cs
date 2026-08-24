@@ -99,6 +99,21 @@ namespace Deskdrop.WinUI
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_event_device_id(IntPtr ev);
 
+        // Continuity Camera: ask a specific connected peer to start
+        // streaming its camera. Frames themselves are still fetched by
+        // polling deskdrop_engine_get_camera_frame (see DaemonClient's
+        // "latest_camera_frame" IPC command) - this only kicks off the
+        // request that was previously never sent at all.
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_request_camera_stream(
+            IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string targetDevice);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_stop_camera_stream(IntPtr handle);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_event_camera_stream_accepted(IntPtr ev);
+
         /// Respond to a TOFU prompt. trust=1 to accept, trust=0 to reject.
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int deskdrop_trust_peer(

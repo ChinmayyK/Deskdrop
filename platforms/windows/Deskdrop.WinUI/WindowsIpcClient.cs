@@ -75,11 +75,13 @@ namespace Deskdrop.WinUI
         /// Send a JSON command and return the parsed response.
         /// Returns null if the daemon is not running.
         /// </summary>
-        public static JsonDocument? Send(object request)
+        public static JsonDocument? Send(object request) => Send(request, TimeoutMs);
+
+        public static JsonDocument? Send(object request, int timeoutMs)
         {
             try
             {
-                using var pipe = OpenPipe(TimeoutMs);
+                using var pipe = OpenPipe(timeoutMs);
                 if (pipe == null) return null;
 
                 // Write request (newline-delimited JSON).
@@ -89,7 +91,7 @@ namespace Deskdrop.WinUI
                 pipe.Flush();
 
                 // Read response line.
-                var line = ReadLineWithTimeout(pipe, TimeoutMs);
+                var line = ReadLineWithTimeout(pipe, timeoutMs);
                 if (line != null)
                 {
                     try { return JsonDocument.Parse(line); } catch { return null; }
@@ -104,6 +106,11 @@ namespace Deskdrop.WinUI
             CancellationToken ct = default)
         {
             return await Task.Run(() => Send(request), ct);
+        }
+
+        public static async Task<JsonDocument?> SendAsync(object request, int timeoutMs, CancellationToken ct = default)
+        {
+            return await Task.Run(() => Send(request, timeoutMs), ct);
         }
 
         // ── Convenience commands ──────────────────────────────────────────────
@@ -271,6 +278,16 @@ namespace Deskdrop.WinUI
             
         public static JsonDocument? RemoteFilePullRequest(string deviceId, ulong fileId) =>
             Send(new { cmd = "remote_file_pull_request", target_device = deviceId, file_id = fileId });
+
+        // Asks the remote peer to generate/send a thumbnail for one file
+        // (JPEG bytes, base64-encoded in the response) - the local daemon
+        // does not cache or generate these itself. Mirrors macOS's
+        // requestRemoteThumbnail(targetDevice:fileId:sizePx:). The engine
+        // waits up to 10s for the peer's reply (engine/mod.rs), so this
+        // needs a longer local pipe read timeout than the default 1s.
+        private const int ThumbnailTimeoutMs = 12000;
+        public static async Task<JsonDocument?> RemoteThumbnailRequestAsync(string deviceId, ulong fileId, uint sizePx = 256) =>
+            await SendAsync(new { cmd = "remote_thumbnail_request", target_device = deviceId, file_id = fileId, size_px = sizePx }, ThumbnailTimeoutMs);
 
         public static JsonDocument? RemoteFileActionRequest(string deviceId, ulong fileId, string action, string? newName = null)
         {

@@ -16,6 +16,35 @@ namespace Deskdrop.WinUI.Views
         {
             this.InitializeComponent();
             StartupToggle.IsOn = IsLaunchAtStartupEnabled();
+            ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
+
+            ThemeSelector.SelectedIndex = Deskdrop.WinUI.Services.ThemeService.CurrentPreference switch
+            {
+                "Dark" => 1,
+                "System" => 2,
+                _ => 0,
+            };
+        }
+
+        private void OnScreenshotSyncToggled(object sender, RoutedEventArgs e)
+        {
+            App.SetScreenshotSyncEnabled(ScreenshotSyncToggle.IsOn);
+        }
+
+        private void OnThemeSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var preference = ThemeSelector.SelectedIndex switch
+            {
+                1 => "Dark",
+                2 => "System",
+                _ => "Light",
+            };
+            Deskdrop.WinUI.Services.ThemeService.SetPreference(preference);
+        }
+
+        private void OnManageDevicesClicked(object sender, RoutedEventArgs e)
+        {
+            DashboardWindow.Current?.NavigateTo("Devices");
         }
 
         private static bool IsLaunchAtStartupEnabled()
@@ -77,11 +106,33 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
-        private void OnRevokeAllClicked(object sender, RoutedEventArgs e)
+        // Confirm before wiping every pairing key. This used to fire on a
+        // single click with no way back, which is the wrong shape for an
+        // irreversible security action.
+        private async void OnRevokeAllClicked(object sender, RoutedEventArgs e)
         {
             try
             {
-                foreach (var peer in mgr.Peers)
+                var count = mgr.KnownDeviceCount;
+                if (count == 0) return;
+
+                var noun = count == 1 ? "device" : "devices";
+                var dialog = new ContentDialog
+                {
+                    Title = $"Forget {count} paired {noun}?",
+                    Content = "Deskdrop will clear its pairing keys on this PC. "
+                            + "Every device will need to be paired again before it can connect.",
+                    PrimaryButtonText = "Forget all",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = this.XamlRoot,
+                };
+
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+                // Snapshot first: ForgetPeer mutates the collection we'd
+                // otherwise be iterating.
+                foreach (var peer in mgr.Peers.ToList())
                 {
                     mgr.ForgetPeer(peer.device_id);
                 }

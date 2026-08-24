@@ -72,14 +72,23 @@ namespace Deskdrop.WinUI
         private System.Collections.Generic.List<string> _relay_path = new();
         public System.Collections.Generic.List<string> relay_path { get => _relay_path; set { if (SetProperty(ref _relay_path, value ?? new())) NotifyDisplayProperties(); } }
 
-        // Compatibility for older in-process history bindings.
+        // Compatibility for older in-process history bindings. JsonIgnore on
+        // both: neither is a wire field (device_name is), and without it
+        // System.Text.Json throws "JSON property name ... collides with
+        // another property" at type-info build time because the active
+        // PropertyNameCaseInsensitive options make "source"/"Source"
+        // ambiguous - which was silently breaking EVERY ActivityFeed
+        // deserialization (see DeserializeList<ActivityEntry> callers).
+        [JsonIgnore]
         public ulong timestamp { get => timestamp_ms; set => timestamp_ms = value; }
+        [JsonIgnore]
         public string source { get => device_name; set => device_name = value; }
 
         public string Title => !string.IsNullOrWhiteSpace(file_name)
             ? file_name!
             : (!string.IsNullOrWhiteSpace(text_preview) ? text_preview! : summary);
         public string Preview => !string.IsNullOrWhiteSpace(text_preview) ? text_preview! : summary;
+        [JsonIgnore]
         public string Source => string.IsNullOrWhiteSpace(device_name) ? "Deskdrop" : device_name;
         public string TypeLabel => kind switch
         {
@@ -113,18 +122,20 @@ namespace Deskdrop.WinUI
             "remote_notification" => "Bell",
             _ => "Activity"
         };
+        // Mid-tone values so a single hex reads on both the light and dark
+        // canvas; see the note on PeerViewModel.ConnectionColor.
         public string AccentColor => kind switch
         {
-            "remote_clipboard_available" => "#0055CC",
-            "clipboard_applied" => "#34C759",
-            "clipboard_image" => "#5E5CE6",
-            "file_transfer_complete" => "#34C759",
-            "file_transfer_failed" => "#FF3B30",
-            "peer_connected" => "#34C759",
-            "peer_disconnected" => "#8E8E93",
-            "sync_paused" => "#FF9500",
-            "remote_notification" => "#5E5CE6",
-            _ => "#0055CC"
+            "remote_clipboard_available" => "#3A66D8",
+            "clipboard_applied" => "#2AA971",
+            "clipboard_image" => "#6E72CF",
+            "file_transfer_complete" => "#2AA971",
+            "file_transfer_failed" => "#D6483B",
+            "peer_connected" => "#2AA971",
+            "peer_disconnected" => "#8A8A90",
+            "sync_paused" => "#C9861E",
+            "remote_notification" => "#6E72CF",
+            _ => "#3A66D8"
         };
         public bool CanApply => kind == "remote_clipboard_available" && !applied_locally && !string.IsNullOrWhiteSpace(content_hash);
         public bool HasPreview => !string.IsNullOrWhiteSpace(text_preview);
@@ -214,9 +225,13 @@ namespace Deskdrop.WinUI
                 return is_trusted && remembered && auto_connect ? "Ready to reconnect" : "Offline";
             }
         }
-        public string ConnectionColor => pairingRequested || outgoingPairingWaiting ? "#FF9500" : (status == "connected" ? "#34C759" : "#8E8E93");
+        // Literal hex rather than theme brushes: these are view-model values
+        // that also feed the tray/notification paths, so they have to read
+        // acceptably on both a light and a dark surface. Mid-tone versions of
+        // the design system's status colours satisfy both.
+        public string ConnectionColor => pairingRequested || outgoingPairingWaiting ? "#C9861E" : (status == "connected" ? "#2AA971" : "#8A8A90");
         public string TrustText => is_trusted ? "Trusted" : "Pairing required";
-        public string TrustColor => is_trusted ? "#34C759" : "#FF9500";
+        public string TrustColor => is_trusted ? "#2AA971" : "#C9861E";
         public string DeviceIcon => (platform ?? friendly_name).ToLowerInvariant() switch
         {
             var p when p.Contains("windows") => "Monitor",
@@ -225,13 +240,73 @@ namespace Deskdrop.WinUI
             _ => "Smartphone"
         };
         public string LastSeenText => last_seen.HasValue ? $"Seen {DeskdropFormatting.RelativeTimeFromUnixSeconds(last_seen.Value)}" : "";
-        public bool HasError => !string.IsNullOrWhiteSpace(last_error);
+        // Gated on connection state, not just "is last_error non-empty": the
+        // daemon doesn't clear last_error the moment a device reconnects, it
+        // just stops updating it - so a device that reconnected fine kept
+        // showing "Couldn't reach" from its last failed attempt forever.
+        // Once we're actually connected, any stale error is moot.
+        public bool HasError => !IsConnected && !string.IsNullOrWhiteSpace(last_error);
         public bool IsConnected => status == "connected";
         
         public bool ShowVerifyButton => !is_trusted;
         public bool ShowDisconnectButton => status == "connected";
         public bool ShowConnectButton => status != "connected" && is_trusted;
         public bool ShowForgetButton => true;
+
+        // ---- Presentation state for the redesigned device row ----------
+        //
+        // The row communicates one of four states at a glance: transferring,
+        // negotiating (connecting / awaiting a pairing answer), connected, or
+        // offline. These predicates are what the card's indicator, action
+        // cluster and dimming all key off, so the states stay mutually
+        // consistent instead of each control deciding for itself.
+
+        // "In negotiation" - the only state that earns an animated
+        // indicator. A steady connection gets a steady dot.
+        public bool IsNegotiating => status == "connecting" || pairingRequested || outgoingPairingWaiting;
+
+        public bool IsOffline => status != "connected" && !IsNegotiating;
+
+        // A device we've paired with before, versus one merely seen on the
+        // network. Drives the split between "Your devices" and "Nearby".
+        public bool IsKnown => is_trusted || remembered;
+        public bool IsNearby => !IsKnown;
+
+        // Pairing is the primary action for an unknown device; connecting is
+        // the primary action for a known one that's offline.
+        public bool ShowPairButton => !is_trusted && !pairingRequested;
+
+        private bool _isTransferring;
+        [JsonIgnore]
+        public bool IsTransferring
+        {
+            get => _isTransferring;
+            set { if (SetProperty(ref _isTransferring, value)) OnPropertyChanged(nameof(ShowTransferIndicator)); }
+        }
+        public bool ShowTransferIndicator => IsTransferring && IsConnected;
+
+        public string PlatformLabel
+        {
+            get
+            {
+                var p = (platform ?? "").ToLowerInvariant();
+                if (p.Contains("windows")) return "Windows PC";
+                if (p.Contains("mac") || p.Contains("apple")) return "Mac";
+                if (p.Contains("linux")) return "Linux";
+                if (p.Contains("android")) return "Android";
+                if (p.Contains("ios") || p.Contains("iphone")) return "iPhone";
+                return string.IsNullOrWhiteSpace(platform) ? "Device" : platform!;
+            }
+        }
+
+        public string BatteryPercentText => BatteryLevel > 0 ? $"{BatteryLevel}%" : "";
+        public bool HasMetrics => ShowBattery || ShowStorage;
+
+        // Errors are surfaced on the row itself rather than in a toast that
+        // scrolls away, and phrased as a state, not a stack trace.
+        public string ErrorText => string.IsNullOrWhiteSpace(last_error)
+            ? ""
+            : $"Couldn't reach {DisplayName}. It may be offline or on another network.";
 
         // Continuity Camera is phone-to-desktop only: the mobile app is the
         // frame source (deskdrop_push_video_frame), desktop platforms have
@@ -274,7 +349,7 @@ namespace Deskdrop.WinUI
                 return "Battery"; // Empty
             }
         }
-        public string BatteryColor => BatteryCharging ? "#34C759" : (BatteryLevel <= 20 ? "#FF3B30" : "#8E8E93");
+        public string BatteryColor => BatteryCharging ? "#2AA971" : (BatteryLevel <= 20 ? "#D6483B" : "#8A8A90");
 
         private long _storageTotal;
         public long StorageTotal { get => _storageTotal; set { if(SetProperty(ref _storageTotal, value)) NotifyStorageProperties(); } }
@@ -327,6 +402,14 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(ShowConnectButton));
             OnPropertyChanged(nameof(ShowForgetButton));
             OnPropertyChanged(nameof(ShowCameraButton));
+            OnPropertyChanged(nameof(IsNegotiating));
+            OnPropertyChanged(nameof(IsOffline));
+            OnPropertyChanged(nameof(IsKnown));
+            OnPropertyChanged(nameof(IsNearby));
+            OnPropertyChanged(nameof(ShowPairButton));
+            OnPropertyChanged(nameof(ShowTransferIndicator));
+            OnPropertyChanged(nameof(HasError));
+            OnPropertyChanged(nameof(ErrorText));
         }
 
         public void NotifyAll()
@@ -337,6 +420,10 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(ShowBattery));
             OnPropertyChanged(nameof(BatteryIcon));
             OnPropertyChanged(nameof(BatteryColor));
+            OnPropertyChanged(nameof(BatteryPercentText));
+            OnPropertyChanged(nameof(HasMetrics));
+            OnPropertyChanged(nameof(PlatformLabel));
+            OnPropertyChanged(nameof(LastSeenText));
             OnPropertyChanged(nameof(pairingPin));
         }
     }
@@ -372,6 +459,11 @@ namespace Deskdrop.WinUI
         public bool IsDirectory => is_directory;
         public int ItemCount => item_count;
         public double PercentFloat => bytes_total > 0 ? ((double)bytes_received / bytes_total * 100) : 100.0;
+        // JsonIgnore: "Percent"/"percent" collide under case-insensitive
+        // matching, which was silently throwing on every ActiveTransfers
+        // deserialization (see UpdateStateFromDaemon) - `percent` is the
+        // real wire field, this is just a display-casing alias for it.
+        [JsonIgnore]
         public int Percent => percent;
         public string PercentText => $"{PercentFloat:0.0}%";
         public string SizeText => bytes_total > 0 ? $"{DeskdropFormatting.FormatBytes(bytes_received)} / {DeskdropFormatting.FormatBytes(bytes_total)}" : DeskdropFormatting.FormatBytes(bytes_received);
@@ -395,7 +487,61 @@ namespace Deskdrop.WinUI
                 };
             }
         }
-        public string ProgressColor => status is "complete" or "completed" ? "#34C759" : (status == "failed" ? "#FF3B30" : "#0055CC");
+        public string ProgressColor => status is "complete" or "completed" ? "#2AA971" : (status == "failed" ? "#D6483B" : "#3A66D8");
+
+        // ---- Transfer-manager presentation ---------------------------
+        //
+        // The old row showed Accept, Reject *and* Cancel simultaneously for
+        // every transfer regardless of state, which meant two of the three
+        // were always wrong. These predicates give each state exactly the
+        // actions that apply to it.
+
+        public bool IsIncoming => status == "incoming";
+        public bool IsInFlight => status is "transferring" or "in_progress" or "paused" or "verifying";
+        public bool IsComplete => status is "complete" or "completed";
+        public bool IsFailed => status is "failed" or "cancelled";
+        public bool IsVerifying => status == "verifying";
+
+        public bool ShowAcceptReject => IsIncoming;
+        public bool ShowCancel => IsInFlight;
+        public bool ShowProgress => IsIncoming || IsInFlight;
+        public bool ShowOpenFolder => IsComplete;
+
+        // Short state word for the row's status chip - the long StatusText
+        // carries the detail underneath it.
+        public string StateLabel => status switch
+        {
+            "incoming" => "Waiting for approval",
+            "transferring" or "in_progress" => "Transferring",
+            "paused" => "Paused",
+            "verifying" => "Verifying",
+            "complete" or "completed" => "Completed",
+            "failed" => "Failed",
+            "cancelled" => "Cancelled",
+            _ => string.IsNullOrWhiteSpace(status) ? "Queued" : status,
+        };
+
+        public string StateColor => status switch
+        {
+            "complete" or "completed" => "#2AA971",
+            "failed" or "cancelled" => "#D6483B",
+            "incoming" => "#C9861E",
+            "paused" => "#8A8A90",
+            _ => "#3A66D8",
+        };
+
+        // "42.8 MB/s . 2 sec remaining" - the two numbers people actually
+        // watch, joined only when both exist so there's never a dangling dot.
+        public string RateText
+        {
+            get
+            {
+                var parts = new[] { SpeedText, EtaText }.Where(s => !string.IsNullOrWhiteSpace(s));
+                return string.Join("  ·  ", parts);
+            }
+        }
+
+        public string PeerLabel => string.IsNullOrWhiteSpace(from_device) ? "Unknown device" : from_device;
 
         public string PrimaryIcon => status switch
         {
@@ -429,6 +575,19 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(PrimaryBackground));
             OnPropertyChanged(nameof(PrimaryForeground));
             OnPropertyChanged(nameof(SecondaryVisible));
+            OnPropertyChanged(nameof(IsIncoming));
+            OnPropertyChanged(nameof(IsInFlight));
+            OnPropertyChanged(nameof(IsComplete));
+            OnPropertyChanged(nameof(IsFailed));
+            OnPropertyChanged(nameof(IsVerifying));
+            OnPropertyChanged(nameof(ShowAcceptReject));
+            OnPropertyChanged(nameof(ShowCancel));
+            OnPropertyChanged(nameof(ShowProgress));
+            OnPropertyChanged(nameof(ShowOpenFolder));
+            OnPropertyChanged(nameof(StateLabel));
+            OnPropertyChanged(nameof(StateColor));
+            OnPropertyChanged(nameof(RateText));
+            OnPropertyChanged(nameof(PeerLabel));
 
             try
             {
@@ -532,6 +691,24 @@ namespace Deskdrop.WinUI
         public string modified_text => FormattedDate;
         public string IconKind => is_dir ? "Folder" : "File";
         public string IconColor => is_dir ? "#0055CC" : "#555555";
+
+        // Thumbnail preview support (mirrors the macOS RemoteExplorerView:
+        // only image/video files are previewable, fetched on demand from the
+        // connected Android device over the existing peer link).
+        public bool IsPreviewable => !is_dir && (category?.StartsWith("image", StringComparison.OrdinalIgnoreCase) == true
+                                                  || category?.StartsWith("video", StringComparison.OrdinalIgnoreCase) == true);
+
+        private Microsoft.UI.Xaml.Media.Imaging.BitmapImage? _thumbnail;
+        public Microsoft.UI.Xaml.Media.Imaging.BitmapImage? Thumbnail
+        {
+            get => _thumbnail;
+            set { if (SetProperty(ref _thumbnail, value)) OnPropertyChanged(nameof(HasThumbnail)); }
+        }
+        public bool HasThumbnail => _thumbnail != null;
+
+        // Not bindable - just prevents re-requesting a thumbnail every time
+        // this row's container is recycled/scrolled back into view.
+        public bool ThumbnailRequested { get; set; }
     }
 
     public class RemoteFileListResponse
@@ -597,7 +774,11 @@ namespace Deskdrop.WinUI
             Peers.CollectionChanged += (_, _) => NotifyPeerMetrics();
             ActiveTransfers.CollectionChanged += (_, _) => NotifyTransferMetrics();
             ActiveSpeedTests.CollectionChanged += (_, _) => NotifyTransferMetrics();
-            ActivityFeed.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ActivityCount));
+            ActivityFeed.CollectionChanged += (_, _) =>
+            {
+                OnPropertyChanged(nameof(ActivityCount));
+                SyncRecentActivity();
+            };
             PendingClipboards.CollectionChanged += (_, _) => NotifyPendingClipboardMetrics();
             
             StartPolling();
@@ -636,6 +817,23 @@ namespace Deskdrop.WinUI
             get => _connectedPeers;
             set { _connectedPeers = value; OnPropertyChanged(); }
         }
+
+        // The Devices screen separates devices you've paired with from ones
+        // merely visible on the network - they need different primary actions
+        // and different visual weight, and lumping them into one list is what
+        // made the old "Remembered Devices" list ambiguous.
+        //
+        // Both are kept as stable collection *instances* and synced in place,
+        // so bound ListViews don't tear down and rebuild every card on the
+        // 5-second poll.
+        public ObservableCollection<PeerViewModel> KnownDevices { get; } = new();
+        public ObservableCollection<PeerViewModel> NearbyDevices { get; } = new();
+        public ObservableCollection<PeerViewModel> PairingRequests { get; } = new();
+
+        // Newest few activity entries, for the Devices screen's summary
+        // section. The full log lives on the Activity page.
+        public ObservableCollection<ActivityEntry> RecentActivity { get; } = new();
+        private const int RecentActivityLimit = 5;
 
         private PeerViewModel? _selectedPeer;
         public PeerViewModel? SelectedPeer
@@ -697,6 +895,8 @@ namespace Deskdrop.WinUI
                     OnPropertyChanged(nameof(HeaderStatusText));
                     OnPropertyChanged(nameof(HeaderStatusBrush));
                     OnPropertyChanged(nameof(DaemonStatusText));
+                    OnPropertyChanged(nameof(IsSearching));
+                    OnPropertyChanged(nameof(EcosystemSummaryText));
                 }
             }
         }
@@ -717,12 +917,28 @@ namespace Deskdrop.WinUI
         public int ActivityCount => ActivityFeed?.Count ?? 0;
         public int PendingClipboardCount => PendingClipboards?.Count ?? 0;
         public bool HasPendingClipboards => PendingClipboardCount > 0;
+        // Exposed as a notified property rather than letting views bind to
+        // ActiveTransfers.Count: x:Bind on a collection's Count reads it once
+        // and never hears CollectionChanged, so those counters silently went
+        // stale as transfers came and went.
+        public int ActiveTransferCount => ActiveTransfers?.Count ?? 0;
         public bool HasActiveTransfers => (ActiveTransfers?.Count ?? 0) > 0;
         public bool HasActiveSpeedTests => (ActiveSpeedTests?.Count ?? 0) > 0;
         private bool _otpShieldEnabled = true;
         public bool OtpShieldEnabled { get => _otpShieldEnabled; set => SetProperty(ref _otpShieldEnabled, value); }
         private bool _syncEnabled = true;
-        public bool SyncEnabled { get => _syncEnabled; set { if (SetProperty(ref _syncEnabled, value)) DaemonClient.SetSyncEnabled(value); } }
+        public bool SyncEnabled
+        {
+            get => _syncEnabled;
+            set
+            {
+                if (SetProperty(ref _syncEnabled, value))
+                {
+                    DaemonClient.SetSyncEnabled(value);
+                    OnPropertyChanged(nameof(ClipboardSummaryText));
+                }
+            }
+        }
         private bool _requireTofuConfirmation = true;
         public bool RequireTofuConfirmation { get => _requireTofuConfirmation; set { if (SetProperty(ref _requireTofuConfirmation, value)) DaemonClient.PatchSettings(new { require_tofu_confirmation = value }); } }
         public string DaemonStatusText => IsDaemonRunning ? "Running" : "Stopped";
@@ -741,10 +957,115 @@ namespace Deskdrop.WinUI
         {
             get
             {
-                if (!IsDaemonRunning) return "#FF3B30";
-                if (ConnectedCount > 0) return "#34C759";
-                if (AttentionCount > 0) return "#FF9500";
-                return "#8E8E93";
+                if (!IsDaemonRunning) return "#D6483B";
+                if (ConnectedCount > 0) return "#2AA971";
+                if (AttentionCount > 0) return "#C9861E";
+                return "#8A8A90";
+            }
+        }
+
+        // ---- Derived state for the redesigned shell -------------------
+
+        // Drives the header indicator's pulse. Animation here means "work in
+        // progress", so it runs only while we're actually looking for
+        // something - a connected, settled state gets a steady dot.
+        public bool IsSearching => IsDaemonRunning && ConnectedCount == 0;
+
+        // Distinguishes "we haven't asked the engine yet" from "we asked and
+        // there is nothing". Without it, the Devices page flashes its
+        // "No devices paired yet" empty state for the first second of every
+        // launch, which reads as data loss.
+        private bool _hasLoadedOnce;
+        public bool HasLoadedOnce
+        {
+            get => _hasLoadedOnce;
+            set
+            {
+                if (SetProperty(ref _hasLoadedOnce, value))
+                {
+                    OnPropertyChanged(nameof(IsInitialLoad));
+                    OnPropertyChanged(nameof(ShowDevicesEmptyState));
+                }
+            }
+        }
+
+        public bool IsInitialLoad => !HasLoadedOnce;
+
+        // The empty state is only honest once we've actually heard back.
+        public bool ShowDevicesEmptyState => HasLoadedOnce && KnownDevices.Count == 0;
+
+        public int KnownDeviceCount => KnownDevices.Count;
+        public int NearbyDeviceCount => NearbyDevices.Count;
+        public bool HasKnownDevices => KnownDevices.Count > 0;
+        public bool HasNoKnownDevices => KnownDevices.Count == 0;
+        public bool HasNearbyDevices => NearbyDevices.Count > 0;
+        public bool HasPairingRequests => PairingRequests.Count > 0;
+        public bool HasRecentActivity => RecentActivity.Count > 0;
+        public bool HasNoRecentActivity => RecentActivity.Count == 0;
+
+        // The one line that has to answer "is my ecosystem healthy?" in
+        // under a second. Reachability first, then trust, then encryption -
+        // in that order, because that's the order the user cares about.
+        public string EcosystemSummaryText
+        {
+            get
+            {
+                if (!IsDaemonRunning) return "Local service stopped  ·  Deskdrop can't reach the network";
+                if (ConnectedCount == 1) return "1 device connected  ·  Encrypted local network";
+                if (ConnectedCount > 1) return $"{ConnectedCount} devices connected  ·  Encrypted local network";
+                if (HasKnownDevices) return "No devices connected  ·  Listening on the local network";
+                return "No devices paired yet  ·  Listening on the local network";
+            }
+        }
+
+        // Compact one-liner for the in-progress banner: how many, how fast.
+        public string ActiveTransferSummaryText
+        {
+            get
+            {
+                var count = ActiveTransfers?.Count ?? 0;
+                if (count == 0) return "";
+
+                var noun = count == 1 ? "1 transfer" : $"{count} transfers";
+                var fastest = ActiveTransfers!
+                    .Where(t => t.speed_bps.HasValue && t.speed_bps.Value > 0)
+                    .Select(t => t.speed_bps!.Value)
+                    .DefaultIfEmpty(0)
+                    .Max();
+
+                return fastest > 0
+                    ? $"{noun} in progress  ·  {DeskdropFormatting.FormatBytes(fastest)}/s"
+                    : $"{noun} in progress";
+            }
+        }
+
+        // Header line for the clipboard bridge: who it's sharing with, and
+        // whether automatic sync is actually on - the two things that explain
+        // why an entry did or didn't appear.
+        public string ClipboardSummaryText
+        {
+            get
+            {
+                var scope = ConnectedCount switch
+                {
+                    0 => "No connected devices",
+                    1 => "Sharing with 1 device",
+                    _ => $"Sharing with {ConnectedCount} devices",
+                };
+                return $"{scope}  ·  Auto-sync {(SyncEnabled ? "on" : "off")}";
+            }
+        }
+
+        // Header line for the transfer manager: what's happening now, and
+        // where finished files land - the two questions this page gets asked.
+        public string TransfersSummaryText
+        {
+            get
+            {
+                var active = ActiveTransfers?.Count ?? 0;
+                if (active > 0) return ActiveTransferSummaryText;
+                if (HasActiveSpeedTests) return "Benchmark running";
+                return "No active transfers  ·  Received files are saved to your Downloads folder";
             }
         }
 
@@ -857,6 +1178,10 @@ namespace Deskdrop.WinUI
                 finally
                 {
                     System.Threading.Interlocked.Exchange(ref _isRefreshInFlight, 0);
+
+                    // First poll is done - the UI can stop showing skeletons
+                    // and start trusting "no devices" to mean no devices.
+                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() => HasLoadedOnce = true);
                 }
             });
         }
@@ -944,10 +1269,51 @@ namespace Deskdrop.WinUI
                 {
                 if (newPeers != null)
                 {
-                    Peers = new ObservableCollection<PeerViewModel>(newPeers);
-                    var connected = newPeers.Where(p => p.is_trusted && p.status == "connected").ToList();
+                    // Update existing PeerViewModel instances in place (matched by
+                    // device_id) instead of replacing the whole collection every
+                    // poll - preserving object identity keeps the bound ListView
+                    // from tearing down and rebuilding every device card (which
+                    // read as constant "flicker"/refresh and reset hover state)
+                    // on every 5s poll. Mirrors the ActiveTransfers merge below.
+                    var stalePeers = Peers.ToList();
+                    foreach (var incoming in newPeers)
+                    {
+                        var match = Peers.FirstOrDefault(p => p.device_id == incoming.device_id);
+                        if (match != null)
+                        {
+                            match.friendly_name = incoming.friendly_name;
+                            match.platform = incoming.platform;
+                            match.status = incoming.status;
+                            match.is_trusted = incoming.is_trusted;
+                            match.remembered = incoming.remembered;
+                            match.sync_enabled = incoming.sync_enabled;
+                            match.remote_sync_enabled = incoming.remote_sync_enabled;
+                            match.auto_connect = incoming.auto_connect;
+                            match.explicit_disconnect = incoming.explicit_disconnect;
+                            match.last_seen = incoming.last_seen;
+                            match.last_error = incoming.last_error;
+                            match.pairingPin = incoming.pairingPin;
+                            match.pairingRequested = incoming.pairingRequested;
+                            match.outgoingPairingWaiting = incoming.outgoingPairingWaiting;
+                            match.BatteryLevel = incoming.BatteryLevel;
+                            match.BatteryCharging = incoming.BatteryCharging;
+                            match.StorageTotal = incoming.StorageTotal;
+                            match.StorageFree = incoming.StorageFree;
+                            match.StorageImages = incoming.StorageImages;
+                            match.StorageVideos = incoming.StorageVideos;
+                            match.StorageApps = incoming.StorageApps;
+                            stalePeers.Remove(match);
+                        }
+                        else
+                        {
+                            Peers.Add(incoming);
+                        }
+                    }
+                    foreach (var stale in stalePeers) Peers.Remove(stale);
+
+                    var connected = Peers.Where(p => p.is_trusted && p.status == "connected").ToList();
                     ConnectedPeers = new ObservableCollection<PeerViewModel>(connected);
-                    
+
                     StatusLine = Peers.Count == 0 ? "Running - no devices connected" : $"Connected to {ConnectedCount} device{(ConnectedCount == 1 ? "" : "s")}";
                     NotifyPeerMetrics();
                 }
@@ -1091,6 +1457,88 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(AttentionCount));
             OnPropertyChanged(nameof(HeaderStatusText));
             OnPropertyChanged(nameof(HeaderStatusBrush));
+
+            SyncPeerProjection(KnownDevices, Peers.Where(p => p.IsKnown));
+            SyncPeerProjection(NearbyDevices, Peers.Where(p => p.IsNearby));
+            SyncPeerProjection(PairingRequests, Peers.Where(p => p.pairingRequested));
+
+            OnPropertyChanged(nameof(KnownDeviceCount));
+            OnPropertyChanged(nameof(NearbyDeviceCount));
+            OnPropertyChanged(nameof(HasKnownDevices));
+            OnPropertyChanged(nameof(HasNoKnownDevices));
+            OnPropertyChanged(nameof(HasNearbyDevices));
+            OnPropertyChanged(nameof(HasPairingRequests));
+            OnPropertyChanged(nameof(EcosystemSummaryText));
+            OnPropertyChanged(nameof(IsSearching));
+            OnPropertyChanged(nameof(ClipboardSummaryText));
+            OnPropertyChanged(nameof(ShowDevicesEmptyState));
+        }
+
+        // Reconciles a filtered projection against the master Peers list
+        // without replacing the collection instance. Removing stale entries
+        // first, then inserting missing ones at their target index, keeps
+        // object identity intact - which is what stops every device card from
+        // being rebuilt (losing hover and focus) on each poll.
+        private static void SyncPeerProjection(ObservableCollection<PeerViewModel> target, IEnumerable<PeerViewModel> source)
+        {
+            var desired = source.ToList();
+
+            for (var i = target.Count - 1; i >= 0; i--)
+            {
+                if (!desired.Contains(target[i])) target.RemoveAt(i);
+            }
+
+            for (var i = 0; i < desired.Count; i++)
+            {
+                var item = desired[i];
+                var existing = target.IndexOf(item);
+                if (existing < 0) target.Insert(i, item);
+                else if (existing != i) target.Move(existing, i);
+            }
+        }
+
+        // Mirrors in-flight transfers onto the devices they belong to, so a
+        // device row can show it's busy without every row subscribing to the
+        // whole transfer list. Matching is by display name because that's the
+        // only peer identity the transfer payload carries.
+        private void SyncTransferringPeers()
+        {
+            if (Peers == null) return;
+
+            var busy = (ActiveTransfers ?? new ObservableCollection<FileTransferState>())
+                .Where(t => t.IsInFlight)
+                .Select(t => t.from_device)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var peer in Peers)
+            {
+                peer.IsTransferring = busy.Contains(peer.DisplayName) || busy.Contains(peer.friendly_name);
+            }
+        }
+
+        // Keeps the Devices screen's activity preview to the newest handful.
+        private void SyncRecentActivity()
+        {
+            if (ActivityFeed == null) return;
+
+            var desired = ActivityFeed.Take(RecentActivityLimit).ToList();
+
+            for (var i = RecentActivity.Count - 1; i >= 0; i--)
+            {
+                if (!desired.Contains(RecentActivity[i])) RecentActivity.RemoveAt(i);
+            }
+
+            for (var i = 0; i < desired.Count; i++)
+            {
+                var item = desired[i];
+                var existing = RecentActivity.IndexOf(item);
+                if (existing < 0) RecentActivity.Insert(i, item);
+                else if (existing != i) RecentActivity.Move(existing, i);
+            }
+
+            OnPropertyChanged(nameof(HasRecentActivity));
+            OnPropertyChanged(nameof(HasNoRecentActivity));
         }
 
         private bool _sleepImmunityActive;
@@ -1098,7 +1546,11 @@ namespace Deskdrop.WinUI
         private void NotifyTransferMetrics()
         {
             OnPropertyChanged(nameof(HasActiveTransfers));
+            OnPropertyChanged(nameof(ActiveTransferCount));
             OnPropertyChanged(nameof(HasActiveSpeedTests));
+            OnPropertyChanged(nameof(ActiveTransferSummaryText));
+            OnPropertyChanged(nameof(TransfersSummaryText));
+            SyncTransferringPeers();
 
             // Prevent Modern Standby / display sleep for as long as a
             // transfer or speed test is in flight, mirroring macOS's
@@ -1231,16 +1683,41 @@ namespace Deskdrop.WinUI {
         public string path {get;set;} = "";
         public bool is_text {get;set;} = true;
         private bool _isPinned;
-        public bool IsPinned { get => _isPinned; set { if (SetProperty(ref _isPinned, value)) OnPropertyChanged(nameof(PinColor)); } }
-        public string PinColor => IsPinned ? "#32ADE6" : "#8E8E93";
+        public bool IsPinned
+        {
+            get => _isPinned;
+            set
+            {
+                if (SetProperty(ref _isPinned, value))
+                {
+                    OnPropertyChanged(nameof(PinColor));
+                    OnPropertyChanged(nameof(PinTooltip));
+                }
+            }
+        }
+        public string PinColor => IsPinned ? "#3A66D8" : "#8A8A90";
+
+        // Windows glyph for the row. TypeIcon below is the emoji used by the
+        // cross-platform surfaces; on Windows we want Segoe Fluent so the
+        // icon set stays internally consistent. Built from a code point so
+        // this file stays pure ASCII.
+        public string Glyph => is_text ? char.ConvertFromUtf32(0xE8C8) : char.ConvertFromUtf32(0xE8A5);
+        public bool HasPath => !string.IsNullOrWhiteSpace(path);
+        public string PinTooltip => IsPinned ? "Unpin from the top" : "Pin to the top";
+
         public string TypeIcon { get; set; } = "📝";
         public string Summary { get; set; } = "";
         public string FullText { get; set; } = "";
         public string Source { get; set; } = "";
         public string RelativeTime { get; set; } = "Just now";
         public DateTime Time { get; set; } = DateTime.Now;
+        // JsonIgnore: same "collides under case-insensitive matching" issue
+        // as ActivityEntry.Source/FileTransferState.Percent above - latent
+        // here since HistoryItem isn't JSON round-tripped today, but fixing
+        // it before it becomes a live bug.
+        [JsonIgnore]
         public string Id { get => id; set => id = value; }
-    } 
+    }
 }
 
 

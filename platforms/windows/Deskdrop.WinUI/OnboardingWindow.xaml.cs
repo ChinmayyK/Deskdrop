@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 
 namespace Deskdrop.WinUI
 {
@@ -22,6 +23,7 @@ namespace Deskdrop.WinUI
 
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
+            Deskdrop.WinUI.Services.ThemeService.Register(this);
 
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
@@ -29,6 +31,26 @@ namespace Deskdrop.WinUI
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(appWindow);
             
             appWindow.Resize(new Windows.Graphics.SizeInt32(600, 500));
+
+            CardRoot.Loaded += (s, e) => PlayEntranceAnimation();
+        }
+
+        private void PlayEntranceAnimation()
+        {
+            var storyboard = new Storyboard();
+            var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+            var fade = new DoubleAnimation { To = 1.0, Duration = TimeSpan.FromMilliseconds(280), EasingFunction = easing };
+            Storyboard.SetTarget(fade, CardRoot);
+            Storyboard.SetTargetProperty(fade, "Opacity");
+
+            var rise = new DoubleAnimation { To = 0.0, Duration = TimeSpan.FromMilliseconds(280), EasingFunction = easing };
+            Storyboard.SetTarget(rise, CardTranslate);
+            Storyboard.SetTargetProperty(rise, "Y");
+
+            storyboard.Children.Add(fade);
+            storyboard.Children.Add(rise);
+            storyboard.Begin();
         }
 
         private void BtnShowQRCode_Click(object sender, RoutedEventArgs e)

@@ -55,8 +55,40 @@ namespace Deskdrop.WinUI.Views
                 {
                     FilteredFeed.Add(item);
                 }
+
+                UpdateEmptyState(isNarrowed: !string.IsNullOrEmpty(query) || _activeFilter != "All");
             }
             catch (Exception ex) { App.HandleError(ex); }
+        }
+
+        // "Nothing has ever been copied" and "nothing matches your filter"
+        // need different words and different actions - offering "push this
+        // PC's clipboard" to someone whose search just missed is noise.
+        private void UpdateEmptyState(bool isNarrowed)
+        {
+            if (EmptyStatePanel == null) return;
+
+            if (FilteredFeed.Count > 0)
+            {
+                EmptyStatePanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            EmptyStatePanel.Visibility = Visibility.Visible;
+
+            if (isNarrowed)
+            {
+                EmptyStateTitle.Text = "No matches";
+                EmptyStateDetail.Text = "Nothing in your clipboard history matches that search or filter.";
+                EmptyStateAction.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                EmptyStateTitle.Text = "Nothing here yet";
+                EmptyStateDetail.Text = "Copy something on this PC or a paired device and it will show up here, "
+                                     + "ready to paste on either end.";
+                EmptyStateAction.Visibility = Visibility.Visible;
+            }
         }
 
         private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
@@ -64,31 +96,55 @@ namespace Deskdrop.WinUI.Views
             UpdateFilter();
         }
 
+        // Selection is expressed by swapping the whole style rather than
+        // poking Background and Foreground individually. That way the
+        // selected and unselected chips keep their full set of hover, press
+        // and disabled states instead of losing them the moment we overwrite
+        // one brush by hand.
         private void OnFilterChipClicked(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Content is string tag)
             {
                 _activeFilter = tag;
-                
-                var accentBrush = (Brush)Application.Current.Resources["AppAccentBrush"];
-                var surfaceBrush = (Brush)Application.Current.Resources["AppSurfaceBrush"];
-                var primaryText = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
-                var secondaryText = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
-
-                ChipAll.Background = _activeFilter == "All" ? accentBrush : surfaceBrush;
-                ChipAll.Foreground = _activeFilter == "All" ? new SolidColorBrush(Microsoft.UI.Colors.White) : secondaryText;
-                
-                ChipText.Background = _activeFilter == "Text" ? accentBrush : surfaceBrush;
-                ChipText.Foreground = _activeFilter == "Text" ? new SolidColorBrush(Microsoft.UI.Colors.White) : secondaryText;
-                
-                ChipImage.Background = _activeFilter == "Image" ? accentBrush : surfaceBrush;
-                ChipImage.Foreground = _activeFilter == "Image" ? new SolidColorBrush(Microsoft.UI.Colors.White) : secondaryText;
-                
-                ChipFile.Background = _activeFilter == "File" ? accentBrush : surfaceBrush;
-                ChipFile.Foreground = _activeFilter == "File" ? new SolidColorBrush(Microsoft.UI.Colors.White) : secondaryText;
-
+                ApplyChipSelection();
                 UpdateFilter();
             }
+        }
+
+        private void ApplyChipSelection()
+        {
+            try
+            {
+                var selected = (Style)Application.Current.Resources["AppAccentSubtleButton"];
+                var unselected = (Style)Application.Current.Resources["AppGhostButton"];
+
+                ChipAll.Style = _activeFilter == "All" ? selected : unselected;
+                ChipText.Style = _activeFilter == "Text" ? selected : unselected;
+                ChipImage.Style = _activeFilter == "Image" ? selected : unselected;
+                ChipFile.Style = _activeFilter == "File" ? selected : unselected;
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+        }
+
+        // Pushing an older entry back out to a device: the same operation as
+        // "Push clipboard", but sourced from history instead of the live
+        // Windows clipboard.
+        private async void OnSendActivityClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not ActivityEntry entry) return;
+
+            var text = !string.IsNullOrEmpty(entry.text_preview) ? entry.text_preview : entry.Title;
+            if (string.IsNullOrEmpty(text)) return;
+
+            try
+            {
+                var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(this.XamlRoot, mgr.ConnectedPeers);
+                if (target != null)
+                {
+                    mgr.SendPushText(text, target.device_id);
+                }
+            }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private async void OnPushLocalClipboardClicked(object sender, RoutedEventArgs e)
@@ -101,10 +157,10 @@ namespace Deskdrop.WinUI.Views
                     var text = await dataPackageView.GetTextAsync();
                     if (!string.IsNullOrEmpty(text))
                     {
-                        var firstConnected = mgr.ConnectedPeers.FirstOrDefault();
-                        if (firstConnected != null)
+                        var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(this.XamlRoot, mgr.ConnectedPeers);
+                        if (target != null)
                         {
-                            mgr.SendPushText(text, firstConnected.device_id);
+                            mgr.SendPushText(text, target.device_id);
                         }
                     }
                 }

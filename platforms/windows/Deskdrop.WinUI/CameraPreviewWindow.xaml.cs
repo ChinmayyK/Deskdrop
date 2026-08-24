@@ -9,6 +9,12 @@ namespace Deskdrop.WinUI
 {
     public sealed partial class CameraPreviewWindow : Window
     {
+        // Raised by ClipboardManager's event loop on PB_EVENT_CAMERA_STREAM_STOP
+        // so an open preview reflects the peer ending the stream instead of
+        // just silently going stale.
+        public static event Action<string>? RemoteStreamStopped;
+        public static void NotifyRemoteStreamStopped(string deviceId) => RemoteStreamStopped?.Invoke(deviceId);
+
         private readonly string _deviceId;
         private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
         private CancellationTokenSource? _cts;
@@ -21,6 +27,7 @@ namespace Deskdrop.WinUI
             this.InitializeComponent();
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
+            Deskdrop.WinUI.Services.ThemeService.Register(this);
 
             if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
             {
@@ -41,7 +48,27 @@ namespace Deskdrop.WinUI
 
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
-            this.Closed += (s, e) => StopPolling();
+            RemoteStreamStopped += OnRemoteStreamStopped;
+            this.Closed += (s, e) =>
+            {
+                RemoteStreamStopped -= OnRemoteStreamStopped;
+                StopPolling();
+                try
+                {
+                    if (App.EngineHandle != IntPtr.Zero) NativeCore.deskdrop_stop_camera_stream(App.EngineHandle);
+                }
+                catch (Exception ex) { App.HandleError(ex); }
+            };
+
+            // This window used to just poll for a frame that might already
+            // exist - nothing ever actually asked the peer to start
+            // streaming, so it showed "Waiting for stream..." forever
+            // unless the phone happened to start unprompted.
+            try
+            {
+                if (App.EngineHandle != IntPtr.Zero) NativeCore.deskdrop_request_camera_stream(App.EngineHandle, _deviceId);
+            }
+            catch (Exception ex) { App.HandleError(ex); }
 
             StartPolling();
         }
@@ -89,7 +116,7 @@ namespace Deskdrop.WinUI
                                 _dispatcherQueue.TryEnqueue(() =>
                                 {
                                     StatusText.Text = _receivedFirstFrame ? "Connection lost..." : "Waiting for stream...";
-                                    StatusText.Visibility = Visibility.Visible;
+                                    StatusPanel.Visibility = Visibility.Visible;
                                 });
                             }
                         }
@@ -125,12 +152,23 @@ namespace Deskdrop.WinUI
 
                 CameraImage.Source = bitmapImage;
                 _receivedFirstFrame = true;
-                StatusText.Visibility = Visibility.Collapsed;
+                StatusPanel.Visibility = Visibility.Collapsed;
             }
             catch (Exception ex)
             {
                 App.HandleError(ex);
             }
+        }
+
+        private void OnRemoteStreamStopped(string deviceId)
+        {
+            if (!string.Equals(deviceId, _deviceId, StringComparison.OrdinalIgnoreCase)) return;
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                StopPolling();
+                StatusText.Text = "Stream ended";
+                StatusPanel.Visibility = Visibility.Visible;
+            });
         }
 
         private void StopPolling()

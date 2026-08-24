@@ -5,25 +5,60 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Camera Preview">
+    Title="Camera">
 
     <Grid Background="Transparent">
         <Border x:Name="AppTitleBar" Height="1" VerticalAlignment="Top" Background="Transparent" />
-        
-        <Border CornerRadius="12" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Margin="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-            <Grid>
-                <!-- Title Bar for Dragging / Actions -->
-                <Grid VerticalAlignment="Top" Padding="12">
-                    <Button Width="28" Height="28" CornerRadius="14" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Background="Transparent" BorderThickness="0" Click="BtnClose_Click" Padding="0">
+
+        <Border CornerRadius="{StaticResource RadiusLarge}"
+                BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                BorderThickness="1"
+                Margin="12"
+                Background="{ThemeResource AppSurfaceElevatedBrush}">
+            <Grid RowSpacing="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Labelled header: an unlabelled close button on a black
+                     rectangle gave no indication what the window was. -->
+                <Grid Grid.Row="0" Padding="14,10,10,8" ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <FontIcon Grid.Column="0" Glyph="&#xE722;" FontSize="14"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                              VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="Continuity camera"
+                               Style="{StaticResource AppBodyStrong}" FontSize="13"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="2" Style="{StaticResource AppIconButtonSmall}"
+                            Click="BtnClose_Click"
+                            ToolTipService.ToolTip="Close"
+                            AutomationProperties.Name="Close the camera preview">
                         <FontIcon Glyph="&#xE711;" FontSize="12" />
                     </Button>
                 </Grid>
 
-                <Grid Margin="16,48,16,16">
-                    <Border CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="Black">
+                <Grid Grid.Row="1" Margin="12,0,12,12">
+                    <!-- Black letterbox is intentional (matches media-player
+                         convention) regardless of app theme. -->
+                    <Border CornerRadius="{StaticResource RadiusMedium}"
+                            BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                            BorderThickness="1"
+                            Background="Black">
                         <Grid>
                             <Image x:Name="CameraImage" Stretch="Uniform" />
-                            <TextBlock x:Name="StatusText" Text="Waiting for stream..." Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="16" FontWeight="Medium" />
+                            <StackPanel x:Name="StatusPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                                <ProgressRing IsActive="True" Width="26" Height="26" />
+                                <TextBlock x:Name="StatusText" Text="Waiting for the camera stream"
+                                           Foreground="White" HorizontalAlignment="Center"
+                                           FontSize="13.5" FontWeight="SemiBold" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </Grid>

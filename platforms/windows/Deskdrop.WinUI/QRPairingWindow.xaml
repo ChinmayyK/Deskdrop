@@ -5,35 +5,78 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Pair Device">
+    Title="Pair a device">
 
-    <Grid Background="Transparent">
+    <!--
+        Standalone pairing window, raised from the tray popup and onboarding
+        where there's no host to put the in-app pairing sheet into. Same
+        content and same hierarchy as PairDeviceDialog so the flow feels
+        identical whichever door you came through.
+    -->
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Custom TitleBar -->
-        <Border x:Name="AppTitleBar" Height="32" Grid.Row="0" Background="Transparent" />
+        <Border x:Name="AppTitleBar" Height="36" Grid.Row="0" Background="Transparent" />
 
-        <!-- Main Content -->
-        <StackPanel Grid.Row="1" Padding="20" Spacing="24" HorizontalAlignment="Center" VerticalAlignment="Center">
-            
-            <TextBlock Text="Pair Device" 
-                       HorizontalAlignment="Center" 
-                       FontWeight="SemiBold" 
-                       FontSize="18"/>
+        <StackPanel Grid.Row="1" Padding="24,0,24,24" Spacing="16"
+                    VerticalAlignment="Center">
 
-            <Border Background="White" CornerRadius="16" Padding="12" HorizontalAlignment="Center">
-                <Image x:Name="QrCodeImage" Width="180" Height="180" Stretch="Uniform" />
+            <StackPanel Spacing="4">
+                <TextBlock Text="Pair a device"
+                           Style="{StaticResource AppDisplayText}"
+                           FontSize="20"
+                           TextAlignment="Center" />
+                <TextBlock x:Name="TxtDeviceName" Text="This PC"
+                           Style="{StaticResource AppSecondary}"
+                           TextAlignment="Center" />
+            </StackPanel>
+
+            <!-- QR needs a solid white quiet zone to stay scannable
+                 regardless of the app's own theme. -->
+            <Border Background="White"
+                    CornerRadius="{StaticResource RadiusLarge}"
+                    Padding="14"
+                    HorizontalAlignment="Center">
+                <Grid Width="180" Height="180">
+                    <ProgressRing x:Name="QrLoadingRing" IsActive="True" Width="30" Height="30" />
+                    <Image x:Name="QrCodeImage" Stretch="Uniform" Visibility="Collapsed"
+                           AutomationProperties.Name="Pairing QR code" />
+                    <StackPanel x:Name="QrErrorPanel" Visibility="Collapsed" Spacing="8"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE783;" FontSize="22" Foreground="#C2331F"
+                                  HorizontalAlignment="Center" />
+                        <TextBlock Text="Couldn't reach the local service"
+                                   FontSize="11.5" FontWeight="SemiBold" Foreground="#5A5A60"
+                                   HorizontalAlignment="Center" TextAlignment="Center"
+                                   TextWrapping="Wrap" Width="140" />
+                    </StackPanel>
+                </Grid>
             </Border>
-            
-            <TextBlock Text="Scan with Deskdrop on your other device to connect." 
-                       TextWrapping="WrapWholeWords" 
-                       TextAlignment="Center" 
-                       FontSize="13" 
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                       Width="200"/>
+
+            <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
+                    CornerRadius="{StaticResource RadiusMedium}"
+                    Padding="12,10">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Waiting for a device to scan"
+                               Style="{StaticResource AppBodyStrong}"
+                               FontSize="13"
+                               TextAlignment="Center" />
+                    <TextBlock x:Name="TxtCaption"
+                               Text="Open Deskdrop on your phone or another computer and scan this code."
+                               Style="{StaticResource AppCaption}"
+                               TextWrapping="WrapWholeWords"
+                               TextAlignment="Center" />
+                </StackPanel>
+            </Border>
+
+            <Button x:Name="RetryButton" Content="Try again"
+                    Style="{StaticResource AppSecondaryButton}"
+                    HorizontalAlignment="Center"
+                    Visibility="Collapsed"
+                    Click="OnRetryClicked" />
         </StackPanel>
     </Grid>
 </Window>

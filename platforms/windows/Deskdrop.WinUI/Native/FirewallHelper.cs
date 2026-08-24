@@ -13,61 +13,29 @@ namespace Deskdrop.WinUI
             ("Deskdrop mDNS",          5353,  "UDP"),
         };
 
+        // Deskdrop never elevates to add firewall rules: a UAC "runas"
+        // prompt asks for an *administrator's* credentials, which is a
+        // dead end for any user who isn't a local admin - they can't ever
+        // satisfy it, so surfacing it is just a recurring interruption
+        // with no way out. This only detects and logs whether the rules
+        // are missing; LAN discovery/transfer instead relies on Windows'
+        // own per-app firewall consent prompt (the "Allow access" dialog),
+        // which any standard user can accept without a password.
         public static void EnsureRules()
         {
             try
             {
-                bool needsElevation = false;
                 foreach (var (name, port, protocol) in RequiredRules)
                 {
                     if (!RuleExists(name))
                     {
-                        needsElevation = true;
-                        break;
+                        System.Diagnostics.Debug.WriteLine($"[Deskdrop] Firewall rule missing: {name} ({protocol}/{port}). Not auto-elevating - LAN discovery/transfer may be blocked until this is added manually or by an admin.");
                     }
                 }
-
-                if (needsElevation)
-                {
-                    System.Diagnostics.Debug.WriteLine("[Deskdrop] Missing firewall rules, attempting UAC elevation...");
-                    AddRulesElevated();
-                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Deskdrop] Firewall auto-config failed (non-fatal): {ex.Message}");
-            }
-        }
-
-        private static void AddRulesElevated()
-        {
-            try
-            {
-                string script = "";
-                foreach (var (name, port, protocol) in RequiredRules)
-                {
-                    script += $"netsh advfirewall firewall add rule name=\\\"{name}\\\" dir=in action=allow protocol={protocol} localport={port} profile=any; ";
-                }
-
-                var psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{script}\"",
-                    UseShellExecute = true,
-                    Verb = "runas", // Triggers UAC prompt
-                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
-                };
-
-                using var proc = System.Diagnostics.Process.Start(psi);
-                proc?.WaitForExit();
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                System.Diagnostics.Debug.WriteLine("[Deskdrop] User declined UAC prompt for Firewall rules.");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Deskdrop] Elevated Firewall rule add failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[Deskdrop] Firewall rule check failed (non-fatal): {ex.Message}");
             }
         }
 

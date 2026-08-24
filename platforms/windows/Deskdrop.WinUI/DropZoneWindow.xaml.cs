@@ -12,6 +12,7 @@ namespace Deskdrop.WinUI
 
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
+            Deskdrop.WinUI.Services.ThemeService.Register(this);
 
             if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
             {

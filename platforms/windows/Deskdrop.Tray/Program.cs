@@ -139,7 +139,8 @@ namespace Deskdrop.Tray
             var openItem = new ToolStripMenuItem("Open Deskdrop", null, (s, e) => OpenDeskdropWindow());
             openItem.Font = new Font(openItem.Font, FontStyle.Bold);
             menu.Items.Add(openItem);
-            menu.Items.Add(new ToolStripMenuItem("Settings...", null, (s, e) => OpenDeskdropWindow()));
+            menu.Items.Add(new ToolStripMenuItem("Quick Access", null, (s, e) => SendCommandToMain("QUICKACCESS")));
+            menu.Items.Add(new ToolStripMenuItem("Settings...", null, (s, e) => SendCommandToMain("SETTINGS")));
             menu.Items.Add(new ToolStripMenuItem("Rescan Network", null, async (s, e) =>
             {
                 try
@@ -222,6 +223,27 @@ namespace Deskdrop.Tray
             ipcThread.Start();
 
             Application.Run();
+        }
+
+        // Reverse channel to the main WinUI process - mirrors the
+        // "Deskdrop_Tray_Pipe" protocol it already uses to send us
+        // TIP:/NOTIFY: messages, just in the other direction, so menu items
+        // beyond "open the window" can reach real app state.
+        private static void SendCommandToMain(string command)
+        {
+            try
+            {
+                using var client = new NamedPipeClientStream(".", "Deskdrop_Main_Commands", PipeDirection.Out);
+                client.Connect(300);
+                using var writer = new StreamWriter(client);
+                writer.WriteLine(command);
+                writer.Flush();
+            }
+            catch
+            {
+                // Main app likely isn't running yet - just launch/foreground it.
+                OpenDeskdropWindow();
+            }
         }
 
         private static void OpenDeskdropWindow()

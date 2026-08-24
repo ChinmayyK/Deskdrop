@@ -5,30 +5,59 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Edge Drop">
+    Title="Edge drop">
 
-    <Grid Background="Transparent" AllowDrop="True" DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave" Drop="Grid_Drop">
+    <!--
+        The screen-edge drop target. The resting sliver was an accent-to-cyan
+        gradient, which introduced a second accent hue into a system that has
+        one; it is now a solid accent bar. The copy dropped "portal" and
+        "mesh" for words that say what happens.
+    -->
+    <Grid Background="Transparent" AllowDrop="True"
+          DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave" Drop="Grid_Drop">
+
         <Border x:Name="AppTitleBar" Height="1" VerticalAlignment="Top" Background="Transparent" />
-        
-        <!-- Resting Edge Sliver -->
-        <Border x:Name="RestingSliver" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="2.5" Margin="2,0,0,0" Width="6" Height="100">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#0A84FF" Offset="0.0"/>
-                    <GradientStop Color="#5AC8FA" Offset="1.0"/>
-                </LinearGradientBrush>
-            </Border.Background>
-        </Border>
 
-        <!-- Expanded Glass Card -->
-        <Border x:Name="ExpandedCard" CornerRadius="16" BorderBrush="#0A84FF" BorderThickness="1.5"
-                Opacity="0" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="16,0,0,0"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Padding="24">
-            
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                <Ellipse Fill="#0A84FF" Width="44" Height="44"/>
-                <TextBlock Text="Edge Portal Drop ✨" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="ExpandedSubText" Text="Instant transfer to active mesh" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" HorizontalAlignment="Center"/>
+        <Border x:Name="RestingSliver"
+                HorizontalAlignment="Left" VerticalAlignment="Center"
+                CornerRadius="3"
+                Margin="2,0,0,0"
+                Width="6" Height="96"
+                Background="{ThemeResource AppAccentBrush}" />
+
+        <Border x:Name="ExpandedCard"
+                CornerRadius="{StaticResource RadiusLarge}"
+                BorderBrush="{ThemeResource AppAccentBorderBrush}"
+                BorderThickness="1"
+                Opacity="0" Visibility="Collapsed"
+                HorizontalAlignment="Left" VerticalAlignment="Center"
+                Margin="16,0,0,0"
+                Background="{ThemeResource AppSurfaceElevatedBrush}"
+                Padding="22,20">
+
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                <Border Width="44" Height="44"
+                        CornerRadius="{StaticResource RadiusCard}"
+                        Background="{ThemeResource AppAccentSubtleBrush}"
+                        HorizontalAlignment="Center">
+                    <FontIcon Glyph="&#xE898;" FontSize="19"
+                              Foreground="{ThemeResource AppAccentBrush}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+
+                <StackPanel Spacing="3">
+                    <TextBlock Text="Drop to send"
+                               Style="{StaticResource AppBodyStrong}"
+                               FontSize="14"
+                               HorizontalAlignment="Center" />
+                    <TextBlock x:Name="ExpandedSubText"
+                               Text="Release here to send to your connected devices"
+                               Style="{StaticResource AppCaption}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               MaxWidth="160" />
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid>

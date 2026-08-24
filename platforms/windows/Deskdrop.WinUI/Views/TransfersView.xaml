@@ -4,179 +4,300 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Deskdrop.WinUI.Views"
     xmlns:winui="using:Deskdrop.WinUI"
+    xmlns:services="using:Deskdrop.WinUI.Services"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,36">
-        <StackPanel Spacing="24" MaxWidth="1100" HorizontalAlignment="Stretch">
+    <Page.Resources>
+        <!--
+            A transfer row. The progress bar is the widest element on the row
+            because progress is what you came here to look at; the numbers
+            people actually watch (percent, rate, ETA) sit on the same
+            baseline as the bar rather than being buried in a subtitle.
 
-            <!-- Top Header & Actions -->
-            <Grid>
+            Actions are state-specific. The old row offered Accept, Reject and
+            Cancel simultaneously for every transfer, which meant two of the
+            three were always inapplicable.
+        -->
+        <DataTemplate x:Key="TransferRowTemplate" x:DataType="winui:FileTransferState">
+            <Border Style="{StaticResource AppCard}"
+                    Padding="14,12"
+                    Margin="0,0,0,8"
+                    services:HoverEffects.EnableCardHover="True">
+                <Grid RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}">
+                            <FontIcon Glyph="{x:Bind IsDirectory, Converter={StaticResource BoolToFolderIconConverter}, Mode=OneWay}"
+                                      FontSize="18"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Text="{x:Bind FileName, Mode=OneWay}"
+                                       Style="{StaticResource AppBodyStrong}"
+                                       FontSize="13.5" />
+                            <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind StateLabel, Mode=OneWay}"
+                                           Style="{StaticResource AppSecondary}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{x:Bind StateColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                                <TextBlock Text="{x:Bind PeerLabel, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                                <TextBlock Text="{x:Bind SizeText, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <!-- Live rate, right-aligned so it reads as a
+                                 readout rather than another label. -->
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"
+                                        Visibility="{x:Bind ShowProgress, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                <TextBlock Text="{x:Bind PercentText, Mode=OneWay}"
+                                           Style="{StaticResource AppMetric}"
+                                           FontSize="13.5"
+                                           HorizontalAlignment="Right"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{x:Bind RateText, Mode=OneWay}"
+                                           Style="{StaticResource AppCaption}"
+                                           HorizontalAlignment="Right" />
+                            </StackPanel>
+
+                            <Button Style="{StaticResource AppSuccessButton}"
+                                    Content="Accept"
+                                    Visibility="{x:Bind ShowAcceptReject, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                    Click="OnAcceptClicked" />
+                            <Button Style="{StaticResource AppDestructiveButton}"
+                                    Content="Decline"
+                                    Visibility="{x:Bind ShowAcceptReject, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                    Click="OnRejectClicked" />
+
+                            <Button Style="{StaticResource AppIconButton}"
+                                    Visibility="{x:Bind ShowCancel, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                    ToolTipService.ToolTip="Cancel this transfer"
+                                    AutomationProperties.Name="Cancel this transfer"
+                                    Click="OnCancelClicked">
+                                <FontIcon Glyph="&#xE711;" FontSize="14" />
+                            </Button>
+
+                            <Button Style="{StaticResource AppSecondaryButton}"
+                                    Visibility="{x:Bind ShowOpenFolder, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                    ToolTipService.ToolTip="Show the received file"
+                                    Click="OnOpenDestinationClicked">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xED25;" FontSize="12" />
+                                    <TextBlock Text="Show" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Determinate while bytes are moving, indeterminate
+                         while the engine is verifying integrity (where a
+                         percentage would be a lie). -->
+                    <ProgressBar Grid.Row="1"
+                                 Value="{x:Bind PercentFloat, Mode=OneWay}"
+                                 Maximum="100"
+                                 IsIndeterminate="{x:Bind IsVerifying, Mode=OneWay}"
+                                 Height="4"
+                                 CornerRadius="2"
+                                 Foreground="{x:Bind ProgressColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
+                                 Visibility="{x:Bind ShowProgress, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Completed / failed history: a typographic stream, not a deck of
+             cards. Status is carried by the glyph's colour. -->
+        <DataTemplate x:Key="HistoryRowTemplate" x:DataType="winui:ActivityEntry">
+            <Border BorderThickness="0,1,0,0"
+                    BorderBrush="{ThemeResource AppDividerBrush}"
+                    Padding="2,10">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <FontIcon Grid.Column="0"
+                              Glyph="{x:Bind kind, Converter={StaticResource ActivityKindToGlyphConverter}, Mode=OneWay}"
+                              FontSize="14"
+                              Foreground="{x:Bind AccentColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
+                              VerticalAlignment="Center" />
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                   Style="{StaticResource AppBody}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{x:Bind Source, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="2" Text="{x:Bind FormattedSize, Mode=OneWay}"
+                               Style="{StaticResource AppCaption}"
+                               VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Grid.Column="3" Text="{x:Bind RelativeTime, Mode=OneWay}"
+                               Style="{StaticResource AppCaption}"
+                               VerticalAlignment="Center" MinWidth="72" TextAlignment="Right" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{StaticResource PagePadding}"
+                    Spacing="22"
+                    MaxWidth="1400"
+                    HorizontalAlignment="Center">
+
+            <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Transfers &amp; Benchmark" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" CharacterSpacing="-15"/>
-                    <TextBlock Text="Monitor active payloads, verify transfer integrity, and run speed benchmarks" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
+                <TextBlock Grid.Column="0"
+                           Style="{StaticResource AppSecondary}"
+                           VerticalAlignment="Center"
+                           Text="{x:Bind mgr.TransfersSummaryText, Mode=OneWay}" />
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <Button Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnOpenDownloadFolderClicked">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xED25;" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                            <TextBlock Text="Open Downloads" FontSize="13"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Style="{StaticResource AppGhostButton}"
+                            ToolTipService.ToolTip="Open the folder received files are saved to"
+                            Click="OnOpenDownloadFolderClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xED25;" FontSize="13" />
+                            <TextBlock Text="Downloads" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource PrimaryAccentButtonStyle}" Click="OnSendFilesClicked">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE898;" FontSize="13" Foreground="#FFFFFF"/>
-                            <TextBlock Text="Send Files" FontSize="13"/>
+                    <Button Style="{StaticResource AppAccentSubtleButton}"
+                            ToolTipService.ToolTip="Choose files to send"
+                            Click="OnSendFilesClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE898;" FontSize="13" />
+                            <TextBlock Text="Send files" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
             </Grid>
 
-            <!-- 1. LIVE SPEED TEST CARD (Shown when Speed Test is active) -->
+            <!-- Live benchmark. Only present while a test is running, and it
+                 leads with the number the test exists to produce. -->
             <ItemsControl ItemsSource="{x:Bind mgr.ActiveSpeedTests, Mode=OneWay}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="winui:SpeedTestState">
-                        <Border Background="{StaticResource AppCyanSubtleBrush}" BorderBrush="{StaticResource AppCyanBrush}" BorderThickness="1.5" CornerRadius="14" Padding="20,16" Margin="0,0,0,12">
-                            <Grid>
+                        <Border Style="{StaticResource AppCard}"
+                                Background="{ThemeResource AppAccentSubtleBrush}"
+                                BorderBrush="{ThemeResource AppAccentBorderBrush}"
+                                Padding="16,14"
+                                Margin="0,0,0,8">
+                            <Grid ColumnSpacing="14">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" Width="48" Height="48" CornerRadius="24" Background="{StaticResource AppCyanBrush}" Margin="0,0,16,0">
-                                    <FontIcon Glyph="&#xE916;" FontSize="22" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
+                                <FontIcon Grid.Column="0" Glyph="&#xE916;" FontSize="18"
+                                          Foreground="{ThemeResource AppAccentBrush}" VerticalAlignment="Center" />
 
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Text="Local Network Throughput Benchmark" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                    <TextBlock Text="{x:Bind phase, Mode=OneWay}" FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="Local network benchmark"
+                                               Style="{StaticResource AppBodyStrong}" FontSize="13.5" />
+                                    <TextBlock Text="{x:Bind phase, Mode=OneWay}" Style="{StaticResource AppCaption}" />
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                    <TextBlock Text="{x:Bind SpeedText, Mode=OneWay}" FontSize="20" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{StaticResource AppCyanBrush}"/>
-                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{x:Bind SpeedText, Mode=OneWay}"
+                                           Style="{StaticResource AppDisplayText}"
+                                           FontSize="21"
+                                           Foreground="{ThemeResource AppAccentBrush}"
+                                           VerticalAlignment="Center" />
                             </Grid>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <!-- 2. ACTIVE TRANSFERS SECTION -->
-            <StackPanel Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE896;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
-                    <TextBlock Text="Active Transfers" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                    <Border Background="{StaticResource AppSurfaceBrush}" CornerRadius="10" Padding="8,2" Margin="4,0,0,0">
-                        <TextBlock Text="{x:Bind mgr.ActiveTransfers.Count, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            <!-- ============================ ACTIVE -->
+            <StackPanel Spacing="10">
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="In progress"
+                               Style="{StaticResource AppSectionTitle}" VerticalAlignment="Center" />
+                    <Border Grid.Column="1" Style="{StaticResource AppChip}"
+                            Visibility="{x:Bind mgr.HasActiveTransfers, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                        <TextBlock Text="{x:Bind mgr.ActiveTransferCount, Mode=OneWay}"
+                                   Style="{StaticResource AppCaption}" FontWeight="SemiBold" />
                     </Border>
-                </StackPanel>
+                </Grid>
 
-                <!-- Empty State for Active Transfers -->
-                <Border Visibility="{x:Bind mgr.HasActiveTransfers, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}"
-                        Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="28,24">
-                    <StackPanel HorizontalAlignment="Center" Spacing="8">
-                        <FontIcon Glyph="&#xE896;" FontSize="24" Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="No file transfers currently in progress" FontSize="13.5" FontWeight="Medium" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
+                <Border Style="{StaticResource AppCardLarge}"
+                        Padding="28,30"
+                        Visibility="{x:Bind mgr.HasActiveTransfers, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}">
+                    <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="380">
+                        <Border Width="44" Height="44"
+                                CornerRadius="{StaticResource RadiusLarge}"
+                                Background="{ThemeResource AppSurfaceSubtleBrush}"
+                                HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE896;" FontSize="19"
+                                      Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Nothing transferring"
+                                       Style="{StaticResource AppSectionTitle}" HorizontalAlignment="Center" />
+                            <TextBlock Style="{StaticResource AppSecondary}"
+                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                                       Text="Send files from here, drop them on the Deskdrop window, or use the right-click menu in File Explorer." />
+                        </StackPanel>
+                        <Button Style="{StaticResource AppPrimaryButton}"
+                                Content="Send files"
+                                HorizontalAlignment="Center"
+                                Click="OnSendFilesClicked" />
                     </StackPanel>
                 </Border>
 
-                <!-- Active Transfers List -->
-                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.ActiveTransfers, Mode=OneWay}">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="winui:FileTransferState">
-                            <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="14" Padding="18,16" Margin="0,0,0,10">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- Icon -->
-                                    <Border Grid.Row="0" Grid.Column="0" Width="44" Height="44" CornerRadius="10" Background="{StaticResource AppAccentSubtleBrush}" Margin="0,0,16,0">
-                                        <FontIcon Glyph="{x:Bind IsDirectory, Converter={StaticResource BoolToFolderIconConverter}, Mode=OneWay}" FontSize="20" Foreground="{StaticResource AppAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-
-                                    <!-- Details -->
-                                    <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                                        <TextBlock Text="{x:Bind FileName, Mode=OneWay}" FontSize="15" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                            <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                            <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                                            <TextBlock Text="{x:Bind SizeText, Mode=OneWay}" FontSize="12.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                            <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Visibility="{x:Bind SpeedText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}"/>
-                                            <TextBlock Text="{x:Bind SpeedText, Mode=OneWay}" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource AppAccentBrush}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-
-                                    <!-- Action Buttons -->
-                                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <Button Content="Accept" Style="{StaticResource PrimaryAccentButtonStyle}" Background="{StaticResource AppSuccessBrush}" Click="OnAcceptClicked"/>
-                                        <Button Content="Reject" Style="{StaticResource DestructiveButtonStyle}" Click="OnRejectClicked"/>
-                                        <Button Content="Cancel" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnCancelClicked"/>
-                                    </StackPanel>
-
-                                    <!-- Progress Bar -->
-                                    <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Value="{x:Bind PercentFloat, Mode=OneWay}" Maximum="100" Margin="0,14,0,0" Height="5" CornerRadius="2.5"/>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
+                <ListView SelectionMode="None"
+                          Padding="0"
+                          IsItemClickEnabled="False"
+                          ItemContainerStyle="{StaticResource AppPlainListItem}"
+                          ItemTemplate="{StaticResource TransferRowTemplate}"
+                          ItemsSource="{x:Bind mgr.ActiveTransfers, Mode=OneWay}" />
             </StackPanel>
 
-            <!-- 3. COMPLETED TRANSFER HISTORY -->
-            <StackPanel Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE81C;" FontSize="15" Foreground="{StaticResource AppAccentBrush}"/>
-                    <TextBlock Text="Transfer History" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                </StackPanel>
+            <!-- ============================ HISTORY -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="History" Style="{StaticResource AppSectionTitle}" Margin="0,0,0,4" />
 
-                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.ActivityFeed, Mode=OneWay}">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="winui:ActivityEntry">
-                            <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="16,12" Margin="0,0,0,8">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    
-                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" Background="{StaticResource AppBorderSubtleBrush}" Margin="0,0,14,0">
-                                        <FontIcon Glyph="&#xE896;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                        <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontSize="13.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="{x:Bind Source, Mode=OneWay}" FontSize="11.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                            <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                                            <TextBlock Text="{x:Bind FormattedSize, Mode=OneWay}" FontSize="11.5" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                    
-                                    <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center"/>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
+                <ItemsControl ItemsSource="{x:Bind mgr.ActivityFeed, Mode=OneWay}"
+                              ItemTemplate="{StaticResource HistoryRowTemplate}" />
+
+                <Border BorderThickness="0,1,0,0"
+                        BorderBrush="{ThemeResource AppDividerBrush}"
+                        Padding="2,16"
+                        Visibility="{x:Bind mgr.ActivityCount, Converter={StaticResource InverseCountToVisibilityConverter}, Mode=OneWay}">
+                    <TextBlock Style="{StaticResource AppSecondary}"
+                               Text="No completed transfers yet." />
+                </Border>
             </StackPanel>
-
         </StackPanel>
     </ScrollViewer>
 </Page>
-

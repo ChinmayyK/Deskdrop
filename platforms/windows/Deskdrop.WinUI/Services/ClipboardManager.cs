@@ -55,6 +55,12 @@ namespace Deskdrop.WinUI.Services
                 try
                 {
                     int kind = NativeCore.deskdrop_event_type(ev);
+                    try
+                    {
+                        var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
+                        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] DrainEvents: kind={kind}\n");
+                    }
+                    catch { }
                     switch (kind)
                     {
                         case NativeCore.PB_EVENT_CLIPBOARD_TEXT:
@@ -98,6 +104,66 @@ namespace Deskdrop.WinUI.Services
                             var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                 try { new IncomingCallBannerWindow().Activate(); } catch (Exception ex) { App.HandleError(ex); }
+                            });
+                            break;
+                        }
+
+                        // The engine already emits these events (this poll loop already
+                        // drains them every 30ms) - they just had no handler wired up,
+                        // so the app ran silently for anything but clipboard/file-offer/
+                        // camera-call while minimized to the tray.
+                        case NativeCore.PB_EVENT_FILE_TRANSFER_COMPLETE:
+                        {
+                            var fileName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
+                            var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown device";
+                            var destPath = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_dest_path(ev));
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                if (!string.IsNullOrEmpty(destPath))
+                                    NotificationHelper.ShowToast("File Received", $"{fileName} from {device}");
+                                else
+                                    NotificationHelper.ShowToast("File Sent", $"{fileName} to {device}");
+                            });
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_FILE_TRANSFER_FAILED:
+                        {
+                            var fileName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
+                            var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown device";
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                NotificationHelper.ShowToast("Transfer Failed", $"{fileName} with {device} could not complete");
+                            });
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_PAIRING_REQUESTED:
+                        {
+                            var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "A device";
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                NotificationHelper.ShowToast("Pairing Request", $"{device} wants to pair with this PC");
+                            });
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_PEER_CONNECTED:
+                        {
+                            var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "A device";
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                NotificationHelper.ShowToast("Device Connected", $"{device} is now connected");
+                            });
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_CAMERA_STREAM_STOP:
+                        {
+                            var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev));
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                if (!string.IsNullOrEmpty(device)) CameraPreviewWindow.NotifyRemoteStreamStopped(device);
+                            });
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_WARNING:
+                        {
+                            var message = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? "A device reported an issue";
+                            var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev));
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                NotificationHelper.ShowToast(string.IsNullOrEmpty(device) ? "Deskdrop Warning" : $"Warning from {device}", message);
                             });
                             break;
                         }

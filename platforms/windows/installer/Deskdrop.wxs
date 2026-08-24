@@ -15,7 +15,12 @@
     Manufacturer="Deskdrop"
     Version="1.2.4"
     UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479"
-    Scope="perMachine">
+    Scope="perUser">
+    <!-- perUser: installs to %LocalAppData%\Programs\Deskdrop and never
+         elevates. Deskdrop's corporate user base is largely non-admin, and
+         a perMachine MSI would require an administrator password just to
+         install - a dead end for those users. Do not switch this back to
+         perMachine. -->
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of Deskdrop is already installed." />
 
@@ -35,8 +40,10 @@
   <!-- Install directory -->
   <Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFilesFolder">
-        <Directory Id="INSTALLFOLDER" Name="Deskdrop" />
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsFolder" Name="Programs">
+          <Directory Id="INSTALLFOLDER" Name="Deskdrop" />
+        </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
         <Directory Id="ApplicationProgramsFolder" Name="Deskdrop" />
@@ -72,44 +79,13 @@
               KeyPath="yes" />
       </Component>
 
-      <!-- Firewall exceptions — TCP data channel + UDP discovery ports -->
-      <Component Id="FirewallRule" Guid="c3d4e5f6-a7b8-9012-cdef-123456789012">
-        <!-- TCP 47823: encrypted clipboard sync and file transfer data channel -->
-        <util:FirewallException
-          xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
-          Id="DeskdropFirewall"
-          Name="Deskdrop"
-          Port="47823"
-          Protocol="tcp"
-          Scope="localSubnet"
-          Description="Deskdrop LAN clipboard sync" />
-        <!-- UDP 47824: broadcast beacon peer discovery -->
-        <util:FirewallException
-          xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
-          Id="DeskdropFirewallUdpBroadcast"
-          Name="Deskdrop UDP Broadcast"
-          Port="47824"
-          Protocol="udp"
-          Scope="localSubnet"
-          Description="Deskdrop LAN broadcast peer discovery" />
-        <!-- UDP 47825: multicast beacon peer discovery -->
-        <util:FirewallException
-          xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
-          Id="DeskdropFirewallUdpMulticast"
-          Name="Deskdrop UDP Multicast"
-          Port="47825"
-          Protocol="udp"
-          Scope="localSubnet"
-          Description="Deskdrop LAN multicast peer discovery" />
-        <!-- UDP 5353: mDNS service discovery -->
-        <util:FirewallException
-          xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
-          Id="DeskdropFirewallMdns"
-          Name="Deskdrop mDNS"
-          Port="5353"
-          Protocol="udp"
-          Scope="localSubnet"
-          Description="Deskdrop mDNS service discovery" />
+      <!-- App registration. No util:FirewallException entries here: adding
+           a Windows Firewall rule always requires administrator privileges
+           regardless of MSI scope, which a no-admin perUser install can't
+           obtain. LAN discovery/transfer instead relies on Windows' own
+           per-app firewall consent prompt at runtime (see FirewallHelper.cs),
+           which any standard user can accept without a password. -->
+      <Component Id="AppRegistration" Guid="c3d4e5f6-a7b8-9012-cdef-123456789012">
         <RegistryValue
           Root="HKMU"
           Key="Software\Deskdrop"

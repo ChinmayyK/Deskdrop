@@ -36,6 +36,50 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
+        // "Show" on a finished transfer reveals the file itself, falling back
+        // to the containing folder - which is what File Explorer's own
+        // "Show in folder" does, and what people expect from a completed
+        // download.
+        private void OnOpenDestinationClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not FileTransferState transfer) return;
+
+            try
+            {
+                var destination = transfer.destination;
+                if (!string.IsNullOrWhiteSpace(destination) && System.IO.File.Exists(destination))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"/select,\"{destination}\"",
+                        UseShellExecute = true
+                    });
+                    return;
+                }
+
+                var folder = !string.IsNullOrWhiteSpace(destination)
+                    ? System.IO.Path.GetDirectoryName(destination)
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(folder) || !System.IO.Directory.Exists(folder))
+                {
+                    folder = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                }
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+            }
+            catch (System.Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
         private void OnOpenDownloadFolderClicked(object sender, RoutedEventArgs e)
         {
             try
@@ -65,10 +109,13 @@ namespace Deskdrop.WinUI.Views
                 var files = await picker.PickMultipleFilesAsync();
                 if (files != null && files.Count > 0)
                 {
-                    var firstConnected = mgr.ConnectedPeers.FirstOrDefault();
+                    var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(this.XamlRoot, mgr.ConnectedPeers);
+                    if (target == null && mgr.ConnectedPeers.Count > 0) return; // user cancelled the picker
                     foreach (var file in files)
                     {
-                        DaemonClient.SendFilePath(firstConnected?.device_id, file.Path, file.Name, file.ContentType);
+                        // Argument order is (path, name, mime, targetDevice, ...); see the
+                        // matching fix note in DashboardWindow.xaml.cs.
+                        DaemonClient.SendFilePath(file.Path, file.Name, file.ContentType, target?.device_id);
                     }
                 }
             }

@@ -1,0 +1,265 @@
+<!--
+    Deskdrop design tokens.
+
+    This is the single source of truth for colour, elevation, typography
+    metrics, and radii. Two rules keep it honest:
+
+      1. Anything that differs between light and dark lives in a
+         ThemeDictionary and MUST be consumed with {ThemeResource ...}.
+         {StaticResource ...} freezes at parse time and leaves stale colours
+         after ThemeService flips a window's RequestedTheme at runtime.
+      2. Anything theme-independent (fonts, radii, sizes) lives at the
+         bottom and is consumed with {StaticResource ...}.
+
+    We also re-point the WinUI *system* accent ramp (SystemAccentColor and
+    its Light/Dark variants) at Deskdrop's accent. Every stock control -
+    ToggleSwitch, ProgressBar, RadioButton, CheckBox, NavigationView's
+    selection indicator, ContentDialog's primary button, text-box focus
+    underline - derives its accent from that ramp, so one override keeps the
+    entire app coherent instead of us re-skinning controls one at a time.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ================================================== LIGHT -->
+        <ResourceDictionary x:Key="Light">
+
+            <!-- System accent ramp. Light-theme accent *fills* resolve to
+                 SystemAccentColorDark1, so that entry carries the brand
+                 colour and the Light* entries are the tint ramp. -->
+            <Color x:Key="SystemAccentColor">#2C5CD5</Color>
+            <Color x:Key="SystemAccentColorDark1">#2C5CD5</Color>
+            <Color x:Key="SystemAccentColorDark2">#2650BC</Color>
+            <Color x:Key="SystemAccentColorDark3">#1E4198</Color>
+            <Color x:Key="SystemAccentColorLight1">#5580E4</Color>
+            <Color x:Key="SystemAccentColorLight2">#7B9DEC</Color>
+            <Color x:Key="SystemAccentColorLight3">#A6BEF4</Color>
+
+            <!-- Brand accent -->
+            <Color x:Key="AppAccentColor">#2C5CD5</Color>
+            <SolidColorBrush x:Key="AppAccentBrush" Color="#2C5CD5" />
+            <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#2650BC" />
+            <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#20458F" />
+            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#142C5CD5" />
+            <SolidColorBrush x:Key="AppAccentSubtleHoverBrush" Color="#242C5CD5" />
+            <SolidColorBrush x:Key="AppAccentBorderBrush" Color="#472C5CD5" />
+            <!-- Legacy alias: was a second, competing purple accent. Now a
+                 tint of the single brand accent so old surfaces stop
+                 introducing a rogue hue. -->
+            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#5580E4" />
+
+            <!-- Text/iconography that sits on top of a saturated fill -->
+            <SolidColorBrush x:Key="AppOnAccentBrush" Color="#FFFFFF" />
+
+            <!-- Status. One muted-but-legible value per state; these are
+                 also mirrored as literal hex in DeskdropStore's *Color
+                 view-model properties, which are theme-independent. -->
+            <SolidColorBrush x:Key="AppSuccessBrush" Color="#107C46" />
+            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#14107C46" />
+            <SolidColorBrush x:Key="AppWarningBrush" Color="#9A5B00" />
+            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#16C07C00" />
+            <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#40C07C00" />
+            <SolidColorBrush x:Key="AppDangerBrush" Color="#C2331F" />
+            <SolidColorBrush x:Key="AppDangerHoverBrush" Color="#A72A19" />
+            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#14C2331F" />
+            <SolidColorBrush x:Key="AppDangerSubtleHoverBrush" Color="#24C2331F" />
+            <SolidColorBrush x:Key="AppNeutralBrush" Color="#75757C" />
+
+            <!-- Retired secondary accents. Kept so legacy surfaces still
+                 resolve, retuned so they read as quiet neighbours of the
+                 brand accent rather than competing hues. -->
+            <SolidColorBrush x:Key="AppVioletBrush" Color="#5B5FC7" />
+            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#145B5FC7" />
+            <Color x:Key="AppCyanColor">#0F6E8C</Color>
+            <SolidColorBrush x:Key="AppCyanBrush" Color="#0F6E8C" />
+            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#140F6E8C" />
+
+            <!--
+                Surface ladder, background -> foreground:
+
+                  Sidebar     transparent, so the window's Mica shows through
+                  Canvas      the solid content pane the pages scroll inside
+                  Surface     cards and rows sitting on the canvas
+                  Elevated    flyouts, dialogs, popups
+                  Subtle      recessed fills (track backgrounds, chips)
+            -->
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F8F8FA" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppSurfaceSubtleBrush" Color="#F1F1F4" />
+            <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#0A000000" />
+            <SolidColorBrush x:Key="AppSurfacePressedBrush" Color="#14000000" />
+            <SolidColorBrush x:Key="AppSurfaceSelectedBrush" Color="#0F2C5CD5" />
+
+            <!-- Opaque control fills. Buttons and chips sit on an opaque
+                 card, so their hover/press states have to be real colours -
+                 a translucent black overlay would read as a smudge. -->
+            <SolidColorBrush x:Key="AppControlFillBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppControlFillHoverBrush" Color="#F3F3F6" />
+            <SolidColorBrush x:Key="AppControlFillPressedBrush" Color="#E9E9EE" />
+
+            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#14000000" />
+            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#26000000" />
+            <SolidColorBrush x:Key="AppDividerBrush" Color="#0F000000" />
+
+            <!-- The pane reads as Mica; keep it transparent rather than
+                 painting a near-white slab over the backdrop. -->
+            <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ModalAcrylicBrush" Color="#FFFFFF" />
+
+            <!-- Stock-control lightweight styling. These are documented WinUI
+                 resource keys; overriding them here restyles every instance
+                 of the control without retemplating it. -->
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#12000000" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#18000000" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#20000000" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0A000000" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#14000000" />
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="Transparent" />
+
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#22000000" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#33000000" />
+
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#08000000" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#12000000" />
+
+            <SolidColorBrush x:Key="ToolTipBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#22000000" />
+        </ResourceDictionary>
+
+        <!-- =================================================== DARK -->
+        <ResourceDictionary x:Key="Dark">
+
+            <!-- Dark-theme accent *fills* resolve to SystemAccentColorLight2,
+                 which is intentionally light: WinUI pairs it with near-black
+                 foreground text (TextOnAccentFillColorPrimary). Our own
+                 AppAccentBrush/AppOnAccentBrush pair follows the same rule so
+                 custom and stock controls match. -->
+            <Color x:Key="SystemAccentColor">#3B6FE0</Color>
+            <Color x:Key="SystemAccentColorDark1">#3260C4</Color>
+            <Color x:Key="SystemAccentColorDark2">#2A50A4</Color>
+            <Color x:Key="SystemAccentColorDark3">#213F80</Color>
+            <Color x:Key="SystemAccentColorLight1">#5C87E8</Color>
+            <Color x:Key="SystemAccentColorLight2">#87A9F0</Color>
+            <Color x:Key="SystemAccentColorLight3">#AEC5F6</Color>
+
+            <Color x:Key="AppAccentColor">#87A9F0</Color>
+            <SolidColorBrush x:Key="AppAccentBrush" Color="#87A9F0" />
+            <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#9BB8F4" />
+            <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#7396DC" />
+            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#2687A9F0" />
+            <SolidColorBrush x:Key="AppAccentSubtleHoverBrush" Color="#3887A9F0" />
+            <SolidColorBrush x:Key="AppAccentBorderBrush" Color="#5987A9F0" />
+            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#AEC5F6" />
+
+            <SolidColorBrush x:Key="AppOnAccentBrush" Color="#E6000000" />
+
+            <SolidColorBrush x:Key="AppSuccessBrush" Color="#54D18C" />
+            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#2654D18C" />
+            <SolidColorBrush x:Key="AppWarningBrush" Color="#EAB055" />
+            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#26EAB055" />
+            <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#4DEAB055" />
+            <SolidColorBrush x:Key="AppDangerBrush" Color="#FF8A80" />
+            <SolidColorBrush x:Key="AppDangerHoverBrush" Color="#FFA39B" />
+            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#26FF8A80" />
+            <SolidColorBrush x:Key="AppDangerSubtleHoverBrush" Color="#38FF8A80" />
+            <SolidColorBrush x:Key="AppNeutralBrush" Color="#9A9AA2" />
+
+            <SolidColorBrush x:Key="AppVioletBrush" Color="#A5A8EA" />
+            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#26A5A8EA" />
+            <Color x:Key="AppCyanColor">#79C4DC</Color>
+            <SolidColorBrush x:Key="AppCyanBrush" Color="#79C4DC" />
+            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#2679C4DC" />
+
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#1B1B1F" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#26262B" />
+            <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#2E2E34" />
+            <SolidColorBrush x:Key="AppSurfaceSubtleBrush" Color="#1F1F24" />
+            <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="AppSurfacePressedBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="AppSurfaceSelectedBrush" Color="#2287A9F0" />
+
+            <SolidColorBrush x:Key="AppControlFillBrush" Color="#2F2F35" />
+            <SolidColorBrush x:Key="AppControlFillHoverBrush" Color="#38383F" />
+            <SolidColorBrush x:Key="AppControlFillPressedBrush" Color="#434349" />
+
+            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#2EFFFFFF" />
+            <SolidColorBrush x:Key="AppDividerBrush" Color="#14FFFFFF" />
+
+            <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ModalAcrylicBrush" Color="#2E2E34" />
+
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#2AFFFFFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="Transparent" />
+
+            <SolidColorBrush x:Key="TextControlBackground" Color="#1F1F24" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#26262B" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#2E2E34" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#38FFFFFF" />
+
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#0BFFFFFF" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#16FFFFFF" />
+
+            <SolidColorBrush x:Key="ToolTipBackground" Color="#2E2E34" />
+            <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#26FFFFFF" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- ======================================== THEME-INDEPENDENT -->
+
+    <!-- Overlay scrims and the "glass HUD" tokens for transient surfaces
+         (drop targets, edge sliver) that float over arbitrary desktop
+         content rather than app content. These stay dark-glass in both
+         themes on purpose - they have to read against whatever is behind
+         the window, not against our own canvas. -->
+    <SolidColorBrush x:Key="AppScrimBrush" Color="#40000000" />
+    <SolidColorBrush x:Key="AppScrimStrongBrush" Color="#80000000" />
+    <SolidColorBrush x:Key="AppScrimBorderBrush" Color="#40FFFFFF" />
+    <SolidColorBrush x:Key="AppScrimSubtleBrush" Color="#1AFFFFFF" />
+    <SolidColorBrush x:Key="AppScrimTextSecondaryBrush" Color="#8CFFFFFF" />
+
+    <!-- Typography. Segoe UI Variable is the Windows 11 system family;
+         Display is optically sized for headings, Text for body copy. Both
+         fall back to Segoe UI on Windows 10. -->
+    <FontFamily x:Key="AppDisplayFont">Segoe UI Variable Display, Segoe UI</FontFamily>
+    <FontFamily x:Key="AppTextFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+    <FontFamily x:Key="AppSmallFont">Segoe UI Variable Small, Segoe UI</FontFamily>
+    <FontFamily x:Key="AppMonoFont">Cascadia Mono, Consolas</FontFamily>
+
+    <!-- Radius scale, assigned by hierarchy rather than by taste:
+         controls stay tight, containers get progressively softer. -->
+    <CornerRadius x:Key="RadiusSmall">6</CornerRadius>
+    <CornerRadius x:Key="RadiusMedium">8</CornerRadius>
+    <CornerRadius x:Key="RadiusCard">10</CornerRadius>
+    <CornerRadius x:Key="RadiusLarge">14</CornerRadius>
+    <CornerRadius x:Key="RadiusPill">999</CornerRadius>
+
+    <!-- Global control radii: two overrides that modernise every stock
+         control and popup in one shot. -->
+    <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
+    <CornerRadius x:Key="OverlayCornerRadius">10</CornerRadius>
+
+    <!-- Spacing scale: 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40.
+         Exposed as Thickness tokens for the values that repeat most, so
+         padding stays on the scale instead of drifting into 18s and 14s. -->
+    <Thickness x:Key="PagePadding">28,18,28,32</Thickness>
+    <Thickness x:Key="CardPadding">16</Thickness>
+    <Thickness x:Key="CardPaddingCompact">14,12</Thickness>
+    <Thickness x:Key="RowPadding">14,10</Thickness>
+</ResourceDictionary>

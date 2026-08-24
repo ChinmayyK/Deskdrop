@@ -17,6 +17,7 @@ namespace Deskdrop.WinUI.Services
         {
             Current = this;
             EnsureTrayProcessRunning();
+            StartCommandListener();
 
             // The tray helper must never stay dead or hung - poll its
             // liveness (process exists) and responsiveness (IPC pipe
@@ -26,6 +27,53 @@ namespace Deskdrop.WinUI.Services
                 null,
                 TimeSpan.FromSeconds(20),
                 TimeSpan.FromSeconds(20));
+        }
+
+        // Reverse channel from the Tray process (context-menu clicks) to
+        // this main process - mirrors the outbound "Deskdrop_Tray_Pipe"
+        // protocol exactly, just in the other direction, so tray menu items
+        // beyond "open the window" (Quick Access, Settings) can actually
+        // reach real app state instead of only being able to foreground it.
+        private void StartCommandListener()
+        {
+            var thread = new System.Threading.Thread(() =>
+            {
+                while (!App.IsShuttingDown)
+                {
+                    try
+                    {
+                        using var server = new NamedPipeServerStream("Deskdrop_Main_Commands", PipeDirection.In);
+                        server.WaitForConnection();
+                        using var reader = new StreamReader(server);
+                        var line = reader.ReadLine();
+                        if (string.IsNullOrEmpty(line)) continue;
+
+                        var queue = App.MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                        queue?.TryEnqueue(() =>
+                        {
+                            try
+                            {
+                                if (line == "QUICKACCESS")
+                                {
+                                    new QuickAccessWindow().Activate();
+                                }
+                                else if (line == "SETTINGS")
+                                {
+                                    ((App)App.Current).ShowMainWindowCommand?.Execute(null);
+                                    DashboardWindow.Current?.NavigateTo("Settings");
+                                }
+                            }
+                            catch (Exception ex) { App.HandleError(ex); }
+                        });
+                    }
+                    catch
+                    {
+                        System.Threading.Thread.Sleep(1000);
+                    }
+                }
+            })
+            { IsBackground = true };
+            thread.Start();
         }
 
         public TrayService(IntPtr unusedHwnd) : this()

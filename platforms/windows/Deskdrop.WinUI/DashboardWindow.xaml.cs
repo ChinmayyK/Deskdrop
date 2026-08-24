@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Deskdrop.WinUI.Views;
 
 namespace Deskdrop.WinUI
@@ -39,6 +40,7 @@ namespace Deskdrop.WinUI
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(AppTitleBar);
+            Deskdrop.WinUI.Services.ThemeService.Register(this);
 
             _appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
             _appWindow.Move(new Windows.Graphics.PointInt32(120, 80));
@@ -143,6 +145,8 @@ namespace Deskdrop.WinUI
                         _ => typeof(DevicesView)
                     };
 
+                    SetPageTitle(tag);
+
                     if (ContentFrame.CurrentSourcePageType != pageType)
                     {
                         ContentFrame.Navigate(pageType);
@@ -153,6 +157,26 @@ namespace Deskdrop.WinUI
                     System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] Navigation Error for " + tag + ": " + ex.ToString() + "\n");
                 }
             }
+        }
+
+        // The page heading lives in the title bar rather than being repeated
+        // at the top of every page. That removes a whole band of vertical
+        // space from each screen and keeps the heading in one predictable
+        // place, which is how Windows' own utilities behave.
+        private void SetPageTitle(string? tag)
+        {
+            if (PageTitleText == null) return;
+
+            PageTitleText.Text = tag switch
+            {
+                "Devices" => "Ecosystem",
+                "DevicePeer" => "Remote files",
+                "Clipboard" => "Clipboard",
+                "Transfers" => "Transfers",
+                "Activity" => "Activity",
+                "Settings" => "Settings",
+                _ => "Ecosystem",
+            };
         }
 
         public void NavigateTo(string tag)
@@ -182,10 +206,17 @@ namespace Deskdrop.WinUI
                 var files = await picker.PickMultipleFilesAsync();
                 if (files != null && files.Count > 0)
                 {
-                    var firstConnected = mgr.ConnectedPeers.FirstOrDefault();
+                    var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync((this.Content as FrameworkElement)?.XamlRoot, mgr.ConnectedPeers);
+                    if (target == null && mgr.ConnectedPeers.Count > 0) return; // user cancelled the picker
                     foreach (var file in files)
                     {
-                        DaemonClient.SendFilePath(firstConnected?.device_id, file.Path, file.Name, file.ContentType);
+                        // SendFilePath's signature is (path, name, mime, targetDevice, ...) -
+                        // this used to pass them in FFI order (deviceId first), which
+                        // silently scrambled every argument: the device id landed in the
+                        // path field, the real path in name, the name in mime, and the
+                        // mime type in targetDevice. The daemon then had no real path to
+                        // read and no real device to send to, so nothing ever arrived.
+                        DaemonClient.SendFilePath(file.Path, file.Name, file.ContentType, target?.device_id);
                     }
                     NavigateTo("Transfers");
                 }
@@ -194,6 +225,128 @@ namespace Deskdrop.WinUI
             {
                 App.HandleError(ex);
             }
+        }
+
+        private void OnRescanClicked(object sender, RoutedEventArgs e)
+        {
+            DaemonClient.RescanPeers();
+            mgr.UpdateStateFromDaemon();
+        }
+
+        private void OnOpenSettingsClicked(object sender, RoutedEventArgs e)
+        {
+            NavigateTo("Settings");
+        }
+
+        private void OnOpenDownloadsClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var downloadsPath = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = downloadsPath,
+                    UseShellExecute = true
+                });
+            }
+            catch (System.Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
+        // Pairing is a focused, in-app flow now (see PairDeviceDialog) rather
+        // than a separate top-level window competing for the taskbar.
+        private async void OnPairDeviceClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var root = this.Content as FrameworkElement;
+                if (root?.XamlRoot == null) return;
+                await new PairDeviceDialog { XamlRoot = root.XamlRoot }.ShowAsync();
+            }
+            catch (System.Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
+        // ---- Drag and drop onto the window ---------------------------
+        //
+        // Files dropped anywhere on the content area are sent, with the same
+        // target resolution as the Send file button: straight through when
+        // one device is connected, prompt when the choice is ambiguous.
+
+        private void OnContentDragOver(object sender, DragEventArgs e)
+        {
+            if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+            {
+                e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
+                return;
+            }
+
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+
+            // Our own overlay says what will happen, so suppress the shell's
+            // "+ Copy" badge rather than showing two competing captions.
+            if (e.DragUIOverride != null)
+            {
+                e.DragUIOverride.IsCaptionVisible = false;
+                e.DragUIOverride.IsGlyphVisible = false;
+            }
+
+            // Say up front where it's going, so the drop isn't a guess.
+            DropOverlayDetail.Text = mgr.ConnectedCount switch
+            {
+                0 => "No devices are connected - pair one first",
+                1 => $"Release to send to {mgr.ConnectedPeers.FirstOrDefault()?.DisplayName ?? "your device"}",
+                _ => "Release to choose a device to send to",
+            };
+            DropOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void OnContentDragLeave(object sender, DragEventArgs e)
+        {
+            DropOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private async void OnContentDrop(object sender, DragEventArgs e)
+        {
+            DropOverlay.Visibility = Visibility.Collapsed;
+
+            try
+            {
+                if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems)) return;
+
+                var items = await e.DataView.GetStorageItemsAsync();
+                if (items == null || items.Count == 0) return;
+
+                var files = items.OfType<Windows.Storage.StorageFile>().ToList();
+                if (files.Count == 0) return;
+
+                var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(
+                    (this.Content as FrameworkElement)?.XamlRoot, mgr.ConnectedPeers);
+                if (target == null && mgr.ConnectedPeers.Count > 0) return; // user cancelled
+
+                foreach (var file in files)
+                {
+                    // Argument order is (path, name, mime, targetDevice, ...); see the
+                    // matching fix note above in OnTitleBarSendClicked.
+                    DaemonClient.SendFilePath(file.Path, file.Name, file.ContentType, target?.device_id);
+                }
+                NavigateTo("Transfers");
+            }
+            catch (System.Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
+        private void OnPairAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            args.Handled = true;
+            OnPairDeviceClicked(sender, new RoutedEventArgs());
         }
 
         private void Quit_Click(object sender, RoutedEventArgs e)

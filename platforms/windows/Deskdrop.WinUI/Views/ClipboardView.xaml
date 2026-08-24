@@ -4,135 +4,248 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Deskdrop.WinUI.Views"
     xmlns:winui="using:Deskdrop.WinUI"
+    xmlns:services="using:Deskdrop.WinUI.Services"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,36">
-        <StackPanel Spacing="20" MaxWidth="1100" HorizontalAlignment="Stretch">
+    <Page.Resources>
+        <!--
+            A clipboard entry. Content leads - two lines of the actual text,
+            because that is how you recognise the thing you copied. Type,
+            origin device and age are metadata and are typeset as such.
 
-            <!-- Top Header & Search Bar -->
-            <Grid>
+            Copy is always available; Apply only when there is something
+            remote to apply. Send appears on hover, because pushing an old
+            clipboard entry back out is a deliberate act, not a default one.
+        -->
+        <DataTemplate x:Key="ClipboardRowTemplate" x:DataType="winui:ActivityEntry">
+            <Border Style="{StaticResource AppCard}"
+                    Padding="14,12"
+                    Margin="0,0,0,8"
+                    services:HoverEffects.EnableCardHover="True">
+                <Grid ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
+                            Width="36" Height="36"
+                            VerticalAlignment="Top">
+                        <FontIcon Glyph="{x:Bind kind, Converter={StaticResource ActivityKindToGlyphConverter}, Mode=OneWay}"
+                                  FontSize="15"
+                                  Foreground="{x:Bind AccentColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                        <TextBlock Text="{x:Bind Preview, Mode=OneWay}"
+                                   Style="{StaticResource AppBody}"
+                                   MaxLines="2"
+                                   TextWrapping="Wrap"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Border Style="{StaticResource AppChip}" Padding="6,1">
+                                <TextBlock Text="{x:Bind TypeLabel, Mode=OneWay}"
+                                           Style="{StaticResource AppCaption}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold" />
+                            </Border>
+                            <TextBlock Text="{x:Bind Source, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                            <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                            <TextBlock Text="{x:Bind RelativeTime, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
+                                VerticalAlignment="Center">
+                        <Button Style="{StaticResource AppSuccessButton}"
+                                Content="Apply"
+                                Visibility="{x:Bind CanApply, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                ToolTipService.ToolTip="Put this on the Windows clipboard"
+                                Click="OnApplyActivityClicked" />
+
+                        <Button Style="{StaticResource AppIconButton}"
+                                ToolTipService.ToolTip="Copy to the Windows clipboard"
+                                AutomationProperties.Name="Copy to the Windows clipboard"
+                                Click="OnCopyActivityTextClicked">
+                            <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                        </Button>
+
+                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                    services:RevealEffects.RevealOnHover="True">
+                            <Button Style="{StaticResource AppIconButton}"
+                                    ToolTipService.ToolTip="Send to a connected device"
+                                    AutomationProperties.Name="Send to a connected device"
+                                    Click="OnSendActivityClicked">
+                                <FontIcon Glyph="&#xE898;" FontSize="14" />
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{StaticResource PagePadding}"
+                    Spacing="18"
+                    MaxWidth="1200"
+                    HorizontalAlignment="Center">
+
+            <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Clipboard Bridge" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" CharacterSpacing="-15"/>
-                    <TextBlock Text="Cross-device clipboard history and real-time synchronization" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
+                <TextBlock Grid.Column="0"
+                           Style="{StaticResource AppSecondary}"
+                           VerticalAlignment="Center"
+                           Text="{x:Bind mgr.ClipboardSummaryText, Mode=OneWay}" />
 
-                <!-- Push Clipboard Quick Button -->
-                <Button Grid.Column="1" Style="{StaticResource PrimaryAccentButtonStyle}" VerticalAlignment="Center" Click="OnPushLocalClipboardClicked">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE8C8;" FontSize="13" Foreground="#FFFFFF"/>
-                        <TextBlock Text="Push Clipboard" FontSize="13"/>
+                <Button Grid.Column="1" Style="{StaticResource AppAccentSubtleButton}"
+                        ToolTipService.ToolTip="Send what's on this PC's clipboard to a device"
+                        Click="OnPushLocalClipboardClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE898;" FontSize="13" />
+                        <TextBlock Text="Push clipboard" />
                     </StackPanel>
                 </Button>
             </Grid>
 
-            <!-- Search & Shortcut Bar -->
-            <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="14,8">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE721;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                    <TextBox x:Name="SearchBox" PlaceholderText="Search copied text, links, code snippets, and files..." 
-                             BorderThickness="0" Background="Transparent" 
-                             Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="13.5" 
-                             Grid.Column="1" VerticalAlignment="Center"
-                             TextChanged="OnSearchTextChanged"/>
-                    <Border Grid.Column="2" Background="{StaticResource AppBorderSubtleBrush}" CornerRadius="6" Padding="6,2" VerticalAlignment="Center">
-                        <TextBlock Text="Ctrl+F" FontSize="10.5" FontWeight="Bold" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                    </Border>
-                </Grid>
-            </Border>
+            <!--
+                Pending remote clipboards are the one genuinely actionable
+                thing on this page, so they sit above the history and above
+                the filters rather than below them.
+            -->
+            <StackPanel Spacing="8"
+                        Visibility="{x:Bind mgr.HasPendingClipboards, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                <TextBlock Text="WAITING FOR YOU" Style="{StaticResource AppOverline}" />
 
-            <!-- 1. PENDING REMOTE CLIPBOARDS BANNER -->
-            <StackPanel Visibility="{x:Bind mgr.HasPendingClipboards, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" Spacing="10">
-                <TextBlock Text="PENDING REMOTE CLIPBOARDS" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AppAccentBrush}" CharacterSpacing="60"/>
-                <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind mgr.PendingClipboards, Mode=OneWay}">
-                    <ListView.ItemTemplate>
+                <ItemsControl ItemsSource="{x:Bind mgr.PendingClipboards, Mode=OneWay}">
+                    <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="winui:PendingClipboard">
-                            <Border Background="{StaticResource AppAccentSubtleBrush}" BorderBrush="{StaticResource AppAccentBrush}" BorderThickness="1" CornerRadius="12" Padding="16,14" Margin="0,0,0,8">
-                                <Grid>
+                            <Border Style="{StaticResource AppCard}"
+                                    Background="{ThemeResource AppAccentSubtleBrush}"
+                                    BorderBrush="{ThemeResource AppAccentBorderBrush}"
+                                    Padding="14,12"
+                                    Margin="0,0,0,6">
+                                <Grid ColumnSpacing="14">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="20" Background="{StaticResource AppAccentBrush}" Margin="0,0,14,0">
-                                        <FontIcon Glyph="&#xE8C8;" FontSize="18" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                                        <TextBlock Text="{x:Bind Preview, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" MaxLines="2" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{x:Bind from_device, Mode=OneWay}" FontSize="12" Foreground="{StaticResource AppAccentBrush}"/>
+
+                                    <FontIcon Grid.Column="0" Glyph="&#xE77F;" FontSize="16"
+                                              Foreground="{ThemeResource AppAccentBrush}"
+                                              VerticalAlignment="Center" />
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Text="{x:Bind Preview, Mode=OneWay}"
+                                                   Style="{StaticResource AppBodyStrong}"
+                                                   FontSize="13"
+                                                   MaxLines="2" TextWrapping="Wrap"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{x:Bind from_device, Mode=OneWay}"
+                                                       Style="{StaticResource AppCaption}" />
+                                            <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                                            <TextBlock Text="{x:Bind RelativeTime, Mode=OneWay}"
+                                                       Style="{StaticResource AppCaption}" />
+                                        </StackPanel>
                                     </StackPanel>
-                                    <Button Grid.Column="2" Content="Apply to Windows Clipboard" Style="{StaticResource PrimaryAccentButtonStyle}" VerticalAlignment="Center" Click="OnApplyPendingClicked"/>
+
+                                    <Button Grid.Column="2" Style="{StaticResource AppPrimaryButton}"
+                                            Content="Apply"
+                                            VerticalAlignment="Center"
+                                            ToolTipService.ToolTip="Put this on the Windows clipboard"
+                                            Click="OnApplyPendingClicked" />
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
 
-            <!-- 2. FILTER CHIPS -->
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button x:Name="ChipAll" Content="All" Background="{StaticResource AppAccentBrush}" Foreground="#FFFFFF" CornerRadius="16" Padding="14,6" BorderThickness="0" Click="OnFilterChipClicked"/>
-                <Button x:Name="ChipText" Content="Text" Background="{StaticResource AppSurfaceBrush}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="16" Padding="14,6" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" Click="OnFilterChipClicked"/>
-                <Button x:Name="ChipImage" Content="Image" Background="{StaticResource AppSurfaceBrush}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="16" Padding="14,6" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" Click="OnFilterChipClicked"/>
-                <Button x:Name="ChipFile" Content="File" Background="{StaticResource AppSurfaceBrush}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" CornerRadius="16" Padding="14,6" BorderThickness="1" BorderBrush="{StaticResource AppBorderSubtleBrush}" Click="OnFilterChipClicked"/>
-            </StackPanel>
+            <!-- Search and type filter share one row: they are two halves of
+                 the same "narrow this list" control, and stacking them wasted
+                 a band of vertical space. -->
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MaxWidth="380" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <!-- 3. CLIPBOARD HISTORY STREAM -->
-            <ListView SelectionMode="None" Padding="0" ItemsSource="{x:Bind FilteredFeed, Mode=OneWay}">
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="winui:ActivityEntry">
-                        <Border Background="{StaticResource AppSurfaceBrush}" 
-                                BorderBrush="{StaticResource AppBorderSubtleBrush}" 
-                                BorderThickness="1" CornerRadius="12" Padding="16,14" Margin="0,0,0,8">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                
-                                <!-- Content Type Icon -->
-                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{StaticResource AppBorderSubtleBrush}" Margin="0,0,14,0">
-                                    <FontIcon Glyph="&#xE8C8;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                
-                                <!-- Content Body -->
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" MaxLines="2" TextTrimming="CharacterEllipsis"/>
-                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <Border CornerRadius="4" Padding="6,2" Background="{StaticResource AppBorderSubtleBrush}">
-                                            <TextBlock Text="{x:Bind TypeLabel, Mode=OneWay}" FontSize="10.5" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                        </Border>
-                                        <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                                        <TextBlock Text="{x:Bind Source, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                        <TextBlock Text="•" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                                        <TextBlock Text="{x:Bind RelativeTime, Mode=OneWay}" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                                    </StackPanel>
-                                </StackPanel>
-                                
-                                <!-- Action Buttons -->
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <Button Content="Copy" Style="{StaticResource SecondarySubtleButtonStyle}" Click="OnCopyActivityTextClicked"/>
-                                    <Button Content="Apply" Style="{StaticResource PrimaryAccentButtonStyle}" Background="{StaticResource AppSuccessBrush}" Visibility="{x:Bind CanApply, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" Click="OnApplyActivityClicked"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                <TextBox x:Name="SearchBox"
+                         Grid.Column="0"
+                         PlaceholderText="Search clipboard history"
+                         FontSize="13"
+                         MinHeight="32"
+                         TextChanged="OnSearchTextChanged"
+                         AutomationProperties.Name="Search clipboard history" />
 
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <Button x:Name="ChipAll" Content="All"
+                            Style="{StaticResource AppAccentSubtleButton}"
+                            FontSize="12.5" Padding="12,5" MinHeight="30"
+                            Click="OnFilterChipClicked" />
+                    <Button x:Name="ChipText" Content="Text"
+                            Style="{StaticResource AppGhostButton}"
+                            FontSize="12.5" Padding="12,5" MinHeight="30"
+                            Click="OnFilterChipClicked" />
+                    <Button x:Name="ChipImage" Content="Image"
+                            Style="{StaticResource AppGhostButton}"
+                            FontSize="12.5" Padding="12,5" MinHeight="30"
+                            Click="OnFilterChipClicked" />
+                    <Button x:Name="ChipFile" Content="File"
+                            Style="{StaticResource AppGhostButton}"
+                            FontSize="12.5" Padding="12,5" MinHeight="30"
+                            Click="OnFilterChipClicked" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Visibility is driven from UpdateFilter() in code-behind:
+                 FilteredFeed is rebuilt on every keystroke, and x:Bind to a
+                 collection's Count never hears CollectionChanged. -->
+            <Border x:Name="EmptyStatePanel"
+                    Style="{StaticResource AppCardLarge}"
+                    Padding="28,32"
+                    Visibility="Collapsed">
+                <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="380">
+                    <Border Width="44" Height="44"
+                            CornerRadius="{StaticResource RadiusLarge}"
+                            Background="{ThemeResource AppSurfaceSubtleBrush}"
+                            HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE8C8;" FontSize="19"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="EmptyStateTitle" Text="Nothing here yet"
+                                   Style="{StaticResource AppSectionTitle}" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="EmptyStateDetail" Style="{StaticResource AppSecondary}"
+                                   HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                                   Text="Copy something on this PC or a paired device and it will show up here, ready to paste on either end." />
+                    </StackPanel>
+                    <Button x:Name="EmptyStateAction"
+                            Style="{StaticResource AppPrimaryButton}"
+                            Content="Push this PC's clipboard"
+                            HorizontalAlignment="Center"
+                            Click="OnPushLocalClipboardClicked" />
+                </StackPanel>
+            </Border>
+
+            <ListView SelectionMode="None"
+                      Padding="0"
+                      IsItemClickEnabled="False"
+                      ItemContainerStyle="{StaticResource AppPlainListItem}"
+                      ItemTemplate="{StaticResource ClipboardRowTemplate}"
+                      ItemsSource="{x:Bind FilteredFeed, Mode=OneWay}" />
         </StackPanel>
     </ScrollViewer>
 </Page>
-

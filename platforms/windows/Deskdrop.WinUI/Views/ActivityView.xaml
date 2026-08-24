@@ -4,76 +4,141 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Deskdrop.WinUI.Views"
     xmlns:root="using:Deskdrop.WinUI"
+    xmlns:services="using:Deskdrop.WinUI.Services"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24,32,36">
-        <StackPanel Spacing="20" MaxWidth="1000" HorizontalAlignment="Stretch">
-            
-            <!-- Header -->
-            <StackPanel Spacing="4">
-                <TextBlock Text="Activity Feed" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" CharacterSpacing="-15"/>
-                <TextBlock Text="Full audit log of clipboard history, transfers, and system events" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--
+            A log is a stream, not a stack of cards. Twenty events rendered as
+            twenty bordered cards is exactly what made the old feed
+            unreadable; here the hierarchy comes from weight, a coloured
+            glyph, and a hairline rule per row - so twice as many events fit
+            and scanning them is actually possible.
+        -->
+        <Grid Grid.Row="0" ColumnSpacing="12" MaxWidth="1200" HorizontalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="380" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="TxtSearch"
+                     Grid.Column="0"
+                     PlaceholderText="Filter events, paths, and text"
+                     FontSize="13"
+                     MinHeight="32"
+                     TextChanged="TxtSearch_TextChanged"
+                     AutomationProperties.Name="Filter activity" />
+
+            <TextBlock Grid.Column="1"
+                       x:Name="CountText"
+                       Style="{StaticResource AppCaption}"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <Border Grid.Row="1"
+                Style="{StaticResource AppCardLarge}"
+                Padding="28,32"
+                MaxWidth="1200"
+                HorizontalAlignment="Center"
+                x:Name="EmptyStateBorder"
+                Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="380">
+                <Border Width="44" Height="44"
+                        CornerRadius="{StaticResource RadiusLarge}"
+                        Background="{ThemeResource AppSurfaceSubtleBrush}"
+                        HorizontalAlignment="Center">
+                    <FontIcon Glyph="&#xE81C;" FontSize="19"
+                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="EmptyTitle" Text="No activity yet"
+                               Style="{StaticResource AppSectionTitle}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="EmptyDetail"
+                               Style="{StaticResource AppSecondary}"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                               Text="Clipboard syncs, file transfers, and connection events will be recorded here." />
+                </StackPanel>
             </StackPanel>
+        </Border>
 
-            <!-- Search Bar -->
-            <Border Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="14,8">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE721;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                    <AutoSuggestBox x:Name="TxtSearch" PlaceholderText="Filter timeline entries, paths, and text..." 
-                                    BorderThickness="0" Background="Transparent" 
-                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="13.5" 
-                                    Grid.Column="1" VerticalAlignment="Center"
-                                    TextChanged="TxtSearch_TextChanged"/>
-                </Grid>
-            </Border>
+        <ListView Grid.Row="2"
+                  x:Name="TimelineList"
+                  SelectionMode="None"
+                  Padding="0"
+                  MaxWidth="1200"
+                  HorizontalAlignment="Center"
+                  IsItemClickEnabled="False"
+                  ItemContainerStyle="{StaticResource AppPlainListItem}">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="root:HistoryItem">
+                    <Border BorderThickness="0,0,0,1"
+                            BorderBrush="{ThemeResource AppDividerBrush}"
+                            Background="Transparent"
+                            Padding="4,10"
+                            services:HoverEffects.EnableCardHover="True">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-            <!-- Activity List -->
-            <ListView SelectionMode="None" Padding="0" x:Name="TimelineList">
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="root:HistoryItem">
-                        <Border Background="{StaticResource AppSurfaceBrush}" 
-                                BorderBrush="{StaticResource AppBorderSubtleBrush}" 
-                                BorderThickness="1" CornerRadius="12" Padding="16,14" Margin="0,0,0,8">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                
-                                <!-- Icon -->
-                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{StaticResource AppBorderSubtleBrush}" Margin="0,0,14,0">
-                                    <FontIcon Glyph="&#xEC42;" FontSize="16" Foreground="{StaticResource AppAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
+                            <FontIcon Grid.Column="0"
+                                      Glyph="{x:Bind Glyph}"
+                                      FontSize="14"
+                                      Foreground="{x:Bind PinColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
+                                      VerticalAlignment="Center" />
 
-                                <!-- Details -->
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Text="{x:Bind display_text}" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{x:Bind path}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
-                                
-                                <!-- Action Buttons -->
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Button Background="Transparent" BorderThickness="0" Click="BtnPinItem_Click" Padding="8" CornerRadius="8" ToolTipService.ToolTip="Pin / Unpin">
-                                        <FontIcon Glyph="&#xE718;" FontSize="14" Foreground="{StaticResource AppAccentBrush}"/>
-                                    </Button>
-                                    <Button Background="Transparent" BorderThickness="0" Click="BtnDeleteItem_Click" Padding="8" CornerRadius="8" ToolTipService.ToolTip="Delete">
-                                        <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="{StaticResource AppDangerBrush}"/>
-                                    </Button>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="{x:Bind display_text}"
+                                           Style="{StaticResource AppBody}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{x:Bind path}"
+                                           Style="{StaticResource AppCaption}"
+                                           TextTrimming="CharacterEllipsis"
+                                           Visibility="{x:Bind HasPath, Converter={StaticResource BoolToVisibleConverter}}" />
+                            </StackPanel>
 
-        </StackPanel>
-    </ScrollViewer>
+                            <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime}"
+                                       Style="{StaticResource AppCaption}"
+                                       VerticalAlignment="Center"
+                                       MinWidth="76" TextAlignment="Right" />
+
+                            <!-- Row actions stay out of the way until the
+                                 pointer or keyboard focus arrives, so the log
+                                 reads as text rather than as a wall of
+                                 buttons. -->
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
+                                        VerticalAlignment="Center"
+                                        services:RevealEffects.RevealOnHover="True">
+                                <Button Style="{StaticResource AppIconButtonSmall}"
+                                        Click="BtnPinItem_Click"
+                                        ToolTipService.ToolTip="{x:Bind PinTooltip, Mode=OneWay}"
+                                        AutomationProperties.Name="Pin or unpin this event">
+                                    <FontIcon Glyph="&#xE718;" FontSize="13"
+                                              Foreground="{x:Bind PinColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                                </Button>
+                                <Button Style="{StaticResource AppIconButtonSmall}"
+                                        Click="BtnDeleteItem_Click"
+                                        ToolTipService.ToolTip="Remove from the log"
+                                        AutomationProperties.Name="Remove this event from the log">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="13" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
 </Page>
-
