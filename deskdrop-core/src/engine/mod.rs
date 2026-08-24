@@ -2,9 +2,9 @@ use crate::activity::ActivityFeed;
 use crate::dedup::hash_content;
 use crate::discovery::{Discovery, PeerEvent, PeerInfo};
 use crate::discovery_manager::{DiscoveryEvent, DiscoveryManager};
-use crate::lan_probe::spawn_lan_probe;
 use crate::file_transfer::{default_save_dir, FileTransferManager};
 use crate::identity::IdentityStore;
+use crate::lan_probe::spawn_lan_probe;
 use crate::mesh::{ClipboardApplyPolicy, MeshRouter};
 use crate::network::{self, PeerSession, Server};
 use crate::network_manager::{self, NetworkChangeEvent, NetworkInterfaceInfo};
@@ -1672,17 +1672,16 @@ impl Engine {
                                 });
                             if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
                                 bg_last_prog_emit.insert(bg_transfer_id, now);
-                                let _ = bg_event_tx
-                                    .try_send(EngineEvent::FileTransferProgress {
-                                        transfer_id: bg_transfer_id,
-                                        from_device: bg_peer_id,
-                                        file_name: fname.clone(),
-                                        percent: prog.percent,
-                                        bytes_received: prog.bytes_received,
-                                        total_bytes: prog.total_bytes,
-                                        speed_bps: prog.speed_bps,
-                                        eta_secs: prog.eta_secs,
-                                    });
+                                let _ = bg_event_tx.try_send(EngineEvent::FileTransferProgress {
+                                    transfer_id: bg_transfer_id,
+                                    from_device: bg_peer_id,
+                                    file_name: fname.clone(),
+                                    percent: prog.percent,
+                                    bytes_received: prog.bytes_received,
+                                    total_bytes: prog.total_bytes,
+                                    speed_bps: prog.speed_bps,
+                                    eta_secs: prog.eta_secs,
+                                });
                             }
                         }
 
@@ -3404,13 +3403,10 @@ async fn on_peer_found_via(
     for ip in addrs {
         let addr = SocketAddr::new(ip, port);
 
-        let _ = shared.peer_manager.upsert_peer(
-            device_id,
-            device_name.clone(),
-            addr,
-            trusted,
-            source,
-        );
+        let _ =
+            shared
+                .peer_manager
+                .upsert_peer(device_id, device_name.clone(), addr, trusted, source);
 
         if !should_initiate_session(&shared, device_id, source).await {
             continue;
@@ -3431,8 +3427,7 @@ async fn on_peer_found_via(
 
         let shared_clone = shared.clone();
         tokio::spawn(async move {
-            if let Err(err) =
-                connect_loop(shared_clone, vec![addr], Some(device_id), source).await
+            if let Err(err) = connect_loop(shared_clone, vec![addr], Some(device_id), source).await
             {
                 warn!(peer_id = %device_id, error = %err, "discovered peer connection failed");
             }
@@ -4090,8 +4085,8 @@ fn register_session(
                                             || prog.percent == 100
                                         {
                                             last_disk_prog_emit.insert(transfer_id, now);
-                                            let _ = dw_event_tx
-                                                .try_send(EngineEvent::FileTransferProgress {
+                                            let _ = dw_event_tx.try_send(
+                                                EngineEvent::FileTransferProgress {
                                                     transfer_id,
                                                     from_device: dw_peer_id,
                                                     file_name,
@@ -4100,7 +4095,8 @@ fn register_session(
                                                     total_bytes: prog.total_bytes,
                                                     speed_bps: prog.speed_bps,
                                                     eta_secs: prog.eta_secs,
-                                                });
+                                                },
+                                            );
                                         }
 
                                         if should_ack {
@@ -4654,8 +4650,8 @@ fn register_session(
                                             || prog.percent == 100
                                         {
                                             bg_last_prog_emit.insert(bg_transfer_id, now);
-                                            let _ = bg_event_tx
-                                                .try_send(EngineEvent::FileTransferProgress {
+                                            let _ = bg_event_tx.try_send(
+                                                EngineEvent::FileTransferProgress {
                                                     transfer_id: bg_transfer_id,
                                                     from_device: bg_peer_id,
                                                     file_name: fname.clone(),
@@ -4664,7 +4660,8 @@ fn register_session(
                                                     total_bytes: prog.total_bytes,
                                                     speed_bps: prog.speed_bps,
                                                     eta_secs: prog.eta_secs,
-                                                });
+                                                },
+                                            );
                                         }
                                     }
 
@@ -4754,9 +4751,8 @@ fn register_session(
                                         let last_confirmed = t.last_confirmed_chunk;
                                         drop(mgr);
 
-                                        let _ = shared
-                                            .event_tx
-                                            .try_send(EngineEvent::FileTransferProgress {
+                                        let _ = shared.event_tx.try_send(
+                                            EngineEvent::FileTransferProgress {
                                                 transfer_id,
                                                 from_device: peer_id,
                                                 file_name,
@@ -4765,7 +4761,8 @@ fn register_session(
                                                 total_bytes: prog.total_bytes,
                                                 speed_bps: prog.speed_bps,
                                                 eta_secs: prog.eta_secs,
-                                            });
+                                            },
+                                        );
                                         if should_ack {
                                             let _ = rx_session_outbox_tx
                                                 .send(AppMessage::FileChunkAck {
@@ -4820,17 +4817,16 @@ fn register_session(
                                 let event_tx = shared.event_tx.clone();
                                 let tid = transfer_id;
                                 tokio::spawn(async move {
-                                    let _ = event_tx
-                                        .try_send(EngineEvent::FileTransferProgress {
-                                            transfer_id: tid,
-                                            from_device: peer_id,
-                                            file_name: fname,
-                                            percent: prog.percent,
-                                            bytes_received: prog.bytes_received,
-                                            total_bytes: prog.total_bytes,
-                                            speed_bps: prog.speed_bps,
-                                            eta_secs: prog.eta_secs,
-                                        });
+                                    let _ = event_tx.try_send(EngineEvent::FileTransferProgress {
+                                        transfer_id: tid,
+                                        from_device: peer_id,
+                                        file_name: fname,
+                                        percent: prog.percent,
+                                        bytes_received: prog.bytes_received,
+                                        total_bytes: prog.total_bytes,
+                                        speed_bps: prog.speed_bps,
+                                        eta_secs: prog.eta_secs,
+                                    });
                                 });
                             }
                         }
@@ -5049,8 +5045,8 @@ fn register_session(
                                             || prog.percent == 100
                                         {
                                             bg_last_prog_emit.insert(bg_transfer_id, now);
-                                            let _ = bg_event_tx
-                                                .try_send(EngineEvent::FileTransferProgress {
+                                            let _ = bg_event_tx.try_send(
+                                                EngineEvent::FileTransferProgress {
                                                     transfer_id: bg_transfer_id,
                                                     from_device: bg_peer_id,
                                                     file_name: fname.clone(),
@@ -5059,7 +5055,8 @@ fn register_session(
                                                     total_bytes: prog.total_bytes,
                                                     speed_bps: prog.speed_bps,
                                                     eta_secs: prog.eta_secs,
-                                                });
+                                                },
+                                            );
                                         }
                                     }
 
@@ -5211,15 +5208,13 @@ fn register_session(
                                 tests.get(&peer_id).map(|s| s.duration_secs)
                             };
                             if let Some(dur) = duration_secs {
-                                let _ = shared
-                                    .event_tx
-                                    .try_send(EngineEvent::SpeedTestProgress {
-                                        test_id,
-                                        peer_id,
-                                        direction: "download".to_string(),
-                                        bytes_transferred: bytes,
-                                        duration_secs: dur,
-                                    });
+                                let _ = shared.event_tx.try_send(EngineEvent::SpeedTestProgress {
+                                    test_id,
+                                    peer_id,
+                                    direction: "download".to_string(),
+                                    bytes_transferred: bytes,
+                                    duration_secs: dur,
+                                });
                             }
                         }
                     }
@@ -5242,15 +5237,13 @@ fn register_session(
                         };
 
                         if let Some(dur) = duration_secs {
-                            let _ = shared
-                                .event_tx
-                                .try_send(EngineEvent::SpeedTestProgress {
-                                    test_id,
-                                    peer_id,
-                                    direction: "upload".to_string(),
-                                    bytes_transferred: received_bytes,
-                                    duration_secs: dur,
-                                });
+                            let _ = shared.event_tx.try_send(EngineEvent::SpeedTestProgress {
+                                test_id,
+                                peer_id,
+                                direction: "upload".to_string(),
+                                bytes_transferred: received_bytes,
+                                duration_secs: dur,
+                            });
                         }
                     }
                     Ok(AppMessage::SpeedTestComplete { test_id }) => {
@@ -5303,7 +5296,9 @@ fn register_session(
                     Ok(AppMessage::DeviceSyncState { enabled }) => {
                         touch_last_seen();
                         tracing::info!(peer = %peer_name, enabled, "received device sync state");
-                        let _ = shared.peer_manager.set_remote_sync_enabled(peer_id, enabled);
+                        let _ = shared
+                            .peer_manager
+                            .set_remote_sync_enabled(peer_id, enabled);
                         let _ = shared
                             .event_tx
                             .send(EngineEvent::PeerSyncStateChanged {

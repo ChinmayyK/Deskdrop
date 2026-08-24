@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var keyboardShortcutMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if relocateToUserApplicationsIfNeeded() { return }
         guard ensureSingleRunningInstance() else { return }
         triggerLocalNetworkPrivacyPrompt()
         NSApp.setActivationPolicy(.accessory)
@@ -68,6 +69,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         
         // Prevent App Nap to ensure background daemon and network sync stay responsive
         activityToken = ProcessInfo.processInfo.beginActivity(options: [.userInitiated], reason: "Deskdrop Background Sync")
+    }
+
+    /// Copies Deskdrop into ~/Applications and relaunches from there if it's
+    /// currently running somewhere ephemeral (a mounted DMG, ~/Downloads).
+    /// Deskdrop deliberately targets the per-user ~/Applications rather than
+    /// the shared /Applications: writing there never needs an administrator
+    /// password, unlike /Applications which a non-admin (e.g. a managed
+    /// corporate) account often can't write to. Returns true if a relaunch
+    /// was kicked off, so the caller should stop initializing this instance.
+    private func relocateToUserApplicationsIfNeeded() -> Bool {
+        let bundleURL = Bundle.main.bundleURL
+        let bundlePath = bundleURL.path
+        guard !bundlePath.contains("/Applications/") else { return false }
+        guard bundlePath.hasPrefix("/Volumes/") || bundlePath.contains("/Downloads/") else { return false }
+        guard let userAppsURL = FileManager.default.urls(for: .applicationDirectory, in: .userDomainMask).first else { return false }
+
+        do {
+            try FileManager.default.createDirectory(at: userAppsURL, withIntermediateDirectories: true)
+            let destURL = userAppsURL.appendingPathComponent(bundleURL.lastPathComponent)
+            if FileManager.default.fileExists(atPath: destURL.path) {
+                try FileManager.default.removeItem(at: destURL)
+            }
+            try FileManager.default.copyItem(at: bundleURL, to: destURL)
+
+            NSWorkspace.shared.openApplication(at: destURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                if let error { NSLog("Deskdrop: relaunch from ~/Applications failed: \(error)") }
+            }
+            NSApp.terminate(nil)
+            return true
+        } catch {
+            NSLog("Deskdrop: self-relocation to ~/Applications failed: \(error)")
+            return false
+        }
     }
 
     /// Observe notifications posted by DeskdropStore so it stays decoupled from AppKit.

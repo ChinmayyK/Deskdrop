@@ -213,7 +213,8 @@ fn spawn_mock_responder(
             } = event
             {
                 let mut filtered: Vec<RemoteFileEntry> = dataset
-                    .iter().filter(|&f| {
+                    .iter()
+                    .filter(|&f| {
                         if let Some(cat) = &category {
                             if *cat != RemoteFileCategory::All && f.category != *cat {
                                 return false;
@@ -230,7 +231,8 @@ fn spawn_mock_responder(
                             }
                         }
                         true
-                    }).cloned()
+                    })
+                    .cloned()
                     .collect();
 
                 let total_matching = filtered.len() as u32;

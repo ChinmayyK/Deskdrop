@@ -267,7 +267,7 @@ private struct GeneralPane: View {
         
         PrefsSection(title: "Experimental", icon: "flask.fill", tint: CRTheme.accentRed) {
             PrefsRow(icon: "camera.fill", label: "Virtual Camera (Beta)",
-                     description: "Use your Android camera in Zoom, OBS, etc. Requires System Extension installation.") {
+                     description: "Use your Android camera in Zoom, OBS, etc. Requires System Extension installation, which on a managed Mac may need IT/admin approval.") {
                 Button(virtualCamera.status == "Not Installed" ? "Install Extension" : virtualCamera.status) {
                     virtualCamera.install()
                 }

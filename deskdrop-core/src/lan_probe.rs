@@ -141,7 +141,10 @@ async fn sweep_subnet(base: Ipv4Addr, port: u16, handle: &DiscoveryInputHandle) 
                 .await;
         }
     }
-    debug!("lan_probe: sweep of {}.{}.{}.0/24 complete", o[0], o[1], o[2]);
+    debug!(
+        "lan_probe: sweep of {}.{}.{}.0/24 complete",
+        o[0], o[1], o[2]
+    );
 }
 
 /// Attempt a TCP connect to check if Deskdrop is listening at this address.

@@ -1,6 +1,6 @@
-use dhat::{Profiler, Alloc};
 use deskdrop_core::chunked::{maybe_chunk, Reassembler};
 use deskdrop_core::protocol::ClipboardContent;
+use dhat::{Alloc, Profiler};
 
 #[global_allocator]
 static ALLOC: Alloc = Alloc;

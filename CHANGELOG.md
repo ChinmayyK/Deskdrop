@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.6] - 2026-08-24
+### Fixed
+- **Core:** Fix formatting errors that broke CI pipeline (rustfmt).
+
 ## [1.2.5] - 2026-08-24
 ### Added
 - **Core:** Added camera stream request API to FFI.

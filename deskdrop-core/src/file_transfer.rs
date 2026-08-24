@@ -38,8 +38,8 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger chunks reduce per-chunk
-                                                // overhead (mutex locks, syscalls, encrypt/serialize
-                                                // round-trips) by 4× vs 1 MB, vastly increasing MB/s on LAN.
+                                                    // overhead (mutex locks, syscalls, encrypt/serialize
+                                                    // round-trips) by 4× vs 1 MB, vastly increasing MB/s on LAN.
 
 /// Maximum transfer size (1 TB). Rejects announced transfers exceeding this
 /// limit to prevent disk-bomb attacks via pre-allocation.
@@ -1378,7 +1378,7 @@ fn read_file_chunk_from_file(
         .with_context(|| "seeking outbound file".to_string())?;
     file.read_exact(&mut buf)
         .with_context(|| "reading outbound file chunk".to_string())?;
-    
+
     Ok(buf)
 }
 

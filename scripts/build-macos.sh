@@ -176,11 +176,16 @@ log "✅ Built: ${APP_BUNDLE}"
 
 if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
     log "Creating DMG..."
+    # No --app-drop-link: that symlink points at the shared /Applications,
+    # which non-admin (e.g. managed corporate) users can't write to without
+    # an administrator password. Deskdrop relocates itself to the per-user
+    # ~/Applications on first launch instead (see AppDelegate.
+    # relocateToUserApplicationsIfNeeded), so users just double-click it
+    # straight from the mounted DMG.
     create-dmg \
         --volname "Deskdrop" \
         --window-size 600 400 \
         --icon-size 128 \
-        --app-drop-link 400 200 \
         "${MACOS_DIR}/build/Deskdrop.dmg" \
         "${APP_BUNDLE}" || {
             log "create-dmg failed (headless CI), falling back to zip..."

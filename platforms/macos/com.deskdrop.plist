@@ -4,8 +4,15 @@
 <!--
   Deskdrop macOS LaunchAgent
   ============================
-  Installs Deskdrop as a login item via launchd (the preferred method
-  for background agents on macOS 13+; SMAppService wraps this).
+  This file is a reference/manual-install template only. The shipped app
+  registers itself as a login item at runtime via SMAppService (macOS 13+,
+  see DeskdropStore.applyLoginItemState) using its actual running bundle
+  path, wherever that is - it does not require this file or /Applications.
+
+  Deskdrop installs itself to ~/Applications (not the shared /Applications)
+  so that non-admin users never need an administrator password, so this
+  template targets that per-user location. Substitute $HOME manually if you
+  install by hand.
 
   Manual install:
     cp com.deskdrop.plist ~/Library/LaunchAgents/
@@ -23,7 +30,7 @@
     <!-- The .app bundle wraps the Swift AppDelegate which starts the engine. -->
     <key>ProgramArguments</key>
     <array>
-        <string>/Applications/Deskdrop.app/Contents/MacOS/Deskdrop</string>
+        <string>~/Applications/Deskdrop.app/Contents/MacOS/Deskdrop</string>
     </array>
 
     <!-- Start immediately when loaded. -->

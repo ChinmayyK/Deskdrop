@@ -35,7 +35,9 @@ async fn run() -> Result<()> {
         ["send", target, text] => cmd_send(target, text).await,
         ["send-file", path] => cmd_send_file(path, None).await,
         ["send-file", target, path] => cmd_send_file(path, Some(target)).await,
-        ["send-file", "--path", path, "--target", target] => cmd_send_file(path, Some(target)).await,
+        ["send-file", "--path", path, "--target", target] => {
+            cmd_send_file(path, Some(target)).await
+        }
         ["connect", ip] => cmd_connect(ip, deskdrop_core::protocol::DEFAULT_PORT).await,
         ["connect", ip, port] => cmd_connect(ip, port.parse().context("bad port")?).await,
         ["peers"] => cmd_peers().await,
@@ -260,9 +262,7 @@ async fn cmd_send_file(path: &str, target: Option<&str>) -> Result<()> {
         .and_then(|n| n.to_str())
         .unwrap_or("file")
         .to_string();
-    let abs_path = std::fs::canonicalize(p)?
-        .to_string_lossy()
-        .to_string();
+    let abs_path = std::fs::canonicalize(p)?.to_string_lossy().to_string();
     let resp = ipc(&IpcRequest::SendFilePath {
         path: abs_path,
         name,
