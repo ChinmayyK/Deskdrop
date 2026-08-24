@@ -616,6 +616,9 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
         }
         EngineEvent::SpeedTestProgress { peer_id, .. } => Some(peer_id.to_string()),
         EngineEvent::SpeedTestComplete { peer_id, .. } => Some(peer_id.to_string()),
+        EngineEvent::CameraStreamRequest { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::CameraStreamAccept { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::CameraStreamStop { from_device, .. } => Some(from_device.to_string()),
         _ => None,
     };
     if let Some(s) = id_str {
@@ -913,6 +916,55 @@ pub unsafe extern "C" fn deskdrop_stop_camera_stream(handle: *mut DeskdropHandle
     let h = &*handle;
     runtime().block_on(h.engine.stop_camera_stream());
     0
+}
+
+/// Ask a specific connected peer to start streaming its camera. Returns 0
+/// if the request was sent, -1 on invalid args or if that peer isn't
+/// currently connected.
+///
+/// # Safety
+/// `handle` and `target_device_ptr` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_request_camera_stream(
+    handle: *mut DeskdropHandle,
+    target_device_ptr: *const c_char,
+) -> c_int {
+    if handle.is_null() || target_device_ptr.is_null() {
+        return -1;
+    }
+    let id_str = match CStr::from_ptr(target_device_ptr).to_str() {
+        Ok(s) => s.to_string(),
+        Err(_) => return -1,
+    };
+    let target_device = match uuid::Uuid::parse_str(&id_str) {
+        Ok(id) => id,
+        Err(_) => return -1,
+    };
+    let h = &*handle;
+    let sent = runtime().block_on(h.engine.request_camera_stream(target_device));
+    if sent {
+        0
+    } else {
+        -1
+    }
+}
+
+/// Returns 1 if a PB_EVENT_CAMERA_STREAM_ACCEPT event's request was
+/// accepted, 0 if rejected or not applicable.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_camera_stream_accepted(event: *const PbEvent) -> c_int {
+    if event.is_null() {
+        return 0;
+    }
+    if let EngineEvent::CameraStreamAccept { accepted, .. } = &(*event).inner {
+        if *accepted {
+            1
+        } else {
+            0
+        }
+    } else {
+        0
+    }
 }
 
 // ── Windows P/Invoke helpers ──────────────────────────────────────────────────
