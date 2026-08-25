@@ -17,4 +17,16 @@
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
     </windowsSettings>
   </application>
+
+  <!-- Without an explicit requestedExecutionLevel, Windows falls back to
+       installer-detection heuristics and can trigger a UAC consent prompt
+       on first run even though Deskdrop never needs elevation. Declaring
+       asInvoker disables that heuristic. Do not change this level. -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
 </assembly>

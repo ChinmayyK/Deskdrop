@@ -208,7 +208,13 @@ namespace Deskdrop.WinUI
         public ulong? last_seen { get => _last_seen; set { if (SetProperty(ref _last_seen, value)) OnPropertyChanged(nameof(LastSeenText)); } }
         private string? _last_error;
         public string? last_error { get => _last_error; set { if (SetProperty(ref _last_error, value)) OnPropertyChanged(nameof(HasError)); } }
-        
+        private List<string> _ips = new();
+        public List<string> ips { get => _ips; set { if (SetProperty(ref _ips, value)) OnPropertyChanged(nameof(IpAddressText)); } }
+        private string? _fingerprint_display;
+        public string? fingerprint_display { get => _fingerprint_display; set { if (SetProperty(ref _fingerprint_display, value)) OnPropertyChanged(nameof(HasFingerprint)); } }
+        private ulong? _first_seen;
+        public ulong? first_seen { get => _first_seen; set { if (SetProperty(ref _first_seen, value)) OnPropertyChanged(nameof(FirstSeenText)); } }
+
         public string DisplayName => string.IsNullOrWhiteSpace(friendly_name) ? "Nearby device" : friendly_name;
         public string StatusIcon => status == "connected" ? "CheckCircle" : "Circle";
         public string ConnectionText
@@ -240,6 +246,11 @@ namespace Deskdrop.WinUI
             _ => "Smartphone"
         };
         public string LastSeenText => last_seen.HasValue ? $"Seen {DeskdropFormatting.RelativeTimeFromUnixSeconds(last_seen.Value)}" : "";
+        public string IpAddressText => ips.Count > 0 ? string.Join(", ", ips) : "";
+        public bool HasFingerprint => !string.IsNullOrEmpty(fingerprint_display);
+        public string FirstSeenText => first_seen.HasValue
+            ? DateTimeOffset.FromUnixTimeSeconds((long)first_seen.Value).ToLocalTime().ToString("MMM d, yyyy")
+            : "";
         // Gated on connection state, not just "is last_error non-empty": the
         // daemon doesn't clear last_error the moment a device reconnects, it
         // just stops updating it - so a device that reconnected fine kept
@@ -425,6 +436,9 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(PlatformLabel));
             OnPropertyChanged(nameof(LastSeenText));
             OnPropertyChanged(nameof(pairingPin));
+            OnPropertyChanged(nameof(IpAddressText));
+            OnPropertyChanged(nameof(HasFingerprint));
+            OnPropertyChanged(nameof(FirstSeenText));
         }
     }
 
@@ -1292,6 +1306,9 @@ namespace Deskdrop.WinUI
                             match.explicit_disconnect = incoming.explicit_disconnect;
                             match.last_seen = incoming.last_seen;
                             match.last_error = incoming.last_error;
+                            match.ips = incoming.ips;
+                            match.fingerprint_display = incoming.fingerprint_display;
+                            match.first_seen = incoming.first_seen;
                             match.pairingPin = incoming.pairingPin;
                             match.pairingRequested = incoming.pairingRequested;
                             match.outgoingPairingWaiting = incoming.outgoingPairingWaiting;

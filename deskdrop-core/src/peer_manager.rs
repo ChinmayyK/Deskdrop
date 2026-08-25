@@ -137,6 +137,16 @@ pub struct PeerRecord {
     // ── Computed fields (for UI serialization) ───────────────────────────────
     #[serde(default)]
     pub lifecycle_state: Option<DeviceLifecycleState>,
+    /// Trust-store key fingerprint, formatted for display. Populated at
+    /// status-serialization time from `TrustStore` (a separate store from
+    /// this record) — not meaningfully persisted here.
+    #[serde(default)]
+    pub fingerprint_display: Option<String>,
+    /// When this device's trust record was first observed (from
+    /// `TrustRecord::first_seen`). Populated at status-serialization time,
+    /// same as `fingerprint_display`.
+    #[serde(default)]
+    pub first_seen: Option<u64>,
 }
 
 impl Default for PeerRecord {
@@ -166,6 +176,8 @@ impl Default for PeerRecord {
             addr_history: Vec::new(),
             last_disconnect_at: None,
             lifecycle_state: None,
+            fingerprint_display: None,
+            first_seen: None,
         }
     }
 }
@@ -437,6 +449,8 @@ impl PeerManager {
                 }],
                 last_disconnect_at: None,
                 lifecycle_state: None,
+                fingerprint_display: None,
+                first_seen: None,
             });
 
             // Do not overwrite a real name with a placeholder name.

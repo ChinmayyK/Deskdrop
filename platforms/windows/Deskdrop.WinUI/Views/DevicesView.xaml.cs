@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using System;
 using System.Linq;
@@ -24,6 +25,10 @@ namespace Deskdrop.WinUI.Views
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
             {
                 mgr.SelectedPeer = peer;
+                if (sender is FrameworkElement element)
+                {
+                    FlyoutBase.ShowAttachedFlyout(element);
+                }
             }
         }
 

@@ -61,6 +61,107 @@
                     </MenuFlyout>
                 </Border.ContextFlyout>
 
+                <!--
+                    Device detail drawer: tapping the card used to just select
+                    it with nothing visible happening. This surfaces what the
+                    row's compact layout has no room for - fingerprint, IP,
+                    first/last seen - reusing the row's own trust and metrics
+                    presentation rather than re-deriving it.
+                -->
+                <FlyoutBase.AttachedFlyout>
+                    <Flyout Placement="RightEdgeAlignedTop">
+                        <StackPanel Spacing="14" Width="270">
+                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <Grid Width="40" Height="40">
+                                    <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
+                                            CornerRadius="{StaticResource RadiusCard}" />
+                                    <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
+                                              FontSize="18"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Grid>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                               Style="{StaticResource AppBodyStrong}" FontSize="15" />
+                                    <TextBlock Text="{x:Bind PlatformLabel, Mode=OneWay}"
+                                               Style="{StaticResource AppSecondary}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE72E;" FontSize="12"
+                                          Foreground="{x:Bind TrustColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind TrustText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                            </StackPanel>
+
+                            <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Padding="10,7"
+                                    Visibility="{x:Bind HasFingerprint, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="FINGERPRINT" Style="{StaticResource AppOverline}" />
+                                    <TextBlock Text="{x:Bind fingerprint_display, Mode=OneWay}"
+                                               Style="{StaticResource AppMono}" FontSize="11.5" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+
+                            <StackPanel Spacing="2"
+                                        Visibility="{x:Bind IpAddressText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}">
+                                <TextBlock Text="IP ADDRESS" Style="{StaticResource AppOverline}" />
+                                <TextBlock Text="{x:Bind IpAddressText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                            </StackPanel>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2"
+                                            Visibility="{x:Bind FirstSeenText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}">
+                                    <TextBlock Text="FIRST SEEN" Style="{StaticResource AppOverline}" />
+                                    <TextBlock Text="{x:Bind FirstSeenText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="2"
+                                            Visibility="{x:Bind LastSeenText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}">
+                                    <TextBlock Text="LAST SEEN" Style="{StaticResource AppOverline}" />
+                                    <TextBlock Text="{x:Bind LastSeenText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel Spacing="8"
+                                        Visibility="{x:Bind HasMetrics, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center"
+                                            Visibility="{x:Bind ShowBattery, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                    <Grid VerticalAlignment="Center">
+                                        <Border Width="24" Height="12" CornerRadius="3"
+                                                BorderThickness="1.2"
+                                                BorderBrush="{ThemeResource AppBorderStrongBrush}" />
+                                        <Border Height="6" CornerRadius="1.5"
+                                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                Margin="3,0,0,0"
+                                                Width="{x:Bind BatteryLevel, Converter={StaticResource PercentToWidthConverter}, ConverterParameter=18, Mode=OneWay}"
+                                                Background="{x:Bind BatteryColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                                        <Border Width="2" Height="5" CornerRadius="1"
+                                                HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Margin="0,0,-3,0"
+                                                Background="{ThemeResource AppBorderStrongBrush}" />
+                                    </Grid>
+                                    <TextBlock Text="{x:Bind BatteryPercentText, Mode=OneWay}" Style="{StaticResource AppMetric}" />
+                                </StackPanel>
+                                <TextBlock Text="{x:Bind StorageFreeText, Mode=OneWay}"
+                                           Style="{StaticResource AppMetric}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           Visibility="{x:Bind ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Style="{StaticResource AppGhostButton}" Content="Rename" Click="OnRenameDeviceClicked" />
+                                <Button Style="{StaticResource AppGhostButton}" Content="Forget" Click="OnForgetDeviceMenuClicked" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Flyout>
+                </FlyoutBase.AttachedFlyout>
+
                 <Grid RowSpacing="10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />

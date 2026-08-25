@@ -2637,6 +2637,14 @@ impl Engine {
 
     pub async fn status_snapshot(&self) -> EngineStatus {
         let state = self.shared.network_state.lock().await.clone();
+        let trust_lookup: HashMap<Uuid, TrustRecord> = self
+            .shared
+            .trust
+            .lock()
+            .await
+            .all_devices()
+            .map(|rec| (rec.device_id, rec.clone()))
+            .collect();
         EngineStatus {
             active_interface: state.active_interface,
             bind_address: state.bind_addr,
@@ -2645,6 +2653,7 @@ impl Engine {
                 self.shared.config.device_id,
                 &self.shared.config.device_name,
                 state.bind_addr.ip(),
+                &trust_lookup,
             ),
             last_sync_at: self.shared.peer_manager.last_sync_at(),
         }
@@ -2900,10 +2909,26 @@ fn spawn_listener_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Listen
                             }));
                         }
                         Err(err) => {
-                            let message = format!(
-                                "listener rebind to {addr} failed after network change: {err}"
+                            warn!(
+                                addr = %addr,
+                                error = %err,
+                                "listener rebind failed after network change"
                             );
-                            let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
+                            // AddrNotAvailable here means the interface address
+                            // this rebind targeted has already gone stale (the
+                            // network changed again mid-transition) — the next
+                            // NetworkChangeEvent will trigger another rebind
+                            // with a current address, so this is self-healing.
+                            // Surfacing it as a user-facing warning toast on
+                            // every network flap (Wi-Fi/VPN reconnects, sleep
+                            // wake) is just alarming noise with nothing for
+                            // the user to act on.
+                            if !is_addr_not_available(&err) {
+                                let message = format!(
+                                    "listener rebind to {addr} failed after network change: {err}"
+                                );
+                                let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
+                            }
                         }
                     }
                 }
@@ -2984,19 +3009,36 @@ fn spawn_discovery_supervisor(shared: EngineShared, mut rx: mpsc::Receiver<Disco
                                     current = Some(discovery);
                                 }
                                 Err(err) => {
-                                    let message = format!(
-                                        "discovery restart on {bind_ip}:{port} failed after network change: {err}"
+                                    warn!(
+                                        bind_ip = %bind_ip,
+                                        port,
+                                        error = %err,
+                                        "discovery restart failed after network change"
                                     );
-                                    let _ =
-                                        shared.event_tx.send(EngineEvent::Warning(message)).await;
+                                    // Same self-healing AddrNotAvailable case as
+                                    // the listener rebind above: the next
+                                    // network-change event retries with a
+                                    // current address.
+                                    if !is_addr_not_available(&err) {
+                                        let message = format!(
+                                            "discovery restart on {bind_ip}:{port} failed after network change: {err}"
+                                        );
+                                        let _ = shared
+                                            .event_tx
+                                            .send(EngineEvent::Warning(message))
+                                            .await;
+                                    }
                                 }
                             }
                         }
                         Err(err) => {
-                            let message = format!(
-                                "creating discovery daemon after network change failed: {err}"
-                            );
-                            let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
+                            warn!(error = %err, "creating discovery daemon after network change failed");
+                            if !is_addr_not_available(&err) {
+                                let message = format!(
+                                    "creating discovery daemon after network change failed: {err}"
+                                );
+                                let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
+                            }
                         }
                     }
                 }
@@ -3062,6 +3104,47 @@ async fn run_server_loop(shared: EngineShared, server: Server) {
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
         }
+    }
+}
+
+/// Whether `err`'s source chain contains an `AddrNotAvailable` io error —
+/// the OS declining to bind/join a local address that no longer exists on
+/// any interface. Network-change handlers hit this transiently mid-transition
+/// (the address computed for a rebind goes stale before the rebind runs);
+/// the next `NetworkChangeEvent` retries with a current address, so it's
+/// self-healing and not worth surfacing as a user-facing warning.
+fn is_addr_not_available(err: &anyhow::Error) -> bool {
+    err.chain()
+        .any(|cause| matches!(cause.downcast_ref::<std::io::Error>(), Some(io_err) if io_err.kind() == std::io::ErrorKind::AddrNotAvailable))
+}
+
+#[cfg(test)]
+mod is_addr_not_available_tests {
+    use super::*;
+
+    #[test]
+    fn detects_addr_not_available_through_context_chain() {
+        let io_err = std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "address not available",
+        );
+        let wrapped: anyhow::Error =
+            anyhow::Error::new(io_err).context("binding to 10.0.0.5:47823");
+        assert!(is_addr_not_available(&wrapped));
+    }
+
+    #[test]
+    fn does_not_flag_other_io_errors() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::AddrInUse, "address in use");
+        let wrapped: anyhow::Error =
+            anyhow::Error::new(io_err).context("binding to 10.0.0.5:47823");
+        assert!(!is_addr_not_available(&wrapped));
+    }
+
+    #[test]
+    fn does_not_flag_non_io_errors() {
+        let err = anyhow::anyhow!("mdns daemon failed for an unrelated reason");
+        assert!(!is_addr_not_available(&err));
     }
 }
 
@@ -3265,6 +3348,7 @@ fn display_peers_for_status(
     local_device_id: Uuid,
     local_device_name: &str,
     local_ip: IpAddr,
+    trust_lookup: &HashMap<Uuid, TrustRecord>,
 ) -> Vec<PeerRecord> {
     let mut deduped: HashMap<Uuid, PeerRecord> = HashMap::new();
 
@@ -3293,6 +3377,11 @@ fn display_peers_for_status(
         .into_values()
         .map(|mut p| {
             p.lifecycle_state = Some(p.lifecycle_state());
+            if let Some(rec) = trust_lookup.get(&p.id) {
+                p.fingerprint_display =
+                    Some(crate::trust::format_fingerprint(&rec.key_fingerprint));
+                p.first_seen = Some(rec.first_seen);
+            }
             p
         })
         .collect();
@@ -6480,5 +6569,67 @@ pub(crate) async fn drain_remote_waiters(shared: &EngineShared, peer_id: Uuid) {
             data: Vec::new(),
             error: Some("Peer disconnected".to_string()),
         });
+    }
+}
+
+#[cfg(test)]
+mod display_peers_for_status_tests {
+    use super::*;
+    use crate::peer_manager::PeerConnectionState;
+
+    fn bare_peer(id: Uuid) -> PeerRecord {
+        PeerRecord {
+            id,
+            friendly_name: "Some Device".into(),
+            ips: vec!["192.168.1.50".parse().unwrap()],
+            status: PeerConnectionState::Disconnected,
+            ..PeerRecord::default()
+        }
+    }
+
+    #[test]
+    fn fills_fingerprint_and_first_seen_from_trust_record() {
+        let id = Uuid::new_v4();
+        let trust_record = TrustRecord {
+            device_id: id,
+            key_fingerprint: [7u8; 32],
+            first_seen: 1_700_000_000,
+            ..TrustRecord::default()
+        };
+        let mut trust_lookup = HashMap::new();
+        trust_lookup.insert(id, trust_record);
+
+        let result = display_peers_for_status(
+            vec![bare_peer(id)],
+            Uuid::new_v4(),
+            "Local Device",
+            "10.0.0.1".parse().unwrap(),
+            &trust_lookup,
+        );
+
+        let peer = result.into_iter().find(|p| p.id == id).unwrap();
+        assert_eq!(peer.first_seen, Some(1_700_000_000));
+        assert_eq!(
+            peer.fingerprint_display,
+            Some(crate::trust::format_fingerprint(&[7u8; 32]))
+        );
+    }
+
+    #[test]
+    fn leaves_fingerprint_and_first_seen_none_without_trust_record() {
+        let id = Uuid::new_v4();
+        let trust_lookup: HashMap<Uuid, TrustRecord> = HashMap::new();
+
+        let result = display_peers_for_status(
+            vec![bare_peer(id)],
+            Uuid::new_v4(),
+            "Local Device",
+            "10.0.0.1".parse().unwrap(),
+            &trust_lookup,
+        );
+
+        let peer = result.into_iter().find(|p| p.id == id).unwrap();
+        assert_eq!(peer.first_seen, None);
+        assert_eq!(peer.fingerprint_display, None);
     }
 }
