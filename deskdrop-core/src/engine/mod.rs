@@ -999,12 +999,10 @@ impl Engine {
                             tracing::warn!(error = %err, "failed to upsert UDP beacon peer");
                         } else {
                             if !should_initiate_session(
-                                &shared,
+                                &shared.peer_manager,
                                 peer_id,
                                 DiscoverySource::UdpBeacon,
-                            )
-                            .await
-                            {
+                            ) {
                                 continue;
                             }
                             if shared.peer_manager.live_endpoint(peer_id) == Some(peer_addr) {
@@ -2809,7 +2807,7 @@ impl Engine {
                     if peer.explicit_disconnect {
                         continue;
                     }
-                    // Rate-limit: don't attempt more than once every 15 seconds per peer.
+                    // Rate-limit: don't attempt more than once every 5 seconds per peer.
                     let now = tokio::time::Instant::now();
                     if let Some(&last) = last_attempt.get(&peer.id) {
                         if now.duration_since(last) < Duration::from_secs(5) {
@@ -3281,7 +3279,7 @@ async fn reconnect_known_peers(shared: EngineShared) {
 
         let endpoints = peer.socket_addrs();
         if !endpoints.is_empty() {
-            if !should_initiate_session(&shared, peer.id, peer.discovery).await {
+            if !should_initiate_session(&shared.peer_manager, peer.id, peer.discovery) {
                 continue;
             }
 
@@ -3497,7 +3495,7 @@ async fn on_peer_found_via(
             .upsert_peer(device_id, device_name.clone(), addr, trusted, source)
             .ok();
 
-        if !should_initiate_session(&shared, device_id, source).await {
+        if !should_initiate_session(&shared.peer_manager, device_id, source) {
             continue;
         }
 
@@ -6419,8 +6417,11 @@ fn discovery_connect_attempts() -> &'static dashmap::DashMap<(Uuid, SocketAddr),
 }
 
 fn allow_discovery_connect_attempt(device_id: Uuid, addr: SocketAddr) -> bool {
+    allow_discovery_connect_attempt_at(device_id, addr, Instant::now())
+}
+
+fn allow_discovery_connect_attempt_at(device_id: Uuid, addr: SocketAddr, now: Instant) -> bool {
     let map = discovery_connect_attempts();
-    let now = Instant::now();
     if let Some(last) = map.get(&(device_id, addr)) {
         if now.duration_since(*last) < DISCOVERY_CONNECT_COOLDOWN {
             return false;
@@ -6436,15 +6437,15 @@ fn allow_discovery_connect_attempt(device_id: Uuid, addr: SocketAddr) -> bool {
     true
 }
 
-async fn should_initiate_session(
-    shared: &EngineShared,
+fn should_initiate_session(
+    peer_manager: &PeerManager,
     peer_id: Uuid,
     discovery: DiscoverySource,
 ) -> bool {
-    if shared.peer_manager.is_explicitly_disconnected(peer_id) {
+    if peer_manager.is_explicitly_disconnected(peer_id) {
         return false;
     }
-    if shared.peer_manager.is_connected(peer_id) && discovery != DiscoverySource::Manual {
+    if peer_manager.is_connected(peer_id) && discovery != DiscoverySource::Manual {
         return false;
     }
     match discovery {
@@ -6462,6 +6463,161 @@ async fn should_initiate_session(
             // may be routable.
             true
         }
+    }
+}
+
+#[cfg(test)]
+mod discovery_connect_gate_tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    // ---- allow_discovery_connect_attempt_at: guards the c95da46 connect-storm bug ----
+    // Distinct synthetic (device_id, addr) keys per test avoid collisions in the
+    // shared static DashMap under parallel `cargo test`.
+
+    #[test]
+    fn allow_discovery_connect_attempt_blocks_repeat_within_cooldown_window() {
+        let device_id = Uuid::new_v4();
+        let addr: SocketAddr = "203.0.113.1:47823".parse().unwrap();
+        let t0 = Instant::now();
+
+        assert!(allow_discovery_connect_attempt_at(device_id, addr, t0));
+        assert!(!allow_discovery_connect_attempt_at(
+            device_id,
+            addr,
+            t0 + Duration::from_secs(30)
+        ));
+    }
+
+    #[test]
+    fn allow_discovery_connect_attempt_allows_after_cooldown_elapses() {
+        let device_id = Uuid::new_v4();
+        let addr: SocketAddr = "203.0.113.2:47823".parse().unwrap();
+        let t0 = Instant::now();
+
+        assert!(allow_discovery_connect_attempt_at(device_id, addr, t0));
+        assert!(allow_discovery_connect_attempt_at(
+            device_id,
+            addr,
+            t0 + Duration::from_secs(61)
+        ));
+    }
+
+    #[test]
+    fn allow_discovery_connect_attempt_keys_by_device_and_addr_independently() {
+        let device_a = Uuid::new_v4();
+        let device_b = Uuid::new_v4();
+        let addr_x: SocketAddr = "203.0.113.3:47823".parse().unwrap();
+        let addr_y: SocketAddr = "203.0.113.4:47823".parse().unwrap();
+        let t0 = Instant::now();
+
+        assert!(allow_discovery_connect_attempt_at(device_a, addr_x, t0));
+        assert!(allow_discovery_connect_attempt_at(device_a, addr_y, t0));
+        assert!(allow_discovery_connect_attempt_at(device_b, addr_x, t0));
+    }
+
+    // ---- probe_connect_inflight family: guards the d3acf2d unconfirmed-peer path ----
+
+    #[test]
+    fn probe_connect_inflight_dedups_concurrent_same_address_probe() {
+        let addr: SocketAddr = "203.0.113.5:47823".parse().unwrap();
+
+        assert!(mark_probe_connect_inflight(addr));
+        assert!(!mark_probe_connect_inflight(addr));
+    }
+
+    #[test]
+    fn probe_connect_inflight_reattempt_allowed_after_clear() {
+        let addr: SocketAddr = "203.0.113.6:47823".parse().unwrap();
+
+        assert!(mark_probe_connect_inflight(addr));
+        clear_probe_connect_inflight(addr);
+        assert!(mark_probe_connect_inflight(addr));
+    }
+
+    // ---- should_initiate_session ----
+
+    fn peer_manager_with_peer(trusted: bool) -> (PeerManager, NamedTempFile, Uuid) {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        manager
+            .upsert_peer(
+                id,
+                "Test Device".into(),
+                "192.168.1.50:47823".parse().unwrap(),
+                trusted,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+        (manager, file, id)
+    }
+
+    #[test]
+    fn should_initiate_session_false_when_explicitly_disconnected() {
+        let (manager, _file, id) = peer_manager_with_peer(true);
+        manager.set_explicit_disconnect(id, true).unwrap();
+
+        assert!(!should_initiate_session(
+            &manager,
+            id,
+            DiscoverySource::Mdns
+        ));
+    }
+
+    #[test]
+    fn should_initiate_session_false_when_already_connected_via_discovery() {
+        let (manager, _file, id) = peer_manager_with_peer(true);
+        let (tx, _rx) = mpsc::channel(1);
+        let (stop, _stop_rx) = oneshot::channel();
+        manager
+            .replace_live_session(
+                Uuid::nil(),
+                id,
+                true,
+                "192.168.1.50:47823".parse().unwrap(),
+                tx.clone(),
+                tx,
+                stop,
+            )
+            .unwrap();
+
+        assert!(!should_initiate_session(
+            &manager,
+            id,
+            DiscoverySource::Mdns
+        ));
+    }
+
+    #[test]
+    fn should_initiate_session_true_when_connected_but_source_is_manual() {
+        let (manager, _file, id) = peer_manager_with_peer(true);
+        let (tx, _rx) = mpsc::channel(1);
+        let (stop, _stop_rx) = oneshot::channel();
+        manager
+            .replace_live_session(
+                Uuid::nil(),
+                id,
+                true,
+                "192.168.1.50:47823".parse().unwrap(),
+                tx.clone(),
+                tx,
+                stop,
+            )
+            .unwrap();
+
+        assert!(should_initiate_session(
+            &manager,
+            id,
+            DiscoverySource::Manual
+        ));
+    }
+
+    #[test]
+    fn should_initiate_session_true_for_untouched_discovered_peer() {
+        let (manager, _file, id) = peer_manager_with_peer(true);
+
+        assert!(should_initiate_session(&manager, id, DiscoverySource::Mdns));
     }
 }
 

@@ -554,14 +554,38 @@ impl PeerManager {
         let we_are_initiator = local_device_id < device_id;
         let incoming_is_winner = we_are_initiator == is_outbound;
 
-        if let Some(existing) = self.live.get(&device_id) {
-            let existing_is_winner = we_are_initiator == existing.is_outbound;
-            if !incoming_is_winner && existing_is_winner {
-                return Ok((0, None, true)); // rejected_new = true
-            }
-        }
-
         let session_id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
+        let new_session = LivePeerSession {
+            session_id,
+            endpoint,
+            sender,
+            file_sender,
+            shutdown_tx: Some(shutdown_tx),
+            is_outbound,
+            connected_at: now_secs(),
+        };
+
+        // Atomic check-and-replace under a single shard lock (dashmap's
+        // Entry holds the shard guard for the whole match) - closes a race
+        // where two concurrent sessions for the same peer could each read
+        // the same stale `existing` value via a separate get(), both pass
+        // the tie-break check below, and then both insert - with whichever
+        // insert() lands last silently winning the `live` slot regardless
+        // of which one the tie-break rule says should win.
+        let replaced = match self.live.entry(device_id) {
+            dashmap::mapref::entry::Entry::Occupied(mut occupied) => {
+                let existing_is_winner = we_are_initiator == occupied.get().is_outbound;
+                if !incoming_is_winner && existing_is_winner {
+                    return Ok((0, None, true)); // rejected_new = true
+                }
+                Some(occupied.insert(new_session))
+            }
+            dashmap::mapref::entry::Entry::Vacant(vacant) => {
+                vacant.insert(new_session);
+                None
+            }
+        };
+
         {
             let mut entry = self.store.entry(device_id).or_insert_with(|| PeerRecord {
                 id: device_id,
@@ -577,19 +601,6 @@ impl PeerManager {
             entry.status = PeerConnectionState::Connected;
             entry.last_error = None;
         }
-
-        let replaced = self.live.insert(
-            device_id,
-            LivePeerSession {
-                session_id,
-                endpoint,
-                sender,
-                file_sender,
-                shutdown_tx: Some(shutdown_tx),
-                is_outbound,
-                connected_at: now_secs(),
-            },
-        );
         self.save()?;
 
         Ok((
@@ -664,6 +675,19 @@ impl PeerManager {
                     }
                 }
                 return self.save();
+            }
+            // live_endpoint == endpoint: falls through to the "mark Failed"
+            // code below, unchanged.
+        } else {
+            // No live session was visible above. Re-check immediately
+            // before writing Failed: closes the race where a concurrent
+            // replace_live_session() call registers a live session in
+            // between - without this, a stale failure report for a losing
+            // multi-address attempt could clobber a peer's status to Failed
+            // right after it successfully connected. Mirrors the existing
+            // guard in mark_failed_all().
+            if self.live.contains_key(&device_id) {
+                return Ok(());
             }
         }
 
@@ -1517,5 +1541,62 @@ mod tests {
             )
             .unwrap();
         assert_eq!(manager.get(id2).unwrap().friendly_name, "My Macbook");
+    }
+
+    // Regression test for the replace_live_session/mark_failed TOCTOU races:
+    // hammers both from several real OS threads for the same peer and
+    // asserts the invariant that must hold regardless of scheduling - if a
+    // session is live, the store must agree it's Connected, never Failed.
+    // Doesn't assert which attempt wins (that's scheduling-dependent); it
+    // asserts the fix's actual guarantee, so it's a real regression check
+    // rather than a flaky race-order assertion.
+    #[test]
+    fn concurrent_connect_and_failure_reports_never_leave_a_live_session_marked_failed() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = std::sync::Arc::new(PeerManager::load(file.path()).unwrap());
+        let id = Uuid::new_v4();
+        let local_id = Uuid::new_v4();
+        manager
+            .upsert_peer(
+                id,
+                "Contested Device".into(),
+                SocketAddr::from(([192, 168, 1, 200], 47823)),
+                true,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+
+        let mut handles = Vec::new();
+        for i in 0..8u8 {
+            let mgr = manager.clone();
+            handles.push(std::thread::spawn(move || {
+                let endpoint = SocketAddr::from(([192, 168, 1, 100 + i], 47823));
+                let (tx, _rx) = mpsc::channel(1);
+                let (stop, _stop_rx) = oneshot::channel();
+                let is_outbound = i % 2 == 0;
+                let result = mgr.replace_live_session(
+                    local_id,
+                    id,
+                    is_outbound,
+                    endpoint,
+                    tx.clone(),
+                    tx,
+                    stop,
+                );
+                if let Ok((_, _, rejected_new)) = result {
+                    if rejected_new {
+                        let _ = mgr.mark_failed(id, endpoint, "lost tie-break".into());
+                    }
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        if manager.live_endpoint(id).is_some() {
+            let record = manager.get(id).unwrap();
+            assert_eq!(record.status, PeerConnectionState::Connected);
+        }
     }
 }
