@@ -14,12 +14,17 @@ It is meant to answer five planning questions:
 - where platform parity matters most
 - how to sequence the work so the product becomes easier to trust, easier to use, and more resilient
 
-This roadmap is derived from the current repo state plus the findings in:
+This roadmap was derived from the repo state plus a set of 2026-05-27 audit
+documents that have since been removed from the tree. They remain available in
+git history:
 
-- `docs/full-stack-friction-fault-tolerance-connectivity-audit-2026-05-27.md`
-- `docs/functionality-audit-2026-05-27.md`
-- `docs/deep-ui-ux-journey-audit-2026-05-27.md`
-- `docs/cross-platform-feature-parity-audit-2026-05-27.md`
+```
+git show v1.2.8:docs/full-stack-friction-fault-tolerance-connectivity-audit-2026-05-27.md
+git show v1.2.8:docs/functionality-audit-2026-05-27.md
+git show v1.2.8:docs/deep-ui-ux-journey-audit-2026-05-27.md
+git show v1.2.8:docs/cross-platform-feature-parity-audit-2026-05-27.md
+```
+
 
 ## Product Direction
 
