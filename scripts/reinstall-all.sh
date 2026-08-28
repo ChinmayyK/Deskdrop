@@ -27,7 +27,7 @@ echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE}
 # 0. Version Bump & Clean
 # ==========================================
 # echo -e "${BLUE}▶ Bumping version numbers...${NC}"
-# python3 scripts/bump-version.py
+# scripts/bump-version.sh --patch
 
 
 echo -e "${BLUE}▶ Wiping macOS app data (~/Library/Application Support/deskdrop)...${NC}"
