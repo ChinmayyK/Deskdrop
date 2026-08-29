@@ -55,12 +55,7 @@ namespace Deskdrop.WinUI.Services
                 try
                 {
                     int kind = NativeCore.deskdrop_event_type(ev);
-                    try
-                    {
-                        var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
-                        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] DrainEvents: kind={kind}\n");
-                    }
-                    catch { }
+                    TraceLog.Write($"DrainEvents: kind={kind}");
                     switch (kind)
                     {
                         case NativeCore.PB_EVENT_CLIPBOARD_TEXT:

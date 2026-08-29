@@ -97,8 +97,8 @@ namespace Deskdrop.WinUI
         {
             try
             {
-                var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] {message}\n");
+                TraceLog.Write(message);
+                TraceLog.Flush();
             }
             catch { }
         }

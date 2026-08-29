@@ -38,8 +38,7 @@ namespace Deskdrop.WinUI.Native
             }
             catch (Exception ex)
             {
-                var dir = Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
-                try { File.AppendAllText(Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] ContextMenu Error: {ex.Message}\n"); } catch (Exception innerEx) { App.HandleError(innerEx); }
+                try { TraceLog.Write($"ContextMenu Error: {ex.Message}"); TraceLog.Flush(); } catch (Exception innerEx) { App.HandleError(innerEx); }
             }
         }
 
@@ -71,8 +70,7 @@ namespace Deskdrop.WinUI.Native
             }
             catch (Exception ex)
             {
-                var dir = Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
-                try { File.AppendAllText(Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] URI Protocol Registration Error: {ex.Message}\n"); } catch (Exception innerEx) { App.HandleError(innerEx); }
+                try { TraceLog.Write($"URI Protocol Registration Error: {ex.Message}"); TraceLog.Flush(); } catch (Exception innerEx) { App.HandleError(innerEx); }
             }
         }
     }
