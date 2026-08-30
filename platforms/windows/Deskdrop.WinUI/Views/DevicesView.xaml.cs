@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Media.Media3D;
 
 namespace Deskdrop.WinUI.Views
@@ -14,10 +15,9 @@ namespace Deskdrop.WinUI.Views
 
         public DevicesView()
         {
-            var dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DevicesView constructor starting\n");
+            TraceLog.Write("DevicesView constructor starting");
             this.InitializeComponent();
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DevicesView InitializeComponent done\n");
+            TraceLog.Write("DevicesView InitializeComponent done");
         }
 
         private void OnPeerCardTapped(object sender, TappedRoutedEventArgs e)
@@ -100,25 +100,28 @@ namespace Deskdrop.WinUI.Views
 
             try
             {
-                DaemonClient.RenameTrustedDevice(peer.device_id, newName);
+                var resp = await Task.Run(() => DaemonClient.RenameTrustedDevice(peer.device_id, newName));
+                DaemonActions.ReportIfFailed("Rename Device", resp);
                 peer.friendly_name = newName;
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
 
-        private void OnPauseSyncClicked(object sender, RoutedEventArgs e)
+        private async void OnPauseSyncClicked(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
             {
-                DaemonClient.PauseSyncPeer(peer.device_id);
+                var resp = await Task.Run(() => DaemonClient.PauseSyncPeer(peer.device_id));
+                DaemonActions.ReportIfFailed("Pause Sync", resp);
             }
         }
 
-        private void OnResumeSyncClicked(object sender, RoutedEventArgs e)
+        private async void OnResumeSyncClicked(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
             {
-                DaemonClient.ResumeSyncPeer(peer.device_id);
+                var resp = await Task.Run(() => DaemonClient.ResumeSyncPeer(peer.device_id));
+                DaemonActions.ReportIfFailed("Resume Sync", resp);
             }
         }
 
@@ -130,9 +133,10 @@ namespace Deskdrop.WinUI.Views
         // "Scan" should actually probe the network, not just re-read cached
         // daemon state - the old handler only did the latter, which made the
         // button look broken when nothing new appeared.
-        private void OnScanNearbyClicked(object sender, RoutedEventArgs e)
+        private async void OnScanNearbyClicked(object sender, RoutedEventArgs e)
         {
-            DaemonClient.RescanPeers();
+            var resp = await Task.Run(() => DaemonClient.RescanPeers());
+            DaemonActions.ReportIfFailed("Scan", resp);
             mgr.UpdateStateFromDaemon();
         }
 

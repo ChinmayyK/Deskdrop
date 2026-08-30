@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.Threading.Tasks;
 
 namespace Deskdrop.WinUI.Views
 {
@@ -84,9 +85,10 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
-        private void OnRescanClicked(object sender, RoutedEventArgs e)
+        private async void OnRescanClicked(object sender, RoutedEventArgs e)
         {
-            DaemonClient.RescanPeers();
+            var resp = await Task.Run(() => DaemonClient.RescanPeers());
+            DaemonActions.ReportIfFailed("Rescan", resp);
         }
 
         private void OnOpenDownloadsClicked(object sender, RoutedEventArgs e)
@@ -166,9 +168,10 @@ namespace Deskdrop.WinUI.Views
             mgr.UpdateStateFromDaemon();
         }
 
-        private void OnSaveClicked(object sender, RoutedEventArgs e)
+        private async void OnSaveClicked(object sender, RoutedEventArgs e)
         {
-            DaemonClient.PatchSettings(new { sync_enabled = mgr.SyncEnabled });
+            var resp = await Task.Run(() => DaemonClient.PatchSettings(new { sync_enabled = mgr.SyncEnabled }));
+            DaemonActions.ReportIfFailed("Save Settings", resp);
         }
     }
 }

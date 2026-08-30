@@ -72,13 +72,13 @@ namespace Deskdrop.WinUI
                     var items = await e.DataView.GetStorageItemsAsync();
                     if (items.Count > 0 && items[0] is Windows.Storage.StorageFile file)
                     {
-                        System.Threading.Tasks.Task.Run(() => DaemonClient.PushFile(target, file.Path));
+                        DaemonActions.RunFireAndForget("Send File", () => DaemonClient.PushFile(target, file.Path));
                     }
                 }
                 else if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
                 {
                     var text = await e.DataView.GetTextAsync();
-                    System.Threading.Tasks.Task.Run(() => DaemonClient.PushTextTo(text, target));
+                    DaemonActions.RunFireAndForget("Send Text", () => DaemonClient.PushTextTo(text, target));
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }

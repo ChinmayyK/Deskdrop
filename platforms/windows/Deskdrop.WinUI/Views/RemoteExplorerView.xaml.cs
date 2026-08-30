@@ -20,6 +20,11 @@ namespace Deskdrop.WinUI.Views
         private const string RootSegmentLabel = "All files";
 
         private string _currentPath = "/";
+        // Bumped at the start of every LoadRemoteDirectory call and captured
+        // as a ticket; a completion whose ticket no longer matches means a
+        // newer navigation has since started, so its result is discarded
+        // instead of clobbering the UI with a stale directory listing.
+        private int _loadGeneration = 0;
         private static readonly System.Collections.Generic.Dictionary<string, JsonDocument> _cache = new();
         private static readonly System.Collections.Generic.Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _thumbnailCache = new();
 
@@ -41,6 +46,7 @@ namespace Deskdrop.WinUI.Views
 
         private async System.Threading.Tasks.Task LoadRemoteDirectory(string path, bool forceRefresh = false)
         {
+            var myGeneration = ++_loadGeneration;
             if (string.IsNullOrEmpty(path)) path = "/";
             _currentPath = path;
             if (PathBox != null) PathBox.Text = _currentPath;
@@ -93,6 +99,7 @@ namespace Deskdrop.WinUI.Views
                     
                     App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
                     {
+                        if (myGeneration != _loadGeneration) return;
                         RemoteFiles.Clear();
                         if (resp != null && resp.files != null)
                         {
@@ -184,11 +191,11 @@ namespace Deskdrop.WinUI.Views
             var lastSlash = trimmed.LastIndexOf('/');
             if (lastSlash <= 0)
             {
-                LoadRemoteDirectory("/");
+                _ = LoadRemoteDirectory("/");
             }
             else
             {
-                LoadRemoteDirectory(trimmed.Substring(0, lastSlash));
+                _ = LoadRemoteDirectory(trimmed.Substring(0, lastSlash));
             }
         }
 
@@ -257,17 +264,19 @@ namespace Deskdrop.WinUI.Views
             _ = LoadRemoteDirectory(nextPath);
         }
 
-        private void OnDownloadClicked(object sender, RoutedEventArgs e)
+        private async void OnDownloadClicked(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is RemoteFile item)
             {
                 var peer = mgr.SelectedPeer;
                 if (peer != null)
                 {
-                    if (item.file_id > 0)
-                        DaemonClient.RemoteFilePullRequest(peer.device_id, item.file_id);
-                    else if (ulong.TryParse(item.id, out var fid))
-                        DaemonClient.RemoteFilePullRequest(peer.device_id, fid);
+                    ulong fileId = item.file_id > 0 ? item.file_id : (ulong.TryParse(item.id, out var fid) ? fid : 0);
+                    if (fileId > 0)
+                    {
+                        var resp = await Task.Run(() => DaemonClient.RemoteFilePullRequest(peer.device_id, fileId));
+                        DaemonActions.ReportIfFailed("Download", resp);
+                    }
                 }
             }
         }
@@ -301,7 +310,8 @@ namespace Deskdrop.WinUI.Views
 
             try
             {
-                DaemonClient.RemoteFileActionRequest(peer.device_id, fileId, "rename", newName);
+                var resp = await Task.Run(() => DaemonClient.RemoteFileActionRequest(peer.device_id, fileId, "rename", newName));
+                DaemonActions.ReportIfFailed("Rename", resp);
                 await LoadRemoteDirectory(_currentPath, forceRefresh: true);
             }
             catch (Exception ex) { App.HandleError(ex); }
@@ -329,7 +339,8 @@ namespace Deskdrop.WinUI.Views
 
             try
             {
-                DaemonClient.RemoteFileActionRequest(peer.device_id, fileId, "delete");
+                var resp = await Task.Run(() => DaemonClient.RemoteFileActionRequest(peer.device_id, fileId, "delete"));
+                DaemonActions.ReportIfFailed("Delete", resp);
                 RemoteFiles.Remove(item);
                 await LoadRemoteDirectory(_currentPath, forceRefresh: true);
             }

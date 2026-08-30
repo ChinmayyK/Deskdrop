@@ -64,10 +64,8 @@ public partial class App : Application
     public App()
     {
         MainDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-        var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
-        System.IO.Directory.CreateDirectory(dir);
 
-        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App constructor started\n");
+        TraceLog.Write("App constructor started");
 
         // Unpackaged Win32/WinUI3 apps need to explicitly claim an
         // AppUserModelID before the notification platform will reliably
@@ -81,21 +79,21 @@ public partial class App : Application
         this.UnhandledException += (s, e) =>
         {
             e.Handled = true;
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] WinUI UnhandledException: {e.Exception?.Message}\n{e.Exception?.StackTrace}\n"); } catch (Exception ex) { App.HandleError(ex); }
+            try { TraceLog.Write($"WinUI UnhandledException: {e.Exception?.Message}\n{e.Exception?.StackTrace}"); TraceLog.Flush(); } catch (Exception ex) { App.HandleError(ex); }
         };
         AppDomain.CurrentDomain.UnhandledException += (s, e) =>
         {
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] AppDomain UnhandledException: {(e.ExceptionObject as Exception)?.Message}\n"); } catch (Exception ex) { App.HandleError(ex); }
+            try { TraceLog.Write($"AppDomain UnhandledException: {(e.ExceptionObject as Exception)?.Message}"); TraceLog.Flush(); } catch (Exception ex) { App.HandleError(ex); }
         };
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) =>
         {
             e.SetObserved();
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] TaskScheduler UnobservedTaskException: {e.Exception?.Message}\n"); } catch (Exception ex) { App.HandleError(ex); }
+            try { TraceLog.Write($"TaskScheduler UnobservedTaskException: {e.Exception?.Message}"); TraceLog.Flush(); } catch (Exception ex) { App.HandleError(ex); }
         };
 
         InitializeComponent();
-        
-        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] App InitializeComponent finished\n");
+
+        TraceLog.Write("App InitializeComponent finished");
 
         ShowMainWindowCommand = new RelayCommand(() =>
         {
@@ -147,6 +145,7 @@ public partial class App : Application
                 }
                 try { GlobalHotKeyManager.Shared.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 try { Application.Current.Exit(); } catch (Exception ex) { App.HandleError(ex); }
+                TraceLog.Flush();
                 Environment.Exit(0);
             });
         });
@@ -154,9 +153,7 @@ public partial class App : Application
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
-        System.IO.Directory.CreateDirectory(dir);
-        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] OnLaunched started\n");
+        TraceLog.Write("OnLaunched started");
 
         try
         {
@@ -174,7 +171,7 @@ public partial class App : Application
 
             if (!_keyInstance.IsCurrent)
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Secondary instance detected. Redirecting activation to existing instance.\n");
+                TraceLog.Write("Secondary instance detected. Redirecting activation to existing instance.");
                 _keyInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
                 var existingHwnd = FindWindowW(null, "Deskdrop");
                 if (existingHwnd == IntPtr.Zero) existingHwnd = FindWindowW(null, "DeskDrop Dashboard");
@@ -183,6 +180,7 @@ public partial class App : Application
                     ShowWindow(existingHwnd, 9 /* SW_RESTORE */);
                     SetForegroundWindow(existingHwnd);
                 }
+                TraceLog.Flush();
                 Environment.Exit(0);
                 return;
             }
@@ -211,11 +209,12 @@ public partial class App : Application
                 try
                 {
                     _engineHandle = Deskdrop.WinUI.NativeCore.deskdrop_start(System.Environment.MachineName, 0);
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Native engine started gracefully. Handle: " + _engineHandle + "\n");
+                    TraceLog.Write("Native engine started gracefully. Handle: " + _engineHandle);
                 }
                 catch (Exception ex)
                 {
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Native engine start failed: " + ex.Message + "\n");
+                    TraceLog.Write("Native engine start failed: " + ex.Message);
+                    TraceLog.Flush();
                 }
             });
 
@@ -246,12 +245,13 @@ public partial class App : Application
                 ShowWindow(hwnd, 5 /* SW_SHOW */);
                 SetForegroundWindow(hwnd);
 
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow created, activated, and displayed successfully\n");
+                TraceLog.Write("MainWindow created, activated, and displayed successfully");
             }
             catch (Exception ex)
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] MainWindow crash: " + ex.ToString() + "\n");
-                if (ex.InnerException != null) System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "Inner: " + ex.InnerException.ToString() + "\n");
+                TraceLog.Write("MainWindow crash: " + ex.ToString());
+                if (ex.InnerException != null) TraceLog.Write("Inner: " + ex.InnerException.ToString());
+                TraceLog.Flush();
             }
 
             try
@@ -279,7 +279,8 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Exception in OnLaunched: " + ex.Message + "\n" + ex.StackTrace + "\n");
+            TraceLog.Write("Exception in OnLaunched: " + ex.Message + "\n" + ex.StackTrace);
+            TraceLog.Flush();
         }
     }
     private void OnAppActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
@@ -310,14 +311,13 @@ public partial class App : Application
 
     private void ProcessActivationArgs(Microsoft.Windows.AppLifecycle.AppActivationArguments activatedArgs)
     {
-        var dir = System.IO.Path.Combine(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop"));
         if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol)
         {
             var protocolArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
             var uri = protocolArgs?.Uri;
             if (uri != null)
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via protocol: " + uri.ToString() + "\n");
+                TraceLog.Write("Activated via protocol: " + uri.ToString());
                 HandleDeskdropUri(uri.ToString());
             }
         }
@@ -330,7 +330,7 @@ public partial class App : Application
             if (activatedArgs.Data is Microsoft.Windows.AppNotifications.AppNotificationActivatedEventArgs notifArgs
                 && notifArgs.Arguments.TryGetValue("action", out var action) && !string.IsNullOrEmpty(action))
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via AppNotification: " + action + "\n");
+                TraceLog.Write("Activated via AppNotification: " + action);
                 HandleDeskdropUri(action);
             }
         }
@@ -340,16 +340,16 @@ public partial class App : Application
             if (cmdLineArgs != null)
             {
                 string argsStr = cmdLineArgs.Operation.Arguments;
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Activated via CommandLine: " + argsStr + "\n");
-                
+                TraceLog.Write("Activated via CommandLine: " + argsStr);
+
                 var matches = System.Text.RegularExpressions.Regex.Matches(argsStr, @"[\""].+?[\""]|[^ ]+");
                 if (matches.Count >= 2)
                 {
                     string path = matches[matches.Count - 1].Value.Trim('"');
                     if (System.IO.File.Exists(path) || System.IO.Directory.Exists(path))
                     {
-                        System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + DateTime.Now.ToString("u") + "] Context Menu Trigger: Sending " + path + "\n");
-                        
+                        TraceLog.Write("Context Menu Trigger: Sending " + path);
+
                         System.Threading.Tasks.Task.Run(async () =>
                         {
                             var clipboard = await ClipboardReady.Task;
@@ -359,7 +359,8 @@ public partial class App : Application
                             }
                             catch (Exception e)
                             {
-                                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] Error pushing context menu file: {e.Message}\n");
+                                TraceLog.Write($"Error pushing context menu file: {e.Message}");
+                                TraceLog.Flush();
                             }
                         });
                     }
@@ -383,8 +384,8 @@ public partial class App : Application
     {
         try
         {
-            var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), $"[{DateTime.Now:u}] Swallowed Exception in {callerName}: {ex.Message}\n{ex.StackTrace}\n");
+            TraceLog.Write($"Swallowed Exception in {callerName}: {ex.Message}\n{ex.StackTrace}");
+            TraceLog.Flush();
         }
         catch { } // Failsafe
     }

@@ -16,16 +16,15 @@ namespace Deskdrop.WinUI
 
         public DashboardWindow()
         {
-            var dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DashboardWindow constructor starting\n");
-            
+            TraceLog.Write("DashboardWindow constructor starting");
+
             Current = this;
             this.InitializeComponent();
 
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] InitializeComponent completed\n");
+            TraceLog.Write("InitializeComponent completed");
 
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DashboardWindow HWND=0x" + hwnd.ToString("X") + "\n");
+            TraceLog.Write("DashboardWindow HWND=0x" + hwnd.ToString("X"));
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(_appWindow);
@@ -48,7 +47,7 @@ namespace Deskdrop.WinUI
 
             _appWindow.Closing += (s, e) =>
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] appWindow.Closing fired. IsShuttingDown=" + App.IsShuttingDown + "\n");
+                TraceLog.Write("appWindow.Closing fired. IsShuttingDown=" + App.IsShuttingDown);
                 if (!App.IsShuttingDown)
                 {
                     e.Cancel = true;
@@ -61,7 +60,7 @@ namespace Deskdrop.WinUI
 
             this.Closed += (s, e) =>
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] DashboardWindow.Closed fired!\n");
+                TraceLog.Write("DashboardWindow.Closed fired!");
                 if (Current == this) Current = null;
             };
 
@@ -127,11 +126,10 @@ namespace Deskdrop.WinUI
 
         private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
         {
-            var dir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Deskdrop");
             if (args.SelectedItem is NavigationViewItem item)
             {
                 var tag = item.Tag as string;
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] NavView_SelectionChanged: " + tag + "\n");
+                TraceLog.Write("NavView_SelectionChanged: " + tag);
                 try
                 {
                     Type pageType = tag switch
@@ -154,7 +152,8 @@ namespace Deskdrop.WinUI
                 }
                 catch (System.Exception ex)
                 {
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "winui_trace.txt"), "[" + System.DateTime.Now.ToString("u") + "] Navigation Error for " + tag + ": " + ex.ToString() + "\n");
+                    TraceLog.Write("Navigation Error for " + tag + ": " + ex.ToString());
+                    TraceLog.Flush();
                 }
             }
         }

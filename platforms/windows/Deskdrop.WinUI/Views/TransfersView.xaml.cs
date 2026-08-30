@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Threading.Tasks;
 
 namespace Deskdrop.WinUI.Views
 {
@@ -28,11 +29,12 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
-        private void OnCancelClicked(object sender, RoutedEventArgs e)
+        private async void OnCancelClicked(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is FileTransferState transfer)
             {
-                DaemonClient.CancelFileTransfer(transfer.transfer_id);
+                var resp = await Task.Run(() => DaemonClient.CancelFileTransfer(transfer.transfer_id));
+                DaemonActions.ReportIfFailed("Cancel Transfer", resp);
             }
         }
 
