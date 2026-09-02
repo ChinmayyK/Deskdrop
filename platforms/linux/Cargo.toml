@@ -1,6 +1,6 @@
 [package]
 name = "deskdrop-linux"
-version = "1.2.4"
+version.workspace = true
 edition = "2021"
 description = "Deskdrop Linux GTK4 / Wayland / X11 client"
 

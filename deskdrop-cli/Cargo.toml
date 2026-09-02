@@ -1,6 +1,6 @@
 [package]
 name = "deskdrop-cli"
-version = "1.2.4"
+version.workspace = true
 edition = "2021"
 description = "Deskdrop command-line management tool"
 license = "AGPL-3.0-only"
