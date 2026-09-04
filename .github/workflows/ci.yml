@@ -102,7 +102,12 @@ jobs:
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
       - run: sudo apt-get update -q && sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev
-      - run: cargo bench --no-run --workspace
+      # Type-check bench targets only. `cargo bench --no-run` additionally links
+      # every workspace binary under the bench profile, which cannot succeed while
+      # [profile.release] sets panic = "abort": bench targets are forced to unwind
+      # but their dependency rlibs are built with abort, so the unwinding drop glue
+      # is missing at link time. `cargo check` catches bench code rot without linking.
+      - run: cargo check --benches --workspace
 
   # ── Cross-compile for Android ABIs ───────────────────────────────────────
   android:
