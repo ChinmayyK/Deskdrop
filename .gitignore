@@ -45,14 +45,9 @@ platforms/android/local.properties
 *.deb
 *.rpm
 
-# Editor & AI Assistants
+# Editors
 .idea/
 .vscode/
-.claude/
-.gemini/
-.cursor/
-.agents/
-.copilot/
 *.swp
 *.swo
 *~
