@@ -81,3 +81,9 @@ target/criterion/
 bom.json
 
 .cargo/
+
+# Build & release output — produced by CI and the local build scripts.
+# Never commit these: they go stale, and a tracked .pdb leaks local build paths.
+release/
+build/
+/libdeskdrop_core.dylib

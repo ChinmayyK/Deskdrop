@@ -21,6 +21,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify version consistency and tag match
+        run: |
+          scripts/bump-version.sh --check
+          # A tag build must produce artifacts labelled with that tag.
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            have=$(scripts/bump-version.sh --current)
+            if [ "$tag" != "$have" ]; then
+              echo "ERROR: tag $GITHUB_REF_NAME builds artifacts labelled $have" >&2
+              exit 1
+            fi
+          fi
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt

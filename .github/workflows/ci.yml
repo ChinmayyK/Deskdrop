@@ -11,6 +11,17 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # ── Version consistency ───────────────────────────────────────────────────
+  # Cheapest gate in the workflow, so it runs first. Every shippable artifact
+  # has to carry the same version: versions drifted unnoticed across 1.2.5-1.2.8
+  # because nothing checked them.
+  versions:
+    name: Version Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/bump-version.sh --check
+
   # ── Rust core ──────────────────────────────────────────────────────────────
   rust-core:
     name: Rust Core (${{ matrix.os }})

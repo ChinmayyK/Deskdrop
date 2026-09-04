@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.0] - 2026-09-04
+### Added
+- **Core:** Known devices now display their trust fingerprint and first-seen date.
+
+### Fixed
+- **Core:** Closed a race in `PeerManager::replace_live_session` where two concurrent sessions for the same peer could each read the same stale state, both pass the tie-break check, and both insert — letting whichever insert landed last win the live slot regardless of which one the tie-break rule selected.
+- **Core:** Closed a race where a stale failure report from a losing multi-address connect attempt could mark a peer `Failed` immediately after it had successfully connected.
+- **Core:** Reconnect logging no longer floods during transient network interface flaps.
+
+### Changed
+- **Windows:** Diagnostic tracing consolidated into a single `TraceLog` writer instead of ad-hoc `File.AppendAllText` calls scattered across the UI layer; daemon calls that previously ran fire-and-forget now report failures through `DaemonActions`.
+- **Build:** Every shippable artifact now carries a single shared version. The Rust crates inherit it from `[workspace.package]`, and `scripts/bump-version.sh --check` gates CI so the components cannot drift apart again.
+
+### Removed
+- Stale build artifacts (prebuilt `.zip`/`.dll`/`.exe`/`.pdb`) are no longer tracked in the repository, along with one-shot migration scripts and dated internal audit documents.
+
 ## [1.2.8] - 2026-08-24
 ### Fixed
 - **Core:** Fixed a bug where untrusted discovery beacons (mDNS/UDP) were incorrectly saved as "remembered" peers, causing phantom devices to appear in the Known Devices list.
@@ -26,7 +42,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Android:** Disabled mesh gradient in pure dark mode for a true black background.
 - **Windows:** Comprehensive UI overhaul for the WinUI dashboard and dialogs.
 
-## [Unreleased]
+## Pre-1.0 history
+
+The entries below predate the 1.0 release and were never assigned version
+headings. They accumulated under an `[Unreleased]` marker that went stale as
+releases shipped around it. Kept for reference; `git log` is authoritative for
+which release first contained a given change.
 
 ### Added (v4)
 - **Android:** Added "Finish Onboarding" re-entry flow to empty dashboard.
