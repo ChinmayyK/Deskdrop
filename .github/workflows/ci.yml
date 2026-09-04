@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: scripts/bump-version.sh --check
+      - run: bash scripts/bump-version.sh --check
 
   # ── Rust core ──────────────────────────────────────────────────────────────
   rust-core:

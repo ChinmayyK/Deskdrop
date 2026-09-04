@@ -68,13 +68,19 @@ plist_set() { # <file> <key> <value>
   ' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
 }
 
+# GNU sed -i takes no argument and BSD/macOS sed -i requires one, so neither
+# spelling is portable. Write through a temp file instead.
+sed_inplace() { # <expr> <file>
+  sed "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"
+}
+
 apply() { # <version> <build>
   local v="$1" b="$2"
 
-  sed -i "s/^version = \"[^\"]*\"/version = \"$v\"/" "$CARGO"
-  sed -i "s/versionName \"[^\"]*\"/versionName \"$v\"/" "$GRADLE"
-  sed -i "s/versionCode [0-9]*/versionCode $b/" "$GRADLE"
-  sed -i "s/^\( *Version=\"\)[^\"]*\"/\1$v\"/" "$WXS"
+  sed_inplace "s/^version = \"[^\"]*\"/version = \"$v\"/" "$CARGO"
+  sed_inplace "s/versionName \"[^\"]*\"/versionName \"$v\"/" "$GRADLE"
+  sed_inplace "s/versionCode [0-9]*/versionCode $b/" "$GRADLE"
+  sed_inplace "s/^\( *Version=\"\)[^\"]*\"/\1$v\"/" "$WXS"
 
   local p
   for p in "${PLISTS[@]}"; do
