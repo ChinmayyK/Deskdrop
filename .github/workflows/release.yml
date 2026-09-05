@@ -127,7 +127,7 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > platforms/android/app/release.keystore
 
       - name: Build APK
-        run: ./gradlew assembleRelease
+        run: ./gradlew :app:assembleRelease
         working-directory: platforms/android
         env:
           DESKDROP_KEYSTORE: release.keystore

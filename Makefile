@@ -126,7 +126,7 @@ windows:
 android: install-android-targets
 	@echo -e "$(CYAN)Building Android APK ($(ANDROID_ABIS))...$(RESET)"
 	$(MAKE) -C . _android-native
-	cd platforms/android && ./gradlew assembleRelease
+	cd platforms/android && ./gradlew :app:assembleRelease
 	@echo -e "$(GREEN)✓ APK: platforms/android/app/build/outputs/apk/release/$(RESET)"
 
 _android-native:
