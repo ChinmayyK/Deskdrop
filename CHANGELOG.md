@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.1] - 2026-09-05
+### Fixed
+- **Android:** Release builds are now signed with the release keystore instead of the debug key; the build also fails fast if the keystore is configured but any of the store password, key alias, or key password is missing.
+- **Android:** Enabled R8 shrinking in the `benchmark` module's release build type so it matches `app:release`, fixing a `checkTestedAppObfuscationRelease` failure in the release build.
+
 ## [1.3.0] - 2026-09-04
 ### Added
 - **Core:** Known devices now display their trust fingerprint and first-seen date.
