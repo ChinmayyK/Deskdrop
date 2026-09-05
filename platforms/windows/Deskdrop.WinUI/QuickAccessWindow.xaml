@@ -50,7 +50,12 @@
                            Style="{StaticResource AppSecondary}" />
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+            <!-- Right margin clears the native minimize/maximize/close
+                 buttons - ExtendsContentIntoTitleBar draws them on top of
+                 XAML content, it doesn't reserve space for them. Same
+                 148px DashboardWindow's title bar uses for the same reason. -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center"
+                        Margin="0,0,148,0">
                 <Button Style="{StaticResource AppIconButton}"
                         Click="BtnHeaderDiagnostics_Click"
                         ToolTipService.ToolTip="Diagnostics"

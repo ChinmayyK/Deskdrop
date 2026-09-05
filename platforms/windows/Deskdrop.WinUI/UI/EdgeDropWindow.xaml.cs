@@ -38,7 +38,7 @@ namespace Deskdrop.WinUI.UI
                 presenter.IsMaximizable = false;
                 presenter.SetBorderAndTitleBar(false, false);
             }
-            appWindow.Resize(new Windows.Graphics.SizeInt32(20, 200));
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 20, 200);
         }
 
         [DllImport("user32.dll")]

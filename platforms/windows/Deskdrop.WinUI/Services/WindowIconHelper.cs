@@ -20,5 +20,27 @@ namespace Deskdrop.WinUI.Services
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
+
+        // AppWindow.Resize/Move take physical pixels, but every size in this
+        // app (fonts, paddings, and every hardcoded window width/height) is
+        // authored in DIPs. Without this, a window is only the intended size
+        // on a 100%-scaled display; on anything scaled higher its physical
+        // pixel dimensions are smaller in DIP terms than the layout assumes,
+        // so text/buttons/icons all read as oversized for the space they're
+        // crammed into.
+        public static double GetDpiScale(IntPtr hwnd)
+        {
+            try { return GetDpiForWindow(hwnd) / 96.0; }
+            catch { return 1.0; }
+        }
+
+        public static void ResizeDips(AppWindow appWindow, IntPtr hwnd, int widthDips, int heightDips)
+        {
+            double scale = GetDpiScale(hwnd);
+            appWindow.Resize(new Windows.Graphics.SizeInt32((int)(widthDips * scale), (int)(heightDips * scale)));
+        }
     }
 }

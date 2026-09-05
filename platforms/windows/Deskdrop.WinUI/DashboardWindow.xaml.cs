@@ -29,20 +29,44 @@ namespace Deskdrop.WinUI
             _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(_appWindow);
             _appWindow.Title = "Deskdrop";
-            // Deskdrop lives in the system tray, not the taskbar/alt-tab -
-            // it's opened via the tray icon (see TrayService/App.xaml.cs).
-            // IsShownInSwitchers alone doesn't reliably drop the taskbar
-            // button for an unowned top-level window, so also apply the
-            // classic WS_EX_TOOLWINDOW/~WS_EX_APPWINDOW combination directly.
-            _appWindow.IsShownInSwitchers = false;
-            HideFromTaskbar(hwnd);
+
+            // Taskbar presence tracks actual visibility rather than being
+            // fixed at construction time: the window starts visible (Show()
+            // below), so it should have a taskbar button from the start,
+            // and lose it only once Closing hides it to the tray. Tray.exe
+            // restores the window from a separate process via raw
+            // ShowWindow/SetForegroundWindow, which this window never gets
+            // a callback for directly - AppWindow.Changed with
+            // DidVisibilityChange does, regardless of which process caused
+            // the transition, so that's the one signal both directions can
+            // key off reliably. IsShownInSwitchers alone doesn't reliably
+            // add/drop the taskbar button for an unowned top-level window,
+            // so both that and the classic WS_EX_TOOLWINDOW/WS_EX_APPWINDOW
+            // toggle happen together.
+            _appWindow.Changed += (sender, args) =>
+            {
+                if (!args.DidVisibilityChange) return;
+                sender.IsShownInSwitchers = sender.IsVisible;
+                if (sender.IsVisible) ShowInTaskbar(hwnd);
+                else HideFromTaskbar(hwnd);
+            };
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(AppTitleBar);
             Deskdrop.WinUI.Services.ThemeService.Register(this);
 
-            _appWindow.Resize(new Windows.Graphics.SizeInt32(1180, 740));
-            _appWindow.Move(new Windows.Graphics.PointInt32(120, 80));
+            // AppWindow.Resize/Move take physical pixels, but the whole
+            // rest of this app (fonts, paddings, the 240px sidebar) is
+            // measured in DIPs. Without correcting for the monitor's DPI
+            // scale, a 1180x740 physical-pixel window is smaller in DIPs
+            // than the layout assumes on any scaled display (100% is the
+            // only scale where physical pixels and DIPs match) - text,
+            // buttons and icons then all read as oversized for the space
+            // they're crammed into, and tightly-packed rows (like the
+            // title bar) can visually collide.
+            double dpiScale = Deskdrop.WinUI.Services.WindowIconHelper.GetDpiScale(hwnd);
+            _appWindow.Resize(new Windows.Graphics.SizeInt32((int)(1180 * dpiScale), (int)(740 * dpiScale)));
+            _appWindow.Move(new Windows.Graphics.PointInt32((int)(120 * dpiScale), (int)(80 * dpiScale)));
             _appWindow.Show(true);
 
             _appWindow.Closing += (s, e) =>
@@ -106,6 +130,18 @@ namespace Deskdrop.WinUI
             catch (Exception ex) { App.HandleError(ex); }
         }
 
+        private static void ShowInTaskbar(IntPtr hwnd)
+        {
+            try
+            {
+                var exStyle = GetWindowLongSafe(hwnd, GWL_EXSTYLE);
+                exStyle |= WS_EX_APPWINDOW;
+                exStyle &= ~WS_EX_TOOLWINDOW;
+                SetWindowLongSafe(hwnd, GWL_EXSTYLE, exStyle);
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+        }
+
         public static Microsoft.UI.Xaml.Media.Brush GetBrushFromHex(string hex)
         {
             if (string.IsNullOrWhiteSpace(hex)) return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -162,9 +198,39 @@ namespace Deskdrop.WinUI
         // at the top of every page. That removes a whole band of vertical
         // space from each screen and keeps the heading in one predictable
         // place, which is how Windows' own utilities behave.
+        //
+        // Devices is the one exception: it has grown its own in-content
+        // header (title, subtitle, Send files/Scan nearby/Pair device/
+        // Settings) that duplicates everything this title-bar row offers,
+        // so both this text and the action cluster hide specifically on
+        // that page rather than sitting there as a second, redundant copy.
         private void SetPageTitle(string? tag)
         {
             if (PageTitleText == null) return;
+
+            var isDevicesPage = tag == "Devices";
+            PageTitleText.Visibility = isDevicesPage ? Visibility.Collapsed : Visibility.Visible;
+            if (TitleBarActionsPanel != null)
+            {
+                TitleBarActionsPanel.Visibility = isDevicesPage ? Visibility.Collapsed : Visibility.Visible;
+            }
+            if (TitleBarBackgroundBorder != null)
+            {
+                TitleBarBackgroundBorder.Visibility = isDevicesPage ? Visibility.Collapsed : Visibility.Visible;
+            }
+            // Collapsing the title-bar band above only stopped it drawing -
+            // the Frame's own 48px top margin (reserved so content clears
+            // the title bar on every other page) was still there, so
+            // content never actually moved into the space that freed up.
+            // Devices carries its own top padding and a 148px-cleared
+            // action row (see its header XAML) to stay clear of the system
+            // caption buttons on its own, so it doesn't need this margin at
+            // all; every other page still does, since it still shows the
+            // real title bar.
+            if (ContentFrame != null)
+            {
+                ContentFrame.Margin = isDevicesPage ? new Thickness(0, 0, 0, 0) : new Thickness(0, 48, 0, 0);
+            }
 
             PageTitleText.Text = tag switch
             {
@@ -346,6 +412,12 @@ namespace Deskdrop.WinUI
         {
             args.Handled = true;
             OnPairDeviceClicked(sender, new RoutedEventArgs());
+        }
+
+        private void OnSendAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            args.Handled = true;
+            OnTitleBarSendClicked(sender, new RoutedEventArgs());
         }
 
         private void Quit_Click(object sender, RoutedEventArgs e)

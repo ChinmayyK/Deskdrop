@@ -639,6 +639,34 @@
         </Setter>
     </Style>
 
+    <!-- Card grids (Other devices, Nearby) own their own hover/selection
+         feedback the same way list-row cards do, so the container gets the
+         same treatment as AppPlainListItem, just for GridViewItem. Margin
+         provides the gap between tiles in both directions since the wrap
+         panel doesn't have its own spacing property. -->
+    <Style x:Key="AppPlainGridItem" TargetType="GridViewItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0,0,10,10" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridViewItem">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      ContentTransitions="{TemplateBinding ContentTransitions}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Legacy alias kept for older markup. -->
     <Style x:Key="SpacedListViewItemStyle" TargetType="ListViewItem">
         <Setter Property="Margin" Value="0,2" />

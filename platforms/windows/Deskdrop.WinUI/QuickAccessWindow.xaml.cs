@@ -33,12 +33,15 @@ namespace Deskdrop.WinUI
                 this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
             }
 
-            // Resize the window
+            // Resize the window. AppWindow.Resize takes physical pixels while
+            // the XAML content is measured in DIPs - scale by the monitor's
+            // DPI so this is 360x600 DIPs on every display, not just 100%
+            // scaled ones (see the matching note in DashboardWindow.xaml.cs).
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(appWindow);
-            appWindow.Resize(new Windows.Graphics.SizeInt32(360, 600));
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 360, 600);
 
             TimelineList.ItemsSource = DeskdropStore.Shared.History;
             if (DeviceTargetsList != null) DeviceTargetsList.ItemsSource = DeskdropStore.Shared.Peers;

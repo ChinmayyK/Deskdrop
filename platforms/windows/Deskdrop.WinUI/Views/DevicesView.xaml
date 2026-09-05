@@ -20,10 +20,270 @@
             actions are revealed on hover or keyboard focus; the primary one
             never hides.
         -->
-        <DataTemplate x:Key="DeviceRowTemplate" x:DataType="winui:PeerViewModel">
+        <!--
+            The device currently playing the "primary" role (the connected,
+            paired device) gets its own large card instead of being just
+            another row - matching how much more people care about it than
+            about the other entries in the list. Everything shown is real
+            PeerViewModel state; nothing here is device-specific artwork, so
+            unavailable fields (no storage report, no IP yet) collapse
+            instead of being padded with placeholders.
+        -->
+        <DataTemplate x:Key="ConnectedDeviceCardTemplate" x:DataType="winui:PeerViewModel">
+            <Border Style="{StaticResource AppCardLarge}"
+                    Background="{ThemeResource AppAccentSubtleBrush}"
+                    BorderBrush="{ThemeResource AppAccentBorderBrush}"
+                    Padding="20,18"
+                    Tapped="OnPeerCardTapped"
+                    services:HoverEffects.EnableCardHover="True">
+
+                <Border.ContextFlyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem Text="Send files" Click="OnSendFilesToDeviceClicked">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE898;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Browse files" Click="OnExploreDeviceClicked">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8B7;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Run speed test" Click="OnSpeedTestDeviceClicked">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE916;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Continuity camera" Click="OnViewCameraClicked"
+                                        Visibility="{x:Bind ShowCameraButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE722;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem Text="Rename" Click="OnRenameDeviceClicked">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8AC;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Disconnect" Click="OnDisconnectClicked">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE711;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Forget this device" Click="OnForgetDeviceMenuClicked">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </Border.ContextFlyout>
+
+                <!-- Detail drawer: same fingerprint / IP / seen-dates /
+                     metrics presentation the compact tiles use, reached from
+                     the card instead of a right-click. -->
+                <FlyoutBase.AttachedFlyout>
+                    <Flyout Placement="Bottom">
+                        <StackPanel Spacing="14" Width="270">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE72E;" FontSize="12"
+                                          Foreground="{x:Bind TrustColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind TrustText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                            </StackPanel>
+
+                            <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Padding="10,7"
+                                    Visibility="{x:Bind HasFingerprint, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="FINGERPRINT" Style="{StaticResource AppOverline}" />
+                                    <TextBlock Text="{x:Bind fingerprint_display, Mode=OneWay}"
+                                               Style="{StaticResource AppMono}" FontSize="11.5" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2"
+                                            Visibility="{x:Bind FirstSeenText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}">
+                                    <TextBlock Text="FIRST SEEN" Style="{StaticResource AppOverline}" />
+                                    <TextBlock Text="{x:Bind FirstSeenText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="2"
+                                            Visibility="{x:Bind ShowBattery, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                    <TextBlock Text="BATTERY" Style="{StaticResource AppOverline}" />
+                                    <TextBlock Text="{x:Bind BatteryPercentText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Style="{StaticResource AppGhostButton}" Content="Rename" Click="OnRenameDeviceClicked" />
+                                <Button Style="{StaticResource AppGhostButton}" Content="Forget" Click="OnForgetDeviceMenuClicked" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Flyout>
+                </FlyoutBase.AttachedFlyout>
+
+                <StackPanel Spacing="14">
+                    <Grid ColumnSpacing="18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Device object. No per-device artwork exists, so
+                             this is the same rounded-square glyph tile used
+                             everywhere else, just larger. -->
+                        <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Top">
+                            <Border Background="{ThemeResource AppSurfaceBrush}"
+                                    BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusLarge}" />
+                            <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
+                                      FontSize="26"
+                                      Foreground="{ThemeResource AppAccentBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Top">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="9" Height="9" CornerRadius="4.5"
+                                        Background="{x:Bind ConnectionColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                           Style="{StaticResource AppSectionTitle}" FontSize="18" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <TextBlock Text="{x:Bind PlatformLabel, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE72E;" FontSize="11"
+                                              Foreground="{x:Bind TrustColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind TrustText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                                </StackPanel>
+                                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}"
+                                           Visibility="{x:Bind LastSeenText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind LastSeenText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Primary actions -->
+                        <StackPanel Grid.Column="2" Spacing="8" VerticalAlignment="Top">
+                            <Button Style="{StaticResource AppPrimaryButton}"
+                                    HorizontalAlignment="Stretch"
+                                    ToolTipService.ToolTip="Browse files on this device"
+                                    Click="OnExploreDeviceClicked">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <FontIcon Glyph="&#xE8B7;" FontSize="13" />
+                                    <TextBlock Text="Browse files" />
+                                </StackPanel>
+                            </Button>
+                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                                <Button Style="{StaticResource AppSecondaryButton}"
+                                        ToolTipService.ToolTip="Send files to this device"
+                                        Click="OnSendFilesToDeviceClicked">
+                                    <StackPanel Orientation="Horizontal" Spacing="7">
+                                        <FontIcon Glyph="&#xE898;" FontSize="12" />
+                                        <TextBlock Text="Send file" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource AppIconButton}"
+                                        ToolTipService.ToolTip="More actions"
+                                        AutomationProperties.Name="More actions for this device">
+                                    <FontIcon Glyph="&#xE712;" FontSize="15" />
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuFlyoutItem Text="Ping device" Click="OnPingDeviceClicked">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEA8F;" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Run speed test" Click="OnSpeedTestDeviceClicked">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE916;" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Continuity camera" Click="OnViewCameraClicked"
+                                                            Visibility="{x:Bind ShowCameraButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE722;" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem Text="Rename device" Click="OnRenameDeviceClicked">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8AC;" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Pause sync" Click="OnPauseSyncClicked"
+                                                            Visibility="{x:Bind sync_enabled, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE769;" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Resume sync" Click="OnResumeSyncClicked"
+                                                            Visibility="{x:Bind sync_enabled, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE768;" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem Text="Disconnect" Click="OnDisconnectClicked">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE711;" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Forget this device" Click="OnForgetDeviceMenuClicked">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Connection + storage chips: real fields only: no
+                         "Wi-Fi" label is asserted anywhere, since the model
+                         doesn't actually know the link medium. -->
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Border Background="{ThemeResource AppSurfaceBrush}"
+                                BorderBrush="{ThemeResource AppBorderSubtleBrush}" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMedium}"
+                                Padding="12,8" MinWidth="150">
+                            <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE701;" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <StackPanel Spacing="0">
+                                    <TextBlock Text="{x:Bind ConnectionText, Mode=OneWay}" Style="{StaticResource AppBodyStrong}" FontSize="12.5" />
+                                    <TextBlock Text="{x:Bind IpAddressText, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{ThemeResource AppSurfaceBrush}"
+                                BorderBrush="{ThemeResource AppBorderSubtleBrush}" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMedium}"
+                                Padding="12,8" MinWidth="150"
+                                Visibility="{x:Bind ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                            <StackPanel Spacing="0">
+                                <TextBlock Text="{x:Bind StorageFreeText, Mode=OneWay}" Style="{StaticResource AppBodyStrong}" FontSize="12.5" />
+                                <TextBlock Text="{x:Bind StorageTotalDisplayText, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Transfer activity / actionable error, same as every
+                         other device surface. -->
+                    <ProgressBar IsIndeterminate="True" Height="3" CornerRadius="1.5"
+                                 Visibility="{x:Bind ShowTransferIndicator, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                    <Border Background="{ThemeResource AppDangerSubtleBrush}"
+                            CornerRadius="{StaticResource RadiusSmall}"
+                            Padding="10,8"
+                            Visibility="{x:Bind HasError, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE783;" FontSize="13"
+                                      Foreground="{ThemeResource AppDangerBrush}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind ErrorText, Mode=OneWay}"
+                                       Style="{StaticResource AppSecondary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <Button Grid.Column="2" Style="{StaticResource AppGhostButton}"
+                                    Content="Retry" FontSize="12.5" Padding="9,4" MinHeight="26"
+                                    Click="OnPairDeviceClicked" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!--
+            Compact tile for a paired device that isn't playing the primary
+            role right now - offline, reconnecting, or simply the second
+            connected device. Same states and actions as the old full-width
+            row, laid out for a grid instead of a stack.
+        -->
+        <DataTemplate x:Key="OtherDeviceCardTemplate" x:DataType="winui:PeerViewModel">
             <Border Style="{StaticResource AppCard}"
+                    Width="300"
                     Padding="14,12"
-                    Margin="0,0,0,8"
                     Tapped="OnPeerCardTapped"
                     services:HoverEffects.EnableCardHover="True">
 
@@ -31,43 +291,26 @@
                     <MenuFlyout>
                         <MenuFlyoutItem Text="Send files" Click="OnSendFilesToDeviceClicked"
                                         Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE898;" />
-                            </MenuFlyoutItem.Icon>
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE898;" /></MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem Text="Browse files" Click="OnExploreDeviceClicked"
                                         Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE8B7;" />
-                            </MenuFlyoutItem.Icon>
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8B7;" /></MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutSeparator Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
                         <MenuFlyoutItem Text="Rename" Click="OnRenameDeviceClicked">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE8AC;" />
-                            </MenuFlyoutItem.Icon>
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8AC;" /></MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem Text="Disconnect" Click="OnDisconnectClicked"
                                         Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE711;" />
-                            </MenuFlyoutItem.Icon>
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE711;" /></MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem Text="Forget this device" Click="OnForgetDeviceMenuClicked">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE74D;" />
-                            </MenuFlyoutItem.Icon>
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;" /></MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                     </MenuFlyout>
                 </Border.ContextFlyout>
 
-                <!--
-                    Device detail drawer: tapping the card used to just select
-                    it with nothing visible happening. This surfaces what the
-                    row's compact layout has no room for - fingerprint, IP,
-                    first/last seen - reusing the row's own trust and metrics
-                    presentation rather than re-deriving it.
-                -->
                 <FlyoutBase.AttachedFlyout>
                     <Flyout Placement="RightEdgeAlignedTop">
                         <StackPanel Spacing="14" Width="270">
@@ -128,32 +371,6 @@
                                 </StackPanel>
                             </Grid>
 
-                            <StackPanel Spacing="8"
-                                        Visibility="{x:Bind HasMetrics, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center"
-                                            Visibility="{x:Bind ShowBattery, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                                    <Grid VerticalAlignment="Center">
-                                        <Border Width="24" Height="12" CornerRadius="3"
-                                                BorderThickness="1.2"
-                                                BorderBrush="{ThemeResource AppBorderStrongBrush}" />
-                                        <Border Height="6" CornerRadius="1.5"
-                                                HorizontalAlignment="Left" VerticalAlignment="Center"
-                                                Margin="3,0,0,0"
-                                                Width="{x:Bind BatteryLevel, Converter={StaticResource PercentToWidthConverter}, ConverterParameter=18, Mode=OneWay}"
-                                                Background="{x:Bind BatteryColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
-                                        <Border Width="2" Height="5" CornerRadius="1"
-                                                HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                Margin="0,0,-3,0"
-                                                Background="{ThemeResource AppBorderStrongBrush}" />
-                                    </Grid>
-                                    <TextBlock Text="{x:Bind BatteryPercentText, Mode=OneWay}" Style="{StaticResource AppMetric}" />
-                                </StackPanel>
-                                <TextBlock Text="{x:Bind StorageFreeText, Mode=OneWay}"
-                                           Style="{StaticResource AppMetric}"
-                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                           Visibility="{x:Bind ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
-                            </StackPanel>
-
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button Style="{StaticResource AppGhostButton}" Content="Rename" Click="OnRenameDeviceClicked" />
                                 <Button Style="{StaticResource AppGhostButton}" Content="Forget" Click="OnForgetDeviceMenuClicked" />
@@ -162,34 +379,23 @@
                     </Flyout>
                 </FlyoutBase.AttachedFlyout>
 
-                <Grid RowSpacing="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <Grid Grid.Row="0" ColumnSpacing="14">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Device object: a rounded square (an object, not
-                             an avatar) with its connection state pinned to
-                             the corner, so identity and reachability read as
-                             one thing. -->
-                        <Grid Grid.Column="0" Width="44" Height="44"
+                        <Grid Grid.Column="0" Width="40" Height="40"
                               Opacity="{x:Bind IsOffline, Converter={StaticResource BoolToOpacityConverter}, ConverterParameter=0.55, Mode=OneWay}">
                             <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
-                                    CornerRadius="{StaticResource RadiusCard}" />
+                                    CornerRadius="{StaticResource RadiusMedium}" />
                             <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
-                                      FontSize="20"
+                                      FontSize="18"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <Border Width="12" Height="12" CornerRadius="6"
+                            <Border Width="11" Height="11" CornerRadius="5.5"
                                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                     Margin="0,0,-2,-2"
                                     BorderThickness="2"
@@ -198,260 +404,143 @@
                                     services:PulseEffects.EnablePulse="{x:Bind IsNegotiating, Mode=OneWay}" />
                         </Grid>
 
-                        <!-- Identity -->
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                             <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
-                                       Style="{StaticResource AppBodyStrong}"
-                                       FontSize="14" />
+                                       Style="{StaticResource AppBodyStrong}" FontSize="13.5" />
+                            <TextBlock Text="{x:Bind ConnectionText, Mode=OneWay}"
+                                       Style="{StaticResource AppCaption}"
+                                       Foreground="{x:Bind ConnectionColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
+                                       FontWeight="SemiBold" />
+                        </StackPanel>
 
-                            <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
-                                <TextBlock Text="{x:Bind ConnectionText, Mode=OneWay}"
-                                           Style="{StaticResource AppSecondary}"
-                                           Foreground="{x:Bind ConnectionColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
-                                           FontWeight="SemiBold" />
+                        <Button Grid.Column="2" Style="{StaticResource AppIconButton}"
+                                ToolTipService.ToolTip="More actions"
+                                AutomationProperties.Name="More actions for this device">
+                            <FontIcon Glyph="&#xE712;" FontSize="14" />
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuFlyoutItem Text="Ping device" Click="OnPingDeviceClicked"
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEA8F;" /></MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem Text="Browse files" Click="OnExploreDeviceClicked"
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8B7;" /></MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem Text="Run speed test" Click="OnSpeedTestDeviceClicked"
+                                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE916;" /></MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutSeparator Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                                    <MenuFlyoutItem Text="Rename device" Click="OnRenameDeviceClicked">
+                                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8AC;" /></MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem Text="Forget this device" Click="OnForgetDeviceMenuClicked">
+                                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;" /></MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </Grid>
 
-                                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                                <!-- Trust is a security fact, so it gets a
-                                     lock glyph rather than another word in a
-                                     row of words. -->
-                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                    <FontIcon Glyph="&#xE72E;" FontSize="11"
-                                              Foreground="{x:Bind TrustColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
-                                    <TextBlock Text="{x:Bind TrustText, Mode=OneWay}"
-                                               Style="{StaticResource AppSecondary}" />
-                                </StackPanel>
+                        <Button Grid.Column="0" Style="{StaticResource AppPrimaryButton}"
+                                Content="Pair" HorizontalAlignment="Stretch"
+                                Visibility="{x:Bind ShowPairButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                ToolTipService.ToolTip="Start pairing with this device"
+                                Click="OnPairDeviceClicked" />
+                        <Button Grid.Column="0" Style="{StaticResource AppSecondaryButton}"
+                                Content="Connect" HorizontalAlignment="Stretch"
+                                Visibility="{x:Bind ShowConnectButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                ToolTipService.ToolTip="Reconnect to this device"
+                                Click="OnPairDeviceClicked" />
+                        <Button Grid.Column="0" Style="{StaticResource AppSecondaryButton}"
+                                HorizontalAlignment="Stretch"
+                                Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                ToolTipService.ToolTip="Browse files on this device"
+                                Click="OnExploreDeviceClicked">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8B7;" FontSize="12" />
+                                <TextBlock Text="Browse" />
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="1" Style="{StaticResource AppIconButton}"
+                                Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
+                                ToolTipService.ToolTip="Send files to this device"
+                                AutomationProperties.Name="Send files to this device"
+                                Click="OnSendFilesToDeviceClicked">
+                            <FontIcon Glyph="&#xE898;" FontSize="13" />
+                        </Button>
+                    </Grid>
 
+                    <!-- Transfer / error, condensed. -->
+                    <ProgressBar IsIndeterminate="True" Height="3" CornerRadius="1.5"
+                                 Visibility="{x:Bind ShowTransferIndicator, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                    <Border Background="{ThemeResource AppDangerSubtleBrush}"
+                            CornerRadius="{StaticResource RadiusSmall}"
+                            Padding="8,6"
+                            Visibility="{x:Bind HasError, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                        <TextBlock Text="{x:Bind ErrorText, Mode=OneWay}"
+                                   Style="{StaticResource AppCaption}"
+                                   TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!--
+            Nearby devices are a different proposition: not yours yet, so the
+            tile is deliberately lighter (no metrics, no overflow) and offers
+            exactly one thing to do.
+        -->
+        <DataTemplate x:Key="NearbyRowTemplate" x:DataType="winui:PeerViewModel">
+            <Border Style="{StaticResource AppCard}"
+                    Background="Transparent"
+                    Width="300"
+                    Padding="14,12"
+                    services:HoverEffects.EnableCardHover="True">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
+                                Width="34" Height="34"
+                                CornerRadius="{StaticResource RadiusSmall}">
+                            <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
+                                      FontSize="16"
+                                      Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                       Style="{StaticResource AppBodyStrong}" FontSize="13" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{x:Bind PlatformLabel, Mode=OneWay}"
+                                           Style="{StaticResource AppCaption}" />
                                 <TextBlock Text="&#183;" Style="{StaticResource AppCaption}"
                                            Visibility="{x:Bind LastSeenText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
                                 <TextBlock Text="{x:Bind LastSeenText, Mode=OneWay}"
                                            Style="{StaticResource AppCaption}" />
                             </StackPanel>
                         </StackPanel>
-
-                        <!-- Live metrics. A drawn battery pip beats another
-                             number: fill level is readable without parsing.
-                             Collapses entirely when the device reports
-                             nothing, rather than showing zeroes. -->
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="14"
-                                    VerticalAlignment="Center"
-                                    Margin="8,0,4,0"
-                                    Visibility="{x:Bind HasMetrics, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-
-                            <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center"
-                                        Visibility="{x:Bind ShowBattery, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
-                                        ToolTipService.ToolTip="Battery level">
-                                <Grid VerticalAlignment="Center">
-                                    <Border Width="24" Height="12" CornerRadius="3"
-                                            BorderThickness="1.2"
-                                            BorderBrush="{ThemeResource AppBorderStrongBrush}" />
-                                    <Border Height="6" CornerRadius="1.5"
-                                            HorizontalAlignment="Left" VerticalAlignment="Center"
-                                            Margin="3,0,0,0"
-                                            Width="{x:Bind BatteryLevel, Converter={StaticResource PercentToWidthConverter}, ConverterParameter=18, Mode=OneWay}"
-                                            Background="{x:Bind BatteryColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
-                                    <Border Width="2" Height="5" CornerRadius="1"
-                                            HorizontalAlignment="Right" VerticalAlignment="Center"
-                                            Margin="0,0,-3,0"
-                                            Background="{ThemeResource AppBorderStrongBrush}" />
-                                </Grid>
-                                <TextBlock Text="{x:Bind BatteryPercentText, Mode=OneWay}"
-                                           Style="{StaticResource AppMetric}" />
-                            </StackPanel>
-
-                            <TextBlock Text="{x:Bind StorageFreeText, Mode=OneWay}"
-                                       Style="{StaticResource AppMetric}"
-                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                       VerticalAlignment="Center"
-                                       ToolTipService.ToolTip="Free storage on this device"
-                                       Visibility="{x:Bind ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
-                        </StackPanel>
-
-                        <!-- Action cluster. One labelled primary action per
-                             state; the rest appear on hover or focus, and
-                             the long tail lives in the overflow menu and the
-                             right-click menu. -->
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-
-                            <Button Style="{StaticResource AppPrimaryButton}"
-                                    Content="Pair"
-                                    Visibility="{x:Bind ShowPairButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
-                                    ToolTipService.ToolTip="Start pairing with this device"
-                                    Click="OnPairDeviceClicked" />
-
-                            <Button Style="{StaticResource AppSecondaryButton}"
-                                    Content="Connect"
-                                    Visibility="{x:Bind ShowConnectButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
-                                    ToolTipService.ToolTip="Reconnect to this device"
-                                    Click="OnPairDeviceClicked" />
-
-                            <Button Style="{StaticResource AppAccentSubtleButton}"
-                                    Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
-                                    ToolTipService.ToolTip="Send files to this device"
-                                    AutomationProperties.Name="Send files to this device"
-                                    Click="OnSendFilesToDeviceClicked">
-                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <FontIcon Glyph="&#xE898;" FontSize="12" />
-                                    <TextBlock Text="Send" />
-                                </StackPanel>
-                            </Button>
-
-                            <StackPanel Orientation="Horizontal" Spacing="2"
-                                        Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
-                                        services:RevealEffects.RevealOnHover="True">
-                                <Button Style="{StaticResource AppIconButton}"
-                                        ToolTipService.ToolTip="Browse files on this device"
-                                        AutomationProperties.Name="Browse files on this device"
-                                        Click="OnExploreDeviceClicked">
-                                    <FontIcon Glyph="&#xE8B7;" FontSize="14" />
-                                </Button>
-                                <Button Style="{StaticResource AppIconButton}"
-                                        ToolTipService.ToolTip="Disconnect"
-                                        AutomationProperties.Name="Disconnect"
-                                        Click="OnDisconnectClicked">
-                                    <FontIcon Glyph="&#xE711;" FontSize="14" />
-                                </Button>
-                            </StackPanel>
-
-                            <Button Style="{StaticResource AppIconButton}"
-                                    ToolTipService.ToolTip="More actions"
-                                    AutomationProperties.Name="More actions for this device">
-                                <FontIcon Glyph="&#xE712;" FontSize="15" />
-                                <Button.Flyout>
-                                    <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                        <MenuFlyoutItem Text="Ping device" Click="OnPingDeviceClicked"
-                                                        Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xEA8F;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem Text="Browse files" Click="OnExploreDeviceClicked"
-                                                        Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE8B7;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem Text="Run speed test" Click="OnSpeedTestDeviceClicked"
-                                                        Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE916;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem Text="Continuity camera" Click="OnViewCameraClicked"
-                                                        Visibility="{x:Bind ShowCameraButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE722;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutSeparator Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
-                                        <MenuFlyoutItem Text="Rename device" Click="OnRenameDeviceClicked">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE8AC;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem Text="Pause sync" Click="OnPauseSyncClicked"
-                                                        Visibility="{x:Bind sync_enabled, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE769;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem Text="Resume sync" Click="OnResumeSyncClicked"
-                                                        Visibility="{x:Bind sync_enabled, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE768;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutSeparator />
-                                        <MenuFlyoutItem Text="Forget this device" Click="OnForgetDeviceMenuClicked">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE74D;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                    </MenuFlyout>
-                                </Button.Flyout>
-                            </Button>
-                        </StackPanel>
                     </Grid>
 
-                    <!-- Transfer activity: the row itself shows it is busy,
-                         so you don't have to leave the page to know. -->
-                    <ProgressBar Grid.Row="1"
-                                 IsIndeterminate="True"
-                                 Height="3"
-                                 CornerRadius="1.5"
-                                 Visibility="{x:Bind ShowTransferIndicator, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
-
-                    <!-- Actionable error, in place, with a way out. -->
-                    <Border Grid.Row="2"
-                            Background="{ThemeResource AppDangerSubtleBrush}"
-                            CornerRadius="{StaticResource RadiusSmall}"
-                            Padding="10,8"
-                            Visibility="{x:Bind HasError, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xE783;" FontSize="13"
-                                      Foreground="{ThemeResource AppDangerBrush}" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1" Text="{x:Bind ErrorText, Mode=OneWay}"
-                                       Style="{StaticResource AppSecondary}"
-                                       TextWrapping="Wrap" VerticalAlignment="Center" />
-                            <Button Grid.Column="2" Style="{StaticResource AppGhostButton}"
-                                    Content="Retry" FontSize="12.5" Padding="9,4" MinHeight="26"
-                                    Click="OnPairDeviceClicked" />
-                        </Grid>
-                    </Border>
-                </Grid>
-            </Border>
-        </DataTemplate>
-
-        <!--
-            Nearby devices are a different proposition: not yours yet, so the
-            row is deliberately lighter (no metrics, no overflow) and offers
-            exactly one thing to do.
-        -->
-        <DataTemplate x:Key="NearbyRowTemplate" x:DataType="winui:PeerViewModel">
-            <Border Style="{StaticResource AppCard}"
-                    Background="Transparent"
-                    Padding="14,10"
-                    Margin="0,0,0,6"
-                    services:HoverEffects.EnableCardHover="True">
-                <Grid ColumnSpacing="14">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
-                            Width="34" Height="34"
-                            CornerRadius="{StaticResource RadiusSmall}">
-                        <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
-                                  FontSize="16"
-                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                        <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
-                                   Style="{StaticResource AppBodyStrong}" FontSize="13" />
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{x:Bind PlatformLabel, Mode=OneWay}"
-                                       Style="{StaticResource AppCaption}" />
-                            <TextBlock Text="&#183;" Style="{StaticResource AppCaption}"
-                                       Visibility="{x:Bind LastSeenText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
-                            <TextBlock Text="{x:Bind LastSeenText, Mode=OneWay}"
-                                       Style="{StaticResource AppCaption}" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <Button Grid.Column="2" Style="{StaticResource AppSecondaryButton}"
+                    <Button Style="{StaticResource AppSecondaryButton}"
                             Content="Pair"
+                            HorizontalAlignment="Stretch"
                             ToolTipService.ToolTip="Start pairing with this device"
                             Click="OnPairDeviceClicked" />
-                </Grid>
+                </StackPanel>
             </Border>
         </DataTemplate>
 
@@ -463,11 +552,14 @@
         <DataTemplate x:Key="ActivityRowTemplate" x:DataType="winui:ActivityEntry">
             <Border BorderThickness="0,1,0,0"
                     BorderBrush="{ThemeResource AppDividerBrush}"
-                    Padding="2,9">
+                    Padding="2,10">
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
@@ -481,13 +573,44 @@
                         <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                    Style="{StaticResource AppBody}"
                                    TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{x:Bind Source, Mode=OneWay}"
-                                   Style="{StaticResource AppCaption}" />
+                        <TextBlock Text="{x:Bind OperationText, Mode=OneWay}"
+                                   Style="{StaticResource AppCaption}"
+                                   TextTrimming="CharacterEllipsis" />
                     </StackPanel>
 
-                    <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime, Mode=OneWay}"
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center"
+                                Visibility="{x:Bind HasStatus, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                        <FontIcon Glyph="{x:Bind StatusGlyph, Mode=OneWay}" FontSize="12"
+                                  Foreground="{x:Bind StatusColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
+                                   Style="{StaticResource AppSecondary}"
+                                   Foreground="{x:Bind StatusColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
+                                   FontWeight="SemiBold" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="3" Text="{x:Bind FormattedSize, Mode=OneWay}"
                                Style="{StaticResource AppCaption}"
+                               MinWidth="52" HorizontalAlignment="Right"
                                VerticalAlignment="Center" />
+
+                    <TextBlock Grid.Column="4" Text="{x:Bind RelativeTime, Mode=OneWay}"
+                               Style="{StaticResource AppCaption}"
+                               MinWidth="70" HorizontalAlignment="Right"
+                               VerticalAlignment="Center" />
+
+                    <Button Grid.Column="5" Style="{StaticResource AppIconButtonSmall}"
+                            ToolTipService.ToolTip="More actions"
+                            AutomationProperties.Name="More actions for this activity"
+                            Visibility="{x:Bind HasDestination, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                        <FontIcon Glyph="&#xE712;" FontSize="14" />
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem Text="Open containing folder" Click="OnOpenActivityFolderClicked">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE838;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -500,27 +623,48 @@
                     HorizontalAlignment="Center">
 
             <!--
-                Status line, not a hero. The page title lives in the title
-                bar; this band carries the one sentence that says whether the
-                ecosystem is healthy, plus the two page-scoped actions.
+                Page header. The title bar carries a compact status chip for
+                every page; this is the Devices page's own identity - title,
+                subtitle, and the actions people reach for most on this
+                screen - plus the one sentence on ecosystem health that used
+                to be the whole header.
             -->
-            <Grid ColumnSpacing="12">
+            <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
-                    <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
-                            Background="{x:Bind winui:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"
-                            services:PulseEffects.EnablePulse="{x:Bind mgr.IsSearching, Mode=OneWay}" />
-                    <TextBlock Text="{x:Bind mgr.EcosystemSummaryText, Mode=OneWay}"
-                               Style="{StaticResource AppSecondary}"
-                               VerticalAlignment="Center" />
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <TextBlock Text="Devices" Style="{StaticResource AppDisplayText}" />
+                    <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+                        <TextBlock Text="Connect and manage your devices" Style="{StaticResource AppSecondary}" />
+                        <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                        <Border Width="7" Height="7" CornerRadius="3.5" VerticalAlignment="Center"
+                                Background="{x:Bind winui:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"
+                                services:PulseEffects.EnablePulse="{x:Bind mgr.IsSearching, Mode=OneWay}" />
+                        <TextBlock Text="{x:Bind mgr.EcosystemSummaryText, Mode=OneWay}"
+                                   Style="{StaticResource AppCaption}" VerticalAlignment="Center" />
+                    </StackPanel>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button Style="{StaticResource AppGhostButton}"
+                <!-- 148px right margin clears the system caption buttons -
+                     this header now sits in the space the title bar used to
+                     reserve (see DashboardWindow's per-page Frame margin),
+                     so it needs the same clearance the title bar itself
+                     used to keep. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top"
+                            Margin="0,0,148,0">
+                    <Button Style="{StaticResource AppPrimaryButton}"
+                            ToolTipService.ToolTip="Send files to a connected device (Ctrl+O)"
+                            AutomationProperties.Name="Send files"
+                            Click="OnQuickSendClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE898;" FontSize="13" />
+                            <TextBlock Text="Send files" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource AppSecondaryButton}"
                             ToolTipService.ToolTip="Look for devices on the local network"
                             Click="OnScanNearbyClicked">
                         <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
@@ -536,6 +680,12 @@
                             <TextBlock Text="Pair device" />
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource AppIconButton}"
+                            ToolTipService.ToolTip="Settings"
+                            AutomationProperties.Name="Settings"
+                            Click="OnOpenSettingsClicked">
+                        <FontIcon Glyph="&#xE713;" FontSize="15" />
+                    </Button>
                 </StackPanel>
             </Grid>
 
@@ -549,29 +699,57 @@
                           Visibility="{x:Bind mgr.HasPairingRequests, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="winui:PeerViewModel">
-                        <Border Background="{ThemeResource AppWarningSubtleBrush}"
+                        <!--
+                            Same card language as the connected-device hero
+                            (AppCardLarge, rounded device-icon tile, generous
+                            padding) instead of a plain text banner - this is
+                            the one moment that outranks the hero card, and
+                            it now reads as part of the same design system
+                            instead of a bolted-on alert strip. The accent
+                            bar stays: it's the one glance-able "this needs
+                            you" signal even when the rest of the card is
+                            calm.
+                        -->
+                        <Border Style="{StaticResource AppCardLarge}"
+                                Background="{ThemeResource AppWarningSubtleBrush}"
                                 BorderBrush="{ThemeResource AppWarningBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="{StaticResource RadiusCard}"
                                 Padding="0"
                                 Margin="0,0,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="3" />
+                                    <ColumnDefinition Width="4" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" Background="{ThemeResource AppWarningBrush}" />
+                                <!-- Literal 14 matches RadiusLarge (Tokens.xaml) - CornerRadius
+                                     can't mix a StaticResource token with per-corner literals
+                                     in one attribute, so this stays a plain value. -->
+                                <Border Grid.Column="0" Background="{ThemeResource AppWarningBrush}"
+                                        CornerRadius="14,0,0,14" />
 
-                                <Grid Grid.Column="1" Padding="16,14" ColumnSpacing="14">
+                                <Grid Grid.Column="1" Padding="18,16" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <StackPanel Grid.Column="0" Spacing="8">
+                                    <!-- Device object, same treatment as every
+                                         other device identity in the app. -->
+                                    <Grid Grid.Column="0" Width="48" Height="48" VerticalAlignment="Top">
+                                        <Border Background="{ThemeResource AppSurfaceBrush}"
+                                                BorderBrush="{ThemeResource AppWarningBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="{StaticResource RadiusLarge}" />
+                                        <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
+                                                  FontSize="20"
+                                                  Foreground="{ThemeResource AppWarningBrush}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <StackPanel Grid.Column="1" Spacing="10" VerticalAlignment="Center">
                                         <StackPanel Spacing="2">
-                                            <TextBlock Style="{StaticResource AppBodyStrong}" FontSize="14">
+                                            <TextBlock Style="{StaticResource AppSectionTitle}" FontSize="15">
                                                 <Run Text="{x:Bind DisplayName, Mode=OneWay}" /><Run Text=" wants to pair" />
                                             </TextBlock>
                                             <TextBlock Style="{StaticResource AppSecondary}"
@@ -581,21 +759,22 @@
                                         <Border Background="{ThemeResource AppSurfaceBrush}"
                                                 BorderBrush="{ThemeResource AppBorderSubtleBrush}"
                                                 BorderThickness="1"
-                                                CornerRadius="{StaticResource RadiusSmall}"
-                                                Padding="12,6"
+                                                CornerRadius="{StaticResource RadiusMedium}"
+                                                Padding="12,7"
                                                 HorizontalAlignment="Left">
                                             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                                 <TextBlock Text="SECURITY CODE" Style="{StaticResource AppOverline}"
                                                            VerticalAlignment="Center" />
                                                 <TextBlock Text="{x:Bind pairingPin, Mode=OneWay}"
                                                            Style="{StaticResource AppMono}"
-                                                           FontSize="15"
+                                                           FontSize="16"
+                                                           FontWeight="SemiBold"
                                                            CharacterSpacing="140" />
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                                                 VerticalAlignment="Center">
                                         <Button Style="{StaticResource AppDestructiveButton}"
                                                 Content="Decline" Click="OnPairingRejectClicked" />
@@ -633,25 +812,111 @@
                 </Grid>
             </Button>
 
-            <!-- ============================ YOUR DEVICES -->
-            <StackPanel Spacing="10">
+            <!--
+                Skeleton, not a spinner. The engine starts asynchronously, so
+                for the first moment of every launch we genuinely don't know
+                whether there are devices - showing the empty state then
+                would read as "your devices are gone". Two placeholder rows
+                in the shape of the real thing say "loading" without saying
+                anything false.
+            -->
+            <StackPanel Spacing="8"
+                        Visibility="{x:Bind mgr.IsInitialLoad, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                <Border Style="{StaticResource AppCard}" Padding="14,12">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Width="44" Height="44"
+                                CornerRadius="{StaticResource RadiusCard}"
+                                Background="{ThemeResource AppSurfaceSubtleBrush}"
+                                services:PulseEffects.EnablePulse="True" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="7"
+                                    services:PulseEffects.EnablePulse="True">
+                            <Border Height="12" Width="150" HorizontalAlignment="Left"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppSurfaceSubtleBrush}" />
+                            <Border Height="10" Width="230" HorizontalAlignment="Left"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppSurfaceSubtleBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border Style="{StaticResource AppCard}" Padding="14,12" Opacity="0.6">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Width="44" Height="44"
+                                CornerRadius="{StaticResource RadiusCard}"
+                                Background="{ThemeResource AppSurfaceSubtleBrush}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="7">
+                            <Border Height="12" Width="120" HorizontalAlignment="Left"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppSurfaceSubtleBrush}" />
+                            <Border Height="10" Width="190" HorizontalAlignment="Left"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppSurfaceSubtleBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!--
+                Empty state that answers all three questions: what's empty,
+                why it matters, and the one thing to do about it.
+            -->
+            <Border Style="{StaticResource AppCardLarge}"
+                    Padding="32,36"
+                    Visibility="{x:Bind mgr.ShowDevicesEmptyState, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                <StackPanel HorizontalAlignment="Center" Spacing="14" MaxWidth="380">
+                    <Border Width="48" Height="48"
+                            CornerRadius="{StaticResource RadiusLarge}"
+                            Background="{ThemeResource AppAccentSubtleBrush}"
+                            HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE8EA;" FontSize="21"
+                                  Foreground="{ThemeResource AppAccentBrush}"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="No devices paired yet"
+                                   Style="{StaticResource AppSectionTitle}"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Style="{StaticResource AppSecondary}"
+                                   HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                                   Text="Pair your phone or another computer to share files, clipboard content, and screenshots over your local network." />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <Button Style="{StaticResource AppPrimaryButton}"
+                                Content="Pair a device" Click="OnShowQRCodeClicked" />
+                        <Button Style="{StaticResource AppGhostButton}"
+                                Content="Scan network" Click="OnScanNearbyClicked" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ============================ PRIMARY CONNECTED DEVICE -->
+            <ContentControl Content="{x:Bind mgr.PrimaryDevice, Mode=OneWay}"
+                             ContentTemplate="{StaticResource ConnectedDeviceCardTemplate}"
+                             HorizontalContentAlignment="Stretch"
+                             Visibility="{x:Bind mgr.HasPrimaryDevice, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+
+            <!-- ============================ OTHER DEVICES -->
+            <StackPanel Spacing="10"
+                        Visibility="{x:Bind mgr.HasOtherDevices, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
                 <Grid ColumnSpacing="10">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Text="Your devices"
+                    <TextBlock Grid.Column="0" Text="Other devices"
                                Style="{StaticResource AppSectionTitle}" VerticalAlignment="Center" />
-                    <Border Grid.Column="1" Style="{StaticResource AppChip}"
-                            Visibility="{x:Bind mgr.HasKnownDevices, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                        <TextBlock Text="{x:Bind mgr.KnownDeviceCount, Mode=OneWay}"
-                                   Style="{StaticResource AppCaption}" FontWeight="SemiBold" />
-                    </Border>
 
-                    <Button Grid.Column="3" Style="{StaticResource AppIconButton}"
+                    <Button Grid.Column="2" Style="{StaticResource AppIconButton}"
                             Visibility="{x:Bind mgr.HasKnownDevices, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
                             ToolTipService.ToolTip="Actions for all devices"
                             AutomationProperties.Name="Actions for all devices">
@@ -674,123 +939,26 @@
                     </Button>
                 </Grid>
 
-                <!--
-                    Skeleton, not a spinner. The engine starts asynchronously,
-                    so for the first moment of every launch we genuinely don't
-                    know whether there are devices - showing the empty state
-                    then would read as "your devices are gone". Two placeholder
-                    rows in the shape of the real thing say "loading" without
-                    saying anything false.
-                -->
-                <StackPanel Spacing="8"
-                            Visibility="{x:Bind mgr.IsInitialLoad, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                    <Border Style="{StaticResource AppCard}" Padding="14,12">
-                        <Grid ColumnSpacing="14">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Width="44" Height="44"
-                                    CornerRadius="{StaticResource RadiusCard}"
-                                    Background="{ThemeResource AppSurfaceSubtleBrush}"
-                                    services:PulseEffects.EnablePulse="True" />
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="7"
-                                        services:PulseEffects.EnablePulse="True">
-                                <Border Height="12" Width="150" HorizontalAlignment="Left"
-                                        CornerRadius="{StaticResource RadiusSmall}"
-                                        Background="{ThemeResource AppSurfaceSubtleBrush}" />
-                                <Border Height="10" Width="230" HorizontalAlignment="Left"
-                                        CornerRadius="{StaticResource RadiusSmall}"
-                                        Background="{ThemeResource AppSurfaceSubtleBrush}" />
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                    <Border Style="{StaticResource AppCard}" Padding="14,12" Opacity="0.6">
-                        <Grid ColumnSpacing="14">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Width="44" Height="44"
-                                    CornerRadius="{StaticResource RadiusCard}"
-                                    Background="{ThemeResource AppSurfaceSubtleBrush}" />
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="7">
-                                <Border Height="12" Width="120" HorizontalAlignment="Left"
-                                        CornerRadius="{StaticResource RadiusSmall}"
-                                        Background="{ThemeResource AppSurfaceSubtleBrush}" />
-                                <Border Height="10" Width="190" HorizontalAlignment="Left"
-                                        CornerRadius="{StaticResource RadiusSmall}"
-                                        Background="{ThemeResource AppSurfaceSubtleBrush}" />
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                </StackPanel>
-
-                <!--
-                    Empty state that answers all three questions: what's
-                    empty, why it matters, and the one thing to do about it.
-                -->
-                <Border Style="{StaticResource AppCardLarge}"
-                        Padding="32,36"
-                        Visibility="{x:Bind mgr.ShowDevicesEmptyState, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                    <StackPanel HorizontalAlignment="Center" Spacing="14" MaxWidth="380">
-                        <Border Width="48" Height="48"
-                                CornerRadius="{StaticResource RadiusLarge}"
-                                Background="{ThemeResource AppAccentSubtleBrush}"
-                                HorizontalAlignment="Center">
-                            <FontIcon Glyph="&#xE8EA;" FontSize="21"
-                                      Foreground="{ThemeResource AppAccentBrush}"
-                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <StackPanel Spacing="5">
-                            <TextBlock Text="No devices paired yet"
-                                       Style="{StaticResource AppSectionTitle}"
-                                       HorizontalAlignment="Center" />
-                            <TextBlock Style="{StaticResource AppSecondary}"
-                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
-                                       Text="Pair your phone or another computer to share files, clipboard content, and screenshots over your local network." />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                            <Button Style="{StaticResource AppPrimaryButton}"
-                                    Content="Pair a device" Click="OnShowQRCodeClicked" />
-                            <Button Style="{StaticResource AppGhostButton}"
-                                    Content="Scan network" Click="OnScanNearbyClicked" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <ListView SelectionMode="None"
+                <GridView SelectionMode="None"
                           Padding="0"
                           IsItemClickEnabled="False"
-                          ItemContainerStyle="{StaticResource AppPlainListItem}"
-                          ItemTemplate="{StaticResource DeviceRowTemplate}"
-                          ItemsSource="{x:Bind mgr.KnownDevices, Mode=OneWay}" />
-            </StackPanel>
+                          ItemContainerStyle="{StaticResource AppPlainGridItem}"
+                          ItemTemplate="{StaticResource OtherDeviceCardTemplate}"
+                          ItemsSource="{x:Bind mgr.OtherKnownDevices, Mode=OneWay}" />
 
-            <!-- ============================ NEARBY -->
-            <StackPanel Spacing="10"
-                        Visibility="{x:Bind mgr.HasNearbyDevices, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                <Grid ColumnSpacing="10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="Nearby"
-                               Style="{StaticResource AppSectionTitle}" VerticalAlignment="Center" />
-                    <Border Grid.Column="1" Style="{StaticResource AppChip}">
-                        <TextBlock Text="{x:Bind mgr.NearbyDeviceCount, Mode=OneWay}"
-                                   Style="{StaticResource AppCaption}" FontWeight="SemiBold" />
-                    </Border>
-                    <TextBlock Grid.Column="2" Text="Seen on this network, not paired"
-                               Style="{StaticResource AppCaption}"
-                               VerticalAlignment="Center" Margin="4,0,0,0" />
-                </Grid>
+                <!-- A trusted-but-offline tile and an unpaired-nearby tile
+                     need different primary actions (Connect vs. Pair), so
+                     nearby devices get their own light label rather than
+                     being folded silently into the grid above. -->
+                <TextBlock Text="Seen on this network, not paired"
+                           Style="{StaticResource AppCaption}"
+                           Margin="2,6,0,0"
+                           Visibility="{x:Bind mgr.HasNearbyDevices, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
 
-                <ListView SelectionMode="None"
+                <GridView SelectionMode="None"
                           Padding="0"
                           IsItemClickEnabled="False"
-                          ItemContainerStyle="{StaticResource AppPlainListItem}"
+                          ItemContainerStyle="{StaticResource AppPlainGridItem}"
                           ItemTemplate="{StaticResource NearbyRowTemplate}"
                           ItemsSource="{x:Bind mgr.NearbyDevices, Mode=OneWay}" />
             </StackPanel>
@@ -823,8 +991,13 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xED14;" FontSize="17"
-                                      Foreground="{ThemeResource AppAccentBrush}" VerticalAlignment="Center" />
+                            <Border Grid.Column="0" Width="32" Height="32"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppAccentSubtleBrush}">
+                                <FontIcon Glyph="&#xED14;" FontSize="15"
+                                          Foreground="{ThemeResource AppAccentBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="Pair a device" Style="{StaticResource AppBodyStrong}" FontSize="13" />
                                 <TextBlock Text="Scan a code to connect" Style="{StaticResource AppCaption}" />
@@ -840,8 +1013,13 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xE898;" FontSize="17"
-                                      Foreground="{ThemeResource AppAccentBrush}" VerticalAlignment="Center" />
+                            <Border Grid.Column="0" Width="32" Height="32"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppSuccessSubtleBrush}">
+                                <FontIcon Glyph="&#xE898;" FontSize="15"
+                                          Foreground="{ThemeResource AppSuccessBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="Send files" Style="{StaticResource AppBodyStrong}" FontSize="13" />
                                 <TextBlock Text="Pick files and a target" Style="{StaticResource AppCaption}" />
@@ -857,8 +1035,13 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xED25;" FontSize="17"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                            <Border Grid.Column="0" Width="32" Height="32"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppSurfaceSubtleBrush}">
+                                <FontIcon Glyph="&#xED25;" FontSize="15"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="Received files" Style="{StaticResource AppBodyStrong}" FontSize="13" />
                                 <TextBlock Text="Open the downloads folder" Style="{StaticResource AppCaption}" />
@@ -874,8 +1057,13 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xE8B7;" FontSize="17"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                            <Border Grid.Column="0" Width="32" Height="32"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppVioletSubtleBrush}">
+                                <FontIcon Glyph="&#xE8B7;" FontSize="15"
+                                          Foreground="{ThemeResource AppVioletBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="Remote files" Style="{StaticResource AppBodyStrong}" FontSize="13" />
                                 <TextBlock Text="Browse a connected device" Style="{StaticResource AppCaption}" />
@@ -891,8 +1079,13 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xE8C8;" FontSize="17"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                            <Border Grid.Column="0" Width="32" Height="32"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppSurfaceSubtleBrush}">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="15"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="Clipboard" Style="{StaticResource AppBodyStrong}" FontSize="13" />
                                 <TextBlock Text="Shared copy history" Style="{StaticResource AppCaption}" />
@@ -908,8 +1101,13 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xE916;" FontSize="17"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                            <Border Grid.Column="0" Width="32" Height="32"
+                                    CornerRadius="{StaticResource RadiusSmall}"
+                                    Background="{ThemeResource AppWarningSubtleBrush}">
+                                <FontIcon Glyph="&#xE916;" FontSize="15"
+                                          Foreground="{ThemeResource AppWarningBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="Speed test" Style="{StaticResource AppBodyStrong}" FontSize="13" />
                                 <TextBlock Text="Measure local throughput" Style="{StaticResource AppCaption}" />

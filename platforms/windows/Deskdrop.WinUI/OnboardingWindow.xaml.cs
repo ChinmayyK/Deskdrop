@@ -30,7 +30,7 @@ namespace Deskdrop.WinUI
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(appWindow);
             
-            appWindow.Resize(new Windows.Graphics.SizeInt32(600, 500));
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 600, 500);
 
             CardRoot.Loaded += (s, e) => PlayEntranceAnimation();
         }

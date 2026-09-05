@@ -34,7 +34,7 @@ namespace Deskdrop.WinUI
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(appWindow);
-            appWindow.Resize(new Windows.Graphics.SizeInt32(400, 500));
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 400, 500);
         }
 
         private void PairDevice_Click(object sender, RoutedEventArgs e)

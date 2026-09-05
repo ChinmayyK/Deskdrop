@@ -43,8 +43,8 @@ namespace Deskdrop.WinUI
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(appWindow);
 
-            // Set window size
-            appWindow.Resize(new Windows.Graphics.SizeInt32(640, 480));
+            // Set window size (DIPs, not physical pixels - see WindowIconHelper.ResizeDips)
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 640, 480);
 
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 

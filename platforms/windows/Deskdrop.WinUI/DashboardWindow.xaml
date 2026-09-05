@@ -250,17 +250,46 @@
             <!-- Ctrl+N lives here rather than on the "Pair a new device"
                  menu item: an accelerator declared on a MenuFlyoutItem is
                  only in scope while that flyout is open, so it would have
-                 been advertised in a tooltip and never fired. -->
+                 been advertised in a tooltip and never fired. Ctrl+O moved
+                 here too when its visible "Send file" button was removed
+                 (see TitleBarActionsPanel) - the shortcut still works from
+                 every page, it just no longer has a redundant second button
+                 advertising it on the Devices page. -->
             <Grid.KeyboardAccelerators>
                 <KeyboardAccelerator Modifiers="Control" Key="N" Invoked="OnPairAcceleratorInvoked" />
+                <KeyboardAccelerator Modifiers="Control" Key="O" Invoked="OnSendAcceleratorInvoked" />
             </Grid.KeyboardAccelerators>
 
+            <!--
+                Three columns, not two: the title and the action cluster
+                used to share a single Width="*" column and rely on opposite
+                Margins to keep them apart. That only holds while the window
+                is wide enough for both Margins to still leave a gap - at
+                the app's actual default/restored size (as opposed to
+                maximised) there wasn't enough room, and the title's
+                left-anchored text visibly collided with the right-anchored
+                status chip. Giving the title its own Width="*" column means
+                it truncates (TextTrimming, see AppPageTitle) against a real
+                boundary instead of drifting into whatever the actions
+                cluster hasn't claimed yet.
+            -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="240" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="1"
+            <!-- Collapsed (not just its content) on the Devices page - a
+                 Collapsed child inside it still left this Border's own
+                 background band and bottom divider line drawn as an empty
+                 strip over the page's content. Collapsing the Border itself
+                 lets the identical AppBackgroundBrush from the content
+                 layer underneath show through instead, so the space reads
+                 as nothing rather than as an empty bar. The 48px of height
+                 stays reserved either way (AppTitleBar's own Height, needed
+                 for the drag region and to keep content clear of the system
+                 caption buttons) - only the visible band goes away. -->
+            <Border x:Name="TitleBarBackgroundBorder" Grid.Column="1" Grid.ColumnSpan="2"
                     Background="{ThemeResource AppBackgroundBrush}"
                     BorderBrush="{ThemeResource AppBorderSubtleBrush}"
                     BorderThickness="1,0,0,1" />
@@ -274,18 +303,31 @@
                            FontSize="13.5" VerticalAlignment="Center" />
             </StackPanel>
 
-            <!-- Contextual page title -->
+            <!-- Contextual page title. Collapsed on the Devices page - its
+                 own in-content header (title, subtitle, actions) now covers
+                 everything this row used to, and showing both was the
+                 "Ecosystem" text visibly competing with "Devices" beneath
+                 it. Toggled in DashboardWindow.xaml.cs's SetPageTitle. -->
             <TextBlock x:Name="PageTitleText" Grid.Column="1"
                        Text="Ecosystem"
                        Style="{StaticResource AppPageTitle}"
                        VerticalAlignment="Center"
-                       Margin="28,0,0,0"
+                       Margin="28,0,12,0"
                        HorizontalAlignment="Left" />
 
-            <!-- Global actions. Right margin clears the system caption
-                 buttons; keep it in sync if the window ever gains a
-                 maximise-restore variant. -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+            <!-- Global actions. Own column now (see comment above); the
+                 148px right margin still clears the system caption buttons,
+                 which are drawn on top of this content, not reserved space
+                 the Grid knows about. Keep it in sync if the window ever
+                 gains a maximise-restore variant.
+
+                 Collapsed on the Devices page for the same reason as
+                 PageTitleText: its own header already has Send files/Scan
+                 nearby/Pair device/Settings, so this row was showing a
+                 second "Send file" button doing the same thing. Still used
+                 (and visible) on every other page, which has no header of
+                 its own yet. -->
+            <StackPanel x:Name="TitleBarActionsPanel" Grid.Column="2" Orientation="Horizontal" Spacing="6"
                         HorizontalAlignment="Right" VerticalAlignment="Center"
                         Margin="0,0,148,0">
 
@@ -369,19 +411,6 @@
                     <FontIcon Glyph="&#xE72C;" FontSize="15" />
                     <Button.KeyboardAccelerators>
                         <KeyboardAccelerator Modifiers="Control" Key="R" />
-                    </Button.KeyboardAccelerators>
-                </Button>
-
-                <Button Style="{StaticResource AppPrimaryButton}"
-                        ToolTipService.ToolTip="Send files to a connected device (Ctrl+O)"
-                        AutomationProperties.Name="Send files"
-                        Click="OnTitleBarSendClicked">
-                    <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE898;" FontSize="13" />
-                        <TextBlock Text="Send file" />
-                    </StackPanel>
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Control" Key="O" />
                     </Button.KeyboardAccelerators>
                 </Button>
 

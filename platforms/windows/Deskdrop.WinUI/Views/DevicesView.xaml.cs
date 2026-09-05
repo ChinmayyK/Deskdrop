@@ -160,6 +160,34 @@ namespace Deskdrop.WinUI.Views
             DashboardWindow.Current?.NavigateTo("Activity");
         }
 
+        private void OnOpenSettingsClicked(object sender, RoutedEventArgs e)
+        {
+            DashboardWindow.Current?.NavigateTo("Settings");
+        }
+
+        // "Open containing folder" for a completed, received activity entry -
+        // the one overflow action a history row can back with a real path.
+        private void OnOpenActivityFolderClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not ActivityEntry entry) return;
+            if (string.IsNullOrWhiteSpace(entry.dest_path)) return;
+
+            try
+            {
+                var folder = System.IO.Path.GetDirectoryName(entry.dest_path);
+                if (string.IsNullOrWhiteSpace(folder)) return;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
         private void OnOpenDownloadsClicked(object sender, RoutedEventArgs e)
         {
             try

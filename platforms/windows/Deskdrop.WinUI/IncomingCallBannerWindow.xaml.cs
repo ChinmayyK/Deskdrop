@@ -37,7 +37,7 @@ namespace Deskdrop.WinUI
                 presenter.IsMaximizable = false;
                 presenter.SetBorderAndTitleBar(false, false);
             }
-            appWindow.Resize(new Windows.Graphics.SizeInt32(360, 100));
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 360, 100);
         }
 
         private void BtnDecline_Click(object sender, RoutedEventArgs e)

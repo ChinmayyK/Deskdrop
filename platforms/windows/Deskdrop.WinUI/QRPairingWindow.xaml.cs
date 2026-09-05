@@ -37,7 +37,7 @@ namespace Deskdrop.WinUI
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(appWindow);
-            appWindow.Resize(new Windows.Graphics.SizeInt32(320, 480));
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 320, 480);
 
             _ = PrepareAndGenerateQrAsync();
         }
