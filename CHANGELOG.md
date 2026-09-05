@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.2] - 2026-09-05
+### Fixed
+- **Android:** Added `-dontwarn` rules for the `benchmark` module's R8 pass (`androidx.profileinstaller.ProfileInstallReceiver`, `androidx.startup.Initializer`, `com.google.errorprone.annotations.MustBeClosed`) — optional classes referenced by `androidx.benchmark:benchmark-macro-junit4` that aren't on the classpath and aren't needed at runtime, which made `minifyReleaseWithR8` fail once shrinking was enabled there in 1.3.1.
+
 ## [1.3.1] - 2026-09-05
 ### Fixed
 - **Android:** Release builds are now signed with the release keystore instead of the debug key; the build also fails fast if the keystore is configured but any of the store password, key alias, or key password is missing.

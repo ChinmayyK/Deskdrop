@@ -23,6 +23,7 @@ android {
             // test build type must declare shrinking too or
             // :benchmark:checkTestedAppObfuscationRelease fails on the mapping file.
             minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
