@@ -128,6 +128,70 @@
     </ItemGroup>
     <Copy SourceFiles="@(TrayAppFiles)" DestinationFolder="$(OutDir)tray\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'@(TrayAppFiles)' != ''" />
     <Copy SourceFiles="@(TrayAppFiles)" DestinationFolder="$(PublishDir)tray\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and '@(TrayAppFiles)' != ''" />
+
+    <!--
+      Deskdrop.Tray.csproj has its own TrimUnusedDesktopRuntime target that
+      deletes these same files from ITS OWN bin output, but when this
+      project pulls Deskdrop.Tray in only as a build-order dependency
+      (ReferenceOutputAssembly=false), MSBuild's publish graph doesn't
+      reliably re-run that target before this Copy runs - so the files
+      copied here can be the untrimmed set even when Tray's own folder is
+      already clean. Deleting them again here, on the actual copy
+      destination, is what makes the result correct regardless of that
+      ordering.
+    -->
+    <ItemGroup>
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\Presentation*.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\WindowsBase.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\System.Xaml.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\System.Windows.Presentation.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\ReachFramework.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\System.Printing.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\*_cor3.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\DirectWriteForwarder.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\UIAutomation*.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\WindowsFormsIntegration.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\*.Design.dll" />
+      <UnusedTrayDesktopFiles Include="$(OutDir)tray\Microsoft.Windows.SDK.NET.dll" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\Presentation*.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\WindowsBase.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\System.Xaml.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\System.Windows.Presentation.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\ReachFramework.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\System.Printing.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\*_cor3.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\DirectWriteForwarder.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\UIAutomation*.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\WindowsFormsIntegration.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\*.Design.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\Microsoft.Windows.SDK.NET.dll" Condition="'$(PublishDir)' != ''" />
+    </ItemGroup>
+    <Delete Files="@(UnusedTrayDesktopFiles)" TreatErrorsAsWarnings="true" />
+  </Target>
+
+  <!--
+    Self-contained Microsoft.WindowsAppSDK 2.3.1 deploys its Windows AI /
+    Copilot Runtime component (Phi Silica, ContentSafety, Imaging super
+    resolution, OnnxRuntime + DirectML) unconditionally - there is no project
+    setting to opt out of it, only a FrameworkReference-driven runtime pack
+    that ships as one indivisible blob. Deskdrop calls none of it (grep for
+    Windows.AI./OnnxRuntime/DirectML/MachineLearning across the whole project
+    turns up nothing), so it is ~42 MB of dead weight in every install.
+    Deleting the files post-build/publish is safe: nothing in this codebase
+    ever loads them, so there is no lazy-load path left to break.
+  -->
+  <Target Name="TrimUnusedWindowsAiRuntime" AfterTargets="Build;Publish">
+    <ItemGroup>
+      <UnusedAiFiles Include="$(OutDir)Microsoft.Windows.AI.*" />
+      <UnusedAiFiles Include="$(OutDir)onnxruntime.dll" />
+      <UnusedAiFiles Include="$(OutDir)DirectML.dll" />
+      <UnusedAiFiles Include="$(OutDir)Microsoft.ML.OnnxRuntime.dll" />
+      <UnusedAiFiles Include="$(PublishDir)Microsoft.Windows.AI.*" Condition="'$(PublishDir)' != ''" />
+      <UnusedAiFiles Include="$(PublishDir)onnxruntime.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedAiFiles Include="$(PublishDir)DirectML.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedAiFiles Include="$(PublishDir)Microsoft.ML.OnnxRuntime.dll" Condition="'$(PublishDir)' != ''" />
+    </ItemGroup>
+    <Delete Files="@(UnusedAiFiles)" TreatErrorsAsWarnings="true" />
   </Target>
 
   <!--
@@ -142,6 +206,13 @@
 
   <!-- Publish Properties -->
   <PropertyGroup>
+    <!--
+      Tried disabling this to save size; it doesn't help. R2R only
+      precompiles THIS project's own IL (Deskdrop.dll, a couple MB) - the
+      300+ MB bulk of the publish is third-party WinUI/.NET runtime DLLs
+      that ship precompiled regardless of this setting. Measured delta:
+      <1 MB. Not worth the startup-latency cost for that.
+    -->
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
     <PublishTrimmed>False</PublishTrimmed>

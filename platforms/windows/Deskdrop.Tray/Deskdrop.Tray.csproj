@@ -16,11 +16,71 @@
     -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
+    <!--
+      Trimming (PublishTrimmed) was tried here and rejected by the SDK
+      itself: NETSDK1175, "Windows Forms is not supported or recommended
+      with trimming enabled" - a hard build error, not a warning, and not
+      one the "_WarnAboutWindowsFormsOrWpfWithTrimming" switch overrides.
+      Microsoft's own guidance is not to trim WinForms apps (reflection-
+      heavy internals). See TrimUnusedDesktopRuntime below for the
+      alternative that gets the same result without linking.
+    -->
   </PropertyGroup>
   <ItemGroup>
     <!-- Pin System.Drawing.Common to 8.0.x to match .NET 8 runtime -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.12" />
   </ItemGroup>
+
+  <!--
+    Trimming this WinForms app is a build error the SDK itself refuses
+    (NETSDK1175, see the property group above), so this reaches the same
+    end state - a self-contained deploy stripped to what this exe actually
+    uses - by deleting files instead of linking IL. Everything here is a
+    whole, never-loaded assembly, confirmed by grepping Program.cs's usings
+    (System.Drawing/System.Windows.Forms only, no `using System.Windows;`):
+      - PresentationFramework/PresentationCore/WindowsBase/System.Xaml and
+        friends: WPF, shipped unconditionally alongside WinForms because
+        .NET's Microsoft.WindowsDesktop.App runtime pack isn't split by
+        UseWindowsForms vs UseWPF.
+      - *.Design.dll: WinForms Designer assemblies, a Visual Studio
+        development-time dependency, never loaded by a running exe.
+      - Microsoft.Windows.SDK.NET.dll: the Windows SDK WinRT projection
+        surface, pulled in by the Windows-versioned TFM itself regardless
+        of whether any WinRT/COM API is actually called - this app only
+        talks to named pipes and draws a NotifyIcon.
+    Safe to delete: .NET assembly loading is lazy (on first real use), so
+    an assembly nothing in this exe references is never loaded in the
+    first place - removing the file changes nothing at runtime.
+  -->
+  <Target Name="TrimUnusedDesktopRuntime" AfterTargets="Build;Publish">
+    <ItemGroup>
+      <UnusedDesktopFiles Include="$(OutDir)Presentation*.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)WindowsBase.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)System.Xaml.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)System.Windows.Presentation.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)ReachFramework.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)System.Printing.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)*_cor3.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)DirectWriteForwarder.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)UIAutomation*.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)WindowsFormsIntegration.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)*.Design.dll" />
+      <UnusedDesktopFiles Include="$(OutDir)Microsoft.Windows.SDK.NET.dll" />
+      <UnusedDesktopFiles Include="$(PublishDir)Presentation*.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)WindowsBase.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)System.Xaml.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)System.Windows.Presentation.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)ReachFramework.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)System.Printing.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)*_cor3.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)DirectWriteForwarder.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)UIAutomation*.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)WindowsFormsIntegration.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)*.Design.dll" Condition="'$(PublishDir)' != ''" />
+      <UnusedDesktopFiles Include="$(PublishDir)Microsoft.Windows.SDK.NET.dll" Condition="'$(PublishDir)' != ''" />
+    </ItemGroup>
+    <Delete Files="@(UnusedDesktopFiles)" TreatErrorsAsWarnings="true" />
+  </Target>
   <ItemGroup>
     <!-- Copy icon assets into Assets\ subdirectory in the output -->
     <None Include="..\Deskdrop.WinUI\Assets\TrayIcon.ico" Link="Assets\TrayIcon.ico">
