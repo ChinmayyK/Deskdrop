@@ -303,7 +303,7 @@
                                     <Grid Grid.Column="0" Width="36" Height="36"
                                           CornerRadius="{StaticResource RadiusSmall}"
                                           Background="{ThemeResource AppSurfaceSubtleBrush}">
-                                        <FontIcon Glyph="{x:Bind name, Converter={StaticResource FileTypeToGlyphConverter}, Mode=OneWay}"
+                                        <FontIcon Glyph="{x:Bind display_name, Converter={StaticResource FileTypeToGlyphConverter}, Mode=OneWay}"
                                                   FontSize="16"
                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -312,7 +312,12 @@
                                                Visibility="{x:Bind HasThumbnail, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
                                     </Grid>
 
-                                    <TextBlock Grid.Column="1" Text="{x:Bind name, Mode=OneWay}"
+                                    <!-- Bound to display_name, not the unused "name" field - the
+                                         wire protocol (RemoteFileEntry in protocol.rs, Android's
+                                         RemoteFileManager.kt) only ever sends display_name; "name"
+                                         stays empty forever, which is why this column rendered
+                                         blank. -->
+                                    <TextBlock Grid.Column="1" Text="{x:Bind display_name, Mode=OneWay}"
                                                Style="{StaticResource AppBody}"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />

@@ -35,12 +35,21 @@ namespace Deskdrop.WinUI
         public const int PB_EVENT_CAMERA_STREAM_STOP = 24;
         public const int PB_EVENT_CAMERA_FRAME = 25;
         public const int PB_EVENT_SYSTEM_HEALTH_UPDATED = 26;
-
+        public const int PB_EVENT_PEER_DISCOVERED = 27;
+        public const int PB_EVENT_NETWORK_STATE_CHANGED = 28;
+        public const int PB_EVENT_OUTGOING_PAIRING_WAITING = 29;
         public const int PB_EVENT_REMOTE_FILES_QUERY = 30;
         public const int PB_EVENT_REMOTE_THUMBNAIL_REQUEST = 31;
         public const int PB_EVENT_REMOTE_FILE_PULL_REQUEST = 32;
         public const int PB_EVENT_REMOTE_FILES_RESPONSE = 33;
         public const int PB_EVENT_REMOTE_THUMBNAIL_RESPONSE = 34;
+        // These two were missing entirely (a real version-skew gap against
+        // deskdrop-core/src/ffi.rs's PB_EVENT_* constants) - kind=35 fired
+        // constantly and silently during any remote-files/speed-test
+        // activity with no matching case in DrainEvents' switch, logged and
+        // discarded every time.
+        public const int PB_EVENT_SPEED_TEST_PROGRESS = 35;
+        public const int PB_EVENT_SPEED_TEST_COMPLETE = 36;
         public const int PB_EVENT_REMOTE_FILE_ACTION_REQUEST = 37;
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]

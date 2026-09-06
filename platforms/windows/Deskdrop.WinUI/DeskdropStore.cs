@@ -144,6 +144,59 @@ namespace Deskdrop.WinUI
         public string RelayPathDisplay => relay_path.Count == 0 ? "" : string.Join(" -> ", relay_path);
         public string RelativeTime => timestamp_ms == 0 ? "Just now" : DeskdropFormatting.RelativeTimeFromUnixMs(timestamp_ms);
 
+        // Operation line for the Recent activity row. "Sent"/"Received" is
+        // only known for a *completed* transfer, via whether the daemon gave
+        // it a local destination path (received) or not (sent) - the same
+        // signal HasDestination already reads. Other kinds have no reliable
+        // direction, so they get a directionless phrasing rather than a
+        // guess that could read backwards.
+        public string OperationText => kind switch
+        {
+            "file_transfer_complete" => HasDestination ? $"Received from {Source}" : $"Sent to {Source}",
+            "file_transfer_started" => $"Transferring with {Source}",
+            "file_transfer_failed" => $"Transfer failed - {Source}",
+            "clipboard_applied" => $"Applied from {Source}",
+            "clipboard_text" or "clipboard_image" or "remote_clipboard_available" => $"Shared from {Source}",
+            "peer_connected" => $"{Source} connected",
+            "peer_disconnected" => $"{Source} disconnected",
+            "sync_paused" => "Sync paused",
+            "sync_resumed" => "Sync resumed",
+            "remote_notification" => $"From {Source}",
+            _ => Source
+        };
+
+        // Status pill shown at the end of the row - short, past-tense state
+        // words, distinct from TypeLabel (which names the *kind* of event).
+        public string StatusLabel => kind switch
+        {
+            "file_transfer_complete" => "Completed",
+            "file_transfer_failed" => "Failed",
+            "file_transfer_started" => "In progress",
+            "clipboard_applied" => "Applied",
+            "peer_connected" => "Connected",
+            "peer_disconnected" => "Disconnected",
+            "sync_paused" => "Paused",
+            "sync_resumed" => "Resumed",
+            _ => ""
+        };
+        public bool HasStatus => !string.IsNullOrEmpty(StatusLabel);
+        public string StatusGlyph => kind switch
+        {
+            "file_transfer_complete" or "clipboard_applied" or "peer_connected" or "sync_resumed" => "", // CheckMark
+            "file_transfer_failed" => "", // Error
+            "file_transfer_started" => "", // Clock
+            "peer_disconnected" => "", // Network offline
+            "sync_paused" => "", // Pause
+            _ => ""
+        };
+        public string StatusColor => kind switch
+        {
+            "file_transfer_complete" or "clipboard_applied" or "peer_connected" or "sync_resumed" => "#2AA971",
+            "file_transfer_failed" => "#D6483B",
+            "file_transfer_started" => "#3A66D8",
+            _ => "#8A8A90"
+        };
+
         private void NotifyDisplayProperties()
         {
             OnPropertyChanged(nameof(Title));
@@ -157,6 +210,11 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(HasDestination));
             OnPropertyChanged(nameof(FormattedSize));
             OnPropertyChanged(nameof(RelayPathDisplay));
+            OnPropertyChanged(nameof(OperationText));
+            OnPropertyChanged(nameof(StatusLabel));
+            OnPropertyChanged(nameof(HasStatus));
+            OnPropertyChanged(nameof(StatusGlyph));
+            OnPropertyChanged(nameof(StatusColor));
         }
     }
 
@@ -375,6 +433,7 @@ namespace Deskdrop.WinUI
 
         public bool ShowStorage => StorageTotal > 0;
         public string StorageFreeText => StorageTotal > 0 ? $"{DeskdropFormatting.FormatBytes(StorageFree)} free" : "";
+        public string StorageTotalDisplayText => StorageTotal > 0 ? $"{DeskdropFormatting.FormatBytes(StorageTotal)} total" : "";
         public double StorageImagesRatio => StorageTotal > 0 ? (double)StorageImages / StorageTotal : 0;
         public double StorageVideosRatio => StorageTotal > 0 ? (double)StorageVideos / StorageTotal : 0;
         public double StorageAppsRatio => StorageTotal > 0 ? (double)StorageApps / StorageTotal : 0;
@@ -394,6 +453,7 @@ namespace Deskdrop.WinUI
         {
             OnPropertyChanged(nameof(ShowStorage));
             OnPropertyChanged(nameof(StorageFreeText));
+            OnPropertyChanged(nameof(StorageTotalDisplayText));
             OnPropertyChanged(nameof(StorageImagesRatio));
             OnPropertyChanged(nameof(StorageVideosRatio));
             OnPropertyChanged(nameof(StorageAppsRatio));
@@ -659,27 +719,28 @@ namespace Deskdrop.WinUI
         
         [JsonPropertyName("id")]
         public string id { get; set; } = "";
-        
-        [JsonPropertyName("name")]
-        public string name { get; set; } = "";
-        
+
         [JsonPropertyName("display_name")]
         public string display_name { get; set; } = "";
-        
-        [JsonPropertyName("is_dir")]
-        public bool is_dir { get; set; }
-        
+
+        // "is_dir" is intentionally not bound to anything - the wire
+        // protocol (RemoteFileEntry in protocol.rs, and every actual JSON
+        // key Android's RemoteFileManager.kt puts for a file entry) has no
+        // directory field at all under either "is_dir" or the "is_directory"
+        // name used elsewhere in the protocol for file-transfer metadata.
+        // Android's remote browsing is flat/category-based (the sidebar's
+        // Pictures/Documents/etc. are fixed category filters, not folders),
+        // so nothing in today's protocol can ever produce a directory row.
+        // Left as a hardcoded false rather than removed, since the
+        // double-click-to-open-folder UI code that reads it is otherwise
+        // intact and would need it back if folder browsing is ever added.
+        public bool is_dir => false;
+
         [JsonPropertyName("size_bytes")]
         public long size_bytes { get; set; }
-        
-        [JsonPropertyName("size")]
-        public long size { get; set; }
-        
+
         [JsonPropertyName("date_modified")]
         public ulong date_modified { get; set; }
-        
-        [JsonPropertyName("modified_ms")]
-        public ulong modified_ms { get; set; }
 
         [JsonPropertyName("mime_type")]
         public string mime_type { get; set; } = "";
@@ -696,8 +757,11 @@ namespace Deskdrop.WinUI
         private bool _isSelected;
         public bool IsSelected { get => _isSelected; set => SetProperty(ref _isSelected, value); }
         
-        public long EffectiveSize => size_bytes > 0 ? size_bytes : size;
-        public ulong EffectiveDate => date_modified > 0 ? (date_modified > 100000000000 ? date_modified : date_modified * 1000) : modified_ms;
+        public long EffectiveSize => size_bytes;
+        // date_modified arrives in epoch seconds (protocol.rs: "DATE_MODIFIED
+        // (epoch seconds)"); the >100000000000 branch is a defensive guard
+        // in case a future sender ever switches to milliseconds directly.
+        public ulong EffectiveDate => date_modified == 0 ? 0 : (date_modified > 100000000000 ? date_modified : date_modified * 1000);
         
         public string FormattedSize => is_dir ? "--" : DeskdropFormatting.FormatBytes(EffectiveSize);
         public string FormattedDate => EffectiveDate == 0 ? "--" : DateTimeOffset.FromUnixTimeMilliseconds((long)EffectiveDate).ToLocalTime().ToString("MMM dd, yyyy HH:mm");
@@ -843,6 +907,23 @@ namespace Deskdrop.WinUI
         public ObservableCollection<PeerViewModel> KnownDevices { get; } = new();
         public ObservableCollection<PeerViewModel> NearbyDevices { get; } = new();
         public ObservableCollection<PeerViewModel> PairingRequests { get; } = new();
+
+        // The Devices screen gives the currently-connected paired device a
+        // dedicated hero card instead of burying it in the list; everything
+        // else (paired-but-offline plus nearby-unpaired) renders as compact
+        // tiles. OtherKnownDevices is KnownDevices minus whichever device is
+        // playing that hero role, kept as its own stable instance for the
+        // same reason KnownDevices/NearbyDevices are - so the grid doesn't
+        // rebuild every card on each poll.
+        public ObservableCollection<PeerViewModel> OtherKnownDevices { get; } = new();
+
+        private PeerViewModel? _primaryDevice;
+        public PeerViewModel? PrimaryDevice
+        {
+            get => _primaryDevice;
+            set { if (SetProperty(ref _primaryDevice, value)) OnPropertyChanged(nameof(HasPrimaryDevice)); }
+        }
+        public bool HasPrimaryDevice => PrimaryDevice != null;
 
         // Newest few activity entries, for the Devices screen's summary
         // section. The full log lives on the Activity page.
@@ -1013,6 +1094,9 @@ namespace Deskdrop.WinUI
         public bool HasKnownDevices => KnownDevices.Count > 0;
         public bool HasNoKnownDevices => KnownDevices.Count == 0;
         public bool HasNearbyDevices => NearbyDevices.Count > 0;
+        // Whether the "Other devices" grid has anything to show once the
+        // hero card has claimed the connected device.
+        public bool HasOtherDevices => OtherKnownDevices.Count > 0 || NearbyDevices.Count > 0;
         public bool HasPairingRequests => PairingRequests.Count > 0;
         public bool HasRecentActivity => RecentActivity.Count > 0;
         public bool HasNoRecentActivity => RecentActivity.Count == 0;
@@ -1479,11 +1563,18 @@ namespace Deskdrop.WinUI
             SyncPeerProjection(NearbyDevices, Peers.Where(p => p.IsNearby));
             SyncPeerProjection(PairingRequests, Peers.Where(p => p.pairingRequested));
 
+            // Prefer a connected, paired device for the hero card; fall back
+            // to null (no hero) rather than to an offline device, so the
+            // card only ever claims a connection that's actually live.
+            PrimaryDevice = KnownDevices.FirstOrDefault(p => p.IsConnected);
+            SyncPeerProjection(OtherKnownDevices, KnownDevices.Where(p => p != PrimaryDevice));
+
             OnPropertyChanged(nameof(KnownDeviceCount));
             OnPropertyChanged(nameof(NearbyDeviceCount));
             OnPropertyChanged(nameof(HasKnownDevices));
             OnPropertyChanged(nameof(HasNoKnownDevices));
             OnPropertyChanged(nameof(HasNearbyDevices));
+            OnPropertyChanged(nameof(HasOtherDevices));
             OnPropertyChanged(nameof(HasPairingRequests));
             OnPropertyChanged(nameof(EcosystemSummaryText));
             OnPropertyChanged(nameof(IsSearching));

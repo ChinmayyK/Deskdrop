@@ -29,14 +29,16 @@ namespace Deskdrop.WinUI.Views
         private static readonly System.Collections.Generic.Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _thumbnailCache = new();
 
         // Each thumbnail is a peer-to-peer round trip (the daemon asks the
-        // Android device to generate/send one, up to a 10s engine-side
-        // timeout) over what's effectively a single-instance named pipe.
-        // Scrolling a 100-item list can trigger a dozen fetches at once;
-        // without throttling, most of them queue behind each other and blow
-        // past their own client-side timeout, so only the first couple ever
-        // resolve. Cap concurrency and retry once for anything that fails
-        // under that pressure.
-        private static readonly SemaphoreSlim _thumbnailThrottle = new(2, 2);
+        // Android device to generate/send one). The request/response
+        // protocol is keyed by a per-call request_id (engine/mod.rs's
+        // remote_thumb_waiters), not serialized on a single lane, and
+        // Android services these on an unbounded thread pool - so there's
+        // no protocol-level reason to keep this near-sequential. It was
+        // capped at 2 on the (incorrect) assumption that the IPC pipe only
+        // carries one request at a time; raised to let a scrolled-into-view
+        // batch actually fetch in parallel instead of queueing almost
+        // one-at-a-time behind each other's timeouts.
+        private static readonly SemaphoreSlim _thumbnailThrottle = new(8, 8);
 
         public RemoteExplorerView()
         {
@@ -260,7 +262,7 @@ namespace Deskdrop.WinUI.Views
         private void OpenIfDirectory(RemoteFile item)
         {
             if (!item.is_dir) return;
-            var nextPath = _currentPath.TrimEnd('/') + "/" + item.name;
+            var nextPath = _currentPath.TrimEnd('/') + "/" + item.display_name;
             _ = LoadRemoteDirectory(nextPath);
         }
 
@@ -291,7 +293,7 @@ namespace Deskdrop.WinUI.Views
             var fileId = ResolveFileId(item);
             if (peer == null || fileId == 0) return;
 
-            var input = new TextBox { Text = item.name, SelectionStart = 0, SelectionLength = item.name.Length };
+            var input = new TextBox { Text = item.display_name, SelectionStart = 0, SelectionLength = item.display_name.Length };
             var dialog = new ContentDialog
             {
                 Title = "Rename",
@@ -306,7 +308,7 @@ namespace Deskdrop.WinUI.Views
             if (result != ContentDialogResult.Primary) return;
 
             var newName = input.Text?.Trim();
-            if (string.IsNullOrEmpty(newName) || newName == item.name) return;
+            if (string.IsNullOrEmpty(newName) || newName == item.display_name) return;
 
             try
             {
@@ -327,7 +329,7 @@ namespace Deskdrop.WinUI.Views
             var dialog = new ContentDialog
             {
                 Title = "Delete this item?",
-                Content = $"\"{item.name}\" will be permanently deleted from {peer.DisplayName}. This can't be undone.",
+                Content = $"\"{item.display_name}\" will be permanently deleted from {peer.DisplayName}. This can't be undone.",
                 PrimaryButtonText = "Delete",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Close,
