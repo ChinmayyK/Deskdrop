@@ -242,7 +242,10 @@ class DeskdropService : Service() {
 
 
 
+    // Was declared but never actually scheduled anything - repurposed below
+    // for the engine health check (startEngineHealthCheck).
     private var heartbeatHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var engineHealthCheckRunnable: Runnable? = null
 
     private val pairingResultReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -464,8 +467,41 @@ class DeskdropService : Service() {
         
         val customFilter = IntentFilter("com.deskdrop.CUSTOM_BROADCAST")
         ContextCompat.registerReceiver(this, customReceiver, customFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        
+
         setServiceRunning(true)
+        startEngineHealthCheck()
+    }
+
+    // onStartCommand's `if (!engineStarted.getAndSet(true))` block only ever
+    // runs once per service lifetime - if the Rust engine dies afterward
+    // (engineHandle drops to 0) while engineStarted stays true, nothing was
+    // watching, and every future onStartCommand call took the "already
+    // running" branch instead of restarting it. The only way to recover was
+    // for the user to manually kill and reopen the app (a fresh process
+    // resets engineStarted), which is exactly the "phone shows offline"
+    // symptom this session traced back here. This periodically checks for
+    // that specific dead-handle-but-marked-started state and, if found,
+    // resets the flag and re-delivers a start intent to this same service -
+    // which runs through the existing, already-correct startup path in
+    // onStartCommand rather than duplicating it.
+    private fun startEngineHealthCheck() {
+        val intervalMs = 45_000L
+        val runnable = object : Runnable {
+            override fun run() {
+                try {
+                    if (engineStarted.get() && engineHandle == 0L) {
+                        Log.w(TAG, "Engine health check: handle is dead but engineStarted=true; restarting engine")
+                        engineStarted.set(false)
+                        startService(Intent(this@DeskdropService, DeskdropService::class.java))
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Engine health check failed", e)
+                }
+                heartbeatHandler.postDelayed(this, intervalMs)
+            }
+        }
+        engineHealthCheckRunnable = runnable
+        heartbeatHandler.postDelayed(runnable, intervalMs)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -846,6 +882,8 @@ class DeskdropService : Service() {
         isRunning = false
         eventDrainThread?.join(1000)
         handler.removeCallbacksAndMessages(null)
+        heartbeatHandler.removeCallbacksAndMessages(null)
+        engineHealthCheckRunnable = null
 
         engineLock.writeLock().lock()
         try {
@@ -3292,10 +3330,55 @@ class DeskdropService : Service() {
 
     private fun resolvedDeviceName(): String {
         prefs().getString("device_name", null)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        // Settings.Global.DEVICE_NAME is the Bluetooth/Wi-Fi Direct name the
+        // OS shows the user, usually already a marketing name ("Galaxy A53
+        // 5G"). Several heavily-skinned OEM ROMs (Samsung/Oppo/Vivo/Realme)
+        // block third-party reads of it and return null, which is why this
+        // path historically only worked on near-stock ROMs like OnePlus's.
         Settings.Global.getString(contentResolver, "device_name")?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
         val mfr   = Build.MANUFACTURER.orEmpty().trim()
         val model = Build.MODEL.orEmpty().trim()
-        return if (model.startsWith(mfr, ignoreCase = true)) model else "$mfr $model".trim()
+        // Android has no public API to recover a marketing name ("Galaxy
+        // A53 5G") from Build.MODEL's internal code ("SM-A536B") once the
+        // Settings.Global read above is blocked, so this fallback is model
+        // code, not marketing name. It's still fixed to read as an
+        // intentional device label rather than a bug: Build.MANUFACTURER's
+        // casing is inconsistent across OEMs (lowercase "samsung"/"vivo",
+        // uppercase "OPPO"), which read like garbled text next to a clean
+        // model string.
+        return if (model.startsWith(mfr, ignoreCase = true)) model else "${brandDisplayName(mfr)} $model".trim()
+    }
+
+    // Canonical display casing for common Android OEM brands. Values are the
+    // brand's own stylization (e.g. "vivo" and "realme" are lowercase by
+    // design; "OPPO" and "ASUS" are all-caps by design), not just
+    // title-casing - title-casing everything would "fix" samsung/xiaomi but
+    // introduce a new wrong casing for vivo/realme/OPPO.
+    private fun brandDisplayName(manufacturer: String): String {
+        if (manufacturer.isEmpty()) return manufacturer
+        return when (manufacturer.lowercase()) {
+            "samsung" -> "Samsung"
+            "xiaomi" -> "Xiaomi"
+            "redmi" -> "Redmi"
+            "poco" -> "POCO"
+            "oppo" -> "OPPO"
+            "vivo" -> "vivo"
+            "realme" -> "realme"
+            "oneplus" -> "OnePlus"
+            "huawei" -> "Huawei"
+            "honor" -> "HONOR"
+            "motorola" -> "Motorola"
+            "lenovo" -> "Lenovo"
+            "google" -> "Google"
+            "asus" -> "ASUS"
+            "sony" -> "Sony"
+            "lge" -> "LG"
+            "nokia", "hmd global" -> "Nokia"
+            "infinix" -> "Infinix"
+            "tecno" -> "Tecno"
+            "nothing" -> "Nothing"
+            else -> manufacturer.replaceFirstChar { it.titlecase() }
+        }
     }
 
     // ── Notification channels ─────────────────────────────────────────────────
