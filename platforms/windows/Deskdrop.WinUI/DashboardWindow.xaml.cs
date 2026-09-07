@@ -67,6 +67,20 @@ namespace Deskdrop.WinUI
             double dpiScale = Deskdrop.WinUI.Services.WindowIconHelper.GetDpiScale(hwnd);
             _appWindow.Resize(new Windows.Graphics.SizeInt32((int)(1180 * dpiScale), (int)(740 * dpiScale)));
             _appWindow.Move(new Windows.Graphics.PointInt32((int)(120 * dpiScale), (int)(80 * dpiScale)));
+
+            // Fixed size, not user-resizable: the header/hero-card layout
+            // is tuned for this exact width (see the DPI-scale comment
+            // above and the per-page Frame-margin logic in SetPageTitle),
+            // and an arbitrarily resized window reopens the same
+            // "everything collides or looks cramped" problems that DPI fix
+            // exists to prevent. Maximize is blocked for the same reason -
+            // there's no responsive breakpoint above this size to grow into.
+            if (_appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+            {
+                presenter.IsResizable = false;
+                presenter.IsMaximizable = false;
+            }
+
             _appWindow.Show(true);
 
             _appWindow.Closing += (s, e) =>
