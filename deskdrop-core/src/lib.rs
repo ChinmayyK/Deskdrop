@@ -65,7 +65,6 @@ pub mod settings;
 pub mod sim;
 pub mod speed_test;
 pub mod sync_controller;
-pub mod throttle;
 pub mod transformer;
 pub mod trust;
 pub mod udp_discovery;

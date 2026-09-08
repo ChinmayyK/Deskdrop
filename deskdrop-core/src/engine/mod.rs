@@ -573,10 +573,6 @@ pub(crate) struct EngineShared {
     pub camera_frames: Arc<dashmap::DashMap<uuid::Uuid, Vec<u8>>>,
     /// Rate limit for pairing UI spam from untrusted peers.
 
-    /// Throttle for inbound clipboard pushes.
-    pub throttle: crate::throttle::Throttle,
-    /// AIMD adaptive congestion controller for dynamic bandwidth adjustment.
-    pub congestion_controller: crate::throttle::AdaptiveCongestionController,
     /// Cross-device duplicate prevention (mesh echo suppression).
     pub dedup: Arc<Mutex<crate::dedup::Deduplicator>>,
     /// Active QR authentication token (short-lived)
@@ -706,8 +702,6 @@ impl Engine {
             peer_networks: Arc::new(dashmap::DashMap::new()),
             camera_frames: Arc::new(dashmap::DashMap::new()),
 
-            throttle: crate::throttle::Throttle::default_rate(),
-            congestion_controller: crate::throttle::AdaptiveCongestionController::default(),
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_file_waiters: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -4408,15 +4402,8 @@ fn register_session(
                                 filter_chain.run(&content)
                             {
                                 tracing::warn!(peer_id = %peer_id, reason, "inbound clipboard payload denied by filter");
-                                shared
-                                    .congestion_controller
-                                    .on_congestion(&shared.throttle)
-                                    .await;
                                 continue;
                             }
-
-                            // Apply TokenBucket throttling for large payloads
-                            shared.throttle.acquire(payload_size).await;
 
                             // ── Timeline-first clipboard UX ───────────────
                             let hash = hash_content(&content);
@@ -4511,10 +4498,6 @@ fn register_session(
                                 .await;
                             let _ = rx_session_outbox_tx
                                 .send(AppMessage::ClipboardAck { seq })
-                                .await;
-                            shared
-                                .congestion_controller
-                                .on_success(&shared.throttle)
                                 .await;
 
                             // Persist the incoming item to history.
