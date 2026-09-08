@@ -137,10 +137,25 @@ fn apply_socket_buffers(stream: &TcpStream) -> Result<()> {
         let send_res = sock_ref.set_send_buffer_size(target);
         let recv_res = sock_ref.set_recv_buffer_size(target);
         if send_res.is_ok() && recv_res.is_ok() {
+            // The OS may silently grant less than requested (common on
+            // mobile/hotspot links); log what we actually got so a slow
+            // transfer can be diagnosed from logs instead of guesswork.
+            let actual_send = sock_ref.send_buffer_size().ok();
+            let actual_recv = sock_ref.recv_buffer_size().ok();
+            debug!(
+                requested = target,
+                actual_send, actual_recv, "socket buffers applied"
+            );
             return Ok(());
         }
     }
     // If all custom sizes fail due to strict kernel limits, keep OS defaults without dropping connection.
+    let actual_send = sock_ref.send_buffer_size().ok();
+    let actual_recv = sock_ref.recv_buffer_size().ok();
+    debug!(
+        actual_send,
+        actual_recv, "socket buffer tuning failed for all candidates, using OS defaults"
+    );
     Ok(())
 }
 

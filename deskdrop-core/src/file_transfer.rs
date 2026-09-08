@@ -122,6 +122,23 @@ enum OutboundSource {
     FilePath(PathBuf, Option<std::fs::File>),
 }
 
+/// Per-transfer memory of whether compressing chunks is worth the CPU cost.
+///
+/// Sampling every chunk independently wastes CPU on large, steadily
+/// incompressible files (competing with network throughput, worst on
+/// low-power mobile CPUs). Once a streak of chunks proves compression isn't
+/// paying off, we stop trying for the rest of the transfer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CompressionVerdict {
+    #[default]
+    Unknown,
+    WorthTrying,
+    SkipRestOfTransfer,
+}
+
+/// Consecutive poor-compression samples before giving up on a transfer.
+pub const COMPRESSION_GIVE_UP_STREAK: u8 = 4;
+
 pub struct OutboundTransfer {
     pub transfer_id: TransferId,
     pub meta: FileTransferMetadata,
@@ -139,6 +156,8 @@ pub struct OutboundTransfer {
     pub last_speed_calc_at: Option<Instant>,
     pub last_speed_calc_bytes: u64,
     pub current_speed_bps: Option<u64>,
+    pub compression_verdict: CompressionVerdict,
+    pub consecutive_poor_compression: u8,
 }
 
 impl OutboundTransfer {
@@ -168,6 +187,8 @@ impl OutboundTransfer {
             last_speed_calc_at: None,
             last_speed_calc_bytes: 0,
             current_speed_bps: None,
+            compression_verdict: CompressionVerdict::default(),
+            consecutive_poor_compression: 0,
         }
     }
 
@@ -194,6 +215,8 @@ impl OutboundTransfer {
             last_speed_calc_at: None,
             last_speed_calc_bytes: 0,
             current_speed_bps: None,
+            compression_verdict: CompressionVerdict::default(),
+            consecutive_poor_compression: 0,
         })
     }
 
@@ -297,6 +320,21 @@ impl OutboundTransfer {
             total_chunks: self.total_chunks,
             data,
             compressed,
+        }
+    }
+
+    /// Record whether a sampled/compressed chunk was worth it, updating the
+    /// transfer's running verdict on whether to keep trying compression.
+    pub fn record_compression_sample(&mut self, compressed_well: bool) {
+        if compressed_well {
+            self.consecutive_poor_compression = 0;
+            self.compression_verdict = CompressionVerdict::WorthTrying;
+        } else {
+            self.consecutive_poor_compression =
+                self.consecutive_poor_compression.saturating_add(1);
+            if self.consecutive_poor_compression >= COMPRESSION_GIVE_UP_STREAK {
+                self.compression_verdict = CompressionVerdict::SkipRestOfTransfer;
+            }
         }
     }
 
@@ -1413,6 +1451,50 @@ pub fn checksum_file(path: &Path) -> Result<String> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn compression_verdict_gives_up_after_streak() {
+        let data = b"x".repeat(100);
+        let meta = make_meta(&data);
+        let mut transfer = OutboundTransfer::new(data, meta, None);
+        assert_eq!(transfer.compression_verdict, CompressionVerdict::Unknown);
+
+        for _ in 0..COMPRESSION_GIVE_UP_STREAK - 1 {
+            transfer.record_compression_sample(false);
+            assert_ne!(
+                transfer.compression_verdict,
+                CompressionVerdict::SkipRestOfTransfer
+            );
+        }
+        transfer.record_compression_sample(false);
+        assert_eq!(
+            transfer.compression_verdict,
+            CompressionVerdict::SkipRestOfTransfer
+        );
+    }
+
+    #[test]
+    fn compression_verdict_streak_resets_on_good_sample() {
+        let data = b"x".repeat(100);
+        let meta = make_meta(&data);
+        let mut transfer = OutboundTransfer::new(data, meta, None);
+
+        for _ in 0..COMPRESSION_GIVE_UP_STREAK - 1 {
+            transfer.record_compression_sample(false);
+        }
+        // One good sample right before the streak would have tripped resets it.
+        transfer.record_compression_sample(true);
+        assert_eq!(transfer.compression_verdict, CompressionVerdict::WorthTrying);
+        assert_eq!(transfer.consecutive_poor_compression, 0);
+
+        for _ in 0..COMPRESSION_GIVE_UP_STREAK - 1 {
+            transfer.record_compression_sample(false);
+            assert_ne!(
+                transfer.compression_verdict,
+                CompressionVerdict::SkipRestOfTransfer
+            );
+        }
+    }
 
     fn make_meta(data: &[u8]) -> FileTransferMetadata {
         FileTransferMetadata {

@@ -45,15 +45,25 @@ pub(crate) async fn read_outbound_chunks(
 
     type FileChunkResult = anyhow::Result<(
         Option<(Option<std::fs::File>, sha2::Sha256)>,
-        Vec<(u32, Vec<u8>, bool)>,
+        // (chunk_index, data, compressed, sample_result)
+        // sample_result is None when compression wasn't attempted at all for
+        // this chunk (either extension-excluded or the transfer already gave
+        // up on compression), Some(true/false) otherwise.
+        Vec<(u32, Vec<u8>, bool, Option<bool>)>,
     )>;
 
-    // Determine if we should try LZ4 based on file extension.
-    // Already-compressed formats gain nothing from LZ4 and waste CPU.
+    // Determine if we should try LZ4 based on file extension, and whether
+    // this transfer has already proven (over a streak of prior chunks) that
+    // its content doesn't compress — in which case we skip the per-chunk
+    // sample entirely instead of burning CPU on every chunk forever.
     let try_compress = {
         let mgr = shared.file_transfers.lock().await;
         mgr.get_outbound(&transfer_id)
-            .map(|t| should_try_compress(&t.meta.file_name))
+            .map(|t| {
+                should_try_compress(&t.meta.file_name)
+                    && t.compression_verdict
+                        != crate::file_transfer::CompressionVerdict::SkipRestOfTransfer
+            })
             .unwrap_or(true)
     };
 
@@ -68,29 +78,29 @@ pub(crate) async fn read_outbound_chunks(
             match instr {
                 crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
                     hasher.update(&data);
-                    let do_compress = if try_compress {
+                    let sample_result = if try_compress {
                         let sample_len = data.len().min(4096);
                         if sample_len > 0 {
                             let sample = &data[..sample_len];
                             let mut c_sample = [0u8; 4096 + 32];
                             let c_len = lz4_flex::block::compress_into(sample, &mut c_sample)
                                 .unwrap_or(usize::MAX);
-                            c_len < sample_len * 95 / 100
+                            Some(c_len < sample_len * 95 / 100)
                         } else {
-                            false
+                            None
                         }
                     } else {
-                        false
+                        None
                     };
-                    if do_compress {
+                    if sample_result == Some(true) {
                         let compressed = lz4_flex::compress_prepend_size(&data);
                         if compressed.len() < data.len() {
-                            chunk_data.push((chunk_index, compressed, true));
+                            chunk_data.push((chunk_index, compressed, true, sample_result));
                         } else {
-                            chunk_data.push((chunk_index, data.to_vec(), false));
+                            chunk_data.push((chunk_index, data.to_vec(), false, sample_result));
                         }
                     } else {
-                        chunk_data.push((chunk_index, data.to_vec(), false));
+                        chunk_data.push((chunk_index, data.to_vec(), false, sample_result));
                     }
                 }
                 crate::file_transfer::ChunkInstruction::File {
@@ -125,29 +135,29 @@ pub(crate) async fn read_outbound_chunks(
                             buf.truncate(read_bytes);
                         }
                         hasher.update(&buf);
-                        let do_compress = if try_compress {
+                        let sample_result = if try_compress {
                             let sample_len = buf.len().min(4096);
                             if sample_len > 0 {
                                 let sample = &buf[..sample_len];
                                 let mut c_sample = [0u8; 4096 + 32];
                                 let c_len = lz4_flex::block::compress_into(sample, &mut c_sample)
                                     .unwrap_or(usize::MAX);
-                                c_len < sample_len * 95 / 100
+                                Some(c_len < sample_len * 95 / 100)
                             } else {
-                                false
+                                None
                             }
                         } else {
-                            false
+                            None
                         };
-                        if do_compress {
+                        if sample_result == Some(true) {
                             let compressed = lz4_flex::compress_prepend_size(&buf);
                             if compressed.len() < buf.len() {
-                                chunk_data.push((chunk_index, compressed, true));
+                                chunk_data.push((chunk_index, compressed, true, sample_result));
                             } else {
-                                chunk_data.push((chunk_index, buf, false));
+                                chunk_data.push((chunk_index, buf, false, sample_result));
                             }
                         } else {
-                            chunk_data.push((chunk_index, buf, false));
+                            chunk_data.push((chunk_index, buf, false, sample_result));
                         }
                     }
                 }
@@ -178,7 +188,10 @@ pub(crate) async fn read_outbound_chunks(
             t.restore_io_context(f, h);
         }
         let fname = t.meta.file_name.clone();
-        for (c_idx, data, compressed) in chunk_data {
+        for (c_idx, data, compressed, sample_result) in chunk_data {
+            if let Some(compressed_well) = sample_result {
+                t.record_compression_sample(compressed_well);
+            }
             let msg = t.process_chunk_data(c_idx, data, compressed);
             if let crate::file_transfer::FileTransferMessage::Chunk {
                 transfer_id,
