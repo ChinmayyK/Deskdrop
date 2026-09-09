@@ -20,9 +20,9 @@ Once the handshake is completed, all subsequent frames (e.g., `ClipboardPush`, `
 Deskdrop uses state-of-the-art cryptographic primitives to ensure data in transit is immune to eavesdropping.
 
 - **Key Exchange**: Standard Curve25519 Elliptic Curve Diffie-Hellman (ECDH) is used to establish a shared secret during the handshake.
-- **Key Derivation**: The raw Diffie-Hellman secret is passed through HKDF-SHA256 alongside specific salt contexts to derive a strong symmetric session key.
+- **Key Derivation**: The raw Diffie-Hellman secret is passed through HKDF-SHA256 alongside specific salt contexts to derive **two directional** symmetric session keys — one for initiator→responder traffic, one for responder→initiator traffic (domain-separated by distinct HKDF info strings). Each side encrypts with one key and decrypts with the other. A single shared key for both directions would let each side's independent, counter-based nonce collide with the other's at the same counter value, which breaks AES-GCM catastrophically (the "forbidden attack" nonce-reuse case) — this is why the two directions never share a key.
 - **Zeroization (`CRIT-02`)**: The memory containing the raw Diffie-Hellman shared secret is explicitly zeroized (zero-filled) in RAM immediately after HKDF expansion, preventing cold-boot and memory dump extraction.
-- **Symmetric Encryption**: ChaCha20-Poly1305 Authenticated Encryption with Associated Data (AEAD) is used to encrypt and authenticate all payloads.
+- **Symmetric Encryption**: AES-256-GCM Authenticated Encryption with Associated Data (AEAD) is used to encrypt and authenticate all payloads.
 
 ### Replay Protection
 Deskdrop prevents captured packets from being replayed back to a client by using a **strictly monotonic, 64-bit big-endian counter**. This counter acts as the ChaCha20 nonce. If a packet arrives with a counter less than or equal to the highest counter seen, the packet is instantly dropped, terminating the connection.

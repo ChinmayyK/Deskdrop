@@ -19,7 +19,7 @@ fn bench_handshake(c: &mut Criterion) {
             let alice = EphemeralKeypair::generate();
             let bob = EphemeralKeypair::generate();
             let bob_pub = bob.public_bytes;
-            let (_alice_sess, _, _) = alice.derive_session_key(black_box(bob_pub)).unwrap();
+            let (_alice_sess, _, _) = alice.derive_session_key(black_box(bob_pub), true).unwrap();
         })
     });
 }
@@ -35,7 +35,7 @@ fn bench_encryption(c: &mut Criterion) {
             let alice = EphemeralKeypair::generate();
             let bob = EphemeralKeypair::generate();
             let bob_pub = bob.public_bytes;
-            let (mut sess, _, _) = alice.derive_session_key(bob_pub).unwrap();
+            let (mut sess, _, _) = alice.derive_session_key(bob_pub, true).unwrap();
             b.iter(|| sess.encrypt(black_box(payload)).unwrap())
         });
 
@@ -47,13 +47,13 @@ fn bench_encryption(c: &mut Criterion) {
                 let bob = EphemeralKeypair::generate();
                 let _a_pub = alice.public_bytes;
                 let b_pub = bob.public_bytes;
-                let (_send, _, _) = alice.derive_session_key(b_pub).unwrap();
+                let (_send, _, _) = alice.derive_session_key(b_pub, true).unwrap();
                 let alice2 = EphemeralKeypair::generate();
                 let bob2 = EphemeralKeypair::generate();
                 let a2_pub = alice2.public_bytes;
                 let b2_pub = bob2.public_bytes;
-                let (mut recv, _, _) = bob2.derive_session_key(a2_pub).unwrap();
-                let (mut send2, _, _) = alice2.derive_session_key(b2_pub).unwrap();
+                let (mut recv, _, _) = bob2.derive_session_key(a2_pub, false).unwrap();
+                let (mut send2, _, _) = alice2.derive_session_key(b2_pub, true).unwrap();
 
                 b.iter(|| {
                     let ct = send2.encrypt(black_box(payload)).unwrap();
@@ -84,7 +84,7 @@ fn bench_large_transfers(c: &mut Criterion) {
             |b, data| {
                 let alice = EphemeralKeypair::generate();
                 let bob = EphemeralKeypair::generate();
-                let (mut sess, _, _) = alice.derive_session_key(bob.public_bytes).unwrap();
+                let (mut sess, _, _) = alice.derive_session_key(bob.public_bytes, true).unwrap();
 
                 b.iter(|| {
                     for _ in 0..num_chunks {
@@ -121,7 +121,7 @@ fn bench_concurrent_transfers(c: &mut Criterion) {
                 b.iter(|| {
                     // Simulate multiple active sessions encrypting at the same time
                     let mut sessions = (0..num_concurrent)
-                        .map(|_| alice.derive_session_key(bob.public_bytes).unwrap().0)
+                        .map(|_| alice.derive_session_key(bob.public_bytes, true).unwrap().0)
                         .collect::<Vec<_>>();
 
                     for _ in 0..num_chunks {

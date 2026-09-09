@@ -269,8 +269,8 @@ fn pin_commutative_ecdh() {
     let alice_pub = alice.public_bytes;
     let bob_pub = bob.public_bytes;
 
-    let _alice_sess = alice.derive_session_key(bob_pub).unwrap();
-    let _bob_sess = bob.derive_session_key(alice_pub).unwrap();
+    let _alice_sess = alice.derive_session_key(bob_pub, true).unwrap();
+    let _bob_sess = bob.derive_session_key(alice_pub, false).unwrap();
 
     // We can't read the session key directly, but we can verify that both
     // sides encrypt/decrypt successfully (commutativity guarantee).

@@ -3,9 +3,18 @@
 //! # Session key establishment
 //! 1. Both peers generate an ephemeral X25519 keypair.
 //! 2. They exchange public keys inside HelloFrame / HelloAckFrame (plaintext).
-//! 3. ECDH shared secret → HKDF-SHA256 → 32-byte session key.
+//! 3. ECDH shared secret → HKDF-SHA256 → two directional 32-byte session
+//!    keys, one per traffic direction (initiator→responder,
+//!    responder→initiator), domain-separated by distinct HKDF `info`
+//!    strings. Each side uses one key to send and the other to receive.
+//!    A single shared key for both directions would let each side's
+//!    independent, counter-based nonce collide with the other's at the
+//!    same counter value — the classic AES-GCM "forbidden attack" nonce
+//!    reuse case — so the two directions must never share a key.
 //! 4. Every subsequent frame is encrypted with AES-256-GCM.
-//!    Nonce: 4-byte big-endian message counter || 8 zero bytes (never reused).
+//!    Nonce: 8-byte big-endian message counter || 4 zero bytes (unique per
+//!    direction per session — each direction has its own key and its own
+//!    independent counter starting at 0).
 //!
 //! # Long-term identity
 //! Each device also has a stable X25519 key pair stored on disk.
@@ -111,9 +120,16 @@ impl EphemeralKeypair {
     }
 
     /// Consume the ephemeral secret, perform ECDH, derive session key and PIN.
+    ///
+    /// `is_initiator` selects which of the two directional keys this side
+    /// sends with vs. receives with — see the directional-key note in the
+    /// module doc comment. Both peers must pass opposite values (the side
+    /// that called `handshake_initiator` passes `true`, the side that
+    /// called `handshake_responder` passes `false`).
     pub fn derive_session_key(
         &self,
         peer_pubkey_bytes: [u8; 32],
+        is_initiator: bool,
     ) -> Result<(SessionKey, crate::pairing::PairingPin, [u8; 32])> {
         let secret = self.secret.as_ref().context("keypair already consumed")?;
         let peer_public = PublicKey::from(peer_pubkey_bytes);
@@ -145,12 +161,19 @@ impl EphemeralKeypair {
         };
 
         // HKDF-SHA256: IKM = shared secret, salt = hash(sorted ephemeral pubkeys).
-        // The info string is prefixed with the protocol version so that HKDF
+        // The info strings are prefixed with the protocol version so that HKDF
         // output is domain-separated across wire-format revisions (LOW-03).
         // Changing PROTOCOL_VERSION in protocol.rs automatically invalidates
         // old session keys — peers on different protocol versions cannot
         // decrypt each other's frames even if they share an ephemeral key.
-        let info = format!("deskdrop-v{}-session", crate::protocol::PROTOCOL_VERSION);
+        //
+        // Two directional keys are expanded from the same PRK, one per
+        // traffic direction, so the initiator and responder never encrypt
+        // with the same key — sharing a single key here would let each
+        // side's independent, counter-based nonce collide with the other's
+        // at the same counter value (AES-GCM nonce reuse — see module doc).
+        let info_i2r = format!("deskdrop-v{}-session-i2r", crate::protocol::PROTOCOL_VERSION);
+        let info_r2i = format!("deskdrop-v{}-session-r2i", crate::protocol::PROTOCOL_VERSION);
         let hk = Hkdf::<Sha256>::new(Some(&salt), &shared_bytes);
 
         // Derive the pairing PIN before zeroizing shared_bytes.
@@ -160,17 +183,28 @@ impl EphemeralKeypair {
         // it must not linger in process memory (CRIT-02).
         shared_bytes.zeroize();
 
-        let mut okm = [0u8; 32];
-        hk.expand(info.as_bytes(), &mut okm)
+        let mut okm_i2r = [0u8; 32];
+        let mut okm_r2i = [0u8; 32];
+        hk.expand(info_i2r.as_bytes(), &mut okm_i2r)
+            .map_err(|_| anyhow::anyhow!("HKDF expand failed"))?;
+        hk.expand(info_r2i.as_bytes(), &mut okm_r2i)
             .map_err(|_| anyhow::anyhow!("HKDF expand failed"))?;
 
+        let (send_key, recv_key) = if is_initiator {
+            (&okm_i2r, &okm_r2i)
+        } else {
+            (&okm_r2i, &okm_i2r)
+        };
+
         let key = SessionKey {
-            cipher: Aes256Gcm::new(Key::<aes_gcm::aes::Aes256>::from_slice(&okm)),
+            send_cipher: Aes256Gcm::new(Key::<aes_gcm::aes::Aes256>::from_slice(send_key)),
+            recv_cipher: Aes256Gcm::new(Key::<aes_gcm::aes::Aes256>::from_slice(recv_key)),
             send_counter: 0,
             recv_counter: 0,
         };
 
-        okm.zeroize();
+        okm_i2r.zeroize();
+        okm_r2i.zeroize();
         Ok((key, pin, salt))
     }
 
@@ -200,7 +234,8 @@ impl EphemeralKeypair {
 
 #[derive(Clone)]
 pub struct SessionKey {
-    cipher: Aes256Gcm,
+    send_cipher: Aes256Gcm,
+    recv_cipher: Aes256Gcm,
     send_counter: u64,
     recv_counter: u64,
 }
@@ -224,7 +259,7 @@ impl SessionKey {
             .context("send counter overflow")?;
 
         let ct = self
-            .cipher
+            .send_cipher
             .encrypt(&nonce, plaintext)
             .map_err(|e| anyhow::anyhow!("encrypt: {:?}", e))?;
 
@@ -246,7 +281,7 @@ impl SessionKey {
             .checked_add(1)
             .context("send counter overflow")?;
 
-        self.cipher
+        self.send_cipher
             .encrypt_in_place(&nonce, &[], buffer)
             .map_err(|e| anyhow::anyhow!("encrypt: {:?}", e))?;
 
@@ -263,7 +298,7 @@ impl SessionKey {
             .context("send counter overflow")?;
 
         let tag = self
-            .cipher
+            .send_cipher
             .encrypt_in_place_detached(&nonce, &[], buffer)
             .map_err(|e| anyhow::anyhow!("encrypt: {:?}", e))?;
 
@@ -298,7 +333,7 @@ impl SessionKey {
             .context("recv counter overflow")?;
 
         let res = self
-            .cipher
+            .recv_cipher
             .decrypt(nonce, ct)
             .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e));
 
@@ -344,7 +379,7 @@ impl SessionKey {
         // Remove the 12-byte nonce from the beginning of the buffer.
         buffer.drain(..12);
 
-        self.cipher
+        self.recv_cipher
             .decrypt_in_place(nonce, &[], buffer)
             .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e))?;
 
@@ -406,13 +441,18 @@ mod tests {
         let alice_pub = alice.public_bytes;
         let bob_pub = bob.public_bytes;
 
-        let (mut alice_sess, _, _) = alice.derive_session_key(bob_pub).unwrap();
-        let (mut bob_sess, _, _) = bob.derive_session_key(alice_pub).unwrap();
+        let (mut alice_sess, _, _) = alice.derive_session_key(bob_pub, true).unwrap();
+        let (mut bob_sess, _, _) = bob.derive_session_key(alice_pub, false).unwrap();
 
         let msg = b"hello deskdrop!";
         let ct = alice_sess.encrypt(msg).unwrap();
         let pt = bob_sess.decrypt(&ct).unwrap();
         assert_eq!(pt, msg);
+
+        // And the reverse direction (bob sends, alice receives).
+        let ct2 = bob_sess.encrypt(b"hi back").unwrap();
+        let pt2 = alice_sess.decrypt(&ct2).unwrap();
+        assert_eq!(pt2, b"hi back");
     }
 
     #[test]
@@ -421,12 +461,37 @@ mod tests {
         let bob = EphemeralKeypair::generate();
         let alice_pub = alice.public_bytes;
         let bob_pub = bob.public_bytes;
-        let (mut alice_sess, _, _) = alice.derive_session_key(bob_pub).unwrap();
-        let (mut bob_sess, _, _) = bob.derive_session_key(alice_pub).unwrap();
+        let (mut alice_sess, _, _) = alice.derive_session_key(bob_pub, true).unwrap();
+        let (mut bob_sess, _, _) = bob.derive_session_key(alice_pub, false).unwrap();
 
         let ct = alice_sess.encrypt(b"first").unwrap();
         bob_sess.decrypt(&ct).unwrap();
         assert!(bob_sess.decrypt(&ct).is_err(), "replay should fail");
+    }
+
+    /// Regression test for the AES-GCM nonce-reuse bug: initiator and
+    /// responder must never encrypt with the same key. Before the fix,
+    /// both sides derived one shared key and both counters started at 0,
+    /// so encrypting the same plaintext on both sides at counter 0 (same
+    /// key, same nonce, same plaintext) produced byte-identical ciphertext.
+    #[test]
+    fn directional_keys_differ() {
+        let alice = EphemeralKeypair::generate();
+        let bob = EphemeralKeypair::generate();
+        let alice_pub = alice.public_bytes;
+        let bob_pub = bob.public_bytes;
+
+        let (mut alice_sess, _, _) = alice.derive_session_key(bob_pub, true).unwrap();
+        let (mut bob_sess, _, _) = bob.derive_session_key(alice_pub, false).unwrap();
+
+        let msg = b"same plaintext on both sides";
+        let alice_ct = alice_sess.encrypt(msg).unwrap();
+        let bob_ct = bob_sess.encrypt(msg).unwrap();
+
+        assert_ne!(
+            alice_ct, bob_ct,
+            "initiator and responder must never encrypt under the same key"
+        );
     }
 
     #[test]

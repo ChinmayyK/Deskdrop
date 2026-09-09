@@ -447,7 +447,7 @@ pub async fn handshake_initiator(
     }
 
     let (mut session, pin, session_salt) = ephemeral
-        .derive_session_key(ack_ecdh.ecdh_pubkey)
+        .derive_session_key(ack_ecdh.ecdh_pubkey, true)
         .context("ECDH key derivation")?;
 
     let identity_proof = my_identity_key
@@ -576,7 +576,7 @@ where
         .context("sending EcdhFrame ack")?;
 
     let (mut session, pin, session_salt) = ephemeral
-        .derive_session_key(ecdh.ecdh_pubkey)
+        .derive_session_key(ecdh.ecdh_pubkey, false)
         .context("ECDH key derivation")?;
 
     let hello_msg: AppMessage =

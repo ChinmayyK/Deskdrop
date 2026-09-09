@@ -622,7 +622,13 @@ impl AppMessage {
 // ── mDNS / defaults ──────────────────────────────────────────────────────────
 
 pub const MDNS_SERVICE_TYPE: &str = "_deskdrop._tcp.local.";
-pub const PROTOCOL_VERSION: u16 = 4;
+// Bumped 4 -> 5: session key derivation now produces two directional keys
+// (see crypto.rs derive_session_key) instead of one shared key, fixing an
+// AES-GCM nonce-reuse vulnerability. This is a deliberate breaking change —
+// old and new builds must not silently interoperate with mismatched key
+// derivation, so a version bump forces the existing handshake version
+// check to reject the pairing cleanly instead.
+pub const PROTOCOL_VERSION: u16 = 5;
 pub const DEFAULT_PORT: u16 = 47823;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
