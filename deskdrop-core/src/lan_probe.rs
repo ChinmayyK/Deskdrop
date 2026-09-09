@@ -57,6 +57,22 @@ const PROBE_TIMEOUT: Duration = Duration::from_millis(600);
 /// burst 254 simultaneous sockets and doesn't look like a port scan.
 const MAX_CONCURRENT_PROBES: usize = 24;
 
+/// On a detected hotspot, only scan the first N hosts instead of the full
+/// /24. Hotspot subnets have a handful of clients, not 254 — sweeping the
+/// whole range at the fast hotspot cadence wastes CPU/battery/bandwidth on
+/// addresses that will never respond, competing with any transfer sharing
+/// the same link.
+const HOTSPOT_SCAN_MAX_HOST: u8 = 32;
+
+/// After this many consecutive sweeps with zero new peers found, back off
+/// to a slower cadence (see `IDLE_BACKOFF_MULTIPLIER`). Reset to normal
+/// cadence immediately on any find.
+const IDLE_BACKOFF_STREAK_THRESHOLD: u32 = 4;
+
+/// Multiplier applied to the base interval once the idle-backoff streak
+/// threshold is crossed. A single capped step, not unbounded exponential.
+const IDLE_BACKOFF_MULTIPLIER: u32 = 4;
+
 /// Spawn the LAN-wide active discovery probe.
 ///
 /// Runs forever as a background tokio task. Re-reads the active network
@@ -68,6 +84,9 @@ pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
         // based on whether the current network looks like a hotspot.
         let mut interval = tokio::time::interval(HOTSPOT_SWEEP_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        // Consecutive sweeps that found nothing new — drives idle backoff.
+        let mut consecutive_empty_sweeps: u32 = 0;
 
         loop {
             interval.tick().await;
@@ -89,26 +108,45 @@ pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
             };
 
             let is_hotspot = network_manager::is_hotspot_network(&iface);
-            interval = tokio::time::interval(if is_hotspot {
+            let base_interval = if is_hotspot {
                 HOTSPOT_SWEEP_INTERVAL
             } else {
                 LAN_SWEEP_INTERVAL
-            });
+            };
+            let effective_interval = if consecutive_empty_sweeps >= IDLE_BACKOFF_STREAK_THRESHOLD
+            {
+                base_interval * IDLE_BACKOFF_MULTIPLIER
+            } else {
+                base_interval
+            };
+            interval = tokio::time::interval(effective_interval);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-            sweep_subnet(base, port, &discovery_handle).await;
+            let max_host = if is_hotspot { HOTSPOT_SCAN_MAX_HOST } else { 254 };
+            let found = sweep_subnet(base, port, max_host, &discovery_handle).await;
+            if found > 0 {
+                consecutive_empty_sweeps = 0;
+            } else {
+                consecutive_empty_sweeps = consecutive_empty_sweeps.saturating_add(1);
+            }
         }
     });
 }
 
-/// Actively connect-probe every host address on `base`'s /24, reporting any
-/// that accept a TCP connection on `port` as a discovered peer.
-async fn sweep_subnet(base: Ipv4Addr, port: u16, handle: &DiscoveryInputHandle) {
+/// Actively connect-probe host addresses `1..=max_host` on `base`'s subnet,
+/// reporting any that accept a TCP connection on `port` as a discovered
+/// peer. Returns the number of peers found this sweep.
+async fn sweep_subnet(
+    base: Ipv4Addr,
+    port: u16,
+    max_host: u8,
+    handle: &DiscoveryInputHandle,
+) -> usize {
     let o = base.octets();
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_PROBES));
     let mut tasks = tokio::task::JoinSet::new();
 
-    for i in 1..=254u8 {
+    for i in 1..=max_host {
         if i == o[3] {
             continue; // never probe ourselves
         }
@@ -125,9 +163,11 @@ async fn sweep_subnet(base: Ipv4Addr, port: u16, handle: &DiscoveryInputHandle) 
         });
     }
 
+    let mut found_count = 0usize;
     while let Some(result) = tasks.join_next().await {
         if let Ok(Some(ip)) = result {
             info!("lan_probe: Deskdrop responding at {}:{}", ip, port);
+            found_count += 1;
             handle
                 .found(DiscoveredPeer {
                     device_id: placeholder_id(ip),
@@ -142,9 +182,10 @@ async fn sweep_subnet(base: Ipv4Addr, port: u16, handle: &DiscoveryInputHandle) 
         }
     }
     debug!(
-        "lan_probe: sweep of {}.{}.{}.0/24 complete",
-        o[0], o[1], o[2]
+        "lan_probe: sweep of {}.{}.{}.0/{} complete ({} found)",
+        o[0], o[1], o[2], max_host, found_count
     );
+    found_count
 }
 
 /// Attempt a TCP connect to check if Deskdrop is listening at this address.
@@ -223,5 +264,32 @@ mod tests {
         // Sanity: probing our own "self" octet is skipped by construction in
         // sweep_subnet (`if i == o[3] { continue; }`), verified structurally
         // above via the deterministic id test rather than a live /24 sweep.
+    }
+
+    #[tokio::test]
+    async fn sweep_subnet_returns_zero_when_nothing_listening() {
+        let my_id = Uuid::new_v4();
+        let (manager, handle, _output) =
+            crate::discovery_manager::DiscoveryManager::new(my_id);
+        tokio::spawn(manager.run());
+
+        // Nothing listens on this port within the tiny scanned range, on
+        // loopback — should report zero finds, not error.
+        let found = sweep_subnet(Ipv4Addr::new(127, 0, 0, 1), 1, 3, &handle).await;
+        assert_eq!(found, 0);
+    }
+
+    #[test]
+    fn hotspot_scan_range_is_much_smaller_than_full_subnet() {
+        assert!(
+            HOTSPOT_SCAN_MAX_HOST < 254,
+            "hotspot sweep should scan a small window, not the full /24"
+        );
+    }
+
+    #[test]
+    fn idle_backoff_constants_are_sane() {
+        assert!(IDLE_BACKOFF_STREAK_THRESHOLD > 0);
+        assert!(IDLE_BACKOFF_MULTIPLIER > 1, "backoff must actually slow down");
     }
 }

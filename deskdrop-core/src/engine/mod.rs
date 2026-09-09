@@ -836,7 +836,18 @@ impl Engine {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
 
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(1500));
+            // While no peer is connected yet, beacon fast so first pairing
+            // is quick. Once at least one peer is connected, there's no
+            // rush — back off to a steady-state cadence so we're not
+            // broadcasting + enumerating interfaces every 1.5s forever.
+            // Drops back to the fast cadence automatically if we ever go
+            // back to zero connected peers (e.g. everyone disconnects).
+            const BEACON_FAST_INTERVAL: tokio::time::Duration =
+                tokio::time::Duration::from_millis(1500);
+            const BEACON_STEADY_INTERVAL: tokio::time::Duration =
+                tokio::time::Duration::from_secs(5);
+
+            let mut interval = tokio::time::interval(BEACON_FAST_INTERVAL);
             loop {
                 interval.tick().await;
                 // Send to limited broadcast address.
@@ -860,6 +871,12 @@ impl Engine {
                         }
                     }
                 }
+
+                interval = tokio::time::interval(if shared.peer_manager.connected_count() > 0 {
+                    BEACON_STEADY_INTERVAL
+                } else {
+                    BEACON_FAST_INTERVAL
+                });
             }
         });
     }
