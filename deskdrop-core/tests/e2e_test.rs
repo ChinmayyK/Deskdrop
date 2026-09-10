@@ -5,11 +5,11 @@ use deskdrop_core::{
     chunked::{maybe_chunk, Reassembler, CHUNK_THRESHOLD},
     dedup::{hash_content, Deduplicator},
     filter::{ExtensionFilter, FilterChain, SizeFilter, TypeFilter, Verdict},
+    metrics::ThroughputEstimator,
     pairing::derive_pin,
     protocol::ClipboardContent,
     retry::{Backoff, MAX_ATTEMPTS},
     sim::SimNetwork,
-    throttle::ThroughputEstimator,
 };
 use std::time::{Duration, Instant};
 

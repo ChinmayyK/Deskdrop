@@ -379,11 +379,90 @@ impl Default for MetricsRegistry {
     }
 }
 
+// ── Throughput estimator ──────────────────────────────────────────────────────
+
+/// Measures actual bytes-per-second over a sliding 5-second window.
+pub struct ThroughputEstimator {
+    samples: std::collections::VecDeque<(Instant, u64)>, // (timestamp, bytes)
+    window: Duration,
+}
+
+impl ThroughputEstimator {
+    pub fn new() -> Self {
+        Self {
+            samples: std::collections::VecDeque::new(),
+            window: Duration::from_secs(5),
+        }
+    }
+
+    /// Record `bytes` transferred right now.
+    pub fn record(&mut self, bytes: u64) {
+        let now = Instant::now();
+        self.samples.push_back((now, bytes));
+        // Evict samples older than the window.
+        while self
+            .samples
+            .front()
+            .map(|(t, _)| now - *t > self.window)
+            .unwrap_or(false)
+        {
+            self.samples.pop_front();
+        }
+    }
+
+    /// Estimated bytes/second over the last window.
+    pub fn bps(&self) -> f64 {
+        if self.samples.len() < 2 {
+            return 0.0;
+        }
+        let total: u64 = self.samples.iter().map(|(_, b)| b).sum();
+        let span = self
+            .samples
+            .back()
+            .unwrap()
+            .0
+            .duration_since(self.samples.front().unwrap().0)
+            .as_secs_f64();
+        if span < 0.001 {
+            return 0.0;
+        }
+        total as f64 / span
+    }
+
+    /// Human-readable throughput string.
+    pub fn display(&self) -> String {
+        let bps = self.bps();
+        if bps < 1_024.0 {
+            format!("{:.0} B/s", bps)
+        } else if bps < 1_048_576.0 {
+            format!("{:.1} KB/s", bps / 1_024.0)
+        } else {
+            format!("{:.2} MB/s", bps / 1_048_576.0)
+        }
+    }
+}
+
+impl Default for ThroughputEstimator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn throughput_estimator_basic() {
+        let mut est = ThroughputEstimator::new();
+        est.record(1_000_000);
+        std::thread::sleep(Duration::from_millis(100));
+        est.record(1_000_000);
+        let bps = est.bps();
+        assert!(bps > 0.0, "bps = {}", bps);
+    }
 
     #[test]
     fn latency_tracker_statistics() {
