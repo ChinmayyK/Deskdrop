@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var quickAccessWindow: NSWindow?
     private var diagnosticsWindow: NSWindow?
     private var fileBannerManager: FileBannerWindowManager!
-    private var previousConnectedCount = 0
+    private var previousConnectedDeviceIDs: Set<String> = []
     private var menuPanel: NSPanel!
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
@@ -458,8 +458,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             .map { $0.map(ManagedDevice.init).filter { $0.isConnected && $0.trustState == .trusted } }
             .sink { [weak self] (devices: [ManagedDevice]) in
                 guard let self else { return }
-                let count = devices.count
-                if count > self.previousConnectedCount, let device = devices.last ?? devices.first {
+                let currentIDs = Set(devices.map(\.id))
+                // Diff against the previous ID set rather than comparing counts —
+                // a count-only comparison can't tell WHICH device just connected,
+                // so it used to fall back to devices.last ?? devices.first and
+                // could name an already-connected device instead of the new one.
+                let newlyConnectedIDs = currentIDs.subtracting(self.previousConnectedDeviceIDs)
+
+                for device in devices where newlyConnectedIDs.contains(device.id) {
                     // Fire immediately — no delay
                     self.store.showToast(
                         title: "\(device.name) connected",
@@ -470,7 +476,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     )
                     // Animate the menu bar icon briefly
                     self.pulseMenuBarIcon()
-                } else if count == 0 && self.previousConnectedCount > 0 {
+                }
+                if currentIDs.isEmpty && !self.previousConnectedDeviceIDs.isEmpty {
                     self.store.showToast(
                         title: "Device disconnected",
                         body: "No devices currently connected.",
@@ -479,7 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                         ttl: 3.0
                     )
                 }
-                self.previousConnectedCount = count
+                self.previousConnectedDeviceIDs = currentIDs
             }
             .store(in: &cancellables)
     }
