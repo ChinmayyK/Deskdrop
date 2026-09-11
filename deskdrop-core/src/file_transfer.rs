@@ -330,8 +330,7 @@ impl OutboundTransfer {
             self.consecutive_poor_compression = 0;
             self.compression_verdict = CompressionVerdict::WorthTrying;
         } else {
-            self.consecutive_poor_compression =
-                self.consecutive_poor_compression.saturating_add(1);
+            self.consecutive_poor_compression = self.consecutive_poor_compression.saturating_add(1);
             if self.consecutive_poor_compression >= COMPRESSION_GIVE_UP_STREAK {
                 self.compression_verdict = CompressionVerdict::SkipRestOfTransfer;
             }
@@ -1484,7 +1483,10 @@ mod tests {
         }
         // One good sample right before the streak would have tripped resets it.
         transfer.record_compression_sample(true);
-        assert_eq!(transfer.compression_verdict, CompressionVerdict::WorthTrying);
+        assert_eq!(
+            transfer.compression_verdict,
+            CompressionVerdict::WorthTrying
+        );
         assert_eq!(transfer.consecutive_poor_compression, 0);
 
         for _ in 0..COMPRESSION_GIVE_UP_STREAK - 1 {

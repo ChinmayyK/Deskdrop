@@ -73,6 +73,18 @@ const IDLE_BACKOFF_STREAK_THRESHOLD: u32 = 4;
 /// threshold is crossed. A single capped step, not unbounded exponential.
 const IDLE_BACKOFF_MULTIPLIER: u32 = 4;
 
+// Compile-time guardrails on the constants above — enforced unconditionally,
+// not dependent on a test being run.
+const _: () = assert!(
+    HOTSPOT_SCAN_MAX_HOST < 254,
+    "hotspot sweep should scan a small window, not the full /24"
+);
+const _: () = assert!(IDLE_BACKOFF_STREAK_THRESHOLD > 0);
+const _: () = assert!(
+    IDLE_BACKOFF_MULTIPLIER > 1,
+    "backoff must actually slow down"
+);
+
 /// Spawn the LAN-wide active discovery probe.
 ///
 /// Runs forever as a background tokio task. Re-reads the active network
@@ -113,8 +125,7 @@ pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
             } else {
                 LAN_SWEEP_INTERVAL
             };
-            let effective_interval = if consecutive_empty_sweeps >= IDLE_BACKOFF_STREAK_THRESHOLD
-            {
+            let effective_interval = if consecutive_empty_sweeps >= IDLE_BACKOFF_STREAK_THRESHOLD {
                 base_interval * IDLE_BACKOFF_MULTIPLIER
             } else {
                 base_interval
@@ -122,7 +133,11 @@ pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
             interval = tokio::time::interval(effective_interval);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-            let max_host = if is_hotspot { HOTSPOT_SCAN_MAX_HOST } else { 254 };
+            let max_host = if is_hotspot {
+                HOTSPOT_SCAN_MAX_HOST
+            } else {
+                254
+            };
             let found = sweep_subnet(base, port, max_host, &discovery_handle).await;
             if found > 0 {
                 consecutive_empty_sweeps = 0;
@@ -269,27 +284,12 @@ mod tests {
     #[tokio::test]
     async fn sweep_subnet_returns_zero_when_nothing_listening() {
         let my_id = Uuid::new_v4();
-        let (manager, handle, _output) =
-            crate::discovery_manager::DiscoveryManager::new(my_id);
+        let (manager, handle, _output) = crate::discovery_manager::DiscoveryManager::new(my_id);
         tokio::spawn(manager.run());
 
         // Nothing listens on this port within the tiny scanned range, on
         // loopback — should report zero finds, not error.
         let found = sweep_subnet(Ipv4Addr::new(127, 0, 0, 1), 1, 3, &handle).await;
         assert_eq!(found, 0);
-    }
-
-    #[test]
-    fn hotspot_scan_range_is_much_smaller_than_full_subnet() {
-        assert!(
-            HOTSPOT_SCAN_MAX_HOST < 254,
-            "hotspot sweep should scan a small window, not the full /24"
-        );
-    }
-
-    #[test]
-    fn idle_backoff_constants_are_sane() {
-        assert!(IDLE_BACKOFF_STREAK_THRESHOLD > 0);
-        assert!(IDLE_BACKOFF_MULTIPLIER > 1, "backoff must actually slow down");
     }
 }

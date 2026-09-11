@@ -172,8 +172,14 @@ impl EphemeralKeypair {
         // with the same key — sharing a single key here would let each
         // side's independent, counter-based nonce collide with the other's
         // at the same counter value (AES-GCM nonce reuse — see module doc).
-        let info_i2r = format!("deskdrop-v{}-session-i2r", crate::protocol::PROTOCOL_VERSION);
-        let info_r2i = format!("deskdrop-v{}-session-r2i", crate::protocol::PROTOCOL_VERSION);
+        let info_i2r = format!(
+            "deskdrop-v{}-session-i2r",
+            crate::protocol::PROTOCOL_VERSION
+        );
+        let info_r2i = format!(
+            "deskdrop-v{}-session-r2i",
+            crate::protocol::PROTOCOL_VERSION
+        );
         let hk = Hkdf::<Sha256>::new(Some(&salt), &shared_bytes);
 
         // Derive the pairing PIN before zeroizing shared_bytes.

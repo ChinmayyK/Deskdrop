@@ -25,8 +25,14 @@ namespace Deskdrop.WinUI.Services
             _dispatcher = DispatcherQueue.GetForCurrentThread();
             Windows.ApplicationModel.DataTransfer.Clipboard.ContentChanged += Clipboard_ContentChanged;
 
+            // 30ms (33Hz) was needlessly aggressive for a queue that's empty the
+            // vast majority of ticks — a continuous UI-thread wakeup forever, for
+            // the app's whole lifetime. Android's equivalent native-event-drain
+            // loop already settled on 100ms as plenty responsive (feels instant
+            // for clipboard/file-transfer delivery) while idling on a background
+            // thread; match that cadence here too.
             _pollTimer = new DispatcherTimer();
-            _pollTimer.Interval = TimeSpan.FromMilliseconds(30);
+            _pollTimer.Interval = TimeSpan.FromMilliseconds(100);
             _pollTimer.Tick += OnPollTick;
             _pollTimer.Start();
         }
