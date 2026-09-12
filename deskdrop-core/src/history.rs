@@ -611,7 +611,13 @@ impl History {
             .map(|e| e.scrubbed_for_persistence())
             .collect();
 
-        let bytes = serde_json::to_vec_pretty(&persistable_entries)?;
+        // Compact, not pretty — this file is an internal cache rewritten on
+        // every single history mutation (every clipboard copy), never hand-
+        // edited. Pretty-printing costs extra CPU per write and materially
+        // more bytes written to disk (and flash wear on mobile) for no
+        // benefit; `export_json()` below is the human-facing export and
+        // still pretty-prints.
+        let bytes = serde_json::to_vec(&persistable_entries)?;
         {
             use std::io::Write;
             let mut file = std::fs::File::create(&tmp_path).context("creating history tmp")?;
