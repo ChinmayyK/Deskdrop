@@ -332,7 +332,11 @@ impl PeerManager {
                 .collect(),
         };
 
-        let bytes = serde_json::to_vec_pretty(&store_to_save)?;
+        // Compact, not pretty — internal cache, not hand-edited, and this
+        // fires on every connect/reconnect/disconnect (so, repeatedly during
+        // a flaky hotspot/Wi-Fi session), same reasoning as history.rs's
+        // persist().
+        let bytes = serde_json::to_vec(&store_to_save)?;
 
         let save_fn = move || {
             if let Some(parent) = path.parent() {
