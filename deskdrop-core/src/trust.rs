@@ -186,7 +186,11 @@ impl TrustStore {
         }
         use std::io::Write;
         let tmp = self.path.with_extension("tmp");
-        let bytes = serde_json::to_vec_pretty(&self.data)?;
+        // Compact, not pretty — internal cache, not hand-edited.
+        // `observe_peer()` calls this unconditionally on every handshake, so
+        // a flaky connection reconnecting repeatedly rewrites this file
+        // every time; same reasoning as the history.rs/peer_manager.rs fixes.
+        let bytes = serde_json::to_vec(&self.data)?;
         {
             let mut file = std::fs::File::create(&tmp).context("creating trust temp file")?;
             file.write_all(&bytes).context("writing trust store")?;
