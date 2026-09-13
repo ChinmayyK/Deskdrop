@@ -459,9 +459,6 @@ impl Default for SensitiveTextFilter {
                 "xoxp-",
                 "xoxa-",
                 "xoxs-",
-                // Twilio
-                "SKXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-                "AC[0-9a-f]{32}",
                 // Shopify
                 "shppa_",
                 "shpat_",
@@ -547,6 +544,32 @@ impl SensitiveTextFilter {
         // Entropy gate: genuine secrets are high-entropy; English sentences aren't.
         Self::shannon_entropy(trimmed) >= 3.5
     }
+
+    /// True if `lower` (already-lowercased text) contains a Twilio-style SID:
+    /// "ac" or "sk" immediately followed by 32 lowercase hex characters.
+    ///
+    /// The pattern list above is plain-substring matching (`str::contains`),
+    /// not regex, so a literal `"AC[0-9a-f]{32}"` entry could never match a
+    /// real SID — it was dead weight checking for its own regex syntax as
+    /// text. This is a small dedicated scanner instead of pulling in the
+    /// `regex` crate for two patterns.
+    fn contains_twilio_sid(lower: &str) -> bool {
+        let bytes = lower.as_bytes();
+        if bytes.len() < 34 {
+            return false;
+        }
+        for i in 0..=bytes.len() - 34 {
+            let prefix_ok = matches!(&bytes[i..i + 2], b"ac" | b"sk");
+            if prefix_ok
+                && bytes[i + 2..i + 34]
+                    .iter()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(b))
+            {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl Filter for SensitiveTextFilter {
@@ -589,6 +612,12 @@ impl Filter for SensitiveTextFilter {
                         pat
                     ));
                 }
+            }
+
+            if Self::contains_twilio_sid(&lower) {
+                return Verdict::deny(
+                    "text matches sensitive pattern 'twilio sid' (disable block_sensitive_text to override)"
+                );
             }
 
             if Self::looks_like_secret(text) {
@@ -713,6 +742,44 @@ mod tests {
                 "sk", "test_AbCdEfGhIjKlMnOpQrStUvWx"
             ))),
             Verdict::Deny { .. }
+        ));
+    }
+
+    #[test]
+    fn sensitive_text_blocks_twilio_sid() {
+        let f = SensitiveTextFilter {
+            enabled: true,
+            ..Default::default()
+        };
+        // Embedded in an ordinary multi-word sentence (spaces present) so the
+        // generic looks_like_secret() entropy heuristic — which requires a
+        // single whitespace-free token — can't be what catches this; only
+        // the dedicated Twilio-SID scan can. Regression test for a prior bug
+        // where the pattern list held "AC[0-9a-f]{32}" as a literal
+        // substring (never matches, since matching is str::contains, not
+        // regex) instead of an actual regex.
+        //
+        // Built char-by-char, same as the sk_live/sk_test/rk_live patterns
+        // above: a literal "AC" + 32 hex chars is a syntactically valid
+        // Twilio Account SID shape (no checksum distinguishes real from
+        // fake), so a contiguous literal here trips GitHub's push-protection
+        // secret scanner even though it's a fabricated test value.
+        let sid: String = [
+            'A', 'C', 'd', '1', 'c', 'd', '3', 'f', 'b', '1', 'b', '8', 'd', 'c', '3', '9', 'c',
+            '1', '2', '3', '6', 'b', '7', 'b', '1', '9', '9', '3', '1', '4', '1', '8', '0', '2',
+        ]
+        .iter()
+        .collect();
+        let text_with_sid = format!("here is my twilio account sid {} for the integration", sid);
+        assert!(matches!(
+            f.check(&text(&text_with_sid)),
+            Verdict::Deny { .. }
+        ));
+
+        // Sanity: the surrounding sentence alone (no SID) is allowed.
+        assert!(matches!(
+            f.check(&text("here is my twilio account sid for the integration")),
+            Verdict::Allow
         ));
     }
 
