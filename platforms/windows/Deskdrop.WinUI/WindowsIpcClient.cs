@@ -260,6 +260,14 @@ namespace Deskdrop.WinUI
         public static JsonDocument? GetMetrics() => Send(new { cmd = "get_metrics" });
 
         // ── Remote File Explorer ──────────────────────────────────────────────
+        // The daemon waits up to 10s for the remote peer's reply
+        // (query_remote_files_sync's timeout_secs, ipc.rs) before giving up -
+        // an unfiltered/large listing genuinely takes a few seconds over a
+        // P2P link. The local pipe read needs a matching margin, or this
+        // gives up first and discards a reply that was still on its way,
+        // showing a spurious empty folder. Mirrors RemoteThumbnailRequestAsync's
+        // ThumbnailTimeoutMs below.
+        private const int RemoteFilesQueryTimeoutMs = 12000;
         public static async Task<JsonDocument?> RemoteFilesQueryAsync(string deviceId, bool summaryOnly = false, string? category = null, string? source = null, string? searchQuery = null, uint offset = 0, uint limit = 100)
         {
             var req = new System.Collections.Generic.Dictionary<string, object>
@@ -273,7 +281,7 @@ namespace Deskdrop.WinUI
             if (!string.IsNullOrEmpty(category)) req["category"] = category;
             if (!string.IsNullOrEmpty(source)) req["source"] = source;
             if (!string.IsNullOrEmpty(searchQuery)) req["search_query"] = searchQuery;
-            return await SendAsync(req);
+            return await SendAsync(req, RemoteFilesQueryTimeoutMs);
         }
             
         public static JsonDocument? RemoteFilePullRequest(string deviceId, ulong fileId) =>
@@ -299,6 +307,27 @@ namespace Deskdrop.WinUI
                 ["action"] = action
             };
             if (!string.IsNullOrEmpty(newName)) req["new_name"] = newName;
+            return Send(req);
+        }
+
+        // Cross-device link handoff: ask a trusted, connected peer to open a
+        // URL immediately (fire-and-forget; the peer reports back over its
+        // own AckOpenUrlOnDevice call once it knows whether the OS-level
+        // open actually succeeded).
+        public static JsonDocument? OpenUrlOnDevice(string deviceId, string url) =>
+            Send(new { cmd = "open_url_on_device", target_device = deviceId, url });
+
+        // Report back whether we actually managed to open a URL a peer asked
+        // us to open. Called after the local Process.Start attempt.
+        public static JsonDocument? AckOpenUrlOnDevice(string requesterDeviceId, bool success, string? error = null)
+        {
+            var req = new System.Collections.Generic.Dictionary<string, object>
+            {
+                ["cmd"] = "ack_open_url_on_device",
+                ["requester_device"] = requesterDeviceId,
+                ["success"] = success
+            };
+            if (!string.IsNullOrEmpty(error)) req["error"] = error;
             return Send(req);
         }
 

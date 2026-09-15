@@ -168,6 +168,52 @@ namespace Deskdrop.WinUI.Services
                             });
                             break;
                         }
+                        // Cross-device link handoff: a trusted, connected peer asked us
+                        // to open a URL. Engine already restricted this to http/https
+                        // before emitting the event, so just open it and report back
+                        // whether the OS-level open actually worked.
+                        case NativeCore.PB_EVENT_OPEN_URL_ON_DEVICE_REQUESTED:
+                        {
+                            var url = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev));
+                            var requesterId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev));
+                            var fromName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "A device";
+                            if (!string.IsNullOrEmpty(url) && !string.IsNullOrEmpty(requesterId))
+                            {
+                                bool opened;
+                                string? openError = null;
+                                try
+                                {
+                                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                                    {
+                                        UseShellExecute = true
+                                    });
+                                    opened = true;
+                                }
+                                catch (Exception ex)
+                                {
+                                    opened = false;
+                                    openError = ex.Message;
+                                }
+                                DaemonActions.RunFireAndForget("Open Link Ack", () => DaemonClient.AckOpenUrlOnDevice(requesterId, opened, openError));
+                                if (opened)
+                                {
+                                    (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                        NotificationHelper.ShowToast("Link opened", $"From {fromName}");
+                                    });
+                                }
+                            }
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_OPEN_URL_ON_DEVICE_ACK:
+                        {
+                            var success = NativeCore.deskdrop_event_open_url_ack_success(ev) != 0;
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                NotificationHelper.ShowToast(
+                                    success ? "Link opened" : "Couldn't open link",
+                                    success ? "Opened on the other device" : "The other device reported an error");
+                            });
+                            break;
+                        }
                     }
                 }
                 catch (Exception ex) { App.HandleError(ex); }
@@ -224,7 +270,7 @@ namespace Deskdrop.WinUI.Services
                         }
                         else
                         {
-                            DaemonClient.PushText(text);
+                            DaemonActions.RunFireAndForget("Push Text", () => DaemonClient.PushText(text));
                         }
                         AddHistoryItem(text, "local", "📝", text);
                     }
@@ -243,7 +289,7 @@ namespace Deskdrop.WinUI.Services
                                 }
                                 else
                                 {
-                                    DaemonClient.SendFilePath(file.Path, file.Name, "application/octet-stream");
+                                    DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(file.Path, file.Name, "application/octet-stream"));
                                 }
                                 AddHistoryItem(file.Name, "local", "📎", file.Path);
                             } catch (Exception ex) { App.HandleError(ex); }
@@ -285,7 +331,7 @@ namespace Deskdrop.WinUI.Services
                     }
                     else
                     {
-                        DaemonClient.SendFilePath(path, name, "application/octet-stream", targetDevice);
+                        DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, "application/octet-stream", targetDevice));
                     }
                     _dispatcher.TryEnqueue(() => AddHistoryItem(name, "local", "📎", path));
                 } catch (Exception ex) { App.HandleError(ex); }

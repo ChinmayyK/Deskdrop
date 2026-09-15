@@ -117,7 +117,8 @@ namespace Deskdrop.WinUI.Views
                     {
                         // Argument order is (path, name, mime, targetDevice, ...); see the
                         // matching fix note in DashboardWindow.xaml.cs.
-                        DaemonClient.SendFilePath(file.Path, file.Name, file.ContentType, target?.device_id);
+                        var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target?.device_id;
+                        DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                     }
                 }
             }

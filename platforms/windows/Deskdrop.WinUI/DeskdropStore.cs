@@ -1029,13 +1029,13 @@ namespace Deskdrop.WinUI
             {
                 if (SetProperty(ref _syncEnabled, value))
                 {
-                    DaemonClient.SetSyncEnabled(value);
+                    DaemonActions.RunFireAndForget("Sync Toggle", () => DaemonClient.SetSyncEnabled(value));
                     OnPropertyChanged(nameof(ClipboardSummaryText));
                 }
             }
         }
         private bool _requireTofuConfirmation = true;
-        public bool RequireTofuConfirmation { get => _requireTofuConfirmation; set { if (SetProperty(ref _requireTofuConfirmation, value)) DaemonClient.PatchSettings(new { require_tofu_confirmation = value }); } }
+        public bool RequireTofuConfirmation { get => _requireTofuConfirmation; set { if (SetProperty(ref _requireTofuConfirmation, value)) DaemonActions.RunFireAndForget("Settings", () => DaemonClient.PatchSettings(new { require_tofu_confirmation = value })); } }
         public string DaemonStatusText => IsDaemonRunning ? "Running" : "Stopped";
         public string HeaderStatusText
         {
@@ -1169,44 +1169,54 @@ namespace Deskdrop.WinUI
 
         private int _isRefreshInFlight = 0;
 
+        // All of these used to call DaemonClient's blocking, synchronous
+        // named-pipe Send() directly on whatever thread invoked them - which,
+        // called from a XAML Click handler, is the UI dispatcher thread. The
+        // pipe round-trip can take up to its timeout (several seconds) if the
+        // daemon is slow or unreachable, during which the whole window stops
+        // pumping messages - exactly what "app freezes / Windows is not
+        // responding" looks like. Route through the same
+        // DaemonActions.RunFireAndForget helper already used correctly
+        // elsewhere (drag-and-drop send): runs on a background thread via
+        // Task.Run and reports failure with a toast instead of blocking.
         public void ConnectAndPair(string deviceId)
         {
-            DaemonClient.SendPairingRequest(deviceId);
+            DaemonActions.RunFireAndForget("Connect", () => DaemonClient.SendPairingRequest(deviceId));
         }
 
         public void RespondToPairing(string deviceId, bool accepted)
         {
-            DaemonClient.RespondToPairing(deviceId, accepted);
+            DaemonActions.RunFireAndForget("Respond to Pairing", () => DaemonClient.RespondToPairing(deviceId, accepted));
         }
 
         public void DisconnectPeer(string deviceId)
         {
-            DaemonClient.DisconnectPeer(deviceId);
+            DaemonActions.RunFireAndForget("Disconnect", () => DaemonClient.DisconnectPeer(deviceId));
         }
 
         public void ForgetPeer(string deviceId)
         {
-            DaemonClient.ForgetDevice(deviceId);
+            DaemonActions.RunFireAndForget("Forget Device", () => DaemonClient.ForgetDevice(deviceId));
         }
 
         public void AcceptTransfer(string transferId)
         {
-            DaemonClient.AcceptFileTransfer(transferId);
+            DaemonActions.RunFireAndForget("Accept Transfer", () => DaemonClient.AcceptFileTransfer(transferId));
         }
 
         public void RejectTransfer(string transferId)
         {
-            DaemonClient.RejectFileTransfer(transferId, "user_declined");
+            DaemonActions.RunFireAndForget("Reject Transfer", () => DaemonClient.RejectFileTransfer(transferId, "user_declined"));
         }
 
         public void ApplyClipboardItem(string contentHash)
         {
-            DaemonClient.ApplyClipboard(contentHash);
+            DaemonActions.RunFireAndForget("Apply Clipboard", () => DaemonClient.ApplyClipboard(contentHash));
         }
 
         public void SendPushText(string text, string toDeviceId)
         {
-            DaemonClient.PushTextTo(text, toDeviceId);
+            DaemonActions.RunFireAndForget("Send", () => DaemonClient.PushTextTo(text, toDeviceId));
         }
 
         public void UpdateStateFromDaemon()
