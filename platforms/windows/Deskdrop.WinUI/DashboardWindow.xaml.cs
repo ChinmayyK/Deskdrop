@@ -295,7 +295,8 @@ namespace Deskdrop.WinUI
                         // path field, the real path in name, the name in mime, and the
                         // mime type in targetDevice. The daemon then had no real path to
                         // read and no real device to send to, so nothing ever arrived.
-                        DaemonClient.SendFilePath(file.Path, file.Name, file.ContentType, target?.device_id);
+                        var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target?.device_id;
+                        DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                     }
                     NavigateTo("Transfers");
                 }
@@ -308,7 +309,7 @@ namespace Deskdrop.WinUI
 
         private void OnRescanClicked(object sender, RoutedEventArgs e)
         {
-            DaemonClient.RescanPeers();
+            DaemonActions.RunFireAndForget("Rescan", () => DaemonClient.RescanPeers());
             mgr.UpdateStateFromDaemon();
         }
 
@@ -412,7 +413,8 @@ namespace Deskdrop.WinUI
                 {
                     // Argument order is (path, name, mime, targetDevice, ...); see the
                     // matching fix note above in OnTitleBarSendClicked.
-                    DaemonClient.SendFilePath(file.Path, file.Name, file.ContentType, target?.device_id);
+                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target?.device_id;
+                    DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                 }
                 NavigateTo("Transfers");
             }

@@ -107,6 +107,39 @@ namespace Deskdrop.WinUI.Views
             catch (Exception ex) { App.HandleError(ex); }
         }
 
+        // Cross-device link handoff: ask a connected device to open a URL
+        // immediately. Only http/https is accepted - the engine rejects
+        // anything else and reports back via a toast (PB_EVENT_OPEN_URL_ON_DEVICE_ACK
+        // in ClipboardManager.DrainEvents), so no client-side validation
+        // beyond a basic empty-check is needed here.
+        private async void OnOpenLinkOnDeviceClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not PeerViewModel peer) return;
+
+            var input = new TextBox { PlaceholderText = "https://example.com" };
+            var dialog = new ContentDialog
+            {
+                Title = $"Open link on {peer.DisplayName}",
+                Content = input,
+                PrimaryButtonText = "Open",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot,
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary) return;
+
+            var url = input.Text?.Trim();
+            if (string.IsNullOrEmpty(url)) return;
+
+            try
+            {
+                await Task.Run(() => DaemonClient.OpenUrlOnDevice(peer.device_id, url));
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+        }
+
         private async void OnPauseSyncClicked(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
@@ -127,7 +160,7 @@ namespace Deskdrop.WinUI.Views
 
         private void OnDisconnectAllClicked(object sender, RoutedEventArgs e)
         {
-            DaemonClient.DisconnectAllPeers();
+            DaemonActions.RunFireAndForget("Disconnect All", () => DaemonClient.DisconnectAllPeers());
         }
 
         // "Scan" should actually probe the network, not just re-read cached
@@ -229,7 +262,8 @@ namespace Deskdrop.WinUI.Views
                 {
                     // Argument order is (path, name, mime, targetDevice, ...); see the
                     // matching fix note in DashboardWindow.xaml.cs.
-                    DaemonClient.SendFilePath(file.Path, file.Name, file.ContentType, target?.device_id);
+                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target?.device_id;
+                    DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                 }
                 DashboardWindow.Current?.NavigateTo("Transfers");
             }
@@ -265,7 +299,8 @@ namespace Deskdrop.WinUI.Views
                         {
                             // Argument order is (path, name, mime, targetDevice, ...); see
                             // the matching fix note in DashboardWindow.xaml.cs.
-                            DaemonClient.SendFilePath(file.Path, file.Name, file.ContentType, peer.device_id);
+                            var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = peer.device_id;
+                            DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                         }
                         DashboardWindow.Current?.NavigateTo("Transfers");
                     }
@@ -290,7 +325,8 @@ namespace Deskdrop.WinUI.Views
         {
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
             {
-                DaemonClient.StartSpeedTest(peer.device_id, 10);
+                var deviceId = peer.device_id;
+                DaemonActions.RunFireAndForget("Speed Test", () => DaemonClient.StartSpeedTest(deviceId, 10));
                 DashboardWindow.Current?.NavigateTo("Transfers");
             }
         }
@@ -331,7 +367,8 @@ namespace Deskdrop.WinUI.Views
             var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(this.XamlRoot, mgr.ConnectedPeers);
             if (target != null)
             {
-                DaemonClient.StartSpeedTest(target.device_id, 10);
+                var deviceId = target.device_id;
+                DaemonActions.RunFireAndForget("Speed Test", () => DaemonClient.StartSpeedTest(deviceId, 10));
                 DashboardWindow.Current?.NavigateTo("Transfers");
             }
         }

@@ -427,6 +427,8 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         SpeedTestComplete { .. } => 36,
         Warning(_) => 7,
         PeerSyncStateChanged { .. } => 16,
+        OpenUrlOnDeviceRequested { .. } => 38,
+        OpenUrlOnDeviceAckReceived { .. } => 39,
     }
 }
 
@@ -471,6 +473,12 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
         crate::engine::EngineEvent::RemoteFileActionRequestReceived { action, .. } => {
             return env
                 .new_string(action)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        crate::engine::EngineEvent::OpenUrlOnDeviceRequested { url, .. } => {
+            return env
+                .new_string(url)
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
@@ -529,6 +537,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
         ClipboardDeliveryStatus { .. } => None,
         PeerConnected { device_name, .. } => Some(device_name.as_str()),
         PeerDisconnected { device_name, .. } => device_name.as_deref(),
+        OpenUrlOnDeviceRequested { from_name, .. } => Some(from_name.as_str()),
         _ => None,
     };
     name.and_then(|n| env.new_string(n).ok())
@@ -571,6 +580,8 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         RemoteFileActionRequestReceived { from_device, .. } => Some(*from_device),
         RemoteFilesResponseReceived { from_device, .. } => Some(*from_device),
         RemoteThumbnailResponseReceived { from_device, .. } => Some(*from_device),
+        OpenUrlOnDeviceRequested { from_device, .. } => Some(*from_device),
+        OpenUrlOnDeviceAckReceived { from_device, .. } => Some(*from_device),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
@@ -1916,6 +1927,31 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSummaryOnly(
     match ev {
         RemoteFilesQueryReceived { summary_only, .. } => {
             if *summary_only {
+                1
+            } else {
+                0
+            }
+        }
+        _ => 0,
+    }
+}
+
+/// Returns 1 if an OPEN_URL_ON_DEVICE_ACK event (kind=39) reports success,
+/// 0 otherwise (including for any other event type).
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventOpenUrlAckSuccess(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jboolean {
+    if event == 0 {
+        return 0;
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    match ev {
+        OpenUrlOnDeviceAckReceived { success, .. } => {
+            if *success {
                 1
             } else {
                 0

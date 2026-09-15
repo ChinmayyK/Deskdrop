@@ -202,6 +202,7 @@ object RemoteFileManager {
 
         val (selectionString, selectionArgs) = buildFilterSelection(categoryFilter, sourceFilter, searchQuery)
         val totalMatching = countFiles(context, selectionString, selectionArgs)
+        Log.d(TAG, "DIAG queryFiles: categoryFilter=$categoryFilter sourceFilter=$sourceFilter searchQuery=$searchQuery selection=[$selectionString] args=${selectionArgs.joinToString()} totalMatching=$totalMatching")
 
         var filesJson: String? = null
         if (includeList && totalMatching > 0 && offset < totalMatching && limit > 0) {

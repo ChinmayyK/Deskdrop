@@ -301,12 +301,10 @@ public partial class App : Application
         var transferId = uri.AbsolutePath.Trim('/');
         if (string.IsNullOrEmpty(transferId)) return;
 
-        try
-        {
-            if (uri.Host == "accept") DaemonClient.AcceptFileTransfer(transferId);
-            else DaemonClient.RejectFileTransfer(transferId, "user_declined");
-        }
-        catch (Exception ex) { App.HandleError(ex); }
+        if (uri.Host == "accept")
+            DaemonActions.RunFireAndForget("Accept Transfer", () => DaemonClient.AcceptFileTransfer(transferId));
+        else
+            DaemonActions.RunFireAndForget("Reject Transfer", () => DaemonClient.RejectFileTransfer(transferId, "user_declined"));
     }
 
     private void ProcessActivationArgs(Microsoft.Windows.AppLifecycle.AppActivationArguments activatedArgs)
