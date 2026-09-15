@@ -320,6 +320,19 @@ pub enum EngineEvent {
         file_id: u64,
         new_name: Option<String>,
     },
+    /// A trusted, connected peer asked us to open a URL — act on it
+    /// immediately (auto-open, no local confirmation gate).
+    OpenUrlOnDeviceRequested {
+        from_device: Uuid,
+        from_name: String,
+        url: String,
+    },
+    /// Delivery feedback for a URL-open request we sent to another device.
+    OpenUrlOnDeviceAckReceived {
+        from_device: Uuid,
+        success: bool,
+        error: Option<String>,
+    },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
         device_id: Uuid,
@@ -2184,6 +2197,49 @@ impl Engine {
         if let Some(tx) = peers
             .into_iter()
             .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    /// Ask a trusted, connected peer to open a URL immediately. The caller
+    /// (UI layer) is responsible for only offering already-trusted,
+    /// connected devices as targets — trust is enforced on the receiving
+    /// side's handler, same as `send_remote_file_action_request`.
+    pub async fn open_url_on_device(&self, target_device: Uuid, url: String) {
+        let msg = AppMessage::OpenUrlOnDevice {
+            url,
+            origin_device: self.shared.config.device_id,
+            origin_device_name: self.shared.config.device_name.clone(),
+        };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+        {
+            let _ = tx.send(msg).await;
+        }
+    }
+
+    /// Report back whether we actually managed to open a URL a peer asked
+    /// us to open (`requester_device` is whoever sent the original
+    /// `OpenUrlOnDevice` — only the platform layer knows if the OS-level
+    /// open call actually succeeded, e.g. no default browser configured,
+    /// so this is a separate call from the receive handler rather than an
+    /// automatic ack).
+    pub async fn ack_open_url_on_device(
+        &self,
+        requester_device: Uuid,
+        success: bool,
+        error: Option<String>,
+    ) {
+        let msg = AppMessage::OpenUrlOnDeviceAck { success, error };
+        let peers = self.shared.peer_manager.all_connected_senders();
+        if let Some(tx) = peers
+            .into_iter()
+            .find(|(id, _)| *id == requester_device)
             .map(|(_, tx)| tx)
         {
             let _ = tx.send(msg).await;
@@ -6121,6 +6177,54 @@ fn register_session(
                                 action,
                                 file_id,
                                 new_name,
+                            })
+                            .await;
+                    }
+                    Ok(AppMessage::OpenUrlOnDevice {
+                        url,
+                        origin_device: _,
+                        origin_device_name: _,
+                    }) => {
+                        touch_last_seen();
+                        if !shared
+                            .peer_manager
+                            .get(peer_id)
+                            .map(|p| p.trusted)
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+                        // Restrict to http/https — this is the only case
+                        // actually asked for ("open a link"), and it closes
+                        // off URI-scheme-hijacking as a risk class entirely.
+                        if url.starts_with("http://") || url.starts_with("https://") {
+                            let _ = shared
+                                .event_tx
+                                .send(EngineEvent::OpenUrlOnDeviceRequested {
+                                    from_device: peer_id,
+                                    from_name: peer_name.clone(),
+                                    url,
+                                })
+                                .await;
+                        } else {
+                            let _ = rx_session_outbox_tx
+                                .send(AppMessage::OpenUrlOnDeviceAck {
+                                    success: false,
+                                    error: Some(
+                                        "rejected: only http/https URLs are allowed".into(),
+                                    ),
+                                })
+                                .await;
+                        }
+                    }
+                    Ok(AppMessage::OpenUrlOnDeviceAck { success, error }) => {
+                        touch_last_seen();
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::OpenUrlOnDeviceAckReceived {
+                                from_device: peer_id,
+                                success,
+                                error,
                             })
                             .await;
                     }

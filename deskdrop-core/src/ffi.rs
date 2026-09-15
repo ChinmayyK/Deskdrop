@@ -253,6 +253,8 @@ pub const PB_EVENT_REMOTE_THUMBNAIL_RESPONSE: c_int = 34;
 pub const PB_EVENT_SPEED_TEST_PROGRESS: c_int = 35;
 pub const PB_EVENT_SPEED_TEST_COMPLETE: c_int = 36;
 pub const PB_EVENT_REMOTE_FILE_ACTION_REQUEST: c_int = 37;
+pub const PB_EVENT_OPEN_URL_ON_DEVICE_REQUESTED: c_int = 38;
+pub const PB_EVENT_OPEN_URL_ON_DEVICE_ACK: c_int = 39;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -360,6 +362,8 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::RemoteThumbnailRequestReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_REQUEST,
         EngineEvent::RemoteFilePullRequestReceived { .. } => PB_EVENT_REMOTE_FILE_PULL_REQUEST,
         EngineEvent::RemoteFileActionRequestReceived { .. } => PB_EVENT_REMOTE_FILE_ACTION_REQUEST,
+        EngineEvent::OpenUrlOnDeviceRequested { .. } => PB_EVENT_OPEN_URL_ON_DEVICE_REQUESTED,
+        EngineEvent::OpenUrlOnDeviceAckReceived { .. } => PB_EVENT_OPEN_URL_ON_DEVICE_ACK,
         EngineEvent::RemoteFilesResponseReceived { .. } => PB_EVENT_REMOTE_FILES_RESPONSE,
         EngineEvent::RemoteThumbnailResponseReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_RESPONSE,
         EngineEvent::SpeedTestProgress { .. } => PB_EVENT_SPEED_TEST_PROGRESS,
@@ -414,6 +418,7 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
             }))
             .ok()
         }
+        EngineEvent::OpenUrlOnDeviceRequested { url, .. } => Some(url.clone()),
         _ => None,
     };
 
@@ -440,6 +445,7 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::FileTransferComplete { from_name, .. } => Some(from_name.clone()),
         EngineEvent::BatteryStateChanged { from_name, .. } => Some(from_name.clone()),
         EngineEvent::NetworkStateChanged { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::OpenUrlOnDeviceRequested { from_name, .. } => Some(from_name.clone()),
         _ => None,
     };
     if let Some(n) = name {
@@ -619,6 +625,10 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
         EngineEvent::CameraStreamRequest { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::CameraStreamAccept { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::CameraStreamStop { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::OpenUrlOnDeviceRequested { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::OpenUrlOnDeviceAckReceived { from_device, .. } => {
+            Some(from_device.to_string())
+        }
         _ => None,
     };
     if let Some(s) = id_str {
@@ -1424,12 +1434,26 @@ pub unsafe extern "C" fn deskdrop_event_remote_error(event: *mut PbEvent) -> *co
     let err_opt = match &e.inner {
         EngineEvent::RemoteFilesResponseReceived { error, .. } => error.clone(),
         EngineEvent::RemoteThumbnailResponseReceived { error, .. } => error.clone(),
+        EngineEvent::OpenUrlOnDeviceAckReceived { error, .. } => error.clone(),
         _ => None,
     };
     if let Some(s) = err_opt {
         e.cache_str(s)
     } else {
         std::ptr::null()
+    }
+}
+
+/// Returns 1 if an OPEN_URL_ON_DEVICE_ACK event reports success, 0 otherwise
+/// (including for any other event type).
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_open_url_ack_success(event: *const PbEvent) -> c_int {
+    if event.is_null() {
+        return 0;
+    }
+    match (*event).inner {
+        EngineEvent::OpenUrlOnDeviceAckReceived { success, .. } => success as c_int,
+        _ => 0,
     }
 }
 

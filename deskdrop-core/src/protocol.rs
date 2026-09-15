@@ -558,6 +558,18 @@ pub enum AppMessage {
         file_id: u64,
         new_name: Option<String>,
     },
+    /// Cross-device link handoff: ask a trusted, connected peer to open a
+    /// URL immediately. Receiver restricts this to http/https schemes.
+    OpenUrlOnDevice {
+        url: String,
+        origin_device: Uuid,
+        origin_device_name: String,
+    },
+    /// Delivery feedback for `OpenUrlOnDevice`, sent back to the origin.
+    OpenUrlOnDeviceAck {
+        success: bool,
+        error: Option<String>,
+    },
     Bye,
 }
 
