@@ -164,9 +164,14 @@
 
             <SolidColorBrush x:Key="AppSuccessBrush" Color="#54D18C" />
             <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#2654D18C" />
-            <SolidColorBrush x:Key="AppWarningBrush" Color="#EAB055" />
-            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#26EAB055" />
-            <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#4DEAB055" />
+            <!-- Desaturated toward the app's cool dark palette (was #EAB055,
+                 a bright warm gold that read as an unrelated yellow "sticker"
+                 against the surrounding blue/graphite dark theme, most
+                 visible on the pairing-request card which uses this color
+                 across its left stripe, icon, and border all at once). -->
+            <SolidColorBrush x:Key="AppWarningBrush" Color="#C9A468" />
+            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#26C9A468" />
+            <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#4DC9A468" />
             <SolidColorBrush x:Key="AppDangerBrush" Color="#FF8A80" />
             <SolidColorBrush x:Key="AppDangerHoverBrush" Color="#FFA39B" />
             <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#26FF8A80" />

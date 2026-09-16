@@ -51,6 +51,8 @@ namespace Deskdrop.WinUI
         public const int PB_EVENT_SPEED_TEST_PROGRESS = 35;
         public const int PB_EVENT_SPEED_TEST_COMPLETE = 36;
         public const int PB_EVENT_REMOTE_FILE_ACTION_REQUEST = 37;
+        public const int PB_EVENT_OPEN_URL_ON_DEVICE_REQUESTED = 38;
+        public const int PB_EVENT_OPEN_URL_ON_DEVICE_ACK = 39;
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_start(
@@ -204,6 +206,9 @@ namespace Deskdrop.WinUI
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_event_remote_error(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_event_open_url_ack_success(IntPtr ev);
 
         public const uint ES_CONTINUOUS = 0x80000000;
         public const uint ES_SYSTEM_REQUIRED = 0x00000001;
