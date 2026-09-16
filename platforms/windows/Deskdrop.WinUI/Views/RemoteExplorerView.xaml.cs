@@ -18,6 +18,12 @@ namespace Deskdrop.WinUI.Views
         // labelled for humans rather than shown as "/".
         public ObservableCollection<string> PathSegments { get; } = new ObservableCollection<string> { RootSegmentLabel };
         private const string RootSegmentLabel = "All files";
+        // Parallel to PathSegments (same indices), holding the real "/"-rooted
+        // path each breadcrumb entry navigates to - needed because a shortcut
+        // segment's display label ("Pictures") isn't the wire path
+        // ("/category/Images") a breadcrumb click must send back through
+        // LoadRemoteDirectory.
+        private readonly System.Collections.Generic.List<string> _pathSegmentTargets = new() { "/" };
 
         private string _currentPath = "/";
         // Bumped at the start of every LoadRemoteDirectory call and captured
@@ -120,6 +126,20 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
+        // Mirrors the sidebar's own labels (RemoteExplorerView.xaml) for the
+        // "/category/<x>" and "/source/<x>" paths those buttons navigate to,
+        // so the breadcrumb reads "All files > Pictures" instead of the raw
+        // "category > Images" wire values.
+        private static readonly System.Collections.Generic.Dictionary<string, string> ShortcutLabels = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["category/Images"] = "Pictures",
+            ["category/Documents"] = "Documents",
+            ["category/Audio"] = "Music",
+            ["category/Videos"] = "Movies",
+            ["source/Camera"] = "Camera",
+            ["source/Downloads"] = "Downloads",
+        };
+
         // Rebuilds the breadcrumb from the current path. Kept as a plain
         // rebuild rather than a diff: the trail is at most a handful of
         // items, and correctness beats cleverness here.
@@ -129,10 +149,26 @@ namespace Deskdrop.WinUI.Views
             {
                 PathSegments.Clear();
                 PathSegments.Add(RootSegmentLabel);
+                _pathSegmentTargets.Clear();
+                _pathSegmentTargets.Add("/");
 
-                foreach (var segment in (_currentPath ?? "/").Split('/', StringSplitOptions.RemoveEmptyEntries))
+                var trimmed = (_currentPath ?? "/").Trim('/');
+                if (trimmed.Length == 0) return;
+
+                if (ShortcutLabels.TryGetValue(trimmed, out var label))
                 {
+                    PathSegments.Add(label);
+                    _pathSegmentTargets.Add(_currentPath);
+                    return;
+                }
+
+                var parts = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                var built = "";
+                foreach (var segment in parts)
+                {
+                    built += "/" + segment;
                     PathSegments.Add(segment);
+                    _pathSegmentTargets.Add(built);
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }
@@ -144,15 +180,17 @@ namespace Deskdrop.WinUI.Views
             try
             {
                 // Index 0 is the synthetic root label; anything beyond it maps
-                // back onto the real path segments.
-                if (args.Index <= 0)
+                // back onto _pathSegmentTargets, the real path each
+                // breadcrumb entry was built from (not always a plain join of
+                // the display labels - see UpdatePathSegments).
+                if (args.Index >= 0 && args.Index < _pathSegmentTargets.Count)
+                {
+                    _ = LoadRemoteDirectory(_pathSegmentTargets[args.Index]);
+                }
+                else
                 {
                     _ = LoadRemoteDirectory("/");
-                    return;
                 }
-
-                var segments = PathSegments.Skip(1).Take(args.Index).ToArray();
-                _ = LoadRemoteDirectory("/" + string.Join("/", segments));
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
@@ -231,13 +269,21 @@ namespace Deskdrop.WinUI.Views
             _ = LoadRemoteDirectory(_currentPath, true);
         }
 
+        // Android's remote browsing is flat/category-based (DeskdropStore.cs's
+        // RemoteFile comment), not real folders - these must resolve to the
+        // "/category/<RemoteFileCategory>" or "/source/<RemoteFileSource>"
+        // prefixes LoadRemoteDirectory parses (protocol.rs's enum variant
+        // names). Previously these pointed at literal filesystem-looking
+        // paths ("/DCIM/Camera", "/Download", ...) that matched neither
+        // prefix, so category/source stayed null and every shortcut silently
+        // fell back to the unfiltered "All files" query.
         private void OnShortcutRootClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/");
-        private void OnShortcutDCIMClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/DCIM/Camera");
-        private void OnShortcutPicturesClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Pictures");
-        private void OnShortcutDownloadsClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Download");
-        private void OnShortcutDocumentsClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Documents");
-        private void OnShortcutMusicClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Music");
-        private void OnShortcutMoviesClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/Movies");
+        private void OnShortcutDCIMClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/source/Camera");
+        private void OnShortcutPicturesClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/category/Images");
+        private void OnShortcutDownloadsClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/source/Downloads");
+        private void OnShortcutDocumentsClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/category/Documents");
+        private void OnShortcutMusicClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/category/Audio");
+        private void OnShortcutMoviesClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/category/Videos");
 
         private void OnItemClicked(object sender, RoutedEventArgs e)
         {
