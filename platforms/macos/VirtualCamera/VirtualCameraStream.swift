@@ -1,6 +1,7 @@
 import Foundation
 import CoreMediaIO
 import CoreVideo
+import ImageIO
 import os.log
 
 class StreamSource: NSObject, CMIOExtensionStreamSource {

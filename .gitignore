@@ -85,3 +85,7 @@ bom.json
 release/
 build/
 /libdeskdrop_core.dylib
+
+# Swift macro plugins pulled from a local Xcode install for CLT-only builds —
+# Apple-proprietary binaries, must never be committed.
+/.build-tools/

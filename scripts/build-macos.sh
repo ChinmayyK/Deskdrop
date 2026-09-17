@@ -61,12 +61,14 @@ done < <(find "${MACOS_DIR}/${SOURCE_DIR_NAME}" -name '*.swift' | sort)
 
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 MACOS_TARGET="arm64-apple-macos13.0"
+MACRO_PLUGIN_DIR="${REPO_ROOT}/.build-tools/swift-plugins"
 
 swiftc \
     "${SWIFT_FILES[@]}" \
     -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/DeskdropBridge.h" \
     -sdk "${SDK_PATH}" \
     -target "${MACOS_TARGET}" \
+    $( [[ -d "${MACRO_PLUGIN_DIR}" ]] && echo "-plugin-path ${MACRO_PLUGIN_DIR}" ) \
     -framework AppKit \
     -framework SwiftUI \
     -framework Carbon \
@@ -93,6 +95,7 @@ swiftc \
     -framework CoreMediaIO \
     -framework CoreVideo \
     -framework CoreMedia \
+    -framework ImageIO \
     -o "${EXT_DIR}/Contents/MacOS/com.deskdrop.VirtualCamera"
 
 cp "${MACOS_DIR}/VirtualCamera/Info.plist" "${EXT_DIR}/Contents/Info.plist"
