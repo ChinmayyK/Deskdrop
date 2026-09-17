@@ -182,6 +182,8 @@ fun MainScreen(
                         when (tabs[page]) {
                             AppTab.Home -> HomeTab(
                                 isDark = isDark,
+                                deviceName = deviceName,
+                                ambientStatus = ambientStatus,
                                 peers = peers,
                                 feed = feed,
                                 activeTransfers = activeTransfers,
@@ -362,9 +364,101 @@ fun EmptyStateGlassCard(
 
 
 
+private fun greetingForHour(hour: Int): String = when {
+    hour < 5 -> "Good night"
+    hour < 12 -> "Good morning"
+    hour < 18 -> "Good afternoon"
+    else -> "Good evening"
+}
+
+@Composable
+fun HomeHeroHeader(
+    isDark: Boolean,
+    deviceName: String,
+    ambientStatus: String,
+    connectedCount: Int
+) {
+    val greeting = remember { greetingForHour(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) }
+    val isLive = ambientStatus.contains("Secure Connection", ignoreCase = true)
+    val statusColor = if (isLive) CRTheme.accentGreen else CRTheme.accentAmber
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+        Text(
+            text = greeting,
+            style = CRTypography.h1,
+            color = CRTheme.textHigh(isDark)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .blur(2.dp)
+                    .background(statusColor, CircleShape)
+            ) {
+                Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (deviceName.isNotBlank()) "$deviceName  •  $ambientStatus" else ambientStatus,
+                style = CRTypography.caption,
+                color = CRTheme.textMedium(isDark),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (connectedCount > 0) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(modifier = Modifier.width(1.dp).height(10.dp).background(CRTheme.stroke(isDark).copy(alpha = 0.6f)))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (connectedCount == 1) "1 online" else "$connectedCount online",
+                    style = CRTypography.caption,
+                    color = CRTheme.brandElectric
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CRSectionHeader(
+    isDark: Boolean,
+    title: String,
+    subtitle: String? = null,
+    trailing: @Composable () -> Unit = {}
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                text = title,
+                style = CRTypography.h2,
+                color = CRTheme.textHigh(isDark)
+            )
+            if (subtitle != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = CRTypography.caption,
+                    color = CRTheme.textMedium(isDark)
+                )
+            }
+        }
+        trailing()
+    }
+}
+
 @Composable
 fun HomeTab(
     isDark: Boolean,
+    deviceName: String,
+    ambientStatus: String,
     peers: List<PeerSnapshot>,
     feed: List<ActivityEntry>,
     activeTransfers: List<TransferProgress>,
@@ -394,9 +488,17 @@ fun HomeTab(
             .verticalScroll(rememberScrollState())
     ) {
         val hasConnectedPeers = peers.any { it.isConnected || it.trusted }
-        
-        Spacer(modifier = Modifier.height(12.dp)) // Tighter gap from Status Strip
-        
+        val connectedCount = peers.count { it.isConnected }
+
+        HomeHeroHeader(
+            isDark = isDark,
+            deviceName = deviceName,
+            ambientStatus = ambientStatus,
+            connectedCount = connectedCount
+        )
+
+        Spacer(modifier = Modifier.height(28.dp))
+
         if (activeTransfers.isNotEmpty()) {
             Text(
                 text = "Active Transfers",
@@ -427,19 +529,11 @@ fun HomeTab(
         if (peers.isEmpty()) {
             EmptyStateEcosystem(isDark = isDark, onReplayOnboarding = onReplayOnboarding)
         } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Ecosystem",
-                    style = CRTypography.h2,
-                    color = CRTheme.textHigh(isDark)
-                )
-
+            CRSectionHeader(
+                isDark = isDark,
+                title = "Ecosystem",
+                subtitle = "$connectedCount online · ${peers.size} paired",
+                trailing = {
                 Row(
                     modifier = Modifier
                         .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
@@ -534,7 +628,8 @@ fun HomeTab(
                         )
                     }
                 }
-            }
+                }
+            )
 
             Spacer(modifier = Modifier.height(12.dp)) // Related gap
 
@@ -593,12 +688,7 @@ fun HomeTab(
         
         Spacer(modifier = Modifier.height(32.dp)) // Contextual gap
         
-        Text(
-            text = "Actions",
-            style = CRTypography.h2,
-            color = CRTheme.textHigh(isDark),
-            modifier = Modifier.padding(horizontal = 24.dp)
-        )
+        CRSectionHeader(isDark = isDark, title = "Actions")
         
         Spacer(modifier = Modifier.height(12.dp)) // Related gap
         
@@ -1081,7 +1171,7 @@ fun ActivityTimelineSection(
         ) {
             Text(
                 text = "Activity",
-                style = CRTypography.label, // Medium/Semibold
+                style = CRTypography.h2,
                 color = CRTheme.textHigh(isDark)
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
