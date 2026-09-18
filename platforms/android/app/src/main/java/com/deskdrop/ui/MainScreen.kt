@@ -376,7 +376,8 @@ fun HomeHeroHeader(
     isDark: Boolean,
     deviceName: String,
     ambientStatus: String,
-    connectedCount: Int
+    connectedCount: Int,
+    tagline: String
 ) {
     val greeting = remember { greetingForHour(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) }
     val isLive = ambientStatus.contains("Secure Connection", ignoreCase = true)
@@ -388,7 +389,20 @@ fun HomeHeroHeader(
             style = CRTypography.h1,
             color = CRTheme.textHigh(isDark)
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+        androidx.compose.animation.AnimatedContent(
+            targetState = tagline,
+            label = "heroTagline"
+        ) { line ->
+            Text(
+                text = line,
+                style = CRTypography.bodyMedium,
+                color = CRTheme.textMedium(isDark),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -494,7 +508,11 @@ fun HomeTab(
             isDark = isDark,
             deviceName = deviceName,
             ambientStatus = ambientStatus,
-            connectedCount = connectedCount
+            connectedCount = connectedCount,
+            tagline = DeskdropTaglines.current(
+                connectedCount = connectedCount,
+                isTransferring = activeTransfers.any { !it.isPaused && it.state == com.deskdrop.TransferState.PROGRESS }
+            )
         )
 
         Spacer(modifier = Modifier.height(28.dp))
@@ -703,7 +721,7 @@ fun HomeTab(
             onActionStreamCamera = onActionStreamCamera,
             onApplyClipboard = onApplyClipboard
         )
-        
+
         Spacer(modifier = Modifier.height(32.dp)) // Contextual gap
         
         ActivityTimelineSection(
@@ -2028,3 +2046,5 @@ fun BottomDock(
         }
     }
 }
+
+

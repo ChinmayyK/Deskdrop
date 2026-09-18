@@ -1007,6 +1007,7 @@ namespace Deskdrop.WinUI
         public bool HasPeers => Peers != null && Peers.Count > 0;
         public bool HasNoPeers => !HasPeers;
         public int ConnectedCount => Peers?.Count(p => p.IsConnected) ?? 0;
+        public string HeroTagline => Deskdrop.WinUI.Services.DeskdropTaglines.Current(ConnectedCount, HasActiveTransfers);
         public int TrustedCount => Peers?.Count(p => p.is_trusted) ?? 0;
         public int AttentionCount => Peers?.Count(p => !p.is_trusted || p.pairingRequested || p.outgoingPairingWaiting) ?? 0;
         public int ActivityCount => ActivityFeed?.Count ?? 0;
@@ -1564,6 +1565,7 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(HasPeers));
             OnPropertyChanged(nameof(HasNoPeers));
             OnPropertyChanged(nameof(ConnectedCount));
+            OnPropertyChanged(nameof(HeroTagline));
             OnPropertyChanged(nameof(TrustedCount));
             OnPropertyChanged(nameof(AttentionCount));
             OnPropertyChanged(nameof(HeaderStatusText));
@@ -1663,6 +1665,7 @@ namespace Deskdrop.WinUI
 
         private void NotifyTransferMetrics()
         {
+            OnPropertyChanged(nameof(HeroTagline));
             OnPropertyChanged(nameof(HasActiveTransfers));
             OnPropertyChanged(nameof(ActiveTransferCount));
             OnPropertyChanged(nameof(HasActiveSpeedTests));

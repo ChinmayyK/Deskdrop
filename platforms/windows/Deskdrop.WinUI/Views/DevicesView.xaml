@@ -649,7 +649,7 @@
                 <StackPanel Grid.Column="0" Spacing="4">
                     <TextBlock Text="Devices" Style="{StaticResource AppDisplayText}" />
                     <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
-                        <TextBlock Text="Connect and manage your devices" Style="{StaticResource AppSecondary}" />
+                        <TextBlock Text="{x:Bind mgr.HeroTagline, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
                         <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
                         <Border Width="7" Height="7" CornerRadius="3.5" VerticalAlignment="Center"
                                 Background="{x:Bind winui:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"
