@@ -343,7 +343,11 @@ struct CommandCenterView: View {
         }
         .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case let .success(urls) = result {
-                store.sendFiles(urls: urls, to: pendingFileTarget)
+                if let target = pendingFileTarget {
+                    store.sendFiles(urls: urls, to: target)
+                } else {
+                    store.sendFilesChoosingTarget(urls: urls)
+                }
                 pendingFileTarget = nil
             }
         }
@@ -357,8 +361,8 @@ struct CommandCenterView: View {
     // MARK: Launchpad Tile Definitions
     private var transferTile: some View {
         LaunchpadTile(title: "Transfer Files", icon: "paperplane.fill", color: CRTheme.brandElectric) {
-            if let first = store.connectedDevices.first {
-                pendingFileTarget = first
+            if !store.connectedDevices.isEmpty {
+                pendingFileTarget = nil
                 showingFilePicker = true
             }
         }

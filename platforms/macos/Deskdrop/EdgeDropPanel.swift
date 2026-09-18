@@ -92,17 +92,23 @@ class EdgeDropWindowManager: NSObject {
         
         NotificationCenter.default.post(name: NSNotification.Name("deskdropTriggerParticles"), object: nil)
         
-        store.sendFiles(urls: urls, toPeer: nil)
-        store.showToast(
-            title: "Instant Portal Transfer (\(urls.count) file\(urls.count == 1 ? "" : "s"))",
-            body: urls.map(\.lastPathComponent).joined(separator: ", "),
-            tint: CRTheme.brandElectric,
-            systemImage: "arrow.right.to.line.compact",
-            ttl: 3.5
-        )
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            self?.updatePosition(expanded: false, animated: true)
+        // Defer past the drag session: choosing a target may show a modal prompt.
+        DispatchQueue.main.async { [weak self] in
+            guard store.sendFilesChoosingTarget(urls: urls) else {
+                self?.updatePosition(expanded: false, animated: true)
+                return
+            }
+            store.showToast(
+                title: "Instant Portal Transfer (\(urls.count) file\(urls.count == 1 ? "" : "s"))",
+                body: urls.map(\.lastPathComponent).joined(separator: ", "),
+                tint: CRTheme.brandElectric,
+                systemImage: "arrow.right.to.line.compact",
+                ttl: 3.5
+            )
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                self?.updatePosition(expanded: false, animated: true)
+            }
         }
     }
 }

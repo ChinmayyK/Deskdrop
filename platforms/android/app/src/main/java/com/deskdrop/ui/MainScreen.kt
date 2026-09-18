@@ -711,16 +711,34 @@ fun HomeTab(
         Spacer(modifier = Modifier.height(12.dp)) // Related gap
         
         val maxSyncSecs = peers.mapNotNull { it.lastSyncSecs }.maxOrNull()
+        var sendTargetChoices by remember { mutableStateOf<List<PeerSnapshot>?>(null) }
         QuickActionsGrid(
             isDark = isDark,
             enabled = hasConnectedPeers,
             lastSyncSecs = maxSyncSecs,
             feed = feed,
             onActionPushClipboard = onActionPushClipboard,
-            onActionSendFiles = { onActionSendFiles(null) },
+            onActionSendFiles = {
+                // With several devices connected, ask which one gets the
+                // files instead of silently sending to all of them.
+                val connected = peers.filter { it.isConnected }
+                if (connected.size > 1) sendTargetChoices = connected
+                else onActionSendFiles(connected.firstOrNull()?.id)
+            },
             onActionStreamCamera = onActionStreamCamera,
             onApplyClipboard = onApplyClipboard
         )
+        
+        sendTargetChoices?.let { choices ->
+            SendTargetDialog(
+                peers = choices,
+                onPick = { targetId ->
+                    sendTargetChoices = null
+                    onActionSendFiles(targetId)
+                },
+                onDismiss = { sendTargetChoices = null }
+            )
+        }
 
         Spacer(modifier = Modifier.height(32.dp)) // Contextual gap
         
@@ -2047,4 +2065,37 @@ fun BottomDock(
     }
 }
 
-
+/** Asks which connected device should receive files. `null` target means all devices. */
+@Composable
+private fun SendTargetDialog(
+    peers: List<PeerSnapshot>,
+    onPick: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Send to which device?") },
+        text = {
+            Column {
+                peers.forEach { peer ->
+                    androidx.compose.material3.TextButton(
+                        onClick = { onPick(peer.id) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(peer.name, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                androidx.compose.material3.TextButton(
+                    onClick = { onPick(null) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("All connected devices", modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}

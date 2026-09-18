@@ -679,6 +679,61 @@ final class DeskdropStore: ObservableObject {
         }
     }
     
+    /// Send files when the caller has no specific device in mind. With one
+    /// connected device the files go straight to it; with several the user
+    /// picks one device (or all). Returns false when nothing was sent.
+    @discardableResult
+    func sendFilesChoosingTarget(urls: [URL]) -> Bool {
+        guard !urls.isEmpty else { return false }
+        let connected = connectedDevices
+        guard connected.count > 1 else {
+            guard let only = connected.first else { return false }
+            sendFiles(urls: urls, to: only)
+            return true
+        }
+        switch promptForSendTarget(fileCount: urls.count, devices: connected) {
+        case .cancelled:
+            return false
+        case .allDevices:
+            sendFiles(urls: urls, to: nil)
+        case .device(let device):
+            sendFiles(urls: urls, to: device)
+        }
+        return true
+    }
+
+    private enum SendTargetChoice {
+        case cancelled
+        case allDevices
+        case device(ManagedDevice)
+    }
+
+    private func promptForSendTarget(fileCount: Int, devices: [ManagedDevice]) -> SendTargetChoice {
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26), pullsDown: false)
+        for device in devices {
+            popup.addItem(withTitle: device.name)
+        }
+        popup.menu?.addItem(.separator())
+        popup.addItem(withTitle: "All Connected Devices")
+        let allIndex = popup.numberOfItems - 1
+        if let preferred = defaultTargetDevice, let index = devices.firstIndex(where: { $0.id == preferred.id }) {
+            popup.selectItem(at: index)
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Send \(fileCount) item\(fileCount == 1 ? "" : "s") to…"
+        alert.informativeText = "Choose which device receives the files."
+        alert.accessoryView = popup
+        alert.addButton(withTitle: "Send")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return .cancelled }
+
+        let index = popup.indexOfSelectedItem
+        if index == allIndex { return .allDevices }
+        return devices.indices.contains(index) ? .device(devices[index]) : .cancelled
+    }
+
     private func processAndSend(url: URL, targetDeviceId: String?) async {
         let result = await Task.detached { () -> ([URL], String)? in
             var isDir: ObjCBool = false

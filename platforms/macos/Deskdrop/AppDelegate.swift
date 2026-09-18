@@ -172,13 +172,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return
         }
         
-        if let urls = pboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
-            let targetId = store.defaultTargetDevice?.id
+        if let urls = pboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+           store.sendFilesChoosingTarget(urls: urls) {
             for url in urls {
-                Task {
-                    store.sendFile(url: url, toPeer: targetId)
-                    store.showToast(title: "Sending to device", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
-                }
+                store.showToast(title: "Sending to device", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
             }
         }
     }
@@ -920,7 +917,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         panel.prompt                  = "Send"
         panel.message                 = "Choose files or folders to send to connected devices"
         if panel.runModal() == .OK, !panel.urls.isEmpty {
-            store.sendFiles(urls: panel.urls, toPeer: store.defaultTargetDevice?.id)
+            store.sendFilesChoosingTarget(urls: panel.urls)
         }
     }
 
@@ -1127,19 +1124,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 extension AppDelegate: MenuBarDropViewDelegate {
     func application(_ sender: NSApplication, openFiles filenames: [String]) {
         let urls = filenames.map { URL(fileURLWithPath: $0) }
-        store.sendFiles(urls: urls, toPeer: store.defaultTargetDevice?.id)
+        DispatchQueue.main.async { [weak self] in
+            self?.store.sendFilesChoosingTarget(urls: urls)
+        }
     }
 
     func menuBarDropView(_ view: MenuBarDropView, didReceiveFiles urls: [URL]) {
-        store.sendFiles(urls: urls, toPeer: store.defaultTargetDevice?.id)
-        // Brief visual feedback
-        store.showToast(
-            title: "Sending \(urls.count) file\(urls.count == 1 ? "" : "s")",
-            body: urls.map(\.lastPathComponent).joined(separator: ", "),
-            tint: CRTheme.brandElectric,
-            systemImage: "arrow.up.doc.fill",
-            ttl: 3.5
-        )
+        // Defer past the drag session: choosing a target may show a modal prompt.
+        DispatchQueue.main.async { [weak self] in
+            guard let store = self?.store, store.sendFilesChoosingTarget(urls: urls) else { return }
+            // Brief visual feedback
+            store.showToast(
+                title: "Sending \(urls.count) file\(urls.count == 1 ? "" : "s")",
+                body: urls.map(\.lastPathComponent).joined(separator: ", "),
+                tint: CRTheme.brandElectric,
+                systemImage: "arrow.up.doc.fill",
+                ttl: 3.5
+            )
+        }
     }
 
     @objc private func menuBarClicked() {
@@ -1293,7 +1295,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
             return
         }
         
-        let deviceName = store.defaultTargetDevice?.name ?? "Phone"
+        let deviceName = store.connectedDevices.count > 1 ? "a device" : (store.defaultTargetDevice?.name ?? "Phone")
         
         // Show an elegant floating notification
         store.showToast(
@@ -1304,8 +1306,8 @@ extension AppDelegate: MenuBarDropViewDelegate {
             ttl: 8.0,
             primaryAction: ToastAction(title: "Send", role: .primary) { [weak self] in
                 Task { @MainActor [weak self] in
-                    self?.store.sendFile(url: url)
-                    self?.store.showToast(title: "Sent", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
+                    guard let store = self?.store, store.sendFilesChoosingTarget(urls: [url]) else { return }
+                    store.showToast(title: "Sent", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
                 }
             }
         )
