@@ -352,8 +352,8 @@ struct CommandCenterView: View {
             }
         }
         .sheet(isPresented: $showingRemoteExplorer) {
-            if let first = store.connectedDevices.first {
-                RemoteExplorerView(store: store, device: first)
+            if let device = store.defaultTargetDevice {
+                RemoteExplorerView(store: store, device: device)
             }
         }
     }

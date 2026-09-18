@@ -49,7 +49,59 @@ namespace Deskdrop.WinUI.Views
         public RemoteExplorerView()
         {
             this.InitializeComponent();
-            this.Loaded += (s, e) => LoadRemoteDirectory("/");
+            this.Loaded += (s, e) =>
+            {
+                mgr.PropertyChanged += OnStorePropertyChanged;
+                SyncDeviceSwitcher();
+                _ = LoadRemoteDirectory("/");
+            };
+            this.Unloaded += (s, e) => mgr.PropertyChanged -= OnStorePropertyChanged;
+        }
+
+        // Set while SyncDeviceSwitcher writes the ComboBox, so the programmatic
+        // selection isn't mistaken for the user picking a device.
+        private bool _syncingDeviceSwitcher;
+
+        private void OnStorePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(DeskdropStore.ConnectedPeers) or nameof(DeskdropStore.SelectedPeer))
+            {
+                DispatcherQueue.TryEnqueue(SyncDeviceSwitcher);
+            }
+        }
+
+        // Mirror the store's connected devices into the switcher. It only
+        // appears when there is a real choice; a single device keeps the
+        // plain name label.
+        private void SyncDeviceSwitcher()
+        {
+            var peers = mgr.ConnectedPeers;
+            var selectedId = mgr.SelectedPeer?.device_id;
+            var showSwitcher = peers.Count > 1;
+
+            _syncingDeviceSwitcher = true;
+            try
+            {
+                if (!ReferenceEquals(DeviceSwitcher.ItemsSource, peers)) DeviceSwitcher.ItemsSource = peers;
+                DeviceSwitcher.SelectedItem = System.Linq.Enumerable.FirstOrDefault(peers, p => p.device_id == selectedId);
+            }
+            finally { _syncingDeviceSwitcher = false; }
+
+            DeviceSwitcher.Visibility = showSwitcher ? Visibility.Visible : Visibility.Collapsed;
+            DeviceNameText.Visibility = showSwitcher ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void OnDeviceSwitcherSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_syncingDeviceSwitcher) return;
+            if (DeviceSwitcher.SelectedItem is not PeerViewModel peer) return;
+            if (peer.device_id == mgr.SelectedPeer?.device_id) return;
+
+            mgr.SelectedPeer = peer;
+            // A different device has a different file tree: start again from
+            // its root rather than reusing the previous device's path.
+            RemoteFiles.Clear();
+            _ = LoadRemoteDirectory("/");
         }
 
         private async System.Threading.Tasks.Task LoadRemoteDirectory(string path, bool forceRefresh = false)

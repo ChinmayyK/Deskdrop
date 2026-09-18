@@ -26,9 +26,36 @@ struct FileDateGroup: Identifiable {
 }
 
 // MARK: - Main Application Window View
+
+/// Hosts the explorer for one device at a time and lets the user switch
+/// between connected devices. Re-keying the pane on the device id discards
+/// all per-device state (index, selection, thumbnails) and reloads.
 struct RemoteExplorerView: View {
     @ObservedObject var store: DeskdropStore
+    @State private var selectedDeviceId: String
+
+    private let initialDevice: ManagedDevice
+
+    init(store: DeskdropStore, device: ManagedDevice) {
+        self.store = store
+        self.initialDevice = device
+        _selectedDeviceId = State(initialValue: device.id)
+    }
+
+    private var device: ManagedDevice {
+        store.devices.first(where: { $0.id == selectedDeviceId }) ?? initialDevice
+    }
+
+    var body: some View {
+        RemoteExplorerPane(store: store, device: device) { selectedDeviceId = $0.id }
+            .id(selectedDeviceId)
+    }
+}
+
+private struct RemoteExplorerPane: View {
+    @ObservedObject var store: DeskdropStore
     let device: ManagedDevice
+    let onSwitchDevice: (ManagedDevice) -> Void
     @Environment(\.dismiss) var dismiss
     
     // State
@@ -210,6 +237,50 @@ struct RemoteExplorerView: View {
         .ignoresSafeArea()
     }
     
+    // MARK: - Device Switcher
+    @ViewBuilder
+    private var deviceSwitcher: some View {
+        let title = HStack(spacing: 8) {
+            Text(device.name)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(CRTheme.ink)
+                .lineLimit(1)
+
+            Circle()
+                .fill(device.isConnected ? CRTheme.accentGreen : CRTheme.inkSubtle)
+                .frame(width: 6, height: 6)
+        }
+        let others = store.connectedDevices.filter { $0.id != device.id }
+        if others.isEmpty {
+            title
+        } else {
+            Menu {
+                ForEach(store.connectedDevices) { candidate in
+                    Button {
+                        onSwitchDevice(candidate)
+                    } label: {
+                        if candidate.id == device.id {
+                            Label(candidate.name, systemImage: "checkmark")
+                        } else {
+                            Text(candidate.name)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    title
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(CRTheme.inkSubtle)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Switch device")
+        }
+    }
+
     // MARK: - Premium Toolbar
     private var toolbarView: some View {
         HStack(spacing: 16) {
@@ -224,15 +295,7 @@ struct RemoteExplorerView: View {
                 }
                 .buttonStyle(.plain)
                 
-                HStack(spacing: 8) {
-                    Text(device.name)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(CRTheme.ink)
-                    
-                    Circle()
-                        .fill(CRTheme.accentGreen)
-                        .frame(width: 6, height: 6)
-                }
+                deviceSwitcher
             }
             .frame(width: 204, alignment: .leading) // Match sidebar width
             
