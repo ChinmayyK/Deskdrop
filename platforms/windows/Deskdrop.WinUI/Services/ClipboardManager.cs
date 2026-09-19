@@ -49,6 +49,18 @@ namespace Deskdrop.WinUI.Services
             DrainEvents();
         }
 
+        // The native core's send entry points block on its async runtime until
+        // the message is queued to every peer, which can stall for seconds on
+        // a slow or backed-up connection. Never make the UI thread wait on that.
+        private static void RunNativeOffUiThread(Action action)
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { action(); }
+                catch (Exception ex) { App.HandleError(ex); }
+            });
+        }
+
         private void DrainEvents()
         {
             if (App.EngineHandle == IntPtr.Zero) return;
@@ -266,7 +278,8 @@ namespace Deskdrop.WinUI.Services
                         _lastText = text;
                         if (App.EngineHandle != IntPtr.Zero)
                         {
-                            NativeCore.deskdrop_push_text(App.EngineHandle, text);
+                            var handle = App.EngineHandle;
+                            RunNativeOffUiThread(() => NativeCore.deskdrop_push_text(handle, text));
                         }
                         else
                         {
@@ -285,7 +298,8 @@ namespace Deskdrop.WinUI.Services
                             try {
                                 if (App.EngineHandle != IntPtr.Zero)
                                 {
-                                    NativeCore.deskdrop_send_file_path(App.EngineHandle, null, file.Path, file.Name, "application/octet-stream");
+                                    var handle = App.EngineHandle; var filePath = file.Path; var fileName = file.Name;
+                                    RunNativeOffUiThread(() => NativeCore.deskdrop_send_file_path(handle, null, filePath, fileName, "application/octet-stream"));
                                 }
                                 else
                                 {
@@ -327,7 +341,8 @@ namespace Deskdrop.WinUI.Services
                 try {
                     if (App.EngineHandle != IntPtr.Zero)
                     {
-                        NativeCore.deskdrop_send_file_path(App.EngineHandle, targetDevice, path, name, "application/octet-stream");
+                        var handle = App.EngineHandle;
+                        RunNativeOffUiThread(() => NativeCore.deskdrop_send_file_path(handle, targetDevice, path, name, "application/octet-stream"));
                     }
                     else
                     {

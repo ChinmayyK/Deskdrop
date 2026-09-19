@@ -143,6 +143,7 @@ namespace Deskdrop.WinUI
         public string FormattedSize => file_bytes.HasValue ? DeskdropFormatting.FormatBytes(file_bytes.Value) : "";
         public string RelayPathDisplay => relay_path.Count == 0 ? "" : string.Join(" -> ", relay_path);
         public string RelativeTime => timestamp_ms == 0 ? "Just now" : DeskdropFormatting.RelativeTimeFromUnixMs(timestamp_ms);
+        public void RefreshRelativeTime() => OnPropertyChanged(nameof(RelativeTime));
 
         // Operation line for the Recent activity row. "Sent"/"Received" is
         // only known for a *completed* transfer, via whether the daemon gave
@@ -235,6 +236,7 @@ namespace Deskdrop.WinUI
         public ulong timestamp { get => timestamp_ms; set => timestamp_ms = value; }
         public string Preview => !string.IsNullOrWhiteSpace(text_preview) ? text_preview! : summary;
         public string RelativeTime => timestamp_ms == 0 ? "Just now" : DeskdropFormatting.RelativeTimeFromUnixMs(timestamp_ms);
+        public void RefreshRelativeTime() => OnPropertyChanged(nameof(RelativeTime));
     }
 
     public class PeerViewModel : BaseViewModel
@@ -1304,7 +1306,17 @@ namespace Deskdrop.WinUI
                 {
                     try
                     {
-                        ActivityFeed = new ObservableCollection<ActivityEntry>(entries.OrderByDescending(e => e.timestamp_ms));
+                        var ordered = entries.OrderByDescending(e => e.timestamp_ms).ToList();
+                        // Polled every few seconds: swapping in a new collection
+                        // makes every bound list re-template all rows, which
+                        // stutters the UI. When nothing changed, only the
+                        // relative timestamps need a refresh.
+                        if (ActivityFeed != null && ordered.Select(e => (e.id, e.summary)).SequenceEqual(ActivityFeed.Select(e => (e.id, e.summary))))
+                        {
+                            foreach (var entry in ActivityFeed) entry.RefreshRelativeTime();
+                            return;
+                        }
+                        ActivityFeed = new ObservableCollection<ActivityEntry>(ordered);
                         OnPropertyChanged(nameof(ActivityCount));
                     }
                     catch (Exception ex) { App.HandleError(ex); }
@@ -1321,7 +1333,14 @@ namespace Deskdrop.WinUI
                 {
                     try
                     {
-                        PendingClipboards = new ObservableCollection<PendingClipboard>(clips.OrderByDescending(c => c.timestamp_ms));
+                        var ordered = clips.OrderByDescending(c => c.timestamp_ms).ToList();
+                        // Same no-change shortcut as ParseActivityFeed.
+                        if (PendingClipboards != null && ordered.Select(c => c.content_hash).SequenceEqual(PendingClipboards.Select(c => c.content_hash)))
+                        {
+                            foreach (var clip in PendingClipboards) clip.RefreshRelativeTime();
+                            return;
+                        }
+                        PendingClipboards = new ObservableCollection<PendingClipboard>(ordered);
                         NotifyPendingClipboardMetrics();
                     }
                     catch (Exception ex) { App.HandleError(ex); }

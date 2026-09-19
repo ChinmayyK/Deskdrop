@@ -53,22 +53,32 @@ namespace Deskdrop.WinUI
             {
                 RemoteStreamStopped -= OnRemoteStreamStopped;
                 StopPolling();
-                try
+                // Off the UI thread: the native call blocks on the core runtime.
+                var handle = App.EngineHandle;
+                if (handle != IntPtr.Zero)
                 {
-                    if (App.EngineHandle != IntPtr.Zero) NativeCore.deskdrop_stop_camera_stream(App.EngineHandle);
+                    _ = Task.Run(() =>
+                    {
+                        try { NativeCore.deskdrop_stop_camera_stream(handle); }
+                        catch (Exception ex) { App.HandleError(ex); }
+                    });
                 }
-                catch (Exception ex) { App.HandleError(ex); }
             };
 
             // This window used to just poll for a frame that might already
             // exist - nothing ever actually asked the peer to start
             // streaming, so it showed "Waiting for stream..." forever
             // unless the phone happened to start unprompted.
-            try
+            var engineHandle = App.EngineHandle;
+            var requestedDevice = _deviceId;
+            if (engineHandle != IntPtr.Zero)
             {
-                if (App.EngineHandle != IntPtr.Zero) NativeCore.deskdrop_request_camera_stream(App.EngineHandle, _deviceId);
+                _ = Task.Run(() =>
+                {
+                    try { NativeCore.deskdrop_request_camera_stream(engineHandle, requestedDevice); }
+                    catch (Exception ex) { App.HandleError(ex); }
+                });
             }
-            catch (Exception ex) { App.HandleError(ex); }
 
             StartPolling();
         }

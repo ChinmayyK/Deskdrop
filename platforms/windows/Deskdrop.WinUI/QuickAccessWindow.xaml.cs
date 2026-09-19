@@ -179,18 +179,24 @@ namespace Deskdrop.WinUI
             }
         }
 
-        private void DeviceTarget_Click(object sender, RoutedEventArgs e)
+        private async void DeviceTarget_Click(object sender, RoutedEventArgs e)
         {
             if (((FrameworkElement)sender).DataContext is PeerViewModel peer)
             {
-                System.Threading.Tasks.Task.Run(() => 
+                try
                 {
-                    try 
+                    // Read the text here and send it inline: the daemon has no
+                    // OS clipboard access, so "push_clipboard" finds nothing.
+                    var content = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+                    if (content.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
                     {
-                        DaemonClient.PushClipboard(peer.device_id);
-                    } 
-                    catch (Exception ex) { App.HandleError(ex); }
-                });
+                        var text = await content.GetTextAsync();
+                        var targetId = peer.device_id;
+                        if (!string.IsNullOrEmpty(text))
+                            DaemonActions.RunFireAndForget("Push Clipboard", () => DaemonClient.PushTextTo(text, targetId));
+                    }
+                }
+                catch (Exception ex) { App.HandleError(ex); }
                 Close();
             }
         }
