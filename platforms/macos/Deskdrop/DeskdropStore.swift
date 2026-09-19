@@ -228,12 +228,12 @@ final class DeskdropStore: ObservableObject {
         // Always update the quick-send strip (shown in history panel).
         quickSendContext = QuickSendContext(text: text, timestamp: Date())
         guard UserDefaults.standard.bool(forKey: "magicClipboardEnabled") else { return }
-        guard connectedCount > 0 else { return }
+        // Pushed even with no device connected: the daemon records the copy in
+        // the activity feed first, so local clipboard history stays complete.
         Task { [weak self] in
             guard let self else { return }
-            // push_clipboard tells the daemon to read the OS clipboard itself —
-            // avoids double-reading and handles large text more safely than inlining.
-            _ = try? await self.ipc.send(cmd: ["cmd": "push_clipboard"])
+            // Text goes inline — the daemon cannot read the OS clipboard itself.
+            _ = try? await self.ipc.sendPushText(text, targetDeviceId: nil)
         }
     }
 

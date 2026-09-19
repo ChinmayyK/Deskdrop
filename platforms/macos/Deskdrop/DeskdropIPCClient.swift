@@ -3,6 +3,7 @@
 // All requests use the IpcRequest JSON protocol defined in ipc.rs.
 
 import Foundation
+import AppKit
 
 // ── IPC response model ────────────────────────────────────────────────────────
 
@@ -548,11 +549,14 @@ extension DeskdropIPCClient {
         _ = try await send(cmd: cmd)
     }
 
-    /// Push the current local clipboard to connected peers (daemon reads OS clipboard).
+    /// Push the current local clipboard text to connected peers.
+    ///
+    /// The text is read here and sent inline: the daemon has no OS clipboard
+    /// access of its own, so its `push_clipboard` command finds nothing to send.
     func sendClipboardCurrent(targetDeviceId: String?) async throws {
-        var cmd: [String: Any] = ["cmd": "push_clipboard"]
-        if let id = targetDeviceId { cmd["target_device_id"] = id }
-        _ = try await send(cmd: cmd)
+        let text = await MainActor.run { NSPasteboard.general.string(forType: .string) }
+        guard let text, !text.isEmpty else { return }
+        try await sendPushText(text, targetDeviceId: targetDeviceId)
     }
 
     /// Push arbitrary text to connected peers without reading the OS clipboard.
