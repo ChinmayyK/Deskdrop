@@ -383,7 +383,9 @@ fun HomeHeroHeader(
     val isLive = ambientStatus.contains("Secure Connection", ignoreCase = true)
     val statusColor = if (isLive) CRTheme.accentGreen else CRTheme.accentAmber
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+    // Breathing room below the status bar: the greeting is the page's title,
+    // so it should read as a header, not as part of the system chrome.
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 28.dp)) {
         Text(
             text = greeting,
             style = CRTypography.h1,
@@ -1481,7 +1483,7 @@ fun DeviceCard(
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     showMenu = true
                 })
-                .padding(20.dp),
+                .padding(horizontal = 18.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -1523,43 +1525,35 @@ fun DeviceCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (peer.trusted) {
-                    Text(
-                        text = if (peer.isConnected) "Nearby" else "Offline",
-                        style = CRTypography.caption,
-                        color = CRTheme.textMedium(isDark)
-                    )
-                } else {
-                    Text(
-                        text = if (peer.lifecycleState == "pairing_in_progress") "Waiting for ${peer.name}" else "Pending",
-                        style = CRTypography.caption,
-                        color = CRTheme.statusAmber
+                Spacer(modifier = Modifier.height(2.dp))
+                // One bounded status line: the card has a fixed height, so a
+                // wrapping line (e.g. "Waiting for <long device name>") used
+                // to be clipped. The name is already shown above.
+                val (statusText, statusColor) = when {
+                    speedTestProgress != null ->
+                        "${speedTestProgress.phase} · ${speedTestProgress.speedMbpsString}" to CRTheme.blueSoft
+                    peer.trusted -> (if (peer.isConnected) "Nearby" else "Offline") to CRTheme.textMedium(isDark)
+                    peer.lifecycleState == "pairing_in_progress" -> "Waiting to pair…" to CRTheme.statusAmber
+                    else -> "Pending" to CRTheme.statusAmber
+                }
+                Text(
+                    text = statusText,
+                    style = CRTypography.caption,
+                    color = statusColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (speedTestProgress != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    androidx.compose.material3.LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
+                        color = CRTheme.blueSoft,
+                        trackColor = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.1f)
                     )
                 }
             }
         }
-        if (speedTestProgress != null) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "${speedTestProgress.phase}...",
-                    style = CRTypography.caption,
-                    color = CRTheme.blueSoft
-                )
-                Text(
-                    text = speedTestProgress.speedMbpsString,
-                    style = CRTypography.caption,
-                    color = CRTheme.textHigh(isDark)
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            androidx.compose.material3.LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
-                color = CRTheme.blueSoft,
-                trackColor = if(isDark) Color.White.copy(alpha=0.1f) else Color.Black.copy(alpha=0.1f)
-            )
-        }
-        
+
         DisposableEffect(Unit) {
             onDispose {
                 showMenu = false
