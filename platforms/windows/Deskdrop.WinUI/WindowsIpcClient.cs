@@ -22,23 +22,9 @@ namespace Deskdrop.WinUI
     /// </summary>
     internal sealed class DaemonClient : IDisposable
     {
-        // The currently-deployed release/windows/deskdrop_core.dll snapshot
-        // (see the "Do NOT add a fallback..." comment in Deskdrop.WinUI.csproj)
-        // predates per-user pipe sanitization and serves a plain "deskdrop"
-        // pipe. Current deskdrop-core source computes a per-user-sanitized
-        // name instead. Try both, legacy name first (it's what's actually
-        // deployed today), so this keeps working once deskdrop-core is
-        // rebuilt from source with a real Rust toolchain - at which point
-        // the legacy candidate can be dropped.
-        private static string[] PipeNameCandidates
-        {
-            get
-            {
-                var localAppData = Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "default";
-                var sanitized = localAppData.Replace('\\', '_').Replace(':', '_');
-                return new[] { "deskdrop", "deskdrop_" + sanitized };
-            }
-        }
+        // Must match get_pipe_name() in deskdrop-core/src/ipc_windows.rs.
+        private static readonly string PipeName = "deskdrop_" +
+            (Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "default").Replace('\\', '_').Replace(':', '_');
         private const int    TimeoutMs   = 1000;
 
 
@@ -137,24 +123,17 @@ namespace Deskdrop.WinUI
 
         private static NamedPipeClientStream? OpenPipe(int timeoutMs)
         {
-            var candidates = PipeNameCandidates;
-            for (int i = 0; i < candidates.Length; i++)
+            var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.None);
+            try
             {
-                var pipe = new NamedPipeClientStream(".", candidates[i],
-                    PipeDirection.InOut, PipeOptions.None);
-                try
-                {
-                    // Split the timeout across candidates so the overall
-                    // call still respects the caller's budget.
-                    pipe.Connect(Math.Max(1, timeoutMs / candidates.Length));
-                    return pipe;
-                }
-                catch
-                {
-                    pipe.Dispose();
-                }
+                pipe.Connect(Math.Max(1, timeoutMs));
+                return pipe;
             }
-            return null;
+            catch
+            {
+                pipe.Dispose();
+                return null;
+            }
         }
 
         private static string? ReadLineWithTimeout(Stream stream, int timeoutMs)

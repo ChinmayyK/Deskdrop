@@ -1222,69 +1222,25 @@ namespace Deskdrop.WinUI
             DaemonActions.RunFireAndForget("Send", () => DaemonClient.PushTextTo(text, toDeviceId));
         }
 
+        private int _isRefreshRequested = 0;
+
+        // Engine events (pairing accepted, peer connected, ...) call this the
+        // moment they land. If a refresh is already running, its snapshot may
+        // predate the event, so mark another pass instead of dropping the
+        // request - otherwise the UI waits for the next 5s timer tick.
         public void UpdateStateFromDaemon()
         {
+            System.Threading.Interlocked.Exchange(ref _isRefreshRequested, 1);
             if (System.Threading.Interlocked.CompareExchange(ref _isRefreshInFlight, 1, 0) != 0) return;
 
             System.Threading.Tasks.Task.Run(() =>
             {
                 try
                 {
-                    bool isRunning = DaemonClient.IsDaemonRunning();
-                    
-                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                    while (System.Threading.Interlocked.Exchange(ref _isRefreshRequested, 0) == 1)
                     {
-                        try { IsDaemonRunning = isRunning; } catch (Exception ex) { App.HandleError(ex); }
-                    });
-
-                    if (isRunning)
-                    {
-                        var state = DaemonClient.Status();
-                        if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
-                        {
-                            ParseDaemonState(dataElem);
-                        }
-
-                        var activity = DaemonClient.ActivityRecent(80);
-                        if (activity != null && activity.RootElement.TryGetProperty("data", out var actDataElem))
-                        {
-                            ParseActivityFeed(actDataElem);
-                        }
-
-                        var pending = DaemonClient.PendingRemoteClipboards();
-                        if (pending != null && pending.RootElement.TryGetProperty("data", out var pendDataElem))
-                        {
-                            ParsePendingClipboards(pendDataElem);
-                        }
-
-                        var settings = DaemonClient.GetSettings();
-                        if (settings != null && settings.RootElement.TryGetProperty("data", out var settingsDataElem))
-                        {
-                            if (settingsDataElem.TryGetProperty("require_tofu_confirmation", out var tofuElem))
-                            {
-                                bool tofu = tofuElem.GetBoolean();
-                                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
-                                {
-                                    // Set the backing field directly (not the public setter) so
-                                    // loading the daemon's current value doesn't turn around and
-                                    // PatchSettings it straight back.
-                                    if (_requireTofuConfirmation != tofu)
-                                    {
-                                        _requireTofuConfirmation = tofu;
-                                        OnPropertyChanged(nameof(RequireTofuConfirmation));
-                                    }
-                                });
-                            }
-                        }
+                        RefreshStateOnce();
                     }
-                }
-                catch (Exception ex)
-                {
-                    // Handle failure gracefully
-                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
-                    {
-                        StatusLine = $"Error connecting to daemon: {ex.Message}";
-                    });
                 }
                 finally
                 {
@@ -1294,7 +1250,73 @@ namespace Deskdrop.WinUI
                     // and start trusting "no devices" to mean no devices.
                     App.MainWindow?.DispatcherQueue?.TryEnqueue(() => HasLoadedOnce = true);
                 }
+
+                // A request that arrived between the loop's last check and
+                // clearing the in-flight flag would otherwise be lost.
+                if (System.Threading.Volatile.Read(ref _isRefreshRequested) == 1) UpdateStateFromDaemon();
             });
+        }
+
+        private void RefreshStateOnce()
+        {
+            try
+            {
+                bool isRunning = DaemonClient.IsDaemonRunning();
+                
+                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                {
+                    try { IsDaemonRunning = isRunning; } catch (Exception ex) { App.HandleError(ex); }
+                });
+
+                if (isRunning)
+                {
+                    var state = DaemonClient.Status();
+                    if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
+                    {
+                        ParseDaemonState(dataElem);
+                    }
+
+                    var activity = DaemonClient.ActivityRecent(80);
+                    if (activity != null && activity.RootElement.TryGetProperty("data", out var actDataElem))
+                    {
+                        ParseActivityFeed(actDataElem);
+                    }
+
+                    var pending = DaemonClient.PendingRemoteClipboards();
+                    if (pending != null && pending.RootElement.TryGetProperty("data", out var pendDataElem))
+                    {
+                        ParsePendingClipboards(pendDataElem);
+                    }
+
+                    var settings = DaemonClient.GetSettings();
+                    if (settings != null && settings.RootElement.TryGetProperty("data", out var settingsDataElem))
+                    {
+                        if (settingsDataElem.TryGetProperty("require_tofu_confirmation", out var tofuElem))
+                        {
+                            bool tofu = tofuElem.GetBoolean();
+                            App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                            {
+                                // Set the backing field directly (not the public setter) so
+                                // loading the daemon's current value doesn't turn around and
+                                // PatchSettings it straight back.
+                                if (_requireTofuConfirmation != tofu)
+                                {
+                                    _requireTofuConfirmation = tofu;
+                                    OnPropertyChanged(nameof(RequireTofuConfirmation));
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Handle failure gracefully
+                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                {
+                    StatusLine = $"Error connecting to daemon: {ex.Message}";
+                });
+            }
         }
 
                 private void ParseActivityFeed(JsonElement dataElem)
