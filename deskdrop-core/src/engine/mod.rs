@@ -2507,99 +2507,66 @@ impl Engine {
             .peer_manager
             .set_outgoing_pairing_waiting(target_device, true);
 
-        let pin_opt = self
+        let live_tx = self
             .shared
             .peer_manager
-            .get(target_device)
-            .and_then(|p| p.pairing_pin.clone());
-
-        let msg = AppMessage::PairingRequest {
-            origin_device: self.shared.config.device_id,
-            origin_device_name: self.shared.config.device_name.clone(),
-            pin: pin_opt,
-        };
-
-        let peers = self.shared.peer_manager.all_connected_senders();
-        if let Some(tx) = peers
+            .all_connected_senders()
             .into_iter()
             .find(|(id, _)| *id == target_device)
-            .map(|(_, tx)| tx)
-        {
-            let _ = tx.send(msg).await;
+            .map(|(_, tx)| tx);
 
-            let pin = self
-                .shared
-                .peer_manager
-                .get(target_device)
-                .and_then(|p| p.pairing_pin.clone())
-                .unwrap_or_else(|| "------".to_string());
-
-            let device_name = self
-                .shared
-                .peer_manager
-                .get(target_device)
-                .map(|p| p.friendly_name.clone())
-                .unwrap_or_else(|| "Unknown device".to_string());
-
-            let _ = self
-                .shared
-                .event_tx
-                .send(EngineEvent::OutgoingPairingWaiting {
-                    device_id: target_device,
-                    device_name,
-                    pin,
-                })
-                .await;
-        } else {
-            // Trigger a manual connection if we aren't connected yet.
-            if let Some(peer) = self.shared.peer_manager.get(target_device) {
-                let addrs = peer.socket_addrs();
-                if !addrs.is_empty() {
-                    if let Ok(()) = connect_loop(
-                        self.shared.clone(),
-                        addrs,
-                        Some(target_device),
-                        DiscoverySource::Manual,
-                    )
-                    .await
-                    {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                        let peers = self.shared.peer_manager.all_connected_senders();
-                        if let Some(tx) = peers
-                            .into_iter()
-                            .find(|(id, _)| *id == target_device)
-                            .map(|(_, tx)| tx)
-                        {
-                            let _ = tx.send(msg).await;
-
-                            let pin = self
-                                .shared
-                                .peer_manager
-                                .get(target_device)
-                                .and_then(|p| p.pairing_pin.clone())
-                                .unwrap_or_else(|| "------".to_string());
-
-                            let device_name = self
-                                .shared
-                                .peer_manager
-                                .get(target_device)
-                                .map(|p| p.friendly_name.clone())
-                                .unwrap_or_else(|| "Unknown device".to_string());
-
-                            let _ = self
-                                .shared
-                                .event_tx
-                                .send(EngineEvent::OutgoingPairingWaiting {
-                                    device_id: target_device,
-                                    device_name,
-                                    pin,
-                                })
-                                .await;
-                        }
+        match live_tx {
+            Some(tx) => {
+                let _ = tx
+                    .send(pairing_request_message(&self.shared, target_device))
+                    .await;
+            }
+            None => {
+                // Dial in the background instead of awaiting connect_loop's
+                // full retry/backoff here: that blocked the IPC caller for
+                // seconds (the Windows client gave up and reported failure)
+                // and silently dropped the request whenever the session came
+                // up some other way (e.g. the peer dialed us). The request is
+                // delivered by register_session as soon as any session with
+                // this peer goes live, since outgoing_pairing_waiting is set.
+                if let Some(peer) = self.shared.peer_manager.get(target_device) {
+                    let addrs = peer.socket_addrs();
+                    if !addrs.is_empty() {
+                        let shared = self.shared.clone();
+                        tokio::spawn(async move {
+                            if let Err(err) = connect_loop(
+                                shared,
+                                addrs,
+                                Some(target_device),
+                                DiscoverySource::Manual,
+                            )
+                            .await
+                            {
+                                warn!(peer_id = %target_device, error = %err, "pairing connect failed");
+                            }
+                        });
                     }
                 }
             }
         }
+
+        let peer = self.shared.peer_manager.get(target_device);
+        let pin = peer
+            .as_ref()
+            .and_then(|p| p.pairing_pin.clone())
+            .unwrap_or_else(|| "------".to_string());
+        let device_name = peer
+            .map(|p| p.friendly_name)
+            .unwrap_or_else(|| "Unknown device".to_string());
+        let _ = self
+            .shared
+            .event_tx
+            .send(EngineEvent::OutgoingPairingWaiting {
+                device_id: target_device,
+                device_name,
+                pin,
+            })
+            .await;
     }
 
     pub async fn initiate_pairing(&self, target_device: Uuid) -> Result<()> {
@@ -3995,6 +3962,17 @@ async fn observe_trust(
     }
 }
 
+fn pairing_request_message(shared: &EngineShared, target_device: Uuid) -> AppMessage {
+    AppMessage::PairingRequest {
+        origin_device: shared.config.device_id,
+        origin_device_name: shared.config.device_name.clone(),
+        pin: shared
+            .peer_manager
+            .get(target_device)
+            .and_then(|p| p.pairing_pin.clone()),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn register_session(
     shared: EngineShared,
@@ -4066,6 +4044,17 @@ fn register_session(
         tokio::spawn(async move {
             feed.lock().await.record_peer_connected(peer_id, name);
         });
+    }
+
+    // The user asked to pair before this session existed (or on a session
+    // that has since been replaced): deliver the request now.
+    if !trusted
+        && shared
+            .peer_manager
+            .get(peer_id)
+            .is_some_and(|p| p.outgoing_pairing_waiting)
+    {
+        let _ = outbox_tx.try_send(pairing_request_message(&shared, peer_id));
     }
 
     // Push local battery and network status to the newly connected peer if trusted.
