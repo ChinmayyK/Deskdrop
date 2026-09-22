@@ -3619,18 +3619,10 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         anyhow::bail!("aborting inbound connect — cannot connect to self");
     }
 
-    // Skip if this peer already has a live, connected session.
-    // Without this guard, mDNS re-announcements cause the remote peer to
-    // repeatedly connect, replacing the existing session each time, which
-    // creates a visible connect→disconnect→reconnect flicker in the UI.
-    if shared.peer_manager.is_connected(hs.peer_device_id) {
-        tracing::debug!(
-            peer_id = %hs.peer_device_id,
-            "dropping duplicate inbound connection — peer already has an active session"
-        );
-        return Ok(());
-    }
-
+    // A duplicate connection (e.g. both sides dialed at once) is resolved by
+    // the deterministic tie-break in replace_live_session, never by "keep
+    // whichever finished first": that choice differs per side, so each end
+    // would keep a different TCP stream and close the other's live one.
     let endpoint = stream.peer_addr().context("reading remote address")?;
     let trusted = observe_trust(
         &shared,
@@ -3874,16 +3866,8 @@ async fn connect_once(
         anyhow::bail!("aborting outbound connect — cannot connect to self");
     }
 
-    // If the peer already has an active session (e.g. an incoming connection
-    // was accepted while we were handshaking), don't replace it.
-    if shared.peer_manager.is_connected(hs.peer_device_id) {
-        tracing::debug!(
-            peer_id = %hs.peer_device_id,
-            "aborting outbound connect — peer already has an active session"
-        );
-        return Ok(());
-    }
-
+    // An incoming session accepted while we were handshaking is resolved by
+    // replace_live_session's tie-break (see handle_incoming).
     let trusted = observe_trust(
         &shared,
         hs.peer_device_id,
@@ -4020,6 +4004,7 @@ fn register_session(
         return Ok(());
     }
 
+    let was_connected = replaced.is_some();
     if let Some(replaced) = replaced {
         if let Some(old_shutdown) = replaced.shutdown_tx {
             let _ = old_shutdown.send(SessionShutdown {
@@ -4030,15 +4015,16 @@ fn register_session(
         }
     }
 
-    let _ = shared.event_tx.try_send(EngineEvent::PeerConnected {
-        device_id: peer_id,
-        device_name: peer_name.clone(),
-        addr: endpoint,
-        trusted,
-    });
+    // A session swap (duplicate-dial tie-break, or a fresh stream replacing
+    // a stale one) is invisible to the user: the peer never went offline.
+    if !was_connected {
+        let _ = shared.event_tx.try_send(EngineEvent::PeerConnected {
+            device_id: peer_id,
+            device_name: peer_name.clone(),
+            addr: endpoint,
+            trusted,
+        });
 
-    // Record in activity feed.
-    {
         let feed = shared.activity.clone();
         let name = peer_name.clone();
         tokio::spawn(async move {

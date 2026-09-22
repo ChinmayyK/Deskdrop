@@ -1351,6 +1351,40 @@ mod tests {
             .contains(&IpAddr::V4(Ipv4Addr::new(172, 20, 10, 4))));
     }
 
+    #[test]
+    fn simultaneous_dial_both_sides_keep_same_stream() {
+        // Stream X is dialed by A, stream Y by B. Each side sees the two
+        // streams finish in opposite orders - the worst case for any
+        // "keep the first one" rule.
+        let stream_x = SocketAddr::from(([10, 0, 0, 1], 47823));
+        let stream_y = SocketAddr::from(([10, 0, 0, 2], 47823));
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+
+        let register = |mgr: &PeerManager, local: Uuid, peer: Uuid, outbound: bool, ep| {
+            let (tx, _rx) = mpsc::channel(1);
+            let (stop, _stop_rx) = oneshot::channel();
+            mgr.replace_live_session(local, peer, outbound, ep, tx.clone(), tx, stop)
+                .unwrap();
+        };
+
+        let file_a = NamedTempFile::new().unwrap();
+        let mgr_a = PeerManager::load(file_a.path()).unwrap();
+        register(&mgr_a, a, b, false, stream_y);
+        register(&mgr_a, a, b, true, stream_x);
+
+        let file_b = NamedTempFile::new().unwrap();
+        let mgr_b = PeerManager::load(file_b.path()).unwrap();
+        register(&mgr_b, b, a, false, stream_x);
+        register(&mgr_b, b, a, true, stream_y);
+
+        let kept_a = mgr_a.live_endpoint(b).unwrap();
+        let kept_b = mgr_b.live_endpoint(a).unwrap();
+        assert_eq!(kept_a, kept_b);
+        let expected = if a < b { stream_x } else { stream_y };
+        assert_eq!(kept_a, expected);
+    }
+
     // ── Fix 14: connected_count and sync_eligible_count ───────────────────────
 
     #[test]
