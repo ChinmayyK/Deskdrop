@@ -63,10 +63,25 @@ pub unsafe extern "C" fn deskdrop_start(
         ..EngineConfig::default()
     };
 
+    let (engine_event_tx, mut engine_event_rx) = mpsc::channel(256);
     let (event_tx, event_rx) = mpsc::channel(256);
 
-    match runtime().block_on(Engine::start(config, event_tx)) {
+    match runtime().block_on(Engine::start(config, engine_event_tx)) {
         Ok(engine) => {
+            // Desktop hosts answer Remote File Explorer requests in Rust (see
+            // local_files); every event is still forwarded to the host app.
+            let serving_engine = engine.clone();
+            runtime().spawn(async move {
+                while let Some(ev) = engine_event_rx.recv().await {
+                    #[cfg(not(target_os = "android"))]
+                    crate::local_files::handle_event(&serving_engine, &ev);
+                    #[cfg(target_os = "android")]
+                    let _ = &serving_engine;
+                    if event_tx.send(ev).await.is_err() {
+                        break;
+                    }
+                }
+            });
             #[cfg(windows)]
             {
                 let e_clone = std::sync::Arc::new(engine.clone());

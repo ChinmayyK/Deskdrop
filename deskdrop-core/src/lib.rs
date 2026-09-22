@@ -73,6 +73,9 @@ pub mod jni_android;
 #[cfg(windows)]
 pub mod ipc_windows;
 
+#[cfg(not(target_os = "android"))]
+pub mod local_files;
+
 pub use engine::{Engine, EngineConfig, EngineEvent};
 pub use history::{HistoryFilter, HistoryStats};
 pub use protocol::ClipboardContent;

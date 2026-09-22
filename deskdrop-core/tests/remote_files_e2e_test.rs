@@ -1006,3 +1006,30 @@ async fn test_tier4_scenario_device_reconnect_retry() {
 
     assert_eq!(res2.total_matching, 3);
 }
+
+/// Desktop host: Node B answers with the shared local_files server (as the
+/// macOS daemon and the Windows in-process engine do), not a mock.
+#[cfg(not(target_os = "android"))]
+#[tokio::test]
+async fn test_desktop_host_serves_listing_and_thumbnail() {
+    let (engine_a, _dev_a, engine_b, dev_b, mut rx_b, _tmp) = setup_test_nodes().await;
+    tokio::spawn(async move {
+        while let Some(event) = rx_b.recv().await {
+            deskdrop_core::local_files::handle_event(&engine_b, &event);
+        }
+    });
+
+    let res = engine_a
+        .query_remote_files_sync(dev_b, false, None, None, None, 0, 50, 20)
+        .await
+        .expect("desktop host should answer the listing query");
+    assert!(res.error.is_none(), "unexpected error: {:?}", res.error);
+    assert!(res.summary.is_some());
+    assert!(res.files.len() as u32 <= res.total_matching);
+
+    let thumb = engine_a
+        .request_remote_thumbnail_sync(dev_b, 0xdead_beef, 128, 20)
+        .await
+        .expect("desktop host should answer the thumbnail request");
+    assert_eq!(thumb.error.as_deref(), Some("File not found"));
+}
