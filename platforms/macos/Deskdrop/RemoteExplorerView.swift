@@ -250,14 +250,16 @@ private struct RemoteExplorerPane: View {
                 .fill(device.isConnected ? CRTheme.accentGreen : CRTheme.inkSubtle)
                 .frame(width: 6, height: 6)
         }
-        let others = store.connectedDevices.filter { $0.id != device.id }
-        if others.isEmpty {
-            title
-        } else {
-            Menu {
-                ForEach(store.connectedDevices) { candidate in
+        // Always a menu (even with one device) so the switcher is discoverable;
+        // the current device stays listed even if it just dropped offline.
+        let candidates = store.connectedDevices.contains(where: { $0.id == device.id })
+            ? store.connectedDevices
+            : [device] + store.connectedDevices
+        Menu {
+            Section("Browse files on") {
+                ForEach(candidates) { candidate in
                     Button {
-                        onSwitchDevice(candidate)
+                        if candidate.id != device.id { onSwitchDevice(candidate) }
                     } label: {
                         if candidate.id == device.id {
                             Label(candidate.name, systemImage: "checkmark")
@@ -266,19 +268,22 @@ private struct RemoteExplorerPane: View {
                         }
                     }
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    title
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(CRTheme.inkSubtle)
-                }
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Switch device")
+            if candidates.count < 2 {
+                Text("Connect another device to switch")
+            }
+        } label: {
+            HStack(spacing: 4) {
+                title
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(CRTheme.inkSubtle)
+            }
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Switch device")
     }
 
     // MARK: - Premium Toolbar
