@@ -64,7 +64,21 @@ struct CommandCenterRootView: View {
 struct CommandSidebarView: View {
     @ObservedObject var store: DeskdropStore
     @State private var hoveredSection: DashboardSection? = nil
-    
+    @State private var connectingIds: Set<String> = []
+
+    private func nearbyStatus(for device: ManagedDevice) -> String {
+        if device.outgoingPairingWaiting {
+            if let pin = device.pairingPin, !pin.isEmpty {
+                return "Approve on \(device.name) · code \(pin)"
+            }
+            return "Waiting for approval on \(device.name)"
+        }
+        if connectingIds.contains(device.id) || device.connectionState == .connecting {
+            return "Connecting…"
+        }
+        return device.lastError == nil ? "Tap to connect" : "Can't reach · tap to retry"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             // App Branding removed
@@ -131,6 +145,52 @@ struct CommandSidebarView: View {
                 }
             }
             
+            if !store.nearbyTrustedDevices.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("NEARBY")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(CRTheme.inkSubtle)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
+
+                    ForEach(store.nearbyTrustedDevices) { device in
+                        Button(action: {
+                            guard !device.outgoingPairingWaiting else { return }
+                            connectingIds.insert(device.id)
+                            store.connect(device)
+                            // Clear the local "Connecting…" once the dial has
+                            // had time to finish; the daemon state takes over.
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                                connectingIds.remove(device.id)
+                            }
+                        }) {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .strokeBorder(device.outgoingPairingWaiting ? CRTheme.accentOrange : CRTheme.inkSubtle, lineWidth: 1.5)
+                                    .frame(width: 8, height: 8)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(device.name)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(CRTheme.ink)
+                                        .lineLimit(1)
+                                    Text(nearbyStatus(for: device))
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(CRTheme.inkSubtle)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(device.lastError.map { "Last error: \($0)" } ?? "Paired, not connected")
+                    }
+                }
+            }
+
             if !store.pendingDevices.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("PENDING")

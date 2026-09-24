@@ -127,7 +127,10 @@ final class DeskdropStore: ObservableObject {
 
     var connectionBanner: String { statusLine }
     var devices: [ManagedDevice] { peers.map(ManagedDevice.init) }
-    var connectedDevices: [ManagedDevice] { devices.filter { $0.isConnected && $0.trustState == .trusted } }
+    // outgoingPairingWaiting on a trusted, connected peer means the session
+    // is up but the peer no longer trusts us - nothing works until they
+    // approve, so it must not be presented as connected.
+    var connectedDevices: [ManagedDevice] { devices.filter { $0.isConnected && $0.trustState == .trusted && !$0.outgoingPairingWaiting } }
     var pendingDevices: [ManagedDevice] { 
         devices.filter { device in
             if device.trustState == .trusted { return false } // Trusted devices go to connectedDevices or are hidden when disconnected
@@ -143,6 +146,19 @@ final class DeskdropStore: ObservableObject {
                 return true
             }
             return false
+        }
+    }
+    // Paired devices that are on the network right now but not connected
+    // (e.g. a firewall drops the dial). Hiding them made a paired machine
+    // simply vanish from the sidebar with no hint why.
+    var nearbyTrustedDevices: [ManagedDevice] {
+        let now = Date()
+        return devices.filter { device in
+            guard device.trustState == .trusted else { return false }
+            if device.outgoingPairingWaiting { return true }
+            guard !device.isConnected else { return false }
+            let seen = [device.lastDiscoveryAt, device.lastSeen].compactMap { $0 }.max()
+            return seen.map { now.timeIntervalSince($0) < 60 } ?? false
         }
     }
     var status: StatusSnapshot? { dashboardStatus }
