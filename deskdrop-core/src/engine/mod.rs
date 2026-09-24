@@ -3898,6 +3898,15 @@ async fn connect_once(
         .peer_manager
         .set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
 
+    reconcile_one_sided_trust(
+        &shared,
+        hs.peer_device_id,
+        &hs.peer_device_name,
+        trusted,
+        hs.peer_already_trusted,
+        hs.pin.display(),
+    );
+
     register_session(
         shared,
         stream,
@@ -3910,6 +3919,52 @@ async fn connect_once(
         Some(hs.pin.display()),
         true, // is_outbound
     )
+}
+
+/// Trust is stored per side, so it can drift: one device reinstalls or
+/// forgets the other while the other still remembers it. The session then
+/// comes up, every trusted-only message is silently dropped, and neither
+/// user is asked anything - the peer just looks broken. The initiator is
+/// the only side that learns both verdicts (HelloAck carries the
+/// responder's), so it turns the mismatch into a real pairing prompt on
+/// whichever side lost trust.
+fn reconcile_one_sided_trust(
+    shared: &EngineShared,
+    peer_id: Uuid,
+    peer_name: &str,
+    we_trust_them: bool,
+    they_trust_us: bool,
+    pin: String,
+) {
+    match (we_trust_them, they_trust_us) {
+        (true, false) => {
+            // They forgot us. Ask them to pair again; register_session
+            // delivers the request because outgoing_pairing_waiting is set.
+            info!(peer_id = %peer_id, "peer no longer trusts us - requesting re-pair");
+            let _ = shared
+                .peer_manager
+                .set_outgoing_pairing_waiting(peer_id, true);
+            let _ = shared
+                .event_tx
+                .try_send(EngineEvent::OutgoingPairingWaiting {
+                    device_id: peer_id,
+                    device_name: peer_name.to_string(),
+                    pin,
+                });
+        }
+        (false, true) => {
+            // We forgot them but they still remember us: ask our user,
+            // exactly as if they had sent a PairingRequest.
+            info!(peer_id = %peer_id, "peer still trusts us - prompting to re-pair");
+            let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
+            let _ = shared.event_tx.try_send(EngineEvent::PairingRequested {
+                device_id: peer_id,
+                device_name: peer_name.to_string(),
+                pin,
+            });
+        }
+        _ => {}
+    }
 }
 
 async fn observe_trust(
@@ -4033,12 +4088,12 @@ fn register_session(
     }
 
     // The user asked to pair before this session existed (or on a session
-    // that has since been replaced): deliver the request now.
-    if !trusted
-        && shared
-            .peer_manager
-            .get(peer_id)
-            .is_some_and(|p| p.outgoing_pairing_waiting)
+    // that has since been replaced), or reconcile_one_sided_trust found the
+    // peer no longer trusts us: deliver the request now.
+    if shared
+        .peer_manager
+        .get(peer_id)
+        .is_some_and(|p| p.outgoing_pairing_waiting)
     {
         let _ = outbox_tx.try_send(pairing_request_message(&shared, peer_id));
     }
