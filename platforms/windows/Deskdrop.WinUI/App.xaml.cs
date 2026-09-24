@@ -296,6 +296,15 @@ public partial class App : Application
     public static void HandleDeskdropUri(string uriString)
     {
         if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri) || uri.Scheme != "deskdrop") return;
+
+        if (uri.Host == "pair-accept" || uri.Host == "pair-reject")
+        {
+            var deviceId = uri.AbsolutePath.Trim('/');
+            if (!string.IsNullOrEmpty(deviceId))
+                DeskdropStore.Shared.RespondToPairing(deviceId, uri.Host == "pair-accept");
+            return;
+        }
+
         if (uri.Host != "accept" && uri.Host != "reject") return;
 
         var transferId = uri.AbsolutePath.Trim('/');

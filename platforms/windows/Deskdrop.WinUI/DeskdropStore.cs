@@ -282,7 +282,10 @@ namespace Deskdrop.WinUI
             get
             {
                 if (pairingRequested) return "Wants to pair";
-                if (outgoingPairingWaiting) return "Waiting for response";
+                if (outgoingPairingWaiting)
+                    return string.IsNullOrWhiteSpace(pairingPin)
+                        ? $"Waiting for {DisplayName} to accept"
+                        : $"Accept on {DisplayName} - code {pairingPin}";
                 if (status == "connected" && !sync_enabled) return "Connected - sync paused";
                 if (status == "connected" && !remote_sync_enabled) return "Connected - paused remotely";
                 if (status == "connected") return "Connected";
@@ -317,7 +320,10 @@ namespace Deskdrop.WinUI
         // showing "Couldn't reach" from its last failed attempt forever.
         // Once we're actually connected, any stale error is moot.
         public bool HasError => !IsConnected && !string.IsNullOrWhiteSpace(last_error);
-        public bool IsConnected => status == "connected";
+        // A live session with a peer that hasn't accepted us yet (or no
+        // longer trusts us) carries nothing, so it doesn't count as
+        // connected - otherwise it's offered as a send target that fails.
+        public bool IsConnected => status == "connected" && !outgoingPairingWaiting;
         
         public bool ShowVerifyButton => !is_trusted;
         public bool ShowDisconnectButton => status == "connected";
@@ -1464,7 +1470,7 @@ namespace Deskdrop.WinUI
                     }
                     foreach (var stale in stalePeers) Peers.Remove(stale);
 
-                    var connected = Peers.Where(p => p.is_trusted && p.status == "connected").ToList();
+                    var connected = Peers.Where(p => p.is_trusted && p.IsConnected).ToList();
                     ConnectedPeers = new ObservableCollection<PeerViewModel>(connected);
 
                     StatusLine = Peers.Count == 0 ? "Running - no devices connected" : $"Connected to {ConnectedCount} device{(ConnectedCount == 1 ? "" : "s")}";
@@ -1615,6 +1621,7 @@ namespace Deskdrop.WinUI
             SyncPeerProjection(KnownDevices, Peers.Where(p => p.IsKnown));
             SyncPeerProjection(NearbyDevices, Peers.Where(p => p.IsNearby));
             SyncPeerProjection(PairingRequests, Peers.Where(p => p.pairingRequested));
+            Services.PairingPrompt.Sync(PairingRequests);
 
             // Prefer a connected, paired device for the hero card; fall back
             // to null (no hero) rather than to an offline device, so the

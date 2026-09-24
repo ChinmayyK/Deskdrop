@@ -150,8 +150,23 @@ namespace Deskdrop.WinUI.Services
                         case NativeCore.PB_EVENT_PAIRING_REQUESTED:
                         {
                             var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "A device";
+                            var deviceId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? "";
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                NotificationHelper.ShowToast("Pairing Request", $"{device} wants to pair with this PC");
+                                if (string.IsNullOrEmpty(deviceId))
+                                {
+                                    NotificationHelper.ShowToast("Pairing request", $"{device} wants to pair with this PC");
+                                    return;
+                                }
+                                var pin = DeskdropStore.Shared.Peers?.FirstOrDefault(p => p.device_id == deviceId)?.pairingPin;
+                                var codeLine = string.IsNullOrWhiteSpace(pin)
+                                    ? "Open Deskdrop to compare the security code."
+                                    : $"Security code {pin} - accept only if it matches.";
+                                NotificationHelper.ShowToastWithActions(
+                                    $"{device} wants to pair",
+                                    codeLine,
+                                    null,
+                                    $"deskdrop://pair-accept/{deviceId}",
+                                    $"deskdrop://pair-reject/{deviceId}");
                             });
                             break;
                         }
