@@ -3641,10 +3641,6 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         DiscoverySource::Mdns,
     )?;
 
-    let _ = shared
-        .peer_manager
-        .set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
-
     register_session(
         shared,
         stream,
@@ -3653,6 +3649,7 @@ async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<
         hs.peer_device_name,
         hs.session,
         trusted,
+        None, // the responder never learns the initiator's verdict
         DiscoverySource::Mdns,
         Some(hs.pin.display()),
         false, // is_outbound
@@ -3894,19 +3891,6 @@ async fn connect_once(
         discovery,
     )?;
 
-    let _ = shared
-        .peer_manager
-        .set_pairing_pin(hs.peer_device_id, Some(hs.pin.display()));
-
-    reconcile_one_sided_trust(
-        &shared,
-        hs.peer_device_id,
-        &hs.peer_device_name,
-        trusted,
-        hs.peer_already_trusted,
-        hs.pin.display(),
-    );
-
     register_session(
         shared,
         stream,
@@ -3915,6 +3899,7 @@ async fn connect_once(
         hs.peer_device_name,
         hs.session,
         trusted,
+        Some(hs.peer_already_trusted),
         discovery,
         Some(hs.pin.display()),
         true, // is_outbound
@@ -4021,6 +4006,7 @@ fn register_session(
     peer_name: String,
     session: crate::crypto::SessionKey,
     trusted: bool,
+    peer_trusts_us: Option<bool>,
     discovery: DiscoverySource,
     session_pin: Option<String>,
     is_outbound: bool,
@@ -4057,6 +4043,19 @@ fn register_session(
             peer_id
         );
         return Ok(());
+    }
+
+    // The PIN is derived per handshake, and a simultaneous dial runs two
+    // handshakes with different PINs. Recording it only for the session
+    // that won the tie-break keeps both devices showing the same code;
+    // writing it before dedup let each side keep a different loser's PIN.
+    if let Some(pin) = session_pin.clone() {
+        let _ = shared
+            .peer_manager
+            .set_pairing_pin(peer_id, Some(pin.clone()));
+        if let Some(they_trust_us) = peer_trusts_us {
+            reconcile_one_sided_trust(&shared, peer_id, &peer_name, trusted, they_trust_us, pin);
+        }
     }
 
     let was_connected = replaced.is_some();
