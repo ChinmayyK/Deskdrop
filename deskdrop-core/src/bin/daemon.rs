@@ -1784,6 +1784,23 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .await;
             Ok(IpcResponse::ok_empty())
         }
+        IpcRequest::OpenUrlOnDevice { target_device, url } => {
+            let target_uuid = parse_uuid(&target_device)?;
+            state.engine.open_url_on_device(target_uuid, url).await;
+            Ok(IpcResponse::ok_empty())
+        }
+        IpcRequest::AckOpenUrlOnDevice {
+            requester_device,
+            success,
+            error,
+        } => {
+            let requester_uuid = parse_uuid(&requester_device)?;
+            state
+                .engine
+                .ack_open_url_on_device(requester_uuid, success, error)
+                .await;
+            Ok(IpcResponse::ok_empty())
+        }
         IpcRequest::StartSpeedTest {
             device_id,
             duration_secs,

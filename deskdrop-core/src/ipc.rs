@@ -431,6 +431,15 @@ pub enum IpcRequest {
         action: String,
         new_name: Option<String>,
     },
+    /// Ask a trusted, connected peer to open a URL immediately.
+    OpenUrlOnDevice { target_device: String, url: String },
+    /// Report whether we actually managed to open a URL a peer asked us to
+    /// open (called by the platform layer after its OS-level open attempt).
+    AckOpenUrlOnDevice {
+        requester_device: String,
+        success: bool,
+        error: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1470,6 +1479,27 @@ pub async fn handle_ipc_request(
                 Err(e) => return IpcResponse::err(format!("invalid target_device uuid: {e}")),
             };
             eng.send_remote_file_action_request(target_uuid, action, file_id, new_name)
+                .await;
+            IpcResponse::ok_empty()
+        }
+        IpcRequest::OpenUrlOnDevice { target_device, url } => {
+            let target_uuid = match uuid::Uuid::parse_str(&target_device) {
+                Ok(u) => u,
+                Err(e) => return IpcResponse::err(format!("invalid target_device uuid: {e}")),
+            };
+            eng.open_url_on_device(target_uuid, url).await;
+            IpcResponse::ok_empty()
+        }
+        IpcRequest::AckOpenUrlOnDevice {
+            requester_device,
+            success,
+            error,
+        } => {
+            let requester_uuid = match uuid::Uuid::parse_str(&requester_device) {
+                Ok(u) => u,
+                Err(e) => return IpcResponse::err(format!("invalid requester_device uuid: {e}")),
+            };
+            eng.ack_open_url_on_device(requester_uuid, success, error)
                 .await;
             IpcResponse::ok_empty()
         }
