@@ -25,6 +25,21 @@ namespace Deskdrop.WinUI
 
         private static string Glyph(int codePoint) => char.ConvertFromUtf32(codePoint);
 
+        // x:Bind helpers for the six-tile security code. Separators such as
+        // spaces or dashes are ignored; a missing digit renders empty.
+        public static string PinDigit(string? pin, int index)
+        {
+            if (string.IsNullOrEmpty(pin)) return "";
+            var digits = new string(pin.Where(char.IsLetterOrDigit).ToArray());
+            return index >= 0 && index < digits.Length ? digits[index].ToString() : "";
+        }
+
+        public static string MatchHint(string? deviceName)
+        {
+            var name = string.IsNullOrWhiteSpace(deviceName) ? "the other device" : deviceName;
+            return $"Only accept if this matches the code on {name}.";
+        }
+
         public PairDeviceDialog()
         {
             this.InitializeComponent();

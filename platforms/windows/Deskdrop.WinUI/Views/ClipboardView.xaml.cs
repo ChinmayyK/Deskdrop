@@ -68,6 +68,11 @@ namespace Deskdrop.WinUI.Views
         {
             if (EmptyStatePanel == null) return;
 
+            // The history list and the empty state take turns; an empty
+            // grouped panel would draw as a stray outline.
+            if (HistoryPanel != null)
+                HistoryPanel.Visibility = FilteredFeed.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
             if (FilteredFeed.Count > 0)
             {
                 EmptyStatePanel.Visibility = Visibility.Collapsed;
@@ -115,8 +120,8 @@ namespace Deskdrop.WinUI.Views
         {
             try
             {
-                var selected = (Style)Application.Current.Resources["AppAccentSubtleButton"];
-                var unselected = (Style)Application.Current.Resources["AppGhostButton"];
+                var selected = (Style)Application.Current.Resources["AppPrimaryButton"];
+                var unselected = (Style)Application.Current.Resources["AppSecondaryButton"];
 
                 ChipAll.Style = _activeFilter == "All" ? selected : unselected;
                 ChipText.Style = _activeFilter == "Text" ? selected : unselected;

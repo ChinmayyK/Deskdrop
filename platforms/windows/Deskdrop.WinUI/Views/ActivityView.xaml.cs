@@ -34,6 +34,8 @@ namespace Deskdrop.WinUI.Views
             };
 
             EmptyStateBorder.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            // An empty grouped panel would draw as a stray outline.
+            TimelinePanel.Visibility = count == 0 ? Visibility.Collapsed : Visibility.Visible;
             if (count > 0) return;
 
             if (isFiltered)

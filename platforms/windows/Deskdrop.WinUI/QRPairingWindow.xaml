@@ -8,12 +8,12 @@
     Title="Pair a device">
 
     <!--
-        Standalone pairing window, raised from the tray popup and onboarding
-        where there's no host to put the in-app pairing sheet into. Same
-        content and same hierarchy as PairDeviceDialog so the flow feels
-        identical whichever door you came through.
+        Standalone pairing window, opened from the tray popup and onboarding
+        where there is no host for the in-app pairing sheet. Headline, the QR
+        code on a white tile, then one row describing this PC and the live
+        status. Same order as PairDeviceDialog.
     -->
-    <Grid>
+    <Grid Background="{ThemeResource AppBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -21,62 +21,72 @@
 
         <Border x:Name="AppTitleBar" Height="36" Grid.Row="0" Background="Transparent" />
 
-        <StackPanel Grid.Row="1" Padding="24,0,24,24" Spacing="16"
-                    VerticalAlignment="Center">
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Padding="24,4,24,24">
 
-            <StackPanel Spacing="4">
                 <TextBlock Text="Pair a device"
-                           Style="{StaticResource AppDisplayText}"
-                           FontSize="20"
-                           TextAlignment="Center" />
-                <TextBlock x:Name="TxtDeviceName" Text="This PC"
-                           Style="{StaticResource AppSecondary}"
-                           TextAlignment="Center" />
+                           Style="{StaticResource AppDisplayText}" />
+                <TextBlock Style="{StaticResource AppSecondary}"
+                           TextWrapping="Wrap"
+                           Margin="0,8,0,0"
+                           Text="Scan this code with Deskdrop on your phone or another computer." />
+
+                <!-- The QR needs a white quiet zone to stay scannable in either theme. -->
+                <Border Background="White"
+                        BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusCard}"
+                        Padding="12"
+                        Margin="0,20,0,0"
+                        HorizontalAlignment="Center">
+                    <Grid Width="172" Height="172">
+                        <ProgressRing x:Name="QrLoadingRing" IsActive="True" Width="28" Height="28" />
+                        <Image x:Name="QrCodeImage" Stretch="Uniform" Visibility="Collapsed"
+                               AutomationProperties.Name="Pairing QR code" />
+                        <StackPanel x:Name="QrErrorPanel" Visibility="Collapsed" Spacing="8"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE783;" FontSize="20" Foreground="#C62828"
+                                      HorizontalAlignment="Center" />
+                            <TextBlock Text="Couldn't reach the local service"
+                                       FontSize="12" Foreground="#5F6068"
+                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                       TextWrapping="Wrap" Width="140" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- This PC and the live status, as a single list row. -->
+                <Border Style="{StaticResource AppGroupCard}" Margin="0,20,0,0">
+                    <Grid Padding="{StaticResource RowPadding}" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
+                                Background="{ThemeResource AppAccentSubtleBrush}"
+                                VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE7F4;" FontSize="16"
+                                      Foreground="{ThemeResource AppAccentBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock x:Name="TxtDeviceName" Text="This PC"
+                                       Style="{StaticResource AppBodyStrong}" />
+                            <TextBlock x:Name="TxtCaption"
+                                       Text="Waiting for a device to scan."
+                                       Style="{StaticResource AppSecondary}"
+                                       TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Button x:Name="RetryButton" Content="Try again"
+                        Style="{StaticResource AppSecondaryButton}"
+                        HorizontalAlignment="Left"
+                        Margin="0,16,0,0"
+                        Visibility="Collapsed"
+                        Click="OnRetryClicked" />
             </StackPanel>
-
-            <!-- QR needs a solid white quiet zone to stay scannable
-                 regardless of the app's own theme. -->
-            <Border Background="White"
-                    CornerRadius="{StaticResource RadiusLarge}"
-                    Padding="14"
-                    HorizontalAlignment="Center">
-                <Grid Width="180" Height="180">
-                    <ProgressRing x:Name="QrLoadingRing" IsActive="True" Width="30" Height="30" />
-                    <Image x:Name="QrCodeImage" Stretch="Uniform" Visibility="Collapsed"
-                           AutomationProperties.Name="Pairing QR code" />
-                    <StackPanel x:Name="QrErrorPanel" Visibility="Collapsed" Spacing="8"
-                                HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE783;" FontSize="22" Foreground="#C2331F"
-                                  HorizontalAlignment="Center" />
-                        <TextBlock Text="Couldn't reach the local service"
-                                   FontSize="11.5" FontWeight="SemiBold" Foreground="#5A5A60"
-                                   HorizontalAlignment="Center" TextAlignment="Center"
-                                   TextWrapping="Wrap" Width="140" />
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
-                    CornerRadius="{StaticResource RadiusMedium}"
-                    Padding="12,10">
-                <StackPanel Spacing="2">
-                    <TextBlock Text="Waiting for a device to scan"
-                               Style="{StaticResource AppBodyStrong}"
-                               FontSize="13"
-                               TextAlignment="Center" />
-                    <TextBlock x:Name="TxtCaption"
-                               Text="Open Deskdrop on your phone or another computer and scan this code."
-                               Style="{StaticResource AppCaption}"
-                               TextWrapping="WrapWholeWords"
-                               TextAlignment="Center" />
-                </StackPanel>
-            </Border>
-
-            <Button x:Name="RetryButton" Content="Try again"
-                    Style="{StaticResource AppSecondaryButton}"
-                    HorizontalAlignment="Center"
-                    Visibility="Collapsed"
-                    Click="OnRetryClicked" />
-        </StackPanel>
+        </ScrollViewer>
     </Grid>
 </Window>

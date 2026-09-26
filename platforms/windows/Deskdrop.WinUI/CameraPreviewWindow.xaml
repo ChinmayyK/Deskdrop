@@ -7,61 +7,69 @@
     mc:Ignorable="d"
     Title="Camera">
 
+    <!--
+        Continuity camera preview. A panel with a row-style header (icon
+        well, title, one line of detail, close) above a black letterbox that
+        holds the stream and the waiting/ended status.
+    -->
     <Grid Background="Transparent">
         <Border x:Name="AppTitleBar" Height="1" VerticalAlignment="Top" Background="Transparent" />
 
-        <Border CornerRadius="{StaticResource RadiusLarge}"
-                BorderBrush="{ThemeResource AppBorderSubtleBrush}"
-                BorderThickness="1"
-                Margin="12"
-                Background="{ThemeResource AppSurfaceElevatedBrush}">
-            <Grid RowSpacing="0">
+        <Border Style="{StaticResource AppCardLarge}" Margin="8">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Labelled header: an unlabelled close button on a black
-                     rectangle gave no indication what the window was. -->
-                <Grid Grid.Row="0" Padding="14,10,10,8" ColumnSpacing="10">
+                <Grid Grid.Row="0" Padding="16,12,12,12" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <FontIcon Grid.Column="0" Glyph="&#xE722;" FontSize="14"
-                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                              VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="Continuity camera"
-                               Style="{StaticResource AppBodyStrong}" FontSize="13"
-                               VerticalAlignment="Center" />
-                    <Button Grid.Column="2" Style="{StaticResource AppIconButtonSmall}"
+                    <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
+                            Background="{ThemeResource AppAccentSubtleBrush}"
+                            VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE722;" FontSize="16"
+                                  Foreground="{ThemeResource AppAccentBrush}"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Continuity camera"
+                                   Style="{StaticResource AppBodyStrong}" />
+                        <TextBlock Text="Live from a paired device"
+                                   Style="{StaticResource AppSecondary}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <Button Grid.Column="2" Style="{StaticResource AppIconButton}"
+                            VerticalAlignment="Center"
                             Click="BtnClose_Click"
                             ToolTipService.ToolTip="Close"
                             AutomationProperties.Name="Close the camera preview">
-                        <FontIcon Glyph="&#xE711;" FontSize="12" />
+                        <FontIcon Glyph="&#xE711;" FontSize="13" />
                     </Button>
                 </Grid>
 
-                <Grid Grid.Row="1" Margin="12,0,12,12">
-                    <!-- Black letterbox is intentional (matches media-player
-                         convention) regardless of app theme. -->
-                    <Border CornerRadius="{StaticResource RadiusMedium}"
-                            BorderBrush="{ThemeResource AppBorderSubtleBrush}"
-                            BorderThickness="1"
-                            Background="Black">
-                        <Grid>
-                            <Image x:Name="CameraImage" Stretch="Uniform" />
-                            <StackPanel x:Name="StatusPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-                                <ProgressRing IsActive="True" Width="26" Height="26" />
-                                <TextBlock x:Name="StatusText" Text="Waiting for the camera stream"
-                                           Foreground="White" HorizontalAlignment="Center"
-                                           FontSize="13.5" FontWeight="SemiBold" />
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                </Grid>
+                <!-- Black letterbox is intentional in both themes, as in a media player. -->
+                <Border Grid.Row="1" Margin="12,0,12,12"
+                        CornerRadius="{StaticResource RadiusCard}"
+                        Background="Black">
+                    <Grid>
+                        <Image x:Name="CameraImage" Stretch="Uniform" />
+                        <StackPanel x:Name="StatusPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                            <ProgressRing IsActive="True" Width="24" Height="24" Foreground="White" />
+                            <TextBlock x:Name="StatusText" Text="Waiting for the camera stream"
+                                       Foreground="{ThemeResource AppScrimTextSecondaryBrush}"
+                                       FontFamily="{StaticResource AppTextFont}"
+                                       FontSize="13"
+                                       HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
     </Grid>

@@ -208,53 +208,38 @@ namespace Deskdrop.WinUI
             }
         }
 
-        // The page heading lives in the title bar rather than being repeated
-        // at the top of every page. That removes a whole band of vertical
-        // space from each screen and keeps the heading in one predictable
-        // place, which is how Windows' own utilities behave.
-        //
-        // Devices is the one exception: it has grown its own in-content
-        // header (title, subtitle, Send files/Scan nearby/Pair device/
-        // Settings) that duplicates everything this title-bar row offers,
-        // so both this text and the action cluster hide specifically on
-        // that page rather than sitting there as a second, redundant copy.
+        // Every page now carries its own large heading (the shared
+        // Android/Windows layout), so the title bar never shows a page title
+        // or its grey band. Devices also owns its actions and draws into the
+        // title-bar space; every other page keeps the compact status/scan
+        // cluster at the top right and starts below it.
         private void SetPageTitle(string? tag)
         {
             if (PageTitleText == null) return;
 
             var isDevicesPage = tag == "Devices";
-            PageTitleText.Visibility = isDevicesPage ? Visibility.Collapsed : Visibility.Visible;
+            PageTitleText.Visibility = Visibility.Collapsed;
             if (TitleBarActionsPanel != null)
             {
                 TitleBarActionsPanel.Visibility = isDevicesPage ? Visibility.Collapsed : Visibility.Visible;
             }
             if (TitleBarBackgroundBorder != null)
             {
-                TitleBarBackgroundBorder.Visibility = isDevicesPage ? Visibility.Collapsed : Visibility.Visible;
+                TitleBarBackgroundBorder.Visibility = Visibility.Collapsed;
             }
-            // Collapsing the title-bar band above only stopped it drawing -
-            // the Frame's own 48px top margin (reserved so content clears
-            // the title bar on every other page) was still there, so
-            // content never actually moved into the space that freed up.
-            // Devices carries its own top padding and a 148px-cleared
-            // action row (see its header XAML) to stay clear of the system
-            // caption buttons on its own, so it doesn't need this margin at
-            // all; every other page still does, since it still shows the
-            // real title bar.
             if (ContentFrame != null)
             {
-                ContentFrame.Margin = isDevicesPage ? new Thickness(0, 0, 0, 0) : new Thickness(0, 48, 0, 0);
+                ContentFrame.Margin = isDevicesPage ? new Thickness(0, 0, 0, 0) : new Thickness(0, 40, 0, 0);
             }
 
             PageTitleText.Text = tag switch
             {
-                "Devices" => "Ecosystem",
                 "DevicePeer" => "Remote files",
                 "Clipboard" => "Clipboard",
                 "Transfers" => "Transfers",
                 "Activity" => "Activity",
                 "Settings" => "Settings",
-                _ => "Ecosystem",
+                _ => "Devices",
             };
         }
 

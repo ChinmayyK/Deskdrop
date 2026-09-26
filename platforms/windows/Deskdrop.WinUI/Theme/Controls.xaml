@@ -25,37 +25,38 @@
 
     <Style x:Key="AppDisplayText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppDisplayFont}" />
-        <Setter Property="FontSize" Value="26" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="CharacterSpacing" Value="-14" />
+        <Setter Property="FontSize" Value="30" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="CharacterSpacing" Value="-20" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextLineBounds" Value="Tight" />
     </Style>
 
     <Style x:Key="AppPageTitle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppDisplayFont}" />
-        <Setter Property="FontSize" Value="19" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="CharacterSpacing" Value="-10" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="CharacterSpacing" Value="-14" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
     <Style x:Key="AppSectionTitle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource AppTextFont}" />
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontFamily" Value="{StaticResource AppDisplayFont}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="CharacterSpacing" Value="-6" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
 
-    <!-- Group label for navigation sections and table headers. Uppercase
-         is applied in the content, not by a transform - XAML has none. -->
+    <!-- Group label for navigation sections and field names. Sentence
+         case, no tracking: shouted uppercase labels were retired with the
+         shared Android/Windows language. -->
     <Style x:Key="AppOverline" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource AppSmallFont}" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontFamily" Value="{StaticResource AppTextFont}" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="CharacterSpacing" Value="70" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
 
     <Style x:Key="AppBodyStrong" TargetType="TextBlock">
@@ -131,7 +132,7 @@
                 <ControlTemplate TargetType="Button">
                     <Grid x:Name="Root"
                           Background="{TemplateBinding Background}"
-                          CornerRadius="{StaticResource RadiusMedium}"
+                          CornerRadius="{StaticResource RadiusButton}"
                           Padding="{TemplateBinding Padding}"
                           RenderTransformOrigin="0.5,0.5">
                         <Grid.RenderTransform>
@@ -180,7 +181,7 @@
                 <ControlTemplate TargetType="Button">
                     <Grid x:Name="Root"
                           Background="{TemplateBinding Background}"
-                          CornerRadius="{StaticResource RadiusMedium}"
+                          CornerRadius="{StaticResource RadiusButton}"
                           Padding="{TemplateBinding Padding}"
                           RenderTransformOrigin="0.5,0.5">
                         <Grid.RenderTransform>
@@ -242,7 +243,7 @@
                           Background="{TemplateBinding Background}"
                           BorderBrush="{TemplateBinding BorderBrush}"
                           BorderThickness="1"
-                          CornerRadius="{StaticResource RadiusMedium}"
+                          CornerRadius="{StaticResource RadiusButton}"
                           Padding="{TemplateBinding Padding}"
                           RenderTransformOrigin="0.5,0.5">
                         <Grid.RenderTransform>
@@ -299,7 +300,7 @@
                           Background="{TemplateBinding Background}"
                           BorderBrush="{TemplateBinding BorderBrush}"
                           BorderThickness="1"
-                          CornerRadius="{StaticResource RadiusMedium}"
+                          CornerRadius="{StaticResource RadiusButton}"
                           Padding="{TemplateBinding Padding}"
                           RenderTransformOrigin="0.5,0.5">
                         <Grid.RenderTransform>
@@ -421,7 +422,7 @@
                 <ControlTemplate TargetType="Button">
                     <Grid x:Name="Root"
                           Background="{TemplateBinding Background}"
-                          CornerRadius="{StaticResource RadiusMedium}"
+                          CornerRadius="{StaticResource RadiusButton}"
                           Padding="{TemplateBinding Padding}"
                           RenderTransformOrigin="0.5,0.5">
                         <Grid.RenderTransform>
@@ -552,6 +553,59 @@
         reference these three keys directly. Re-pointing them at the new
         templates upgrades those screens without touching their markup.
     -->
+    <!-- A whole row inside a grouped panel (AppGroupCard) that acts as one
+         button: square corners so hover fills edge to edge between the
+         hairlines, content stretched, no border of its own. -->
+    <Style x:Key="AppListRowButton" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource AppTextFont}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="Root"
+                          Background="{TemplateBinding Background}"
+                          Padding="{TemplateBinding Padding}">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource AppSurfaceHoverBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource AppSurfacePressedBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Presenter.Opacity" Value="0.45" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <ContentPresenter x:Name="Presenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          AutomationProperties.AccessibilityView="Raw" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="PrimaryAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource AppPrimaryButton}" />
     <Style x:Key="SecondarySubtleButtonStyle" TargetType="Button" BasedOn="{StaticResource AppSecondaryButton}" />
     <Style x:Key="DestructiveButtonStyle" TargetType="Button" BasedOn="{StaticResource AppDestructiveButton}" />
@@ -583,8 +637,8 @@
 
     <Style x:Key="AppChip" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource AppSurfaceSubtleBrush}" />
-        <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
-        <Setter Property="Padding" Value="7,2" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}" />
+        <Setter Property="Padding" Value="9,3" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
@@ -683,7 +737,7 @@
         we never have to touch the (large, fragile) stock template.
     -->
     <Style x:Key="AppNavItem" TargetType="controls:NavigationViewItem">
-        <Setter Property="Height" Value="36" />
+        <Setter Property="Height" Value="38" />
         <Setter Property="Margin" Value="4,1" />
         <Setter Property="FontFamily" Value="{StaticResource AppTextFont}" />
         <Setter Property="FontSize" Value="13" />
@@ -691,13 +745,12 @@
     </Style>
 
     <Style x:Key="AppNavHeader" TargetType="controls:NavigationViewItemHeader">
-        <Setter Property="Margin" Value="16,14,12,4" />
+        <Setter Property="Margin" Value="16,16,12,4" />
         <Setter Property="MinHeight" Value="22" />
-        <Setter Property="FontFamily" Value="{StaticResource AppSmallFont}" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontFamily" Value="{StaticResource AppTextFont}" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="CharacterSpacing" Value="70" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
 
     <!-- =============================================== PROGRESS -->

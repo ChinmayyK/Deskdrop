@@ -262,6 +262,7 @@ namespace Deskdrop.WinUI.Views
                 NoDeviceState.Visibility = hasPeer ? Visibility.Collapsed : Visibility.Visible;
                 EmptyFolderState.Visibility = (hasPeer && !hasFiles) ? Visibility.Visible : Visibility.Collapsed;
                 FileList.Visibility = hasFiles ? Visibility.Visible : Visibility.Collapsed;
+                FilePanel.Visibility = hasFiles ? Visibility.Visible : Visibility.Collapsed;
             }
             catch (Exception ex) { App.HandleError(ex); }
         }

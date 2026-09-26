@@ -9,63 +9,56 @@
     Title="Incoming call">
 
     <!--
-        Incoming-call banner. Now uses the single brand accent rather than the
-        retired cyan, and a container radius from the scale instead of a
-        28px capsule. The pulsing ring stays: this is genuinely a "something
-        is happening right now, decide" moment, which is exactly what
-        animation should be reserved for.
+        Incoming-call banner, laid out as a single list row: an initials
+        well, caller and one line of detail, then round Decline and Accept
+        buttons built on the shared pill styles.
     -->
     <Grid Background="Transparent">
         <Border x:Name="AppTitleBar" Height="1" VerticalAlignment="Top" Background="Transparent" />
 
-        <Border Background="{ThemeResource AppSurfaceElevatedBrush}"
-                CornerRadius="{StaticResource RadiusLarge}"
-                BorderThickness="1"
-                BorderBrush="{ThemeResource AppBorderStrongBrush}"
-                Margin="12"
-                Padding="14,10">
-            <Grid ColumnSpacing="16">
+        <Border Style="{StaticResource AppCardLarge}"
+                Margin="8"
+                Padding="{StaticResource RowPadding}"
+                VerticalAlignment="Center">
+            <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" VerticalAlignment="Center">
-                    <Ellipse Fill="{ThemeResource AppAccentBrush}" Width="52" Height="52" Opacity="0.3"
-                             services:PulseEffects.EnablePulse="True" />
-                    <Ellipse Fill="{ThemeResource AppAccentBrush}" Width="42" Height="42" />
+                <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
+                        Background="{ThemeResource AppAccentSubtleBrush}"
+                        VerticalAlignment="Center">
                     <TextBlock x:Name="TxtInitials" Text="D"
-                               Foreground="{ThemeResource AppOnAccentBrush}"
-                               FontSize="18" FontWeight="SemiBold"
+                               Foreground="{ThemeResource AppAccentBrush}"
+                               FontFamily="{StaticResource AppDisplayFont}"
+                               FontSize="17" FontWeight="Bold"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Grid>
+                </Border>
 
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                     <TextBlock x:Name="TxtCallerName" Text="Incoming call"
-                               Style="{StaticResource AppBodyStrong}" FontSize="14.5" />
+                               Style="{StaticResource AppBodyStrong}" />
                     <TextBlock Text="Camera stream from a paired device"
-                               Style="{StaticResource AppSecondary}" />
+                               Style="{StaticResource AppSecondary}"
+                               TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
-                    <Button Width="42" Height="42" CornerRadius="21"
-                            Background="{ThemeResource AppDangerBrush}"
-                            Foreground="{ThemeResource AppOnAccentBrush}"
-                            BorderThickness="0" Padding="0"
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                    <Button Style="{StaticResource AppDestructiveButton}"
+                            Width="40" Height="40" MinHeight="0" Padding="0"
                             Click="BtnDecline_Click"
                             ToolTipService.ToolTip="Decline"
                             AutomationProperties.Name="Decline the call">
-                        <FontIcon Glyph="&#xE711;" FontSize="15" />
+                        <FontIcon Glyph="&#xE711;" FontSize="14" />
                     </Button>
-                    <Button Width="42" Height="42" CornerRadius="21"
-                            Background="{ThemeResource AppSuccessBrush}"
-                            Foreground="{ThemeResource AppOnAccentBrush}"
-                            BorderThickness="0" Padding="0"
+                    <Button Style="{StaticResource AppPrimaryButton}"
+                            Width="40" Height="40" MinHeight="0" Padding="0"
                             Click="BtnAccept_Click"
                             ToolTipService.ToolTip="Accept"
                             AutomationProperties.Name="Accept the call">
-                        <FontIcon Glyph="&#xE717;" FontSize="17" />
+                        <FontIcon Glyph="&#xE717;" FontSize="15" />
                     </Button>
                 </StackPanel>
             </Grid>

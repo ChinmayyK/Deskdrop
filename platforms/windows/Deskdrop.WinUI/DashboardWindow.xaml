@@ -35,11 +35,10 @@
                  so pane content starts below it. The brand mark itself lives
                  in the overlay, where it is part of the drag region. -->
             <NavigationView.PaneHeader>
-                <Border Height="48" />
+                <Border Height="56" />
             </NavigationView.PaneHeader>
 
             <NavigationView.MenuItems>
-                <NavigationViewItemHeader Content="WORKSPACE" Style="{StaticResource AppNavHeader}" />
 
                 <NavigationViewItem Tag="Devices" Content="Devices" x:Name="NavDevices"
                                     Style="{StaticResource AppNavItem}"
@@ -65,8 +64,6 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItemHeader Content="ACTIVITY" Style="{StaticResource AppNavHeader}" />
-
                 <NavigationViewItem Tag="Transfers" Content="Transfers" x:Name="NavTransfers"
                                     Style="{StaticResource AppNavItem}"
                                     AutomationProperties.Name="Transfers">
@@ -82,8 +79,6 @@
                         <FontIcon Glyph="&#xE81C;" FontSize="16" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-
-                <NavigationViewItemHeader Content="SYSTEM" Style="{StaticResource AppNavHeader}" />
 
                 <NavigationViewItem Tag="Settings" Content="Settings" x:Name="NavSettings"
                                     Style="{StaticResource AppNavItem}"
@@ -299,8 +294,8 @@
                         VerticalAlignment="Center" Margin="16,0,0,0">
                 <Image Width="20" Height="20" Stretch="Uniform"
                        Source="Assets/Square44x44Logo.scale-200.png" />
-                <TextBlock Text="Deskdrop" Style="{StaticResource AppBodyStrong}"
-                           FontSize="13.5" VerticalAlignment="Center" />
+                <TextBlock Text="Deskdrop" Style="{StaticResource AppSectionTitle}"
+                           FontSize="15" VerticalAlignment="Center" />
             </StackPanel>
 
             <!-- Contextual page title. Collapsed on the Devices page - its
@@ -309,7 +304,7 @@
                  "Ecosystem" text visibly competing with "Devices" beneath
                  it. Toggled in DashboardWindow.xaml.cs's SetPageTitle. -->
             <TextBlock x:Name="PageTitleText" Grid.Column="1"
-                       Text="Ecosystem"
+                       Text="Devices"
                        Style="{StaticResource AppPageTitle}"
                        VerticalAlignment="Center"
                        Margin="28,0,12,0"

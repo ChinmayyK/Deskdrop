@@ -8,10 +8,10 @@
     Title="Edge drop">
 
     <!--
-        The screen-edge drop target. The resting sliver was an accent-to-cyan
-        gradient, which introduced a second accent hue into a system that has
-        one; it is now a solid accent bar. The copy dropped "portal" and
-        "mesh" for words that say what happens.
+        Screen-edge drop target. At rest it is a thin accent bar against the
+        screen edge; while a drag hovers, code-behind widens the window and
+        shows ExpandedCard, a dark-glass panel (AppScrim* tokens) with an
+        icon well and two lines of copy.
     -->
     <Grid Background="Transparent" AllowDrop="True"
           DragEnter="Grid_DragEnter" DragLeave="Grid_DragLeave" Drop="Grid_Drop">
@@ -19,44 +19,47 @@
         <Border x:Name="AppTitleBar" Height="1" VerticalAlignment="Top" Background="Transparent" />
 
         <Border x:Name="RestingSliver"
-                HorizontalAlignment="Left" VerticalAlignment="Center"
+                HorizontalAlignment="Right" VerticalAlignment="Center"
                 CornerRadius="3"
-                Margin="2,0,0,0"
+                Margin="0,0,4,0"
                 Width="6" Height="96"
                 Background="{ThemeResource AppAccentBrush}" />
 
         <Border x:Name="ExpandedCard"
                 CornerRadius="{StaticResource RadiusLarge}"
-                BorderBrush="{ThemeResource AppAccentBorderBrush}"
+                BorderBrush="{ThemeResource AppScrimBorderBrush}"
                 BorderThickness="1"
+                Background="{ThemeResource AppScrimStrongBrush}"
                 Opacity="0" Visibility="Collapsed"
-                HorizontalAlignment="Left" VerticalAlignment="Center"
-                Margin="16,0,0,0"
-                Background="{ThemeResource AppSurfaceElevatedBrush}"
-                Padding="22,20">
+                HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                Margin="12"
+                Padding="20,24">
 
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-                <Border Width="44" Height="44"
-                        CornerRadius="{StaticResource RadiusCard}"
-                        Background="{ThemeResource AppAccentSubtleBrush}"
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+                <Border Width="48" Height="48"
+                        CornerRadius="{StaticResource RadiusMedium}"
+                        Background="{ThemeResource AppScrimSubtleBrush}"
                         HorizontalAlignment="Center">
-                    <FontIcon Glyph="&#xE898;" FontSize="19"
-                              Foreground="{ThemeResource AppAccentBrush}"
+                    <FontIcon Glyph="&#xE898;" FontSize="20"
+                              Foreground="White"
                               HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
 
-                <StackPanel Spacing="3">
+                <StackPanel Spacing="6">
                     <TextBlock Text="Drop to send"
-                               Style="{StaticResource AppBodyStrong}"
-                               FontSize="14"
+                               Foreground="White"
+                               FontFamily="{StaticResource AppDisplayFont}"
+                               FontSize="16" FontWeight="Bold"
                                HorizontalAlignment="Center" />
                     <TextBlock x:Name="ExpandedSubText"
-                               Text="Release here to send to your connected devices"
-                               Style="{StaticResource AppCaption}"
+                               Text="Release to send to your connected devices."
+                               Foreground="{ThemeResource AppScrimTextSecondaryBrush}"
+                               FontFamily="{StaticResource AppTextFont}"
+                               FontSize="12"
                                HorizontalAlignment="Center"
                                TextAlignment="Center"
                                TextWrapping="Wrap"
-                               MaxWidth="160" />
+                               MaxWidth="180" />
                 </StackPanel>
             </StackPanel>
         </Border>

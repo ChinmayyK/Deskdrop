@@ -9,83 +9,67 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="{StaticResource PagePadding}" RowSpacing="16">
+    <!--
+        The log, in the shared Android/Windows layout: large heading with a
+        live count, a filter box, then one grouped list with hairline rows.
+        Row actions reveal on hover so the log reads as text.
+    -->
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="18" MaxWidth="1000">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!--
-            A log is a stream, not a stack of cards. Twenty events rendered as
-            twenty bordered cards is exactly what made the old feed
-            unreadable; here the hierarchy comes from weight, a coloured
-            glyph, and a hairline rule per row - so twice as many events fit
-            and scanning them is actually possible.
-        -->
-        <Grid Grid.Row="0" ColumnSpacing="12" MaxWidth="1200" HorizontalAlignment="Center">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MaxWidth="380" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <StackPanel Grid.Row="0" Spacing="4">
+            <TextBlock Text="Activity" Style="{StaticResource AppDisplayText}" />
+            <TextBlock x:Name="CountText" Style="{StaticResource AppSecondary}" />
+        </StackPanel>
 
-            <TextBox x:Name="TxtSearch"
-                     Grid.Column="0"
-                     PlaceholderText="Filter events, paths, and text"
-                     FontSize="13"
-                     MinHeight="32"
-                     TextChanged="TxtSearch_TextChanged"
-                     AutomationProperties.Name="Filter activity" />
+        <TextBox x:Name="TxtSearch"
+                 Grid.Row="1"
+                 MaxWidth="380"
+                 HorizontalAlignment="Left"
+                 PlaceholderText="Filter events, paths and text"
+                 MinHeight="32"
+                 TextChanged="TxtSearch_TextChanged"
+                 AutomationProperties.Name="Filter activity" />
 
-            <TextBlock Grid.Column="1"
-                       x:Name="CountText"
-                       Style="{StaticResource AppCaption}"
-                       VerticalAlignment="Center" />
-        </Grid>
-
-        <Border Grid.Row="1"
-                Style="{StaticResource AppCardLarge}"
-                Padding="28,32"
-                MaxWidth="1200"
-                HorizontalAlignment="Center"
+        <Border Grid.Row="2"
                 x:Name="EmptyStateBorder"
+                Style="{StaticResource AppCard}"
+                Background="Transparent"
+                Padding="20,18"
                 Visibility="Collapsed">
-            <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="380">
-                <Border Width="44" Height="44"
-                        CornerRadius="{StaticResource RadiusLarge}"
-                        Background="{ThemeResource AppSurfaceSubtleBrush}"
-                        HorizontalAlignment="Center">
-                    <FontIcon Glyph="&#xE81C;" FontSize="19"
-                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                              HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
-                <StackPanel Spacing="4">
-                    <TextBlock x:Name="EmptyTitle" Text="No activity yet"
-                               Style="{StaticResource AppSectionTitle}" HorizontalAlignment="Center" />
-                    <TextBlock x:Name="EmptyDetail"
-                               Style="{StaticResource AppSecondary}"
-                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <FontIcon Grid.Column="0" Glyph="&#xE81C;" FontSize="20"
+                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock x:Name="EmptyTitle" Text="No activity yet" Style="{StaticResource AppBodyStrong}" />
+                    <TextBlock x:Name="EmptyDetail" Style="{StaticResource AppSecondary}" TextWrapping="Wrap"
                                Text="Clipboard syncs, file transfers, and connection events will be recorded here." />
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </Border>
 
-        <ListView Grid.Row="2"
-                  x:Name="TimelineList"
-                  SelectionMode="None"
-                  Padding="0"
-                  MaxWidth="1200"
-                  HorizontalAlignment="Center"
-                  IsItemClickEnabled="False"
-                  ItemContainerStyle="{StaticResource AppPlainListItem}">
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="root:HistoryItem">
-                    <Border BorderThickness="0,0,0,1"
-                            BorderBrush="{ThemeResource AppDividerBrush}"
-                            Background="Transparent"
-                            Padding="4,10"
-                            services:HoverEffects.EnableCardHover="True">
-                        <Grid ColumnSpacing="12">
+        <Border Grid.Row="3"
+                x:Name="TimelinePanel"
+                Style="{StaticResource AppGroupCard}"
+                VerticalAlignment="Top">
+            <ListView x:Name="TimelineList"
+                      Margin="0,-1,0,0"
+                      SelectionMode="None"
+                      Padding="0"
+                      IsItemClickEnabled="False"
+                      ItemContainerStyle="{StaticResource AppPlainListItem}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="root:HistoryItem">
+                        <Grid Padding="16,11" ColumnSpacing="12" Background="Transparent">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -93,15 +77,23 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <FontIcon Grid.Column="0"
-                                      Glyph="{x:Bind Glyph}"
-                                      FontSize="14"
-                                      Foreground="{x:Bind PinColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
-                                      VerticalAlignment="Center" />
+                            <Border Grid.ColumnSpan="4" Height="1" Margin="50,-11,-16,0"
+                                    VerticalAlignment="Top"
+                                    Background="{ThemeResource AppDividerBrush}" />
+
+                            <Border Grid.Column="0" Width="36" Height="36"
+                                    CornerRadius="{StaticResource RadiusMedium}"
+                                    Background="{ThemeResource AppSurfaceSubtleBrush}">
+                                <FontIcon Glyph="{x:Bind Glyph}"
+                                          FontSize="14"
+                                          Foreground="{x:Bind PinColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                                 <TextBlock Text="{x:Bind display_text}"
-                                           Style="{StaticResource AppBody}"
+                                           Style="{StaticResource AppBodyStrong}"
+                                           FontWeight="Normal"
                                            TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{x:Bind path}"
                                            Style="{StaticResource AppCaption}"
@@ -110,14 +102,11 @@
                             </StackPanel>
 
                             <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime}"
-                                       Style="{StaticResource AppCaption}"
+                                       Style="{StaticResource AppMono}" FontSize="11.5"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                        VerticalAlignment="Center"
-                                       MinWidth="76" TextAlignment="Right" />
+                                       MinWidth="64" TextAlignment="Right" />
 
-                            <!-- Row actions stay out of the way until the
-                                 pointer or keyboard focus arrives, so the log
-                                 reads as text rather than as a wall of
-                                 buttons. -->
                             <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
                                         VerticalAlignment="Center"
                                         services:RevealEffects.RevealOnHover="True">
@@ -136,9 +125,9 @@
                                 </Button>
                             </StackPanel>
                         </Grid>
-                    </Border>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Border>
     </Grid>
 </Page>

@@ -14,49 +14,51 @@
     </Window.SystemBackdrop>
 
     <!--
-        The tray popup. Its job is to answer "is everything connected?" and
-        offer the two things you'd open it for - send something, or pair
-        something. Anything deeper belongs in the dashboard, so this stays a
-        glance surface rather than a miniature copy of the app.
+        Tray popup. A glance surface: this PC and its live state, the two
+        actions you open it for, and recent activity as one grouped list.
+        Anything deeper lives in the dashboard.
     -->
-    <Grid>
+    <Grid Background="{ThemeResource AppBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <Border x:Name="AppTitleBar" Height="36" Grid.Row="0" Background="Transparent" />
 
-        <!-- Identity and live state -->
-        <Grid Grid.Row="1" Padding="16,4,12,14" ColumnSpacing="12">
+        <!-- This PC and its live state -->
+        <Grid Grid.Row="1" Padding="20,4,16,0" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0" Width="36" Height="36">
-                <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
-                        CornerRadius="{StaticResource RadiusMedium}" />
-                <FontIcon Glyph="&#xE7F4;" FontSize="17"
-                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-                <Border Width="11" Height="11" CornerRadius="6"
+            <Grid Grid.Column="0" Width="40" Height="40" VerticalAlignment="Center">
+                <Border Style="{StaticResource AppIconTile}"
+                        Background="{ThemeResource AppAccentSubtleBrush}">
+                    <FontIcon Glyph="&#xE7F4;" FontSize="16"
+                              Foreground="{ThemeResource AppAccentBrush}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <Border Width="12" Height="12" CornerRadius="6"
                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                        Margin="0,0,-2,-2"
+                        Margin="0,0,-3,-3"
                         BorderThickness="2"
                         BorderBrush="{ThemeResource AppBackgroundBrush}"
                         Background="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"
                         services:PulseEffects.EnablePulse="{x:Bind mgr.IsSearching, Mode=OneWay}" />
             </Grid>
 
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                 <TextBlock Text="{x:Bind localMachineName, Mode=OneTime}"
-                           Style="{StaticResource AppBodyStrong}" FontSize="14" />
+                           Style="{StaticResource AppPageTitle}" />
                 <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}"
-                           Style="{StaticResource AppSecondary}" />
+                           Style="{StaticResource AppSecondary}"
+                           TextTrimming="CharacterEllipsis" />
             </StackPanel>
 
             <Button Grid.Column="2" Style="{StaticResource AppIconButton}"
@@ -68,85 +70,97 @@
             </Button>
         </Grid>
 
-        <!-- Recent activity, from the live feed. This used to display two
-             hardcoded placeholder strings. -->
-        <Grid Grid.Row="2" Padding="16,0,16,0" RowSpacing="6">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <TextBlock Grid.Row="0" Text="RECENT" Style="{StaticResource AppOverline}" />
-
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <ItemsControl ItemsSource="{x:Bind mgr.RecentActivity, Mode=OneWay}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="local:ActivityEntry">
-                                <Border BorderThickness="0,1,0,0"
-                                        BorderBrush="{ThemeResource AppDividerBrush}"
-                                        Padding="0,9">
-                                    <Grid ColumnSpacing="10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <FontIcon Grid.Column="0"
-                                                  Glyph="{x:Bind local:ActivityKindToGlyphConverter.ToGlyph(kind), Mode=OneWay}"
-                                                  FontSize="13"
-                                                  Foreground="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(AccentColor), Mode=OneWay}"
-                                                  VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="1" Text="{x:Bind Title, Mode=OneWay}"
-                                                   Style="{StaticResource AppSecondary}"
-                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime, Mode=OneWay}"
-                                                   Style="{StaticResource AppCaption}"
-                                                   VerticalAlignment="Center" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <Border BorderThickness="0,1,0,0"
-                            BorderBrush="{ThemeResource AppDividerBrush}"
-                            Padding="0,14"
-                            Visibility="{x:Bind local:BoolToVisibleConverter.ToVisibility(mgr.HasNoRecentActivity), Mode=OneWay}">
-                        <TextBlock Style="{StaticResource AppSecondary}"
-                                   TextWrapping="Wrap"
-                                   Text="Nothing recent. Transfers and clipboard syncs will show up here." />
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </Grid>
-
-        <!-- One primary action, one supporting action. -->
-        <Grid Grid.Row="3" Padding="16,14,16,16" ColumnSpacing="8">
+        <!-- One primary action, one supporting action -->
+        <Grid Grid.Row="2" Padding="20,20,20,0" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Button Grid.Column="0" Style="{StaticResource AppPrimaryButton}"
                     HorizontalAlignment="Stretch"
+                    Padding="14,8"
                     Click="SendFile_Click"
                     ToolTipService.ToolTip="Choose files to send">
-                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xE898;" FontSize="13" />
                     <TextBlock Text="Send file" />
                 </StackPanel>
             </Button>
             <Button Grid.Column="1" Style="{StaticResource AppSecondaryButton}"
                     HorizontalAlignment="Stretch"
+                    Padding="14,8"
                     Click="PairDevice_Click"
                     ToolTipService.ToolTip="Show a pairing code for a new device">
-                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xED14;" FontSize="13" />
                     <TextBlock Text="Pair device" />
                 </StackPanel>
             </Button>
+        </Grid>
+
+        <TextBlock Grid.Row="3" Text="Recent"
+                   Style="{StaticResource AppSectionTitle}"
+                   Margin="20,24,20,10" />
+
+        <!-- Recent activity from the live feed -->
+        <Grid Grid.Row="4" Margin="20,0,20,20">
+            <Border Style="{StaticResource AppGroupCard}"
+                    VerticalAlignment="Top"
+                    Visibility="{x:Bind local:BoolToVisibleConverter.ToVisibility(mgr.HasRecentActivity), Mode=OneWay}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <!-- The -1 top margin tucks the first row's hairline under the panel border. -->
+                    <ItemsControl Margin="0,-1,0,0"
+                                  ItemsSource="{x:Bind mgr.RecentActivity, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:ActivityEntry">
+                                <Grid>
+                                    <Border Style="{StaticResource AppDivider}"
+                                            Margin="66,0,0,0" VerticalAlignment="Top" />
+                                    <Grid Padding="{StaticResource RowPadding}" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
+                                                VerticalAlignment="Center">
+                                            <FontIcon Glyph="{x:Bind local:ActivityKindToGlyphConverter.ToGlyph(kind), Mode=OneWay}"
+                                                      FontSize="15"
+                                                      Foreground="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(AccentColor), Mode=OneWay}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                                       Style="{StaticResource AppBodyStrong}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{x:Bind RelativeTime, Mode=OneWay}"
+                                                       Style="{StaticResource AppSecondary}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Empty state -->
+            <Border Style="{StaticResource AppCard}"
+                    Padding="{StaticResource CardPadding}"
+                    VerticalAlignment="Top"
+                    Visibility="{x:Bind local:BoolToVisibleConverter.ToVisibility(mgr.HasNoRecentActivity), Mode=OneWay}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Grid.Column="0" Glyph="&#xE81C;" FontSize="16"
+                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                              VerticalAlignment="Top" Margin="0,1,0,0" />
+                    <TextBlock Grid.Column="1" Style="{StaticResource AppSecondary}"
+                               TextWrapping="Wrap"
+                               Text="Nothing recent. Transfers and clipboard syncs will show up here." />
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </Window>

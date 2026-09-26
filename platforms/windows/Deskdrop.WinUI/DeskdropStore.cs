@@ -126,16 +126,16 @@ namespace Deskdrop.WinUI
         // canvas; see the note on PeerViewModel.ConnectionColor.
         public string AccentColor => kind switch
         {
-            "remote_clipboard_available" => "#3A66D8",
-            "clipboard_applied" => "#2AA971",
-            "clipboard_image" => "#6E72CF",
-            "file_transfer_complete" => "#2AA971",
-            "file_transfer_failed" => "#D6483B",
-            "peer_connected" => "#2AA971",
-            "peer_disconnected" => "#8A8A90",
-            "sync_paused" => "#C9861E",
-            "remote_notification" => "#6E72CF",
-            _ => "#3A66D8"
+            "remote_clipboard_available" => "#2F6FE0",
+            "clipboard_applied" => "#1FA66A",
+            "clipboard_image" => "#2F6FE0",
+            "file_transfer_complete" => "#1FA66A",
+            "file_transfer_failed" => "#D64545",
+            "peer_connected" => "#1FA66A",
+            "peer_disconnected" => "#8A8A93",
+            "sync_paused" => "#C98A1E",
+            "remote_notification" => "#2F6FE0",
+            _ => "#2F6FE0"
         };
         public bool CanApply => kind == "remote_clipboard_available" && !applied_locally && !string.IsNullOrWhiteSpace(content_hash);
         public bool HasPreview => !string.IsNullOrWhiteSpace(text_preview);
@@ -192,10 +192,10 @@ namespace Deskdrop.WinUI
         };
         public string StatusColor => kind switch
         {
-            "file_transfer_complete" or "clipboard_applied" or "peer_connected" or "sync_resumed" => "#2AA971",
-            "file_transfer_failed" => "#D6483B",
-            "file_transfer_started" => "#3A66D8",
-            _ => "#8A8A90"
+            "file_transfer_complete" or "clipboard_applied" or "peer_connected" or "sync_resumed" => "#1FA66A",
+            "file_transfer_failed" => "#D64545",
+            "file_transfer_started" => "#2F6FE0",
+            _ => "#8A8A93"
         };
 
         private void NotifyDisplayProperties()
@@ -298,9 +298,9 @@ namespace Deskdrop.WinUI
         // that also feed the tray/notification paths, so they have to read
         // acceptably on both a light and a dark surface. Mid-tone versions of
         // the design system's status colours satisfy both.
-        public string ConnectionColor => pairingRequested || outgoingPairingWaiting ? "#C9861E" : (status == "connected" ? "#2AA971" : "#8A8A90");
+        public string ConnectionColor => pairingRequested || outgoingPairingWaiting ? "#C98A1E" : (status == "connected" ? "#1FA66A" : "#8A8A93");
         public string TrustText => is_trusted ? "Trusted" : "Pairing required";
-        public string TrustColor => is_trusted ? "#2AA971" : "#C9861E";
+        public string TrustColor => is_trusted ? "#1FA66A" : "#C98A1E";
         public string DeviceIcon => (platform ?? friendly_name).ToLowerInvariant() switch
         {
             var p when p.Contains("windows") => "Monitor",
@@ -426,7 +426,7 @@ namespace Deskdrop.WinUI
                 return "Battery"; // Empty
             }
         }
-        public string BatteryColor => BatteryCharging ? "#2AA971" : (BatteryLevel <= 20 ? "#D6483B" : "#8A8A90");
+        public string BatteryColor => BatteryCharging ? "#1FA66A" : (BatteryLevel <= 20 ? "#D64545" : "#8A8A93");
 
         private long _storageTotal;
         public long StorageTotal { get => _storageTotal; set { if(SetProperty(ref _storageTotal, value)) NotifyStorageProperties(); } }
@@ -569,7 +569,7 @@ namespace Deskdrop.WinUI
                 };
             }
         }
-        public string ProgressColor => status is "complete" or "completed" ? "#2AA971" : (status == "failed" ? "#D6483B" : "#3A66D8");
+        public string ProgressColor => status is "complete" or "completed" ? "#1FA66A" : (status == "failed" ? "#D64545" : "#2F6FE0");
 
         // ---- Transfer-manager presentation ---------------------------
         //
@@ -605,11 +605,11 @@ namespace Deskdrop.WinUI
 
         public string StateColor => status switch
         {
-            "complete" or "completed" => "#2AA971",
-            "failed" or "cancelled" => "#D6483B",
-            "incoming" => "#C9861E",
-            "paused" => "#8A8A90",
-            _ => "#3A66D8",
+            "complete" or "completed" => "#1FA66A",
+            "failed" or "cancelled" => "#D64545",
+            "incoming" => "#C98A1E",
+            "paused" => "#8A8A93",
+            _ => "#2F6FE0",
         };
 
         // "42.8 MB/s . 2 sec remaining" - the two numbers people actually
@@ -634,14 +634,14 @@ namespace Deskdrop.WinUI
             "failed" => "RotateCcw",
             _ => "ShieldCheck"
         };
-        public string PrimaryBackground => status == "incoming" ? "#34C759" : (status == "paused" ? "#0055CC" : "#0D000000");
+        public string PrimaryBackground => status == "incoming" ? "#1FA66A" : (status == "paused" ? "#0055CC" : "#0D000000");
         public string PrimaryForeground => status == "incoming" || status == "paused" ? "White" : "#D9000000";
         public bool PrimaryVisible => true;
 
         public bool SecondaryVisible => status == "incoming" || status == "in_progress" || status == "transferring" || status == "paused" || status == "verifying";
         public string SecondaryIcon => status == "incoming" ? "X" : "X";
-        public string SecondaryBackground => "#1AFF3B30";
-        public string SecondaryForeground => "#FF3B30";
+        public string SecondaryBackground => "#1AD64545";
+        public string SecondaryForeground => "#D64545";
 
         private void NotifyProgressProperties()
         {
@@ -1061,10 +1061,10 @@ namespace Deskdrop.WinUI
         {
             get
             {
-                if (!IsDaemonRunning) return "#D6483B";
-                if (ConnectedCount > 0) return "#2AA971";
-                if (AttentionCount > 0) return "#C9861E";
-                return "#8A8A90";
+                if (!IsDaemonRunning) return "#D64545";
+                if (ConnectedCount > 0) return "#1FA66A";
+                if (AttentionCount > 0) return "#C98A1E";
+                return "#8A8A93";
             }
         }
 
@@ -1864,7 +1864,7 @@ namespace Deskdrop.WinUI {
                 }
             }
         }
-        public string PinColor => IsPinned ? "#3A66D8" : "#8A8A90";
+        public string PinColor => IsPinned ? "#2F6FE0" : "#8A8A93";
 
         // Windows glyph for the row. TypeIcon below is the emoji used by the
         // cross-platform surfaces; on Windows we want Segoe Fluent so the
