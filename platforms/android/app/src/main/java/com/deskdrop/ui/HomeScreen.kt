@@ -1,0 +1,615 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
+package com.deskdrop.ui
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.NorthEast
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.deskdrop.ActivityEntry
+import com.deskdrop.ActivityKind
+import com.deskdrop.PeerSnapshot
+import com.deskdrop.SpeedTestProgress
+import com.deskdrop.TransferProgress
+import com.deskdrop.TransferState
+import com.deskdrop.ui.theme.OutfitFontFamily
+import com.deskdrop.ui.theme.crPressScale
+import kotlinx.coroutines.delay
+import kotlin.math.PI
+import kotlin.math.sin
+
+
+
+
+
+@Composable
+fun HomeTab(
+    isDark: Boolean,
+    deviceName: String,
+    ambientStatus: String,
+    peers: List<PeerSnapshot>,
+    feed: List<ActivityEntry>,
+    activeTransfers: List<TransferProgress>,
+    activeSpeedTests: List<SpeedTestProgress>,
+    onActionStartSpeedTest: (String) -> Unit,
+    onActionPushClipboard: () -> Unit,
+    onActionSendQuickContext: () -> Unit,
+    quickContextText: String?,
+    onActionPairMagicLink: () -> Unit,
+    onManualIp: () -> Unit,
+    onActionSendFiles: (String?) -> Unit,
+    onActionStreamCamera: () -> Unit,
+    onApplyClipboard: (ActivityEntry) -> Unit,
+    onActionPauseTransfer: (String) -> Unit,
+    onActionResumeTransfer: (String) -> Unit,
+    onActionCancelTransfer: (String) -> Unit,
+    onForgetPeer: (PeerSnapshot) -> Unit,
+    onDeleteActivity: (ActivityEntry) -> Unit,
+    onResendActivity: (ActivityEntry) -> Unit,
+    onReplayOnboarding: () -> Unit,
+    onTabSelected: (AppTab) -> Unit,
+    onRespondPairing: (PeerSnapshot, Boolean) -> Unit
+) {
+    val c = remember(isDark) { DdColors(isDark) }
+    val connected = peers.filter { it.isConnected }
+    val pairingRequest = peers.firstOrNull { it.pairingRequested && !it.trusted }
+    val liveTransfer = activeTransfers.firstOrNull { !it.isPaused && it.state == TransferState.PROGRESS }
+    var sendTargetChoices by remember { mutableStateOf<List<PeerSnapshot>?>(null) }
+
+    val sendFiles = {
+        // With several devices connected, ask which one gets the files
+        // instead of silently sending to all of them.
+        if (connected.size > 1) sendTargetChoices = connected
+        else onActionSendFiles(connected.firstOrNull()?.id)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = PageGutter)
+    ) {
+        HomeTopBar(
+            c = c,
+            deviceName = deviceName,
+            onScanQr = onActionPairMagicLink,
+            onManualIp = onManualIp
+        )
+
+        Spacer(Modifier.height(28.dp))
+
+        if (pairingRequest != null) {
+            PairingPanel(c, pairingRequest, onRespondPairing)
+        } else {
+            StatusBlock(
+                c = c,
+                hasPeers = peers.isNotEmpty(),
+                connected = connected,
+                tagline = DeskdropTaglines.current(connectedCount = connected.size, isTransferring = liveTransfer != null),
+                onAddDevice = onReplayOnboarding
+            )
+        }
+
+        if (peers.isNotEmpty()) {
+            val enabled = connected.isNotEmpty()
+            SectionHeader(c, "Send", if (enabled) null else "Connect a device first")
+            Panel(c) {
+                ActionRow(c, Icons.Outlined.UploadFile, "Files", "Photos, documents, anything", enabled = enabled, onClick = sendFiles)
+                Hairline(c)
+                val clip = quickContextText?.trim()?.replace('\n', ' ')?.takeIf { it.isNotBlank() }
+                ActionRow(
+                    c, Icons.Outlined.ContentPaste, "Clipboard",
+                    clip ?: "Send what you last copied",
+                    detailIsContent = clip != null,
+                    enabled = enabled,
+                    onClick = if (clip == null) onActionPushClipboard else onActionSendQuickContext
+                )
+                Hairline(c)
+                ActionRow(c, Icons.Outlined.Videocam, "Camera", "Stream this camera to your computer", enabled = enabled, onClick = onActionStreamCamera)
+            }
+        }
+
+        if (activeTransfers.isNotEmpty()) {
+            SectionHeader(c, "Transferring", "${activeTransfers.size}")
+            Panel(c) {
+                activeTransfers.forEachIndexed { i, t ->
+                    if (i > 0) Hairline(c)
+                    TransferRow(
+                        c = c,
+                        transfer = t,
+                        onPause = { onActionPauseTransfer(t.id) },
+                        onResume = { onActionResumeTransfer(t.id) },
+                        onCancel = { onActionCancelTransfer(t.id) }
+                    )
+                }
+            }
+        }
+
+        if (peers.isNotEmpty()) {
+            SectionHeader(c, "Devices", "${connected.size} of ${peers.size} online") {
+                onTabSelected(AppTab.Devices)
+            }
+            Panel(c) {
+                peers.forEachIndexed { i, peer ->
+                    if (i > 0) Hairline(c)
+                    DeviceRow(
+                        c = c,
+                        peer = peer,
+                        speedTest = activeSpeedTests.find { it.peerId == peer.id },
+                        onSendFiles = { onActionSendFiles(peer.id) },
+                        onSpeedTest = { onActionStartSpeedTest(peer.id) },
+                        onRespond = { onRespondPairing(peer, it) },
+                        onForget = { onForgetPeer(peer) }
+                    )
+                }
+            }
+        }
+
+        val recent = remember(feed) { dedupeDeviceEvents(feed).take(5) }
+        Column {
+            SectionHeader(c, "Recent", null, if (feed.size > 5) ({ onTabSelected(AppTab.Activity) }) else null)
+            if (recent.isEmpty()) {
+                EmptyRecent(c)
+            } else {
+                Panel(c) {
+                    recent.forEachIndexed { i, entry ->
+                        if (i > 0) Hairline(c)
+                        ActivityRow(
+                            c = c,
+                            entry = entry,
+                            onApply = { onApplyClipboard(entry) },
+                            onResend = { onResendActivity(entry) },
+                            onDelete = { onDeleteActivity(entry) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Clears the floating dock.
+        Spacer(Modifier.height(140.dp))
+    }
+
+    sendTargetChoices?.let { choices ->
+        SendTargetDialog(
+            peers = choices,
+            onPick = { target ->
+                sendTargetChoices = null
+                onActionSendFiles(target)
+            },
+            onDismiss = { sendTargetChoices = null }
+        )
+    }
+}
+
+@Composable
+private fun HomeTopBar(
+    c: DdColors,
+    deviceName: String,
+    onScanQr: () -> Unit,
+    onManualIp: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Deskdrop", style = DdType.title.copy(fontSize = 22.sp, letterSpacing = (-0.6).sp), color = c.text)
+            if (deviceName.isNotBlank()) {
+                Text(deviceName, style = DdType.small, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
+    }
+}
+
+// ---------------------------------------------------------------- status
+
+/** Who this phone is linked to, said plainly. */
+@Composable
+private fun StatusBlock(
+    c: DdColors,
+    hasPeers: Boolean,
+    connected: List<PeerSnapshot>,
+    tagline: String,
+    onAddDevice: () -> Unit
+) {
+    val lead = connected.firstOrNull()
+    Column(Modifier.fillMaxWidth()) {
+        when {
+            lead != null -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).background(c.live, CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Connected", style = DdType.label, color = c.live)
+                    val synced = agoLabel(connected.mapNotNull { it.lastSyncSecs }.maxOrNull())
+                    val meta = listOfNotNull(lead.ip, synced?.let { "synced $it" }).joinToString("  ·  ")
+                    if (meta.isNotEmpty()) {
+                        Spacer(Modifier.width(10.dp))
+                        Text(meta, style = DdType.mono, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(linkedHeadline(connected), style = DdType.display, color = c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(6.dp))
+                Text(tagline, style = DdType.body, color = c.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            hasPeers -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).border(1.5.dp, c.textMuted, CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Not connected", style = DdType.label, color = c.textMuted)
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Waiting for your computer", style = DdType.display, color = c.text)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Paired devices reconnect on their own when they're on the same Wi-Fi or hotspot.",
+                    style = DdType.body,
+                    color = c.textMuted
+                )
+            }
+            else -> {
+                Text("Link this phone to your computer", style = DdType.display, color = c.text)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Share your clipboard and send files over your own network. Nothing goes through a cloud.",
+                    style = DdType.body,
+                    color = c.textMuted
+                )
+                Spacer(Modifier.height(20.dp))
+                PillButton(c, "Pair a device", filled = true, onClick = onAddDevice)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun PairingPanel(c: DdColors, peer: PeerSnapshot, onRespond: (PeerSnapshot, Boolean) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(PanelShape)
+            .background(c.surface)
+            .border(1.dp, c.accent, PanelShape)
+            .padding(20.dp)
+    ) {
+        Text("Pairing request", style = DdType.label, color = c.accent)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "${peer.name} wants to link",
+            style = DdType.display.copy(fontSize = 24.sp, lineHeight = 28.sp),
+            color = c.text,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(18.dp))
+        PinTiles(c, peer.pairingPin)
+        Spacer(Modifier.height(12.dp))
+        Text("Only accept if this code matches the one on ${peer.name}.", style = DdType.small, color = c.textMuted)
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PillButton(c, "Decline", filled = false, modifier = Modifier.weight(1f)) { onRespond(peer, false) }
+            PillButton(c, "Accept", filled = true, modifier = Modifier.weight(1f)) { onRespond(peer, true) }
+        }
+    }
+}
+
+
+private fun linkedHeadline(connected: List<PeerSnapshot>): String = when (connected.size) {
+    1 -> connected[0].name
+    2 -> "${connected[0].name} & ${connected[1].name}"
+    else -> "${connected.size} devices"
+}
+
+
+@Composable
+private fun ActionRow(
+    c: DdColors,
+    icon: ImageVector,
+    title: String,
+    detail: String,
+    detailIsContent: Boolean = false,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
+            .combinedClickable(enabled = enabled, onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            })
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(WellShape).background(c.accentSoft),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = c.accent, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = DdType.label, color = c.text)
+            Text(
+                detail,
+                style = if (detailIsContent) DdType.mono else DdType.small,
+                color = c.textMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
+    }
+}
+
+// ---------------------------------------------------------------- lists
+
+@Composable
+private fun TransferRow(
+    c: DdColors,
+    transfer: TransferProgress,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val ratio = if (transfer.totalBytes > 0L) {
+        (transfer.bytesReceived.toDouble() / transfer.totalBytes).coerceIn(0.0, 1.0).toFloat()
+    } else transfer.percent / 100f
+    val animated by animateFloatAsState(ratio, tween(150), label = "transfer")
+    val speed = when {
+        transfer.isPaused -> "Paused"
+        transfer.speedBps >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB/s", transfer.speedBps / (1024.0 * 1024))
+        transfer.speedBps >= 1024 -> "${transfer.speedBps / 1024} KB/s"
+        else -> "Starting…"
+    }
+    val direction = when {
+        transfer.peerName.isBlank() -> null
+        transfer.isOutbound -> "to ${transfer.peerName}"
+        else -> "from ${transfer.peerName}"
+    }
+
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(transfer.fileName, style = DdType.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOfNotNull(direction, speed).joinToString(" · "),
+                    style = DdType.small,
+                    color = if (transfer.isPaused) c.warn else c.textMuted,
+                    maxLines = 1
+                )
+            }
+            Text("${(ratio * 100).toInt()}%", style = DdType.mono, color = c.text)
+            IconButton(onClick = if (transfer.isPaused) onResume else onPause) {
+                Icon(
+                    if (transfer.isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                    contentDescription = if (transfer.isPaused) "Resume" else "Pause",
+                    tint = c.text,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            IconButton(onClick = onCancel) {
+                Icon(Icons.Rounded.Close, contentDescription = "Cancel", tint = c.textMuted, modifier = Modifier.size(20.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(
+            Modifier
+                .padding(end = 12.dp)
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(CircleShape)
+                .background(c.surfaceSunk)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(animated)
+                    .fillMaxHeight()
+                    .background(if (transfer.isPaused) c.warn else c.accent)
+            )
+        }
+    }
+}
+
+@Composable
+internal fun DeviceRow(
+    c: DdColors,
+    peer: PeerSnapshot,
+    speedTest: SpeedTestProgress?,
+    onSendFiles: () -> Unit,
+    onSpeedTest: () -> Unit,
+    onRespond: (Boolean) -> Unit,
+    onForget: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    var menuOpen by remember { mutableStateOf(false) }
+    val (status, statusColor) = when {
+        speedTest != null -> "${speedTest.phase} · ${speedTest.speedMbpsString}" to c.accent
+        peer.pairingRequested && !peer.trusted -> "Wants to pair" to c.accent
+        peer.isConnected -> "Connected" to c.live
+        peer.lifecycleState == "pairing_in_progress" -> "Waiting for approval" to c.warn
+        peer.isConnecting -> "Connecting…" to c.textMuted
+        peer.trusted -> (agoLabel(peer.lastSeenSecs)?.let { "Seen $it" } ?: "Offline") to c.textMuted
+        else -> "Not paired" to c.warn
+    }
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = { menuOpen = true },
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        menuOpen = true
+                    }
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(WellShape)
+                    .background(if (peer.isConnected) c.accentSoft else c.surfaceSunk),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (isPhoneName(peer.name)) Icons.Outlined.Smartphone else Icons.Outlined.LaptopMac,
+                    contentDescription = null,
+                    tint = if (peer.isConnected) c.accent else c.textMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(peer.name, style = DdType.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (peer.isConnected) {
+                        Box(Modifier.size(6.dp).background(c.live, CircleShape))
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(status, style = DdType.small, color = statusColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Icon(Icons.Rounded.MoreHoriz, contentDescription = "Options for ${peer.name}", tint = c.textMuted, modifier = Modifier.size(20.dp))
+        }
+
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            modifier = Modifier.background(c.surface)
+        ) {
+            if (peer.pairingRequested && !peer.trusted) {
+                MenuItem(c, "Accept pairing", Icons.Outlined.Check, tint = c.live) { menuOpen = false; onRespond(true) }
+                MenuItem(c, "Decline", Icons.Outlined.Close) { menuOpen = false; onRespond(false) }
+            } else if (peer.isConnected) {
+                MenuItem(c, "Send files", Icons.Outlined.UploadFile) { menuOpen = false; onSendFiles() }
+                MenuItem(c, "Test speed", Icons.Outlined.Speed) { menuOpen = false; onSpeedTest() }
+            }
+            MenuItem(c, "Forget device", Icons.Outlined.DeleteOutline, tint = c.danger) { menuOpen = false; onForget() }
+        }
+    }
+}
+
+
+@Composable
+private fun EmptyRecent(c: DdColors) = EmptyBox(c, Icons.Outlined.History, "Copy something on either device, or send a file. It shows up here.")
+
+
+// ---------------------------------------------------------------- primitives
+
+
+
+
+
+
+// ---------------------------------------------------------------- dialogs
+
+
+/** Asks which connected device should receive files. `null` target means all devices. */
+@Composable
+private fun SendTargetDialog(
+    peers: List<PeerSnapshot>,
+    onPick: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Send to which device?") },
+        text = {
+            Column {
+                peers.forEach { peer ->
+                    TextButton(onClick = { onPick(peer.id) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(peer.name, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                TextButton(onClick = { onPick(null) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("All connected devices", modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+// ---------------------------------------------------------------- helpers
+
+/** Keeps only the latest connect/disconnect per device so they don't flood the list. */
+private fun dedupeDeviceEvents(feed: List<ActivityEntry>): List<ActivityEntry> {
+    val seen = mutableSetOf<String>()
+    return feed.filter { e ->
+        val isDeviceEvent = e.kind == ActivityKind.PEER_CONNECTED || e.kind == ActivityKind.PEER_DISCONNECTED
+        !isDeviceEvent || seen.add(e.deviceName)
+    }
+}
+
+

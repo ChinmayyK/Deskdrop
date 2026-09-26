@@ -1,41 +1,15 @@
 package com.deskdrop.ui
 
-import com.deskdrop.ui.theme.*
-
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.deskdrop.ui.theme.CRBackground
-import com.deskdrop.ui.theme.CRTheme
-import com.deskdrop.ui.theme.CRTypography
-import com.deskdrop.ui.theme.crGlassCard
-import com.deskdrop.ui.theme.CRSwitch
 
 fun getLocalIpAddress(): String {
     try {
@@ -104,582 +78,157 @@ fun SettingsTab(
     onStorageSettingsClicked: () -> Unit = {},
     onNotificationSettingsClicked: () -> Unit = {}
 ) {
-    val haptic = LocalHapticFeedback.current
-    val listState = rememberLazyListState()
+    val c = rememberDdColors(isDark)
+    val context = LocalContext.current
+    val ip = remember { getLocalIpAddress() }
+    val version = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
+    }
+    val saved = peers.filter { it.remembered || it.trusted }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-            
-        Text(
-            text = "Settings",
-            style = CRTypography.h2,
-            color = CRTheme.textHigh(isDark),
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = PageGutter, end = PageGutter, bottom = 140.dp)
+    ) {
+        item {
+            Column {
+                PageTitle(c, "Settings")
+                Spacer(Modifier.height(20.dp))
+                Panel(c) {
+                    ListRow(
+                        c, Icons.Outlined.Smartphone, deviceName.ifBlank { "This phone" },
+                        detail = when {
+                            !isServiceRunning -> "Service stopped"
+                            !isSyncEnabled -> "Sync paused · $ip"
+                            else -> "Active · $ip"
+                        },
+                        detailColor = if (isServiceRunning && isSyncEnabled) c.live else c.warn,
+                        iconTint = c.accent,
+                        iconBackground = c.accentSoft
+                    )
+                }
+            }
+        }
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                item {
-                    SettingsSection(
-                        isDark = isDark,
-                        title = "Service Controls",
-                        accentColor = CRTheme.brandElectric,
-                        icon = Icons.Rounded.Settings
-                    ) {
-                        Column {
-                            if (isSyncEnabled) {
-                                SettingsActionTile(isDark = isDark, icon = Icons.Rounded.Pause, label = "Pause Sync", color = CRTheme.accentAmber, onClick = onActionPauseSync)
-                            } else {
-                                SettingsActionTile(isDark = isDark, icon = Icons.Rounded.PlayArrow, label = "Resume Sync", color = CRTheme.accentGreen, onClick = onResumeSync)
-                            }
-                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                            if (!isServiceRunning) {
-                                SettingsActionTile(isDark = isDark, icon = Icons.Rounded.PlayCircle, label = "Start Service", color = CRTheme.accentGreen, onClick = onStartSync)
-                                HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                            }
-                            SettingsActionTile(isDark = isDark, icon = Icons.Rounded.Search, label = "Scan Now", color = CRTheme.brandCyan, onClick = onScanNow)
-                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                            SettingsActionTile(isDark = isDark, icon = Icons.Rounded.LinkOff, label = "Disconnect All", color = CRTheme.brandPink, onClick = onActionDisconnectAll)
-                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                            SettingsActionTile(isDark = isDark, icon = Icons.Rounded.Stop, label = "Stop Service", color = CRTheme.accentRed, onClick = onActionStopService)
-                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                            SettingsActionTile(isDark = isDark, icon = Icons.Rounded.Info, label = "Diagnostics", color = CRTheme.brandElectric, onClick = onOpenDiagnostics)
-                        }
+        item {
+            Column {
+                SectionHeader(c, "Sync", null)
+                Panel(c) {
+                    SwitchRow(c, Icons.Outlined.Sync, "Sync", "Turn off to pause everything", isSyncEnabled, onSyncEnabledChange)
+                    if (isSyncEnabled) {
+                        Hairline(c)
+                        SwitchRow(c, Icons.Outlined.TextFields, "Text", null, syncText, onSyncTextChange)
+                        Hairline(c)
+                        SwitchRow(c, Icons.Outlined.Image, "Images", null, syncImages, onSyncImagesChange)
+                        Hairline(c)
+                        SwitchRow(c, Icons.Outlined.FilePresent, "Files", "Saved to Downloads", syncFiles, onSyncFilesChange)
                     }
                 }
+            }
+        }
 
-                item {
-                    // Aboutfile Card Hero
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-
-                            }
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(80.dp)
-                                    .clip(CircleShape)
-                                    .background(CRTheme.blueSoft.copy(alpha = 0.1f))
-                                    .border(2.dp, CRTheme.blueSoft.copy(alpha = 0.5f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = deviceName.take(1).uppercase(),
-                                    fontSize = 32.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = CRTheme.blueSoft
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Text(text = deviceName, style = CRTypography.h2, color = CRTheme.textHigh(isDark))
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(CRTheme.surface(isDark).copy(alpha = 0.5f))
-                                    .border(1.dp, CRTheme.stroke(isDark), RoundedCornerShape(12.dp))
-                                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "IP: ${getLocalIpAddress()}",
-                                    fontSize = 12.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = CRTheme.textMedium(isDark),
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(CRTheme.statusGreen))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "ACTIVE",
-                                    style = CRTypography.caption,
-                                    color = CRTheme.textHigh(isDark)
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = CRTheme.blueSoft, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("TAP TO EDIT NAME", style = CRTypography.caption, color = CRTheme.blueSoft)
-                            }
-                        }
-                    }
+        item {
+            Column {
+                SectionHeader(c, "Continuity", null)
+                Panel(c) {
+                    SwitchRow(c, Icons.Outlined.Sms, "SMS codes", "Copy one-time codes to your computer", autoForwardSms, onAutoForwardSmsChange)
+                    Hairline(c)
+                    SwitchRow(c, Icons.Outlined.Screenshot, "Screenshots", "Send new screenshots automatically", autoForwardScreenshots, onAutoForwardScreenshotsChange)
+                    Hairline(c)
+                    SwitchRow(c, Icons.Outlined.Call, "Calls", "Needs Phone, Contacts and Call log access", callContinuityEnabled, onCallContinuityChange)
+                    Hairline(c)
+                    SwitchRow(c, Icons.Outlined.Notifications, "Notifications", "Mirror phone notifications", notificationMirroringEnabled, onNotificationMirroringChange)
                 }
+            }
+        }
 
-                item {
-                    SettingsSection(
-                        isDark = isDark,
-                        title = "Appearance",
-                        accentColor = CRTheme.blueSoft,
-                        icon = Icons.Rounded.Brush
-                    ) {
-                        SettingsSwitchRow(
-                            isDark = isDark,
-                            icon = Icons.Rounded.DarkMode,
-                            title = "Dark Mode",
-                            subtitle = "Pure black theme for OLED displays",
-                            checked = isDark,
-                            onCheckedChange = onDarkModeChange
-                        )
-                    }
+        item {
+            Column {
+                SectionHeader(c, "Appearance", null)
+                Panel(c) {
+                    SwitchRow(c, Icons.Outlined.DarkMode, "Dark mode", null, isDark, onDarkModeChange)
                 }
+            }
+        }
 
-                item {
-                    SettingsSection(
-                        isDark = isDark,
-                        title = "Clipboard Sync",
-                        accentColor = CRTheme.statusGreen,
-                        icon = Icons.Rounded.Sync
-                    ) {
-                        Column {
-                            SettingsSwitchRow(
-                                isDark = isDark,
-                                icon = Icons.Rounded.Link,
-                                title = "Enable Sync",
-                                subtitle = "Master switch to pause all transfers",
-                                checked = isSyncEnabled,
-                                onCheckedChange = onSyncEnabledChange
-                            )
-                            
-                            AnimatedVisibility(
-                                visible = isSyncEnabled,
-                                enter = expandVertically() + fadeIn(),
-                                exit = shrinkVertically() + fadeOut()
-                            ) {
-                                Column {
-                                    HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                                    SettingsSwitchRow(
-                                        isDark = isDark,
-                                        icon = Icons.Rounded.TextFields,
-                                        title = "Sync Text",
-                                        subtitle = null,
-                                        checked = syncText,
-                                        onCheckedChange = onSyncTextChange
-                                    )
-                                    HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                                    SettingsSwitchRow(
-                                        isDark = isDark,
-                                        icon = Icons.Rounded.Image,
-                                        title = "Sync Images",
-                                        subtitle = null,
-                                        checked = syncImages,
-                                        onCheckedChange = onSyncImagesChange
-                                    )
-                                    HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                                    SettingsSwitchRow(
-                                        isDark = isDark,
-                                        icon = Icons.Rounded.FilePresent,
-                                        title = "Sync Files",
-                                        subtitle = "Saved directly to Downloads folder",
-                                        checked = syncFiles,
-                                        onCheckedChange = onSyncFilesChange
-                                    )
-                                }
-                            }
-                        }
-                    }
+        item {
+            Column {
+                SectionHeader(c, "Permissions", null)
+                Panel(c) {
+                    ListRow(c, Icons.Outlined.BatteryChargingFull, "Battery", "Allow background use so clips arrive instantly", onClick = onBatterySettingsClicked)
+                    Hairline(c)
+                    ListRow(c, Icons.Outlined.Folder, "All files access", "Lets your computer browse this phone's files", onClick = onStorageSettingsClicked)
+                    Hairline(c)
+                    ListRow(c, Icons.Outlined.NotificationsOff, "Status bar icon", "Hide it without stopping sync", onClick = onNotificationSettingsClicked)
                 }
+            }
+        }
 
-                item {
-                    SettingsSection(
-                        isDark = isDark,
-                        title = "Ambient Continuity",
-                        accentColor = CRTheme.statusAmber,
-                        icon = Icons.Rounded.Star
-                    ) {
-                        Column {
-                            SettingsSwitchRow(
-                                isDark = isDark,
-                                icon = Icons.Rounded.Message,
-                                title = "Auto-forward SMS 2FA",
-                                subtitle = "Automatically copies 2FA codes to Mac clipboard",
-                                checked = autoForwardSms,
-                                onCheckedChange = onAutoForwardSmsChange
-                            )
-                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                            SettingsSwitchRow(
-                                isDark = isDark,
-                                icon = Icons.Rounded.CameraAlt,
-                                title = "Screenshot Sync",
-                                subtitle = "Instantly sends Android screenshots to your Mac",
-                                checked = autoForwardScreenshots,
-                                onCheckedChange = onAutoForwardScreenshotsChange
-                            )
-                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                            SettingsSwitchRow(
-                                isDark = isDark,
-                                icon = Icons.Rounded.Phone,
-                                title = "Call Continuity",
-                                subtitle = "Requires Phone, Contacts, and Call Log permissions",
-                                checked = callContinuityEnabled,
-                                onCheckedChange = onCallContinuityChange
-                            )
-                            HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 72.dp))
-                            SettingsSwitchRow(
-                                isDark = isDark,
-                                icon = Icons.Rounded.Notifications,
-                                title = "Notification Mirroring",
-                                subtitle = "Mirror Android notifications to your Mac",
-                                checked = notificationMirroringEnabled,
-                                onCheckedChange = onNotificationMirroringChange
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    SettingsSection(
-                        isDark = isDark,
-                        title = "Saved Devices",
-                        accentColor = CRTheme.cyanSoft,
-                        icon = Icons.Rounded.Devices
-                    ) {
-                        Column {
-                            val savedPeers = peers.filter { it.remembered || it.trusted }
-                            if (savedPeers.isEmpty()) {
-                                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = "No saved devices.",
-                                        style = CRTypography.bodyMedium,
-                                        color = CRTheme.textMedium(isDark)
-                                    )
-                                }
-                            } else {
-                                savedPeers.forEachIndexed { index, peer ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 24.dp, vertical = 20.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.surface(isDark)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(peer.name.take(1).uppercase(), style = CRTypography.h2, color = CRTheme.textHigh(isDark))
-                                        }
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(text = peer.name, style = CRTypography.bodyMedium, color = CRTheme.textHigh(isDark))
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(if (peer.isConnected) CRTheme.statusGreen else CRTheme.textMedium(isDark)))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(text = if (peer.isConnected) "Connected" else "Offline", fontSize = 12.sp, color = CRTheme.textMedium(isDark))
-                                            }
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(CRTheme.statusRed.copy(alpha = 0.1f))
-                                                .clickable { 
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    onForgetDevice(peer.id) 
-                                                }
-                                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                                        ) {
-                                            Text(
-                                                text = "FORGET",
-                                                style = CRTypography.caption,
-                                                color = CRTheme.statusRed
-                                            )
-                                        }
-                                    }
-                                    if (index < savedPeers.size - 1) {
-                                        HorizontalDivider(color = CRTheme.stroke(isDark), modifier = Modifier.padding(start = 80.dp))
+        if (saved.isNotEmpty()) {
+            item {
+                Column {
+                    SectionHeader(c, "Saved devices", "${saved.size}")
+                    Panel(c) {
+                        saved.forEachIndexed { i, peer ->
+                            if (i > 0) Hairline(c)
+                            ListRow(
+                                c,
+                                if (isPhoneName(peer.name)) Icons.Outlined.Smartphone else Icons.Outlined.LaptopMac,
+                                peer.name,
+                                detail = if (peer.isConnected) "Connected" else "Offline",
+                                detailColor = if (peer.isConnected) c.live else c.textMuted,
+                                trailing = {
+                                    PillButton(c, "Forget", filled = false, compact = true, textColor = c.danger) {
+                                        onForgetDevice(peer.id)
                                     }
                                 }
-                            }
+                            )
                         }
                     }
                 }
-
-                item {
-                    SettingsSection(
-                        isDark = isDark,
-                        title = "Background Execution",
-                        accentColor = CRTheme.statusAmber,
-                        icon = Icons.Rounded.BatteryAlert
-                    ) {
-                        Column(modifier = Modifier.padding(24.dp)) {
-                            Row(verticalAlignment = Alignment.Top) {
-                                Box(
-                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.statusAmber.copy(alpha = 0.1f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Rounded.Warning, contentDescription = "Warning", tint = CRTheme.statusAmber, modifier = Modifier.size(20.dp))
-                                }
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(
-                                    text = "To ensure Deskdrop stays alive in the background and receives clips instantly, disable battery optimization for this app.",
-                                    style = CRTypography.bodyMedium,
-                                    color = CRTheme.textMedium(isDark),
-                                    lineHeight = 22.sp
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(CRTheme.textHigh(isDark))
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onBatterySettingsClicked()
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("OPEN BATTERY SETTINGS", style = CRTypography.label, color = CRTheme.bg(isDark))
-                            }
-                        }
-                    }
-                }
-
-                // Remote Explorer Storage Permissions Section
-                item {
-                    SettingsSection(
-                        isDark = isDark,
-                        title = "Remote File Explorer Access",
-                        accentColor = CRTheme.statusGreen,
-                        icon = Icons.Rounded.Folder
-                    ) {
-                        Column(modifier = Modifier.padding(24.dp)) {
-                            Row(verticalAlignment = Alignment.Top) {
-                                Box(
-                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.statusGreen.copy(alpha = 0.1f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Rounded.Folder, contentDescription = "Folder", tint = CRTheme.statusGreen, modifier = Modifier.size(20.dp))
-                                }
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(
-                                    text = "To browse and pull all files across your phone (Photos, Documents, APKs, Downloads) directly from your Mac, grant All Files Access.",
-                                    style = CRTypography.bodyMedium,
-                                    color = CRTheme.textMedium(isDark),
-                                    lineHeight = 22.sp
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(CRTheme.textHigh(isDark))
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onStorageSettingsClicked()
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("GRANT ALL FILES ACCESS", style = CRTypography.label, color = CRTheme.bg(isDark))
-                            }
-                        }
-                    }
-                }
-
-                // Status Bar Notification Hiding Section
-                item {
-                    SettingsSection(
-                        isDark = isDark,
-                        title = "Status Bar Notification",
-                        accentColor = CRTheme.blueSoft,
-                        icon = Icons.Rounded.NotificationsOff
-                    ) {
-                        Column(modifier = Modifier.padding(24.dp)) {
-                            Row(verticalAlignment = Alignment.Top) {
-                                Box(
-                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.blueSoft.copy(alpha = 0.1f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Rounded.NotificationsOff, contentDescription = null, tint = CRTheme.blueSoft, modifier = Modifier.size(20.dp))
-                                }
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(
-                                    text = "Deskdrop runs an ultra-efficient background service so clips sync instantly. You can minimize or hide the top status bar icon in system notification settings without affecting sync.",
-                                    style = CRTypography.bodyMedium,
-                                    color = CRTheme.textMedium(isDark),
-                                    lineHeight = 22.sp
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(CRTheme.textHigh(isDark))
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onNotificationSettingsClicked()
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("HIDE STATUS BAR ICON", style = CRTypography.label, color = CRTheme.bg(isDark))
-                            }
-                        }
-                    }
-                }
-
-                item {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(CRTheme.glass(isDark))
-                                .border(1.dp, CRTheme.stroke(isDark), RoundedCornerShape(16.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Rounded.EnergySavingsLeaf, contentDescription = "Deskdrop", tint = CRTheme.statusGreen, modifier = Modifier.size(32.dp))
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(text = "Deskdrop", style = CRTypography.h2, color = CRTheme.textHigh(isDark))
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = "VERSION 1.0.0", style = CRTypography.caption, color = CRTheme.textMedium(isDark))
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = "NO CLOUD. NO ACCOUNT. NO TELEMETRY.",
-                            style = CRTypography.caption,
-                            color = CRTheme.textHigh(isDark),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-        }
-    }
-}
-
-@Composable
-fun SettingsSection(
-    isDark: Boolean,
-    title: String,
-    accentColor: Color,
-    icon: ImageVector,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(accentColor))
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = title.uppercase(),
-                style = CRTypography.label,
-                color = CRTheme.textMedium(isDark)
-            )
-        }
-        
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .crGlassCard(isDark = isDark, cornerRadius = 24.dp)
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                content()
             }
         }
-    }
-}
 
-@Composable
-fun SettingsSwitchRow(
-    isDark: Boolean,
-    icon: ImageVector,
-    title: String,
-    subtitle: String?,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onCheckedChange(!checked)
-            }
-            .padding(horizontal = 24.dp, vertical = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.size(40.dp).clip(CircleShape).background(CRTheme.surface(isDark)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = title, tint = CRTheme.textHigh(isDark), modifier = Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.width(16.dp))
-        
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = CRTypography.bodyMedium, color = CRTheme.textHigh(isDark))
-            if (subtitle != null) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.sp,
-                    color = CRTheme.textMedium(isDark),
-                    lineHeight = 18.sp
-                )
+        item {
+            Column {
+                SectionHeader(c, "Service", null)
+                Panel(c) {
+                    if (!isServiceRunning) {
+                        ListRow(c, Icons.Outlined.PlayCircleOutline, "Start service", onClick = onStartSync)
+                        Hairline(c)
+                    }
+                    if (isSyncEnabled) {
+                        ListRow(c, Icons.Outlined.PauseCircleOutline, "Pause sync", onClick = onActionPauseSync)
+                    } else {
+                        ListRow(c, Icons.Outlined.PlayCircleOutline, "Resume sync", onClick = onResumeSync)
+                    }
+                    Hairline(c)
+                    ListRow(c, Icons.Outlined.Radar, "Scan for devices", onClick = onScanNow)
+                    Hairline(c)
+                    ListRow(c, Icons.Outlined.LinkOff, "Disconnect all", onClick = onActionDisconnectAll)
+                    Hairline(c)
+                    ListRow(c, Icons.Outlined.MonitorHeart, "Diagnostics", onClick = onOpenDiagnostics)
+                    Hairline(c)
+                    ListRow(
+                        c, Icons.Outlined.PowerSettingsNew, "Stop service",
+                        detail = "Deskdrop stops until you open it again",
+                        iconTint = c.danger,
+                        titleColor = c.danger,
+                        onClick = onActionStopService
+                    )
+                }
             }
         }
-        Spacer(modifier = Modifier.width(16.dp))
-        CRSwitch(checked = checked, isDark = isDark)
-    }
-}
 
-@Composable
-fun SettingsActionTile(
-    isDark: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    color: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit
-) {
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                onClick()
+        item {
+            Column(Modifier.fillMaxWidth().padding(top = 28.dp, start = 4.dp)) {
+                Text("Deskdrop ${version}".trim(), style = DdType.label, color = c.text)
+                Text("No cloud, no account, no telemetry.", style = DdType.small, color = c.textMuted)
+                if (deviceId.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(deviceId, style = DdType.mono, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(color.copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
         }
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = label,
-            style = CRTypography.label,
-            color = CRTheme.textHigh(isDark)
-        )
     }
 }

@@ -190,7 +190,12 @@ fun SubtleNoiseOverlay(isDark: Boolean) {
 }
 
 @Composable
-fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content: @Composable () -> Unit) {
+fun CRBackground(
+    isDark: Boolean,
+    hasConnectedDevices: Boolean = false,
+    flat: Boolean = false,
+    content: @Composable () -> Unit
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "mesh")
     val breatheShift by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 1f,
@@ -205,8 +210,8 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
         modifier = Modifier
             .fillMaxSize()
             .background(
-                if (isDark) {
-                    androidx.compose.ui.graphics.SolidColor(Color.Black)
+                if (isDark || flat) {
+                    androidx.compose.ui.graphics.SolidColor(CRTheme.bg(isDark))
                 } else {
                     Brush.linearGradient(
                         colors = listOf(Color(0xFFE5E5EA), Color(0xFFF2F4F8), Color(0xFFFFFFFF)),
@@ -216,7 +221,7 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
                 }
             )
     ) {
-        if (!isDark) {
+        if (!isDark && !flat) {
             androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
                 val centerOffset = Offset(size.width * 0.3f, size.height * (0.2f + (breatheShift * 0.1f)))
                 val centerOffset2 = Offset(size.width * 0.8f, size.height * (0.6f - (breatheShift * 0.1f)))
@@ -253,7 +258,7 @@ fun CRBackground(isDark: Boolean, hasConnectedDevices: Boolean = false, content:
                 }
             }
         }
-        SubtleNoiseOverlay(isDark = isDark)
+        if (!flat) SubtleNoiseOverlay(isDark = isDark)
         content()
     }
 }
