@@ -2054,31 +2054,19 @@ class DeskdropService : Service() {
         val clipboardMime = contentResolver.getType(uri).orEmpty()
         if (!clipboardMime.startsWith("image/")) {
             backgroundExecutor.execute {
-                val staged = stageSharedUri(uri, preferredName = null, fallbackIndex = 1)
-                if (staged != null) {
+                val sent = sendSharedUri(uri, preferredName = null, fallbackIndex = 1, targetDeviceId = null)
+                if (sent != null) {
                     lastClipboardSignature = sig
-                    val tid = DeskdropJni.sendFilePath(
-                        engineHandle,
-                        staged.localFile.absolutePath,
-                        staged.displayName,
-                        staged.mimeType,
-                        null,
-                        null,
-                        false,
-                        1
-                    )
-                    if (tid != null) {
-                        TransferManager.pendingOutboundTransferIds.add(tid)
-                        ActivityFeedManager.addToFeed(
-                            ActivityEntry(
-                                deviceName = "All devices",
-                                kind = ActivityKind.FILE_SENT,
-                                preview = staged.displayName,
-                                transferId = tid
-                            )
+                    TransferManager.pendingOutboundTransferIds.add(sent.transferId)
+                    ActivityFeedManager.addToFeed(
+                        ActivityEntry(
+                            deviceName = "All devices",
+                            kind = ActivityKind.FILE_SENT,
+                            preview = sent.displayName,
+                            transferId = sent.transferId
                         )
-                        broadcastStatus()
-                    }
+                    )
+                    broadcastStatus()
                 }
             }
             return
@@ -2114,32 +2102,19 @@ class DeskdropService : Service() {
         var sentAny = false
         uriStrings.forEachIndexed { index, rawUri ->
             val uri = runCatching { Uri.parse(rawUri) }.getOrNull() ?: return@forEachIndexed
-            val staged = stageSharedUri(
+            val staged = sendSharedUri(
                 uri = uri,
                 preferredName = preferredName?.takeIf { uriStrings.size == 1 },
                 fallbackIndex = index + 1,
+                targetDeviceId = targetDeviceId,
             )
-            if (staged == null) {
-                Log.w(TAG, "Unable to stage shared URI: $rawUri")
-                return@forEachIndexed
-            }
-
-            val tid = DeskdropJni.sendFilePath(
-                engineHandle,
-                staged.localFile.absolutePath,
-                staged.displayName,
-                staged.mimeType,
-                targetDeviceId,
-                null,
-                false,
-                1
-            )
-            if (tid != null) {
+            val tid = staged?.transferId
+            if (staged != null && tid != null) {
                 TransferManager.pendingOutboundTransferIds.add(tid)
                 sentAny = true
                 Log.i(
                     TAG,
-                    "Queued shared URI ${staged.displayName} (${staged.localFile.length()} bytes) for target=${targetDeviceId ?: "all"}"
+                    "Queued shared URI ${staged.displayName} (${staged.sizeBytes} bytes, ${if (staged.direct) "direct" else "staged"}) for target=${targetDeviceId ?: "all"}"
                 )
                 val targetName = if (targetDeviceId != null) {
                     connectedPeerIds[targetDeviceId] ?: "Device"
@@ -2157,7 +2132,7 @@ class DeskdropService : Service() {
                     )
                 )
             } else {
-                Log.w(TAG, "Failed to queue staged file transfer for ${staged.displayName}")
+                Log.w(TAG, "Failed to queue shared URI: $rawUri")
             }
         }
         if (sentAny) {
@@ -2362,6 +2337,61 @@ class DeskdropService : Service() {
     private sealed interface OutgoingPayload {
         data class Image(val mime: String, val data: ByteArray) : OutgoingPayload
         data class File(val name: String, val data: ByteArray) : OutgoingPayload
+    }
+
+    private data class SentSharedFile(
+        val transferId: String,
+        val displayName: String,
+        val sizeBytes: Long,
+        val direct: Boolean,
+    )
+
+    /**
+     * Queue a shared URI for sending. Seekable files are read straight from
+     * the provider's file descriptor so the transfer starts at once; only
+     * streams without a size (pipes, some cloud providers) are copied into
+     * the cache first.
+     */
+    private fun sendSharedUri(
+        uri: Uri,
+        preferredName: String?,
+        fallbackIndex: Int,
+        targetDeviceId: String?,
+    ): SentSharedFile? {
+        val displayName = runCatching {
+            resolveUriDisplayName(uri, preferredName, "Shared file $fallbackIndex")
+        }.getOrDefault("Shared file $fallbackIndex")
+        val mime = resolveUriMimeType(uri)?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
+
+        val pfd = runCatching {
+            if (uri.scheme.equals("file", ignoreCase = true)) {
+                uri.path?.let { ParcelFileDescriptor.open(File(it), ParcelFileDescriptor.MODE_READ_ONLY) }
+            } else {
+                contentResolver.openFileDescriptor(uri, "r")
+            }
+        }.getOrNull()
+        if (pfd != null) {
+            val size = pfd.statSize
+            if (size >= 0) {
+                // Rust owns the descriptor from here and closes it.
+                val tid = DeskdropJni.sendFileFd(engineHandle, pfd.detachFd(), displayName, mime, targetDeviceId)
+                return tid?.let { SentSharedFile(it, displayName, size, direct = true) }
+            }
+            runCatching { pfd.close() }
+        }
+
+        val staged = stageSharedUri(uri, preferredName, fallbackIndex) ?: return null
+        val tid = DeskdropJni.sendFilePath(
+            engineHandle,
+            staged.localFile.absolutePath,
+            staged.displayName,
+            staged.mimeType,
+            targetDeviceId,
+            null,
+            false,
+            1
+        ) ?: return null
+        return SentSharedFile(tid, staged.displayName, staged.localFile.length(), direct = false)
     }
 
     private data class StagedOutgoingFile(

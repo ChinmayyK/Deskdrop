@@ -1593,6 +1593,62 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFilePath(
     }
 }
 
+/// Send from a file descriptor the caller detached from a
+/// `ParcelFileDescriptor`. Rust takes ownership and closes it, even when
+/// the send fails.
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFileFd(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    fd: jint,
+    display_name: JString,
+    mime_type: JString,
+    target_device_id: JString,
+) -> jstring {
+    use std::os::fd::FromRawFd;
+    if fd < 0 {
+        return std::ptr::null_mut();
+    }
+    let file = unsafe { std::fs::File::from_raw_fd(fd) };
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let display_name: String = match env.get_string(&display_name) {
+        Ok(s) => s.into(),
+        Err(_) => return std::ptr::null_mut(),
+    };
+    let mime_type: String = match env.get_string(&mime_type) {
+        Ok(s) => s.into(),
+        Err(_) => return std::ptr::null_mut(),
+    };
+    let target_device = if target_device_id.is_null() {
+        None
+    } else {
+        let raw: String = match env.get_string(&target_device_id) {
+            Ok(s) => s.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
+        match uuid::Uuid::parse_str(&raw) {
+            Ok(value) => Some(value),
+            Err(_) => return std::ptr::null_mut(),
+        }
+    };
+
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(
+        h.engine
+            .send_open_file(file, display_name, mime_type, target_device),
+    ) {
+        Ok(tid) => env
+            .new_string(hex::encode(tid))
+            .ok()
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 // ── freeEvent ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]

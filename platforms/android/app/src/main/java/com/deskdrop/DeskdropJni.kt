@@ -151,6 +151,18 @@ object DeskdropJni {
     ): String?
 
     /**
+     * Send from a file descriptor detached from a ParcelFileDescriptor.
+     * The engine takes ownership of [fd] and closes it.
+     */
+    @JvmStatic external fun sendFileFd(
+        handle: Long,
+        fd: Int,
+        displayName: String,
+        mimeType: String,
+        targetDeviceId: String?
+    ): String?
+
+    /**
      * Push updated sync settings to the running engine atomically.
      * Avoids restarting the service just to update a toggle.
      * Returns 0 on success, -1 if the handle is invalid.
