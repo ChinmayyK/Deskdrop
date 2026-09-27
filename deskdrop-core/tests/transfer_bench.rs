@@ -213,3 +213,58 @@ async fn send_open_file_delivers_identical_bytes() {
     assert_eq!(dest.file_name().unwrap(), "clip.bin");
     assert_eq!(std::fs::read(dest).unwrap(), data);
 }
+
+/// A connection that drops mid-transfer resumes on reconnect and still
+/// delivers the exact bytes. Before the fix the receiver discarded every
+/// chunk after the reconnect and the transfer sat at the same percent.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transfer_resumes_after_reconnect() {
+    if std::env::var("BENCH_LOG").is_ok() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("deskdrop_core=debug")
+            .try_init();
+    }
+    let (engine_a, _dev_a, _rx_a, engine_b, dev_b, mut rx_b, tmp) = setup_pair(true).await;
+    let data: Vec<u8> = (0..(96 * 1024 * 1024u32))
+        .map(|i| (i.wrapping_mul(2654435761) >> 13) as u8)
+        .collect();
+    let src = tmp.path().join("resume.bin");
+    std::fs::write(&src, &data).unwrap();
+
+    engine_a
+        .send_file_path(
+            src,
+            "resume.bin".into(),
+            "application/octet-stream".into(),
+            Some(dev_b),
+            None,
+            false,
+            1,
+        )
+        .await
+        .unwrap();
+
+    let port_b = engine_b.bound_port().await;
+    let mut dropped = false;
+    let dest = loop {
+        match tokio::time::timeout(Duration::from_secs(30), rx_b.recv()).await {
+            Ok(Some(EngineEvent::FileTransferProgress { bytes_received, .. }))
+                if !dropped && bytes_received > 0 =>
+            {
+                dropped = true;
+                engine_a.disconnect_peer(dev_b).await.unwrap();
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                engine_a
+                    .connect_to_peer("127.0.0.1".into(), port_b)
+                    .await
+                    .unwrap();
+            }
+            Ok(Some(EngineEvent::FileTransferComplete { dest_path, .. })) => break dest_path,
+            Ok(Some(EngineEvent::FileTransferFailed { reason, .. })) => panic!("failed: {reason}"),
+            Ok(Some(_)) => {}
+            other => panic!("no completion: {:?}", other.map(|o| o.is_some())),
+        }
+    };
+    assert!(dropped, "the transfer finished before the disconnect was injected");
+    assert_eq!(std::fs::read(dest).unwrap(), data);
+}

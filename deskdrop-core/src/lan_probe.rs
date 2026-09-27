@@ -92,16 +92,15 @@ const _: () = assert!(
 /// without needing to be restarted.
 pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
     tokio::spawn(async move {
-        // Start with the slower cadence; the loop below switches per-tick
-        // based on whether the current network looks like a hotspot.
-        let mut interval = tokio::time::interval(HOTSPOT_SWEEP_INTERVAL);
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
         // Consecutive sweeps that found nothing new — drives idle backoff.
         let mut consecutive_empty_sweeps: u32 = 0;
+        // The first sweep runs at once; after that the loop waits the
+        // cadence picked for the current network before the next one.
+        let mut next_wait = Duration::ZERO;
 
         loop {
-            interval.tick().await;
+            tokio::time::sleep(next_wait).await;
+            next_wait = HOTSPOT_SWEEP_INTERVAL;
 
             let iface = match network_manager::get_active_interface() {
                 Ok(iface) => iface,
@@ -125,13 +124,15 @@ pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
             } else {
                 LAN_SWEEP_INTERVAL
             };
-            let effective_interval = if consecutive_empty_sweeps >= IDLE_BACKOFF_STREAK_THRESHOLD {
+            // A fresh `tokio::time::interval` fires its first tick at once, so
+            // rebuilding one here each pass made sweeps run back to back
+            // (a full /24 about every 0.6 s) and flood the Wi-Fi during
+            // transfers. Sleep for the chosen cadence instead.
+            next_wait = if consecutive_empty_sweeps >= IDLE_BACKOFF_STREAK_THRESHOLD {
                 base_interval * IDLE_BACKOFF_MULTIPLIER
             } else {
                 base_interval
             };
-            interval = tokio::time::interval(effective_interval);
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             let max_host = if is_hotspot {
                 HOTSPOT_SCAN_MAX_HOST

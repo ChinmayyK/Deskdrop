@@ -45,7 +45,7 @@ pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = crate::protocol::MAX_FILE_BYTES;
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 4; // ACK every 4 chunks (16 MB); sender progress moves on acks
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 1; // ACK every chunk (4 MB); the sender progress bar moves on acks
 
 pub type TransferId = [u8; 16];
 
@@ -158,6 +158,10 @@ pub struct OutboundTransfer {
     pub current_speed_bps: Option<u64>,
     pub compression_verdict: CompressionVerdict,
     pub consecutive_poor_compression: u8,
+    /// Delivered chunks to feed into a fresh hasher before the next read.
+    /// Set on resume: chunks the receiver never got are sent again, and
+    /// hashing them a second time would break the final checksum.
+    rehash_chunks: u32,
 }
 
 impl OutboundTransfer {
@@ -189,6 +193,7 @@ impl OutboundTransfer {
             current_speed_bps: None,
             compression_verdict: CompressionVerdict::default(),
             consecutive_poor_compression: 0,
+            rehash_chunks: 0,
         }
     }
 
@@ -220,6 +225,7 @@ impl OutboundTransfer {
             current_speed_bps: None,
             compression_verdict: CompressionVerdict::default(),
             consecutive_poor_compression: 0,
+            rehash_chunks: 0,
         })
     }
 
@@ -261,6 +267,12 @@ impl OutboundTransfer {
             None
         };
         self.hasher.take().map(|h| (file, h))
+    }
+
+    /// Bytes of already-delivered file data the next read must hash first.
+    pub fn take_rehash_bytes(&mut self) -> u64 {
+        let chunks = std::mem::take(&mut self.rehash_chunks);
+        (chunks as u64 * FILE_CHUNK_SIZE as u64).min(self.meta.size_bytes)
     }
 
     pub fn restore_io_context(&mut self, file: Option<std::fs::File>, hasher: sha2::Sha256) {
@@ -426,6 +438,17 @@ impl OutboundTransfer {
             self.started_at = Some(Instant::now());
         }
         self.next_chunk = chunk_index;
+        // Rebuild the running checksum from exactly the delivered prefix.
+        let mut hasher = Sha256::new();
+        match &self.source {
+            OutboundSource::Memory(data) => {
+                let end = (chunk_index as usize * FILE_CHUNK_SIZE).min(data.len());
+                hasher.update(&data[..end]);
+                self.rehash_chunks = 0;
+            }
+            OutboundSource::FilePath(..) => self.rehash_chunks = chunk_index,
+        }
+        self.hasher = Some(hasher);
         self.last_acked_chunk = if chunk_index > 0 {
             Some(chunk_index - 1)
         } else {
@@ -557,6 +580,28 @@ impl InboundTransfer {
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
         Ok(())
+    }
+
+    /// Continue a transfer after a disconnect. Pausing drops the file
+    /// handle, so reopen the partial file, and forget chunks that were
+    /// accepted but never written: the sender resends from the returned
+    /// chunk. Without this every chunk after a reconnect was discarded and
+    /// the transfer sat at the same percentage forever.
+    fn reopen_for_resume(&mut self) -> Result<u32> {
+        if self.file_handle.is_none() {
+            let dest = self.dest_path.as_ref().context("transfer has no destination")?;
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(dest)
+                .with_context(|| format!("reopening {} to resume", dest.display()))?;
+            self.file_handle = Some(BufWriter::with_capacity(4 * 1024 * 1024, file));
+            // A fresh handle starts at offset 0; the disk writer seeks
+            // whenever the next chunk's offset differs from this.
+            self.last_written_offset = 0;
+        }
+        self.queued_chunk_count = self.received_chunk_count;
+        self.status = TransferStatus::Transferring;
+        Ok(self.received_chunk_count)
     }
 
     pub fn take_io_context(&mut self) -> Option<(BufWriter<std::fs::File>, sha2::Sha256, u64)> {
@@ -922,6 +967,13 @@ impl FileTransferManager {
                 let transfer = entry.into_mut();
                 transfer.from_device = from_device;
                 transfer.from_device_name = from_device_name;
+                // The sender re-announces after a reconnect. When that beats
+                // this side noticing the old session died, the transfer
+                // still reads as running and would never be accepted again,
+                // so mark it for resume.
+                if transfer.dest_path.is_some() && transfer.status == TransferStatus::Transferring {
+                    transfer.status = TransferStatus::Pending;
+                }
                 Ok(transfer)
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
@@ -940,17 +992,11 @@ impl FileTransferManager {
     /// Accept inbound with resume support: if we have partial state, return resume chunk.
     pub fn accept_inbound_or_resume(&mut self, tid: &TransferId) -> Result<u32> {
         let transfer = self.inbound.get_mut(tid).context("unknown transfer")?;
-        let resume_from = if transfer.received_chunk_count > 0 {
-            transfer.last_confirmed_chunk + 1
-        } else {
-            0
-        };
         if transfer.dest_path.is_none() {
             transfer.accept(&self.save_dir)?;
-        } else {
-            transfer.status = TransferStatus::Transferring;
+            return Ok(0);
         }
-        Ok(resume_from)
+        transfer.reopen_for_resume()
     }
 
     pub fn queue_inbound(&mut self, tid: &TransferId) -> Result<()> {

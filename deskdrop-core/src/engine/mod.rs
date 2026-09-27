@@ -4743,7 +4743,10 @@ fn register_session(
                             .lock()
                             .await
                             .register_inbound(meta, peer_id, peer_name.clone())
-                            .map(|_| ());
+                            .map(|t| t.dest_path.is_some());
+                        // Already accepted once: this is the sender resuming
+                        // after a reconnect, so continue without asking again.
+                        let resuming = matches!(reg_result, Ok(true));
                         if let Err(e) = reg_result {
                             tracing::warn!(error = %e, "rejected file transfer announce");
                             let _ = rx_session_outbox_tx
@@ -4766,7 +4769,17 @@ fn register_session(
                             && (settings.auto_accept_max_bytes == 0
                                 || file_bytes <= settings.auto_accept_max_bytes);
 
-                        if auto_accept {
+                        if resuming {
+                            let _ = shared
+                                .file_transfers
+                                .lock()
+                                .await
+                                .queue_inbound(&transfer_id);
+                            let bg_shared = shared.clone();
+                            tokio::spawn(async move {
+                                pump_transfer_queue(&bg_shared).await;
+                            });
+                        } else if auto_accept {
                             let _ = shared
                                 .file_transfers
                                 .lock()

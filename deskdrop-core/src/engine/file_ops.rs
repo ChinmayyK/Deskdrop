@@ -10,11 +10,13 @@ pub(crate) async fn read_outbound_chunks(
 )> {
     let mut instrs = Vec::with_capacity(batch_size);
     let io_ctx;
+    let rehash_bytes;
 
     {
         let mut mgr = shared.file_transfers.lock().await;
         let t = mgr.get_outbound_mut(&transfer_id)?;
         io_ctx = t.take_io_context();
+        rehash_bytes = t.take_rehash_bytes();
         let effective_batch = t.adaptive_batch_size(batch_size);
         for _ in 0..effective_batch {
             match t.next_chunk_instruction() {
@@ -73,6 +75,31 @@ pub(crate) async fn read_outbound_chunks(
 
         let mut chunk_data = Vec::with_capacity(instrs.len());
         let (mut f, mut hasher) = io_ctx.unwrap_or((None, sha2::Sha256::new())); // Memory chunks might not have io_ctx, but we'll return it anyway
+
+        // After a resume, hash the delivered prefix before reading on.
+        if rehash_bytes > 0 {
+            if f.is_none() {
+                if let Some(crate::file_transfer::ChunkInstruction::File { path, .. }) =
+                    instrs.first()
+                {
+                    f = Some(std::fs::File::open(path)?);
+                }
+            }
+            if let Some(file) = f.as_mut() {
+                file.seek(std::io::SeekFrom::Start(0))?;
+                let mut buf = vec![0u8; 1 << 20];
+                let mut left = rehash_bytes;
+                while left > 0 {
+                    let want = (left as usize).min(buf.len());
+                    let n = file.read(&mut buf[..want])?;
+                    if n == 0 {
+                        break;
+                    }
+                    hasher.update(&buf[..n]);
+                    left -= n as u64;
+                }
+            }
+        }
 
         for instr in instrs {
             match instr {
