@@ -110,9 +110,11 @@ namespace Deskdrop.WinUI
 
     public sealed class CountToVisibilityConverter : IValueConverter
     {
+        public static Visibility ToVisibility(int count) => count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            if (value is int count) return count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (value is int count) return ToVisibility(count);
             if (value is long lCount) return lCount > 0 ? Visibility.Visible : Visibility.Collapsed;
             return Visibility.Collapsed;
         }
@@ -132,13 +134,18 @@ namespace Deskdrop.WinUI
 
     public sealed class PlatformToGlyphConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, string language)
+        public static string ToGlyph(string? value)
         {
-            var str = value?.ToString()?.ToLowerInvariant() ?? "";
+            var str = value?.ToLowerInvariant() ?? "";
             if (str.Contains("mac") || str.Contains("apple")) return "\uE7F8"; // Laptop
             if (str.Contains("windows") || str.Contains("pc") || str.Contains("desktop")) return "\uE7F4"; // Monitor / PC
             if (str.Contains("linux") || str.Contains("server")) return "\uE975"; // Server
             return "\uE8EA"; // Smartphone
+        }
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            return ToGlyph(value?.ToString());
         }
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }

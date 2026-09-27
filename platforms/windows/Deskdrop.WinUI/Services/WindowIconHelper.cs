@@ -39,8 +39,47 @@ namespace Deskdrop.WinUI.Services
 
         public static void ResizeDips(AppWindow appWindow, IntPtr hwnd, int widthDips, int heightDips)
         {
+            appWindow.Resize(FitToWorkArea(appWindow, hwnd, widthDips, heightDips));
+        }
+
+        // A DIP size scaled for the monitor, but never larger than that
+        // monitor's work area. At 150-175% scaling a laptop screen is only
+        // ~1100x600 DIPs, so a fixed DIP size ran off the bottom and right
+        // of the screen with no way to reach what was cut off.
+        public static Windows.Graphics.SizeInt32 FitToWorkArea(AppWindow appWindow, IntPtr hwnd, int widthDips, int heightDips)
+        {
             double scale = GetDpiScale(hwnd);
-            appWindow.Resize(new Windows.Graphics.SizeInt32((int)(widthDips * scale), (int)(heightDips * scale)));
+            int w = (int)(widthDips * scale);
+            int h = (int)(heightDips * scale);
+            var work = GetWorkArea(appWindow);
+            if (work is { } area)
+            {
+                w = Math.Min(w, (int)(area.Width * 0.94));
+                h = Math.Min(h, (int)(area.Height * 0.94));
+            }
+            return new Windows.Graphics.SizeInt32(w, h);
+        }
+
+        // Size the window (see FitToWorkArea) and centre it on its monitor.
+        public static void ResizeAndCenterDips(AppWindow appWindow, IntPtr hwnd, int widthDips, int heightDips)
+        {
+            var size = FitToWorkArea(appWindow, hwnd, widthDips, heightDips);
+            appWindow.Resize(size);
+            if (GetWorkArea(appWindow) is { } area)
+            {
+                appWindow.Move(new Windows.Graphics.PointInt32(
+                    area.X + (area.Width - size.Width) / 2,
+                    area.Y + (area.Height - size.Height) / 2));
+            }
+        }
+
+        private static Windows.Graphics.RectInt32? GetWorkArea(AppWindow appWindow)
+        {
+            try
+            {
+                return DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest)?.WorkArea;
+            }
+            catch { return null; }
         }
     }
 }

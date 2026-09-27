@@ -76,8 +76,8 @@
             <!-- Retired secondary accents. Kept so legacy surfaces still
                  resolve, retuned so they read as quiet neighbours of the
                  brand accent rather than competing hues. -->
-            <SolidColorBrush x:Key="AppAccentBrush" Color="#0055CC" />
-            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#140055CC" />
+            <SolidColorBrush x:Key="AppVioletBrush" Color="#0055CC" />
+            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#140055CC" />
             <Color x:Key="AppCyanColor">#0055CC</Color>
             <SolidColorBrush x:Key="AppCyanBrush" Color="#0055CC" />
             <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#140055CC" />
@@ -189,8 +189,8 @@
             <SolidColorBrush x:Key="AppDangerSubtleHoverBrush" Color="#36FF6B6B" />
             <SolidColorBrush x:Key="AppNeutralBrush" Color="#9D9DA6" />
 
-            <SolidColorBrush x:Key="AppAccentBrush" Color="#5C95FF" />
-            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#245C95FF" />
+            <SolidColorBrush x:Key="AppVioletBrush" Color="#5C95FF" />
+            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#245C95FF" />
             <Color x:Key="AppCyanColor">#5C95FF</Color>
             <SolidColorBrush x:Key="AppCyanBrush" Color="#5C95FF" />
             <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#245C95FF" />

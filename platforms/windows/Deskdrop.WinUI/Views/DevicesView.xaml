@@ -170,7 +170,7 @@
 
                 <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
                         Opacity="{x:Bind IsOffline, Converter={StaticResource BoolToOpacityConverter}, ConverterParameter=0.55, Mode=OneWay}">
-                    <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
+                    <FontIcon Glyph="{x:Bind DeviceGlyph, Mode=OneWay}"
                               FontSize="18"
                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                               HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -265,7 +265,7 @@
                         VerticalAlignment="Top"
                         Background="{ThemeResource AppDividerBrush}" />
                 <Border Grid.Column="0" Style="{StaticResource AppIconTile}">
-                    <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
+                    <FontIcon Glyph="{x:Bind DeviceGlyph, Mode=OneWay}"
                               FontSize="18"
                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                               HorizontalAlignment="Center" VerticalAlignment="Center" />

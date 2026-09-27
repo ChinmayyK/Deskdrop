@@ -27,7 +27,7 @@
                         IsBackButtonVisible="Collapsed"
                         IsSettingsVisible="False"
                         IsTitleBarAutoPaddingEnabled="False"
-                        OpenPaneLength="252"
+                        OpenPaneLength="212"
                         SelectionChanged="NavView_SelectionChanged"
                         Background="Transparent">
 
@@ -279,7 +279,7 @@
                 cluster hasn't claimed yet.
             -->
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240" />
+                <ColumnDefinition Width="212" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
