@@ -1,0 +1,17 @@
+# The RustCrypto AES and POLYVAL (GCM) crates only use the ARMv8 crypto
+# instructions when these cfgs are set; without them every Apple Silicon Mac
+# and arm64 Android phone encrypts in software, which caps transfer speed.
+# Both detect the CPU feature at runtime and fall back to software.
+[target.aarch64-apple-darwin]
+rustflags = ["--cfg", "aes_armv8", "--cfg", "polyval_armv8"]
+
+[target.aarch64-linux-android]
+rustflags = ["--cfg", "aes_armv8", "--cfg", "polyval_armv8"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["--cfg", "aes_armv8", "--cfg", "polyval_armv8"]
+
+# Windows has no runtime detection for these crates, so enable the
+# instructions at compile time. Every Windows-on-ARM SoC has them.
+[target.aarch64-pc-windows-msvc]
+rustflags = ["--cfg", "aes_armv8", "--cfg", "polyval_armv8", "-C", "target-feature=+aes,+sha2"]

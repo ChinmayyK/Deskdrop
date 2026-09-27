@@ -1407,9 +1407,57 @@ impl Engine {
         is_directory: bool,
         item_count: u32,
     ) -> Result<[u8; 16]> {
+        self.send_outbound_source(
+            path,
+            None,
+            file_name,
+            mime_type,
+            target_device,
+            batch_id,
+            is_directory,
+            item_count,
+        )
+        .await
+    }
+
+    /// Send from an already-open file, so a caller that only has a handle
+    /// (an Android content URI) need not copy the file somewhere first.
+    pub async fn send_open_file(
+        &self,
+        file: std::fs::File,
+        file_name: String,
+        mime_type: String,
+        target_device: Option<Uuid>,
+    ) -> Result<[u8; 16]> {
+        self.send_outbound_source(
+            PathBuf::from(&file_name),
+            Some(file),
+            file_name,
+            mime_type,
+            target_device,
+            None,
+            false,
+            1,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn send_outbound_source(
+        &self,
+        path: PathBuf,
+        opened: Option<std::fs::File>,
+        file_name: String,
+        mime_type: String,
+        target_device: Option<Uuid>,
+        batch_id: Option<String>,
+        is_directory: bool,
+        item_count: u32,
+    ) -> Result<[u8; 16]> {
         let mut mgr = self.shared.file_transfers.lock().await;
         let transfer = mgr.start_outbound_path(
             path,
+            opened,
             file_name.clone(),
             mime_type,
             target_device,
@@ -1655,7 +1703,7 @@ impl Engine {
                 let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> =
                     std::collections::HashMap::new();
                 tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 16;
+                    const BATCH_SIZE: usize = 4;
                     'outer: loop {
                         let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
@@ -4011,11 +4059,12 @@ fn register_session(
     session_pin: Option<String>,
     is_outbound: bool,
 ) -> Result<()> {
-    // 64 capacity * 4 MB chunk size = ~256 MB max queued memory.
-    // If the network is slower than disk I/O, this applies backpressure to the
-    // file reading loop so we don't blow up Android's memory limits.
+    // File chunks get their own small queue: 8 × 4 MB = 32 MB waiting to be
+    // encrypted, on top of the kernel socket buffer. That is enough to keep
+    // any LAN link busy, and the backpressure stops the reader from racing
+    // ahead of the network and pinning hundreds of MB on a phone.
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(64);
-    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(128);
+    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(8);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
     match shared
         .peer_manager
@@ -4209,7 +4258,7 @@ fn register_session(
             },
         }
 
-        let (disk_tx, mut disk_rx) = tokio::sync::mpsc::channel::<DiskTaskMsg>(128);
+        let (disk_tx, mut disk_rx) = tokio::sync::mpsc::channel::<DiskTaskMsg>(8);
         let mut last_disk_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> =
             std::collections::HashMap::new();
 
@@ -4795,7 +4844,7 @@ fn register_session(
                                 std::time::Instant,
                             > = std::collections::HashMap::new();
                             tokio::spawn(async move {
-                                const BATCH_SIZE: usize = 16;
+                                const BATCH_SIZE: usize = 4;
                                 'outer: loop {
                                     let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
@@ -5190,7 +5239,7 @@ fn register_session(
                                 std::time::Instant,
                             > = std::collections::HashMap::new();
                             tokio::spawn(async move {
-                                const BATCH_SIZE: usize = 16;
+                                const BATCH_SIZE: usize = 4;
                                 'outer: loop {
                                     let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
                                         let mut mgr = bg_shared.file_transfers.lock().await;
@@ -6356,7 +6405,10 @@ fn register_session(
                     if let Err(err) = sess_tx.send_no_flush(&mut msg).await {
                         break format!("send failed: {err}");
                     }
-                    for _ in 0..31 {
+                    // Write a few queued chunks per flush, then go back to the
+                    // select so pings, acks and clipboard never wait behind
+                    // a long run of file data.
+                    for _ in 0..3 {
                         match file_outbox_rx.try_recv() {
                             Ok(mut next_msg) => {
                                 if let Err(_err) = sess_tx.send_no_flush(&mut next_msg).await {

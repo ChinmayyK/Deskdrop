@@ -54,6 +54,7 @@ async fn start_pair(tmp: &TempDir, a_trusts_b: bool, b_trusts_a: bool) -> (Node,
             trust_store_path: trust_path,
             peer_store_path: tmp.path().join(format!("peers{i}.json")),
             identity_path: tmp.path().join(format!("identity{i}.key")),
+            data_dir: tmp.path().join(format!("data{i}")),
             bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             enable_discovery: false,
             ..EngineConfig::default()

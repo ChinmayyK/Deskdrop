@@ -45,7 +45,7 @@ pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = crate::protocol::MAX_FILE_BYTES;
 
-pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 32; // ACK every 32 chunks (128 MB)
+pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 4; // ACK every 4 chunks (16 MB); sender progress moves on acks
 
 pub type TransferId = [u8; 16];
 
@@ -192,8 +192,11 @@ impl OutboundTransfer {
         }
     }
 
+    /// `opened` is an already-open handle to read from instead of opening
+    /// `path` (Android hands over a content-provider file descriptor).
     pub fn from_path(
         path: PathBuf,
+        opened: Option<std::fs::File>,
         meta: FileTransferMetadata,
         target_device: Option<Uuid>,
     ) -> Result<Self> {
@@ -201,7 +204,7 @@ impl OutboundTransfer {
         Ok(Self {
             transfer_id: meta.transfer_id,
             meta,
-            source: OutboundSource::FilePath(path, None),
+            source: OutboundSource::FilePath(path, opened),
             total_chunks,
             next_chunk: 0,
             last_acked_chunk: None,
@@ -836,9 +839,11 @@ impl FileTransferManager {
         Ok(self.outbound.entry(tid).or_insert(transfer))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn start_outbound_path(
         &mut self,
         path: PathBuf,
+        opened: Option<std::fs::File>,
         file_name: String,
         mime_type: String,
         target_device: Option<Uuid>,
@@ -846,9 +851,12 @@ impl FileTransferManager {
         is_directory: bool,
         item_count: u32,
     ) -> Result<&OutboundTransfer> {
-        let size_bytes = std::fs::metadata(&path)
-            .with_context(|| format!("reading metadata for {}", path.display()))?
-            .len();
+        let size_bytes = match &opened {
+            Some(file) => file.metadata(),
+            None => std::fs::metadata(&path),
+        }
+        .with_context(|| format!("reading metadata for {}", path.display()))?
+        .len();
         let mut tid = [0u8; 16];
         tid.copy_from_slice(Uuid::new_v4().as_bytes());
 
@@ -861,7 +869,7 @@ impl FileTransferManager {
             item_count,
             batch_id,
         };
-        let transfer = OutboundTransfer::from_path(path, meta, target_device)?;
+        let transfer = OutboundTransfer::from_path(path, opened, meta, target_device)?;
         let tid = transfer.transfer_id;
         Ok(self.outbound.entry(tid).or_insert(transfer))
     }

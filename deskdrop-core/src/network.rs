@@ -44,7 +44,9 @@ pub fn get_buffer(capacity: usize) -> Vec<u8> {
 }
 
 pub fn return_buffer(mut buf: Vec<u8>) {
-    // Only pool up to 64 buffers, and don't pool huge ones (e.g., > MAX_FRAME_SIZE)
+    // Only pool up to 16 buffers, and don't pool huge ones (e.g., > MAX_FRAME_SIZE).
+    // Chunk buffers are 4 MB, so a bigger pool keeps a lot of memory pinned
+    // after a transfer.
     if buf.capacity() > MAX_FRAME_SIZE as usize {
         return;
     }
@@ -52,7 +54,7 @@ pub fn return_buffer(mut buf: Vec<u8>) {
         .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
         .lock()
         .unwrap();
-    if pool.len() < 64 {
+    if pool.len() < 16 {
         buf.clear();
         pool.push(buf);
     }
