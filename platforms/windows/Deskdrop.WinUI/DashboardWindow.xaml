@@ -27,7 +27,7 @@
                         IsBackButtonVisible="Collapsed"
                         IsSettingsVisible="False"
                         IsTitleBarAutoPaddingEnabled="False"
-                        OpenPaneLength="240"
+                        OpenPaneLength="252"
                         SelectionChanged="NavView_SelectionChanged"
                         Background="Transparent">
 
@@ -38,6 +38,12 @@
                 <Border Height="56" />
             </NavigationView.PaneHeader>
 
+            <!--
+                Sidebar: one short list of places, a live list of the devices
+                that are connected right now, then Settings and this PC at
+                the bottom. Selection is an accent-tinted fill (Tokens.xaml),
+                not the stock indicator bar.
+            -->
             <NavigationView.MenuItems>
 
                 <NavigationViewItem Tag="Devices" Content="Devices" x:Name="NavDevices"
@@ -70,6 +76,13 @@
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE896;" FontSize="16" />
                     </NavigationViewItem.Icon>
+                    <!-- Running-transfer count, so progress is visible from
+                         any page. -->
+                    <NavigationViewItem.InfoBadge>
+                        <InfoBadge Value="{x:Bind mgr.ActiveTransferCount, Mode=OneWay}"
+                                   Visibility="{x:Bind mgr.HasActiveTransfers, Mode=OneWay}"
+                                   Background="{ThemeResource AppAccentBrush}" />
+                    </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
 
                 <NavigationViewItem Tag="Activity" Content="Activity" x:Name="NavActivity"
@@ -79,7 +92,51 @@
                         <FontIcon Glyph="&#xE81C;" FontSize="16" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+            </NavigationView.MenuItems>
 
+            <!-- Connected devices, one click from anywhere: opens that
+                 device's files. Hidden while nothing is connected. -->
+            <NavigationView.PaneCustomContent>
+                <StackPanel Margin="0,18,0,0"
+                            Visibility="{x:Bind mgr.ConnectedPeers.Count, Converter={StaticResource CountToVisibilityConverter}, Mode=OneWay}">
+                    <TextBlock Text="Connected"
+                               Style="{StaticResource AppCaption}"
+                               Margin="20,0,12,6" />
+                    <ItemsControl ItemsSource="{x:Bind mgr.ConnectedPeers, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:PeerViewModel">
+                                <Button Style="{StaticResource AppNavRowButton}"
+                                        Margin="8,1" Padding="10,6"
+                                        Click="OnSidebarDeviceClicked"
+                                        ToolTipService.ToolTip="Browse files"
+                                        AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}">
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="{x:Bind platform, Converter={StaticResource PlatformToGlyphConverter}, Mode=OneWay}"
+                                                  FontSize="15"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                  VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{x:Bind DisplayName, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <Border Grid.Column="2" Width="7" Height="7" CornerRadius="4"
+                                                VerticalAlignment="Center"
+                                                Background="{x:Bind ConnectionColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </NavigationView.PaneCustomContent>
+
+            <NavigationView.FooterMenuItems>
                 <NavigationViewItem Tag="Settings" Content="Settings" x:Name="NavSettings"
                                     Style="{StaticResource AppNavItem}"
                                     AutomationProperties.Name="Settings">
@@ -87,23 +144,21 @@
                         <FontIcon Glyph="&#xE713;" FontSize="16" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-            </NavigationView.MenuItems>
+            </NavigationView.FooterMenuItems>
 
-            <!--
-                Local-device identity. This is a real status area, not a card
-                parked at the bottom: a hairline seam separates it from the
-                nav list, and the whole row is a menu button - which is where
-                the app-level commands (rescan, downloads, quit) now live,
-                instead of being scattered across the pages.
-            -->
+            <!-- This PC: a small card with its live status. The whole card
+                 opens the app-level commands (rescan, downloads, quit). -->
             <NavigationView.PaneFooter>
-                <StackPanel Margin="0,8,0,8">
-                    <Border Style="{StaticResource AppDivider}" Margin="12,0,12,8" />
-
+                <Border Margin="10,6,10,12"
+                        Background="{ThemeResource AppSurfaceBrush}"
+                        BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusMedium}">
                     <Button x:Name="LocalDeviceButton"
                             Style="{StaticResource AppNavRowButton}"
-                            Margin="8,0"
-                            Padding="8,7"
+                            Margin="0"
+                            Padding="10,9"
+                            CornerRadius="{StaticResource RadiusMedium}"
                             ToolTipService.ToolTip="This PC - status and app commands"
                             AutomationProperties.Name="This PC. Status and application commands">
                         <Grid ColumnSpacing="10">
@@ -116,26 +171,28 @@
                             <!-- Device glyph with a live status dot pinned to
                                  its corner, so "this PC" and "reachable" are
                                  one object rather than two labels. -->
-                            <Grid Grid.Column="0" Width="28" Height="28">
-                                <Border Background="{ThemeResource AppSurfaceSubtleBrush}"
+                            <Grid Grid.Column="0" Width="32" Height="32">
+                                <Border Background="{ThemeResource AppAccentSubtleBrush}"
                                         CornerRadius="{StaticResource RadiusSmall}" />
-                                <FontIcon Glyph="&#xE7F4;" FontSize="14"
-                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                <FontIcon Glyph="&#xE7F4;" FontSize="15"
+                                          Foreground="{ThemeResource AppAccentBrush}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                <Border Width="9" Height="9" CornerRadius="5"
+                                <Border Width="10" Height="10" CornerRadius="5"
                                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                        Margin="0,0,-1,-1"
-                                        BorderThickness="1.5"
-                                        BorderBrush="{ThemeResource AppBackgroundBrush}"
+                                        Margin="0,0,-2,-2"
+                                        BorderThickness="2"
+                                        BorderBrush="{ThemeResource AppSurfaceBrush}"
                                         Background="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}" />
                             </Grid>
 
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                                 <TextBlock Text="{x:Bind localMachineName, Mode=OneTime}"
                                            Style="{StaticResource AppBodyStrong}"
-                                           FontSize="12.5" />
+                                           FontSize="13"
+                                           TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}"
-                                           Style="{StaticResource AppCaption}" />
+                                           Style="{StaticResource AppCaption}"
+                                           TextTrimming="CharacterEllipsis" />
                             </StackPanel>
 
                             <FontIcon Grid.Column="2" Glyph="&#xE712;" FontSize="13"
@@ -170,7 +227,7 @@
                             </MenuFlyout>
                         </Button.Flyout>
                     </Button>
-                </StackPanel>
+                </Border>
             </NavigationView.PaneFooter>
 
             <!-- Content layer: opaque, seamed off from the Mica pane with a

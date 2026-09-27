@@ -118,9 +118,15 @@
             <!-- Stock-control lightweight styling. These are documented WinUI
                  resource keys; overriding them here restyles every instance
                  of the control without retemplating it. -->
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#12000000" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#18000000" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#20000000" />
+            <!-- Sidebar selection: an accent-tinted fill with accent text and
+                 icon, no stock indicator bar. -->
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#140055CC" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#1C0055CC" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#240055CC" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#0055CC" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#0055CC" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#0055CC" />
+            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="Transparent" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0A000000" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#14000000" />
             <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
@@ -208,9 +214,13 @@
             <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="Transparent" />
             <SolidColorBrush x:Key="ModalAcrylicBrush" Color="#1E1E23" />
 
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#1FFFFFFF" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#2AFFFFFF" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#265C95FF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#305C95FF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#3A5C95FF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#5C95FF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#5C95FF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#5C95FF" />
+            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="Transparent" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0FFFFFFF" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#1AFFFFFF" />
             <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
@@ -259,8 +269,8 @@
     <CornerRadius x:Key="RadiusCard">16</CornerRadius>
     <CornerRadius x:Key="RadiusLarge">20</CornerRadius>
     <CornerRadius x:Key="RadiusPill">999</CornerRadius>
-    <!-- Filled and outlined buttons are pills, matching the Android app. -->
-    <CornerRadius x:Key="RadiusButton">999</CornerRadius>
+    <!-- Buttons and chips: a soft rounded rectangle, same radius as inputs. -->
+    <CornerRadius x:Key="RadiusButton">8</CornerRadius>
 
     <!-- Global control radii: two overrides that modernise every stock
          control and popup in one shot. -->

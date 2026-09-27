@@ -65,6 +65,7 @@ namespace Deskdrop.WinUI.Services
         {
             if (App.EngineHandle == IntPtr.Zero) return;
             bool processedAny = false;
+            bool onlyProgress = true;
             while (true)
             {
                 var ev = NativeCore.deskdrop_poll_event(App.EngineHandle);
@@ -73,6 +74,7 @@ namespace Deskdrop.WinUI.Services
                 try
                 {
                     int kind = NativeCore.deskdrop_event_type(ev);
+                    if (kind != NativeCore.PB_EVENT_FILE_TRANSFER_PROGRESS) onlyProgress = false;
                     TraceLog.Write($"DrainEvents: kind={kind}");
                     switch (kind)
                     {
@@ -251,9 +253,22 @@ namespace Deskdrop.WinUI.Services
             }
             if (processedAny)
             {
-                DeskdropStore.Shared.UpdateStateFromDaemon();
+                // Progress events arrive every tick while a transfer runs. A
+                // full refresh is several IPC round trips that take the
+                // engine's transfer lock, so refreshing on each one slowed
+                // the transfer itself. Progress refreshes at most twice a
+                // second; any other event still refreshes at once.
+                var now = Environment.TickCount64;
+                if (!onlyProgress || now - _lastProgressRefreshMs >= ProgressRefreshIntervalMs)
+                {
+                    _lastProgressRefreshMs = now;
+                    DeskdropStore.Shared.UpdateStateFromDaemon();
+                }
             }
         }
+
+        private const long ProgressRefreshIntervalMs = 500;
+        private long _lastProgressRefreshMs;
 
         private void AddHistoryItem(string summary, string source, string icon, string fullText)
         {

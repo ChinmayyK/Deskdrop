@@ -637,7 +637,7 @@
 
     <Style x:Key="AppChip" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource AppSurfaceSubtleBrush}" />
-        <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusButton}" />
         <Setter Property="Padding" Value="9,3" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
