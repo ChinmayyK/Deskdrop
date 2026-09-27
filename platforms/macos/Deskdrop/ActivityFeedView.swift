@@ -527,7 +527,7 @@ struct FileTransferBanner: View {
                     VStack(alignment: .leading, spacing: 4) {
                         let prog = transfer.exactRatio
                         StopwatchProgressView(progress: prog, tint: CRTheme.accentIndigo)
-                            .animation(.linear(duration: 0.15), value: prog)
+                            .animation(.linear(duration: 0.5), value: prog)
                         HStack {
                             Text("From \(transfer.fromDeviceName)")
                             Spacer()
@@ -538,7 +538,7 @@ struct FileTransferBanner: View {
                     VStack(alignment: .leading, spacing: 4) {
                         let prog = transfer.exactRatio
                         StopwatchProgressView(progress: prog, tint: CRTheme.accentOrange)
-                            .animation(.linear(duration: 0.15), value: prog)
+                            .animation(.linear(duration: 0.5), value: prog)
                         HStack {
                             Text("Paused - From \(transfer.fromDeviceName)")
                             Spacer()

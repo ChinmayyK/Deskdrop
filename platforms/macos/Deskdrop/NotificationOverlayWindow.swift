@@ -221,7 +221,7 @@ private struct DynamicIslandTransferCard: View {
                             Capsule()
                                 .fill(progressColor)
                                 .frame(width: max(0, geo.size.width * CGFloat(transfer.exactRatio)), height: 4)
-                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: transfer.exactRatio)
+                                .animation(.linear(duration: 0.5), value: transfer.exactRatio)
                         }
                     }
                     .frame(height: 4)
@@ -343,7 +343,7 @@ private struct GroupedDynamicIslandTransferCard: View {
                         Capsule()
                             .fill(CRTheme.brandElectric)
                             .frame(width: max(0, geo.size.width * CGFloat(exactRatio)), height: 4)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: exactRatio)
+                            .animation(.linear(duration: 0.5), value: exactRatio)
                     }
                 }
                 .frame(height: 4)

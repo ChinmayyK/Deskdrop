@@ -324,7 +324,7 @@ struct ActiveTransferCard: View {
                             RoundedRectangle(cornerRadius: 5)
                                 .fill(progressGradient)
                                 .frame(width: max(0, geo.size.width * CGFloat(transfer.exactRatio)), height: 10)
-                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: transfer.exactRatio)
+                                .animation(.linear(duration: 0.5), value: transfer.exactRatio)
                         }
                     }
                     .frame(height: 10)
