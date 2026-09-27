@@ -243,14 +243,6 @@ namespace Deskdrop.WinUI
             };
         }
 
-        // Sidebar "Connected" row: open that device's files.
-        private void OnSidebarDeviceClicked(object sender, RoutedEventArgs e)
-        {
-            if ((sender as FrameworkElement)?.DataContext is not PeerViewModel peer) return;
-            mgr.SelectedPeer = peer;
-            NavigateTo("DevicePeer");
-        }
-
         public void NavigateTo(string tag)
         {
             var item = NavView.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == tag)

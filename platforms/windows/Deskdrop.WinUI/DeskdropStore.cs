@@ -247,7 +247,7 @@ namespace Deskdrop.WinUI
         private string _friendly_name = "";
         public string friendly_name { get => _friendly_name; set { if (SetProperty(ref _friendly_name, value)) OnPropertyChanged(nameof(DisplayName)); } }
         private string? _platform;
-        public string? platform { get => _platform; set { if (SetProperty(ref _platform, value)) { OnPropertyChanged(nameof(DeviceIcon)); OnPropertyChanged(nameof(IsCameraCapable)); OnPropertyChanged(nameof(ShowCameraButton)); } } }
+        public string? platform { get => _platform; set { if (SetProperty(ref _platform, value)) { OnPropertyChanged(nameof(DeviceIcon)); OnPropertyChanged(nameof(IsCameraCapable)); OnPropertyChanged(nameof(ShowCameraButton)); OnPropertyChanged(nameof(DetailLine)); } } }
         private string _status = "";
         public string status { get => _status; set { if(SetProperty(ref _status, value)) NotifyPeerStateProperties(); } }
         private bool _is_trusted;
@@ -269,7 +269,7 @@ namespace Deskdrop.WinUI
         private string? _last_error;
         public string? last_error { get => _last_error; set { if (SetProperty(ref _last_error, value)) OnPropertyChanged(nameof(HasError)); } }
         private List<string> _ips = new();
-        public List<string> ips { get => _ips; set { if (SetProperty(ref _ips, value)) OnPropertyChanged(nameof(IpAddressText)); } }
+        public List<string> ips { get => _ips; set { if (SetProperty(ref _ips, value)) { OnPropertyChanged(nameof(IpAddressText)); OnPropertyChanged(nameof(PrimaryIpText)); } } }
         private string? _fingerprint_display;
         public string? fingerprint_display { get => _fingerprint_display; set { if (SetProperty(ref _fingerprint_display, value)) OnPropertyChanged(nameof(HasFingerprint)); } }
         private ulong? _first_seen;
@@ -310,6 +310,17 @@ namespace Deskdrop.WinUI
         };
         public string LastSeenText => last_seen.HasValue ? $"Seen {DeskdropFormatting.RelativeTimeFromUnixSeconds(last_seen.Value)}" : "";
         public string IpAddressText => ips.Count > 0 ? string.Join(", ", ips) : "";
+        // One address is enough to identify the link; prefer IPv4 over the
+        // long IPv6 and link-local forms.
+        public string PrimaryIpText => ips.FirstOrDefault(ip => !ip.Contains(':')) ?? ips.FirstOrDefault() ?? "";
+        // Platform, battery and free space on one line, skipping whatever is
+        // unknown, so the status block never shows a bare "Device".
+        public string DetailLine => string.Join("  ·  ", new[]
+        {
+            string.IsNullOrWhiteSpace(platform) ? null : PlatformLabel,
+            ShowBattery ? $"Battery {BatteryPercentText}" : null,
+            ShowStorage ? StorageFreeText : null,
+        }.Where(part => !string.IsNullOrEmpty(part)));
         public bool HasFingerprint => !string.IsNullOrEmpty(fingerprint_display);
         public string FirstSeenText => first_seen.HasValue
             ? DateTimeOffset.FromUnixTimeSeconds((long)first_seen.Value).ToLocalTime().ToString("MMM d, yyyy")
@@ -410,7 +421,7 @@ namespace Deskdrop.WinUI
         public bool outgoingPairingWaiting { get => _outgoingPairingWaiting; set { if (SetProperty(ref _outgoingPairingWaiting, value)) NotifyPeerStateProperties(); } }
 
         private int _batteryLevel;
-        public int BatteryLevel { get => _batteryLevel; set { if(SetProperty(ref _batteryLevel, value)) { OnPropertyChanged(nameof(ShowBattery)); OnPropertyChanged(nameof(BatteryIcon)); OnPropertyChanged(nameof(BatteryColor)); } } }
+        public int BatteryLevel { get => _batteryLevel; set { if(SetProperty(ref _batteryLevel, value)) { OnPropertyChanged(nameof(ShowBattery)); OnPropertyChanged(nameof(BatteryIcon)); OnPropertyChanged(nameof(BatteryColor)); OnPropertyChanged(nameof(DetailLine)); } } }
         private bool _batteryCharging;
         public bool BatteryCharging { get => _batteryCharging; set { if(SetProperty(ref _batteryCharging, value)) { OnPropertyChanged(nameof(BatteryIcon)); OnPropertyChanged(nameof(BatteryColor)); } } }
         public bool ShowBattery => BatteryLevel > 0;
@@ -459,6 +470,7 @@ namespace Deskdrop.WinUI
 
         private void NotifyStorageProperties()
         {
+            OnPropertyChanged(nameof(DetailLine));
             OnPropertyChanged(nameof(ShowStorage));
             OnPropertyChanged(nameof(StorageFreeText));
             OnPropertyChanged(nameof(StorageTotalDisplayText));
@@ -505,6 +517,8 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(LastSeenText));
             OnPropertyChanged(nameof(pairingPin));
             OnPropertyChanged(nameof(IpAddressText));
+            OnPropertyChanged(nameof(PrimaryIpText));
+            OnPropertyChanged(nameof(DetailLine));
             OnPropertyChanged(nameof(HasFingerprint));
             OnPropertyChanged(nameof(FirstSeenText));
         }
@@ -1627,7 +1641,7 @@ namespace Deskdrop.WinUI
             // to null (no hero) rather than to an offline device, so the
             // card only ever claims a connection that's actually live.
             PrimaryDevice = KnownDevices.FirstOrDefault(p => p.IsConnected);
-            SyncPeerProjection(OtherKnownDevices, KnownDevices.Where(p => p != PrimaryDevice));
+            SyncPeerProjection(OtherKnownDevices, WithoutStaleDuplicates(KnownDevices.Where(p => p != PrimaryDevice)));
 
             OnPropertyChanged(nameof(KnownDeviceCount));
             OnPropertyChanged(nameof(NearbyDeviceCount));
@@ -1647,6 +1661,22 @@ namespace Deskdrop.WinUI
         // first, then inserting missing ones at their target index, keeps
         // object identity intact - which is what stops every device card from
         // being rebuilt (losing hover and focus) on each poll.
+        // Reinstalling an app gives it a new device id, so the same phone can
+        // be remembered several times. Among offline entries that share a
+        // name, list only the most recently seen one; a connected entry, or
+        // any other name, is always kept.
+        private static IEnumerable<PeerViewModel> WithoutStaleDuplicates(IEnumerable<PeerViewModel> peers)
+        {
+            var list = peers.ToList();
+            var keepOffline = list
+                .Where(p => !p.IsConnected)
+                .GroupBy(p => p.DisplayName)
+                .Where(g => !list.Any(p => p.IsConnected && p.DisplayName == g.Key))
+                .Select(g => g.OrderByDescending(p => p.last_seen ?? 0).First())
+                .ToHashSet();
+            return list.Where(p => p.IsConnected || keepOffline.Contains(p));
+        }
+
         private static void SyncPeerProjection(ObservableCollection<PeerViewModel> target, IEnumerable<PeerViewModel> source)
         {
             var desired = source.ToList();

@@ -31,31 +31,20 @@
                         <TextBlock Text="{x:Bind ConnectionText, Mode=OneWay}"
                                    Style="{StaticResource AppBodyStrong}"
                                    Foreground="{x:Bind ConnectionColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
-                        <TextBlock Text="{x:Bind IpAddressText, Mode=OneWay}"
-                                   Style="{StaticResource AppMono}" FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        <TextBlock Text="{x:Bind PrimaryIpText, Mode=OneWay}"
+                                   Style="{StaticResource AppSecondary}"
                                    VerticalAlignment="Center"
-                                   Visibility="{x:Bind IpAddressText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
+                                   ToolTipService.ToolTip="{x:Bind IpAddressText, Mode=OneWay}"
+                                   Visibility="{x:Bind PrimaryIpText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
                     </StackPanel>
 
                     <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
                                Style="{StaticResource AppDisplayText}"
-                               FontSize="34"
+                               FontSize="28"
                                TextTrimming="CharacterEllipsis" />
 
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{x:Bind PlatformLabel, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
-                        <TextBlock Text="&#183;" Style="{StaticResource AppSecondary}"
-                                   Visibility="{x:Bind ShowBattery, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
-                        <TextBlock Style="{StaticResource AppSecondary}"
-                                   Visibility="{x:Bind ShowBattery, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                            <Run Text="Battery " /><Run Text="{x:Bind BatteryPercentText, Mode=OneWay}" />
-                        </TextBlock>
-                        <TextBlock Text="&#183;" Style="{StaticResource AppSecondary}"
-                                   Visibility="{x:Bind ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
-                        <TextBlock Text="{x:Bind StorageFreeText, Mode=OneWay}" Style="{StaticResource AppSecondary}"
-                                   Visibility="{x:Bind ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
-                    </StackPanel>
+                    <TextBlock Text="{x:Bind DetailLine, Mode=OneWay}" Style="{StaticResource AppSecondary}"
+                               Visibility="{x:Bind DetailLine, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -200,21 +189,16 @@
                                    Style="{StaticResource AppCaption}" VerticalAlignment="Center"
                                    Visibility="{x:Bind LastSeenText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
                     </StackPanel>
-                    <TextBlock Text="{x:Bind ErrorText, Mode=OneWay}"
-                               Style="{StaticResource AppCaption}"
-                               Foreground="{ThemeResource AppDangerBrush}"
-                               TextWrapping="Wrap"
-                               Visibility="{x:Bind HasError, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
                     <ProgressBar IsIndeterminate="True" Height="2" Margin="0,6,0,0"
                                  Visibility="{x:Bind ShowTransferIndicator, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <Button Style="{StaticResource AppPrimaryButton}" Content="Connect"
+                    <Button Style="{StaticResource AppSecondaryButton}" Content="Connect"
                             Visibility="{x:Bind ShowConnectButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
                             ToolTipService.ToolTip="Reconnect to this device"
                             Click="OnPairDeviceClicked" />
-                    <Button Style="{StaticResource AppPrimaryButton}" Content="Pair"
+                    <Button Style="{StaticResource AppSecondaryButton}" Content="Pair"
                             Visibility="{x:Bind ShowPairButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}"
                             ToolTipService.ToolTip="Start pairing with this device"
                             Click="OnPairDeviceClicked" />
@@ -288,11 +272,10 @@
                 </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                     <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" Style="{StaticResource AppBodyStrong}" />
-                    <TextBlock Style="{StaticResource AppSecondary}" TextTrimming="CharacterEllipsis">
-                        <Run Text="{x:Bind PlatformLabel, Mode=OneWay}" /><Run Text="  " /><Run Text="{x:Bind IpAddressText, Mode=OneWay}" />
-                    </TextBlock>
+                    <TextBlock Text="{x:Bind PrimaryIpText, Mode=OneWay}"
+                               Style="{StaticResource AppSecondary}" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
-                <Button Grid.Column="2" Style="{StaticResource AppPrimaryButton}"
+                <Button Grid.Column="2" Style="{StaticResource AppSecondaryButton}"
                         Content="Pair" VerticalAlignment="Center"
                         ToolTipService.ToolTip="Start pairing with this device"
                         Click="OnPairDeviceClicked" />
@@ -348,7 +331,7 @@
     </Page.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Padding="{StaticResource PagePadding}" Spacing="24" MaxWidth="1180">
+        <StackPanel Padding="{StaticResource PagePadding}" Spacing="24" MaxWidth="860">
 
             <!-- ============================== HEADER
                  148px right margin clears the system caption buttons: this
@@ -365,7 +348,7 @@
                         <Border Width="7" Height="7" CornerRadius="3.5" VerticalAlignment="Center"
                                 Background="{x:Bind winui:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"
                                 services:PulseEffects.EnablePulse="{x:Bind mgr.IsSearching, Mode=OneWay}" />
-                        <TextBlock Text="{x:Bind mgr.EcosystemSummaryText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
+                        <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}" Style="{StaticResource AppSecondary}" />
                     </StackPanel>
                 </StackPanel>
 
@@ -448,14 +431,11 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <Grid ColumnSpacing="28">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="3*" />
-                    <ColumnDefinition Width="2*" MinWidth="300" />
-                </Grid.ColumnDefinitions>
-
-                <!-- ============================== LEFT: devices -->
-                <StackPanel Grid.Column="0" Spacing="28">
+            <!-- One column, like the phone and Mac apps: the linked device and
+                 its actions, other devices, then recent activity. Clipboard,
+                 remote files and speed test live in the sidebar and the
+                 device's ... menu rather than a second action list. -->
+            <StackPanel Spacing="28">
 
                     <!-- Loading: plain placeholder bars in the shape of the
                          status block, so launch never flashes "no devices". -->
@@ -488,6 +468,9 @@
                             <Button Style="{StaticResource AppSecondaryButton}" Padding="20,8"
                                     Content="Scan network" Click="OnScanNearbyClicked" />
                         </StackPanel>
+                        <TextBlock Style="{StaticResource AppCaption}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left"
+                                   Margin="0,6,0,0"
+                                   Text="Devices find each other on the same Wi-Fi. Away from home, join your phone's hotspot from this PC." />
                     </StackPanel>
 
                     <!-- Transfer in progress -->
@@ -535,104 +518,6 @@
                         </Border>
                     </StackPanel>
 
-                    <TextBlock Style="{StaticResource AppCaption}" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
-                               Text="Devices find each other on the same Wi-Fi. Away from home, join your phone's hotspot from this PC." />
-                </StackPanel>
-
-                <!-- ============================== RIGHT: actions + recent -->
-                <StackPanel Grid.Column="1" Spacing="28">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="Do" Style="{StaticResource AppSectionTitle}" />
-                        <Border Style="{StaticResource AppGroupCard}">
-                            <StackPanel>
-                                <Button Style="{StaticResource AppListRowButton}"
-                                        ToolTipService.ToolTip="Send files to a connected device (Ctrl+O)"
-                                        Click="OnQuickSendClicked">
-                                    <Grid ColumnSpacing="14">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppAccentSubtleBrush}">
-                                            <FontIcon Glyph="&#xE898;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}"
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Send files" Style="{StaticResource AppBodyStrong}" />
-                                            <TextBlock Text="Photos, documents, anything" Style="{StaticResource AppSecondary}" />
-                                        </StackPanel>
-                                        <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="12"
-                                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
-                                    </Grid>
-                                </Button>
-                                <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
-                                <Button Style="{StaticResource AppListRowButton}"
-                                        Click="OnClipboardTapped">
-                                    <Grid ColumnSpacing="14">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppAccentSubtleBrush}">
-                                            <FontIcon Glyph="&#xE8C8;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}"
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Clipboard" Style="{StaticResource AppBodyStrong}" />
-                                            <TextBlock Text="Shared copy history" Style="{StaticResource AppSecondary}" />
-                                        </StackPanel>
-                                        <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="12"
-                                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
-                                    </Grid>
-                                </Button>
-                                <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
-                                <Button Style="{StaticResource AppListRowButton}"
-                                        Click="OnBrowseDeviceTapped">
-                                    <Grid ColumnSpacing="14">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppAccentSubtleBrush}">
-                                            <FontIcon Glyph="&#xE8B7;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}"
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Remote files" Style="{StaticResource AppBodyStrong}" />
-                                            <TextBlock Text="Browse a connected device" Style="{StaticResource AppSecondary}" />
-                                        </StackPanel>
-                                        <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="12"
-                                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
-                                    </Grid>
-                                </Button>
-                                <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
-                                <Button Style="{StaticResource AppListRowButton}"
-                                        Click="OnSpeedTestTapped">
-                                    <Grid ColumnSpacing="14">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppAccentSubtleBrush}">
-                                            <FontIcon Glyph="&#xE916;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}"
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Speed test" Style="{StaticResource AppBodyStrong}" />
-                                            <TextBlock Text="Measure the link" Style="{StaticResource AppSecondary}" />
-                                        </StackPanel>
-                                        <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="12"
-                                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
-                                    </Grid>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-
                     <StackPanel Spacing="10">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -663,8 +548,7 @@
                             </Grid>
                         </Border>
                     </StackPanel>
-                </StackPanel>
-            </Grid>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Page>
