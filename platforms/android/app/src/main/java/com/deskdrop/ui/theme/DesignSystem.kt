@@ -196,13 +196,6 @@ fun CRBackground(
     flat: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "mesh")
-    val breatheShift by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(8000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "mesh_breathe"
-    )
-
     val electricColor = CRTheme.brandElectric
     val violetColor = CRTheme.brandViolet
 
@@ -222,6 +215,14 @@ fun CRBackground(
             )
     ) {
         if (!isDark && !flat) {
+            // Only animate when the mesh is drawn: an infinite transition
+            // requests a frame every vsync even if nothing reads it.
+            val infiniteTransition = rememberInfiniteTransition(label = "mesh")
+            val breatheShift by infiniteTransition.animateFloat(
+                initialValue = 0f, targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(8000, easing = LinearEasing), RepeatMode.Reverse),
+                label = "mesh_breathe"
+            )
             androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
                 val centerOffset = Offset(size.width * 0.3f, size.height * (0.2f + (breatheShift * 0.1f)))
                 val centerOffset2 = Offset(size.width * 0.8f, size.height * (0.6f - (breatheShift * 0.1f)))

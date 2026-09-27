@@ -391,9 +391,14 @@ class DeskdropService : Service() {
                         if (h != 0L) {
                             backgroundExecutor.execute { DeskdropJni.notifySleepState(h, false) }
                         }
-                        restartDiscoveryNow()
-                        if (h != 0L) {
-                            backgroundExecutor.execute { DeskdropJni.notifyNetworkRestored(h) }
+                        // Peers that survived the screen-off need no
+                        // rediscovery; restarting NSD and redialling every
+                        // known peer ~100 times a day was pure overhead.
+                        if (!hasConnectedPeers()) {
+                            restartDiscoveryNow()
+                            if (h != 0L) {
+                                backgroundExecutor.execute { DeskdropJni.notifyNetworkRestored(h) }
+                            }
                         }
                     }
                 }
@@ -403,9 +408,22 @@ class DeskdropService : Service() {
                     if (h != 0L) {
                         backgroundExecutor.execute { DeskdropJni.notifySleepState(h, true) }
                     }
+                    // The 2-minute idle release runs on uptime, which stops
+                    // while the CPU sleeps, so it could leave the multicast
+                    // lock (every LAN broadcast wakes the CPU) held all night.
+                    // Drop discovery locks now unless bytes are moving.
+                    handler.post {
+                        if (!isMovingData()) {
+                            idleLockReleaseRunnable?.let { handler.removeCallbacks(it) }
+                            releaseMulticastLock()
+                            releaseWifiLock()
+                        }
+                    }
                 }
                 android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> {
-                    if (!pm.isDeviceIdleMode) {
+                    // Doze maintenance windows end idle mode many times a
+                    // night; only rediscover if we actually lost everyone.
+                    if (!pm.isDeviceIdleMode && !hasConnectedPeers()) {
                         Log.i(TAG, "Device woke up (Doze ended) — forcing reconnect/discovery")
                         handler.post {
                             restartDiscoveryNow()
@@ -716,6 +734,11 @@ class DeskdropService : Service() {
                     DeskdropJni.rejectFileTransfer(engineHandle, tid)
                     notificationManager.cancel(transferNotifId(tid))
                 }
+                // The core sends no local event for a reject, so the entry
+                // would otherwise linger and keep the transfer Wi-Fi lock held.
+                TransferManager.activeTransfers.remove(tid)
+                TransferManager.publishActiveTransfers(force = true)
+                syncTransferWifiLock()
                 return START_STICKY
             }
 
@@ -754,13 +777,12 @@ class DeskdropService : Service() {
             else -> Log.w(TAG, "Unknown action: ${intent?.action}")
         }
 
-        // Any time the service receives a command (e.g. app opened, file shared, ping),
-        // ensure our active network locks are held for at least 2 minutes.
-        acquireContinuousLocks()
-
-        // Start / re-attach foreground
+        // Several actions fall through to here (push text/notification/shared
+        // file, trust/call handling, plain app-open starts). Foreground was
+        // already (re)attached at the top of this method, and network locks
+        // are only taken for real discovery or transfer work - taking them
+        // here re-armed them for every notification any app posted.
         return try {
-            startForegroundCompat(buildForegroundNotification())
             setServiceRunning(true)
 
             if (!engineStarted.getAndSet(true)) {
@@ -801,7 +823,8 @@ class DeskdropService : Service() {
                 persistStatus()
             } else {
                 // Engine was already running — permission may have just been granted.
-                acquireContinuousLocks()
+                // A null action is the app being opened: discovery matters now.
+                if (intent?.action == null) acquireContinuousLocks()
                 startBatteryMonitor()
             }
 
@@ -880,6 +903,7 @@ class DeskdropService : Service() {
         releaseWifiLock()
         releaseWakeLock()
         isRunning = false
+        if (engineHandle != 0L) DeskdropJni.interruptWait(engineHandle)
         eventDrainThread?.join(1000)
         handler.removeCallbacksAndMessages(null)
         heartbeatHandler.removeCallbacksAndMessages(null)
@@ -961,8 +985,14 @@ class DeskdropService : Service() {
     // since Android 10), so hold a low-latency lock only while files move.
     private var transferWifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
+    // Only bytes actually moving justify a lock: a transfer waiting on the
+    // user's Accept, or paused, can sit there for hours.
+    private fun isMovingData(): Boolean =
+        TransferManager.activeTransfers.values.any { it.state == TransferState.PROGRESS } ||
+            TransferManager.activeSpeedTests.isNotEmpty()
+
     private fun syncTransferWifiLock() {
-        val busy = TransferManager.activeTransfers.isNotEmpty() || TransferManager.activeSpeedTests.isNotEmpty()
+        val busy = isMovingData()
         val held = transferWifiLock?.isHeld == true
         if (busy == held) return
         runCatching {
@@ -1045,13 +1075,17 @@ class DeskdropService : Service() {
      */
     private fun acquireContinuousLocks() {
         handler.post {
+            // With the screen off nobody is waiting on discovery, and the
+            // release timer below can't be trusted to fire (see SCREEN_OFF).
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            if (!pm.isInteractive && !isMovingData()) return@post
             acquireMulticastLock()
             acquireWifiLock()
 
             idleLockReleaseRunnable?.let { handler.removeCallbacks(it) }
 
             val releaseTask = Runnable {
-                if (TransferManager.activeTransfers.isNotEmpty()) {
+                if (isMovingData()) {
                     // Still active transfers, re-schedule
                     acquireContinuousLocks()
                 } else {
@@ -1124,14 +1158,19 @@ class DeskdropService : Service() {
         isRunning = true
         eventDrainThread = Thread {
             while (isRunning) {
+                // Block in the core until an event arrives instead of polling
+                // every 100 ms (600 wakeups a minute, forever). onDestroy
+                // calls interruptWait before taking the write lock, so
+                // holding the read lock while blocked can't deadlock it.
                 engineLock.readLock().lock()
                 val ev = try {
                     if (engineHandle != 0L) {
-                        DeskdropJni.pollEvent(engineHandle)
+                        DeskdropJni.waitEvent(engineHandle)
                     } else 0L
                 } finally {
                     engineLock.readLock().unlock()
                 }
+                if (ev == 0L && engineHandle == 0L) break
                 
                 if (ev != 0L) {
                     val batch = mutableListOf(ev)
@@ -1156,7 +1195,9 @@ class DeskdropService : Service() {
                         }
                     }
                 } else {
-                    Thread.sleep(100)
+                    // Only reached if the core's event channel closed; avoid
+                    // spinning while the service winds down.
+                    Thread.sleep(1000)
                 }
             }
         }.apply { start() }
@@ -1312,26 +1353,36 @@ class DeskdropService : Service() {
                 val speedBps      = DeskdropJni.eventTransferSpeedBps(ev)
                 val etaSecs       = DeskdropJni.eventTransferEtaSecs(ev)
                 val name          = DeskdropJni.eventTransferFileName(ev) ?: "file"
-                val from          = resolvePeerDisplayName(
-                    DeskdropJni.eventDeviceId(ev),
-                    DeskdropJni.eventDeviceName(ev)
-                )
-                // Update existing activity entry in-place.
-                updateActivityTransferProgress(
-                    tid = tid,
-                    percent = percent,
-                    bytesReceived = bytesReceived,
-                    speedBps = speedBps,
-                    etaSecs = etaSecs
-                )
-                
                 val existing = TransferManager.activeTransfers[tid]
+                // Progress arrives ~10x a second; the feed update below
+                // broadcasts to the dashboard and tile, so rate-limit it
+                // like the notification (250 ms), always letting 100% through.
+                val nowMs = android.os.SystemClock.elapsedRealtime()
+                if (percent == 100 || nowMs - (lastTransferFeedTimes[tid] ?: 0L) >= 250L) {
+                    lastTransferFeedTimes[tid] = nowMs
+                    updateActivityTransferProgress(
+                        tid = tid,
+                        percent = percent,
+                        bytesReceived = bytesReceived,
+                        speedBps = speedBps,
+                        etaSecs = etaSecs
+                    )
+                }
+
                 val isPaused = existing?.isPaused ?: false
                 // Use eventTransferTotalBytes to get the real total even for outbound transfers
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev).let { if (it > 0) it else (existing?.totalBytes ?: 0L) }
-                val peerName = existing?.peerName ?: from
-                val isOutboundFeed = ActivityFeedManager.getFeedSnapshot().any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT }
-                val isOutbound = TransferManager.pendingOutboundTransferIds.contains(tid) || isOutboundFeed || (existing?.isOutbound ?: true)
+                // Peer name and direction don't change mid-transfer; only
+                // resolve them (a JNI peer list + JSON parse, and a feed
+                // scan) the first time this transfer is seen.
+                val peerName = existing?.peerName ?: resolvePeerDisplayName(
+                    DeskdropJni.eventDeviceId(ev),
+                    DeskdropJni.eventDeviceName(ev)
+                )
+                // Unknown transfers default to outbound, as before; incoming
+                // ones were registered by FILE_TRANSFER_INCOMING already.
+                val isOutbound = existing == null || existing.isOutbound ||
+                    TransferManager.pendingOutboundTransferIds.contains(tid)
                 
                 TransferManager.activeTransfers[tid] = TransferProgress(
                     id = tid, fileName = name, percent = percent, bytesReceived = bytesReceived, 
@@ -1358,6 +1409,7 @@ class DeskdropService : Service() {
             DeskdropJni.CR_EVENT_FILE_TRANSFER_COMPLETE -> {
                 val tid      = DeskdropJni.eventTransferId(ev) ?: return
                 lastTransferNotifTimes.remove(tid)
+                lastTransferFeedTimes.remove(tid)
                 val from     = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
@@ -1408,6 +1460,7 @@ class DeskdropService : Service() {
             DeskdropJni.CR_EVENT_FILE_TRANSFER_FAILED -> {
                 val tid  = DeskdropJni.eventTransferId(ev) ?: return
                 lastTransferNotifTimes.remove(tid)
+                lastTransferFeedTimes.remove(tid)
                 val from = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
@@ -1554,6 +1607,10 @@ class DeskdropService : Service() {
                 // reset backoff so the next disconnect starts fresh.
                 cancelNsdRetry()
                 nsdRetryCount.set(0L)
+                pauseNsdBrowse()
+                // The storage monitor only runs with peers present, so give
+                // the new peer a reading straight away.
+                pushStorageStatusAsync()
             }
 
             // ── Peer disconnected ─────────────────────────────────────────────
@@ -1564,7 +1621,15 @@ class DeskdropService : Service() {
                     DeskdropJni.eventDeviceName(ev)
                 )
                 Log.i(TAG, "Peer disconnected: $name (id=$deviceId)")
-                if (deviceId != null) connectedPeerIds.remove(deviceId)
+                if (deviceId != null) {
+                    connectedPeerIds.remove(deviceId)
+                    // No SPEED_TEST_COMPLETE will come for a dropped peer;
+                    // a stale entry would pin the transfer Wi-Fi lock.
+                    if (TransferManager.activeSpeedTests.remove(deviceId) != null) {
+                        TransferManager.publishActiveTransfers(force = true)
+                        syncTransferWifiLock()
+                    }
+                }
                 persistStatus()
                 updateForegroundNotification()
                 // If we're now peerless, schedule a retry scan so we reconnect
@@ -1577,6 +1642,7 @@ class DeskdropService : Service() {
             // ── Engine warning ────────────────────────────────────────────────
             DeskdropJni.CR_EVENT_WARNING -> {
                 val msg = DeskdropJni.eventText(ev) ?: return
+                if (msg == "interrupt") return // interruptWait wake-up, not a real warning
                 Log.w(TAG, "Engine warning: $msg")
                 if (msg == "Pairing request was declined." || msg == "Pairing request was accepted.") {
                     sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
@@ -1923,6 +1989,7 @@ class DeskdropService : Service() {
     }
 
     private val lastTransferNotifTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val lastTransferFeedTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private fun updateFileTransferNotificationProgress(
         tid: String,
@@ -2807,72 +2874,98 @@ class DeskdropService : Service() {
 
     private var storageMonitorRunnable: Runnable? = null
 
+    // Summing every image and video row in MediaStore is the expensive part;
+    // gallery totals barely move minute to minute, so reuse them for a while.
+    private val STORAGE_PUSH_INTERVAL_MS = 5 * 60_000L
+    private val STORAGE_MEDIA_RESCAN_MS = 30 * 60_000L
+    @Volatile private var cachedMediaSizes: Pair<Long, Long>? = null
+    @Volatile private var cachedMediaAt = 0L
+
     private fun startStorageMonitor() {
         if (storageMonitorRunnable != null) return
         val r = object : Runnable {
             override fun run() {
-                backgroundExecutor.execute {
-                    engineLock.readLock {
-                        val h = engineHandle
-                        if (h != 0L) {
-                            try {
-                                val storageManager = getSystemService(android.content.Context.STORAGE_STATS_SERVICE) as? android.app.usage.StorageStatsManager
-                                if (storageManager != null) {
-                                    val rawTotalBytes = storageManager.getTotalBytes(android.os.storage.StorageManager.UUID_DEFAULT)
-                                    val freeBytes = storageManager.getFreeBytes(android.os.storage.StorageManager.UUID_DEFAULT)
-
-                                    val GB = 1_000_000_000L
-                                    val tiers = longArrayOf(16 * GB, 32 * GB, 64 * GB, 128 * GB, 256 * GB, 512 * GB, 1000 * GB, 2000 * GB)
-                                    var totalBytes = rawTotalBytes
-                                    for (tier in tiers) {
-                                        if (rawTotalBytes <= tier) {
-                                            totalBytes = tier
-                                            break
-                                        }
-                                    }
-
-                                    var imgSize = 0L
-                                    var vidSize = 0L
-                                    
-                                    val uri = android.provider.MediaStore.Files.getContentUri("external")
-                                    val proj = arrayOf(
-                                        android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE,
-                                        android.provider.MediaStore.Files.FileColumns.SIZE
-                                    )
-                                    val sel = "${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=?"
-                                    val selArgs = arrayOf(
-                                        android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
-                                        android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
-                                    )
-                                    
-                                    contentResolver.query(uri, proj, sel, selArgs, null)?.use { cursor ->
-                                        val typeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE)
-                                        val sizeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.SIZE)
-                                        while (cursor.moveToNext()) {
-                                            val type = cursor.getInt(typeCol)
-                                            val size = cursor.getLong(sizeCol)
-                                            if (type == android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE) {
-                                                imgSize += size
-                                            } else {
-                                                vidSize += size
-                                            }
-                                        }
-                                    }
-                                    
-                                    DeskdropJni.pushStorageStatus(h, imgSize, vidSize, 0L, freeBytes, totalBytes)
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Storage telemetry failed", e)
-                            }
-                        }
-                    }
-                }
-                handler.postDelayed(this, 60_000L) // every 60s
+                // Nobody to report to, or nobody looking at the phone's
+                // numbers being refreshed: skip. A peer that connects gets
+                // a fresh reading from PEER_CONNECTED.
+                val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                if (hasConnectedPeers() && pm.isInteractive) pushStorageStatusAsync()
+                handler.postDelayed(this, STORAGE_PUSH_INTERVAL_MS)
             }
         }
         storageMonitorRunnable = r
-        handler.post(r)
+        handler.postDelayed(r, STORAGE_PUSH_INTERVAL_MS)
         Log.i(TAG, "Storage monitor started")
+    }
+
+    private fun pushStorageStatusAsync() {
+        backgroundExecutor.execute {
+            engineLock.readLock {
+                val h = engineHandle
+                if (h != 0L) {
+                    try {
+                        val storageManager = getSystemService(android.content.Context.STORAGE_STATS_SERVICE) as? android.app.usage.StorageStatsManager
+                        if (storageManager != null) {
+                            val rawTotalBytes = storageManager.getTotalBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+                            val freeBytes = storageManager.getFreeBytes(android.os.storage.StorageManager.UUID_DEFAULT)
+
+                            val GB = 1_000_000_000L
+                            val tiers = longArrayOf(16 * GB, 32 * GB, 64 * GB, 128 * GB, 256 * GB, 512 * GB, 1000 * GB, 2000 * GB)
+                            var totalBytes = rawTotalBytes
+                            for (tier in tiers) {
+                                if (rawTotalBytes <= tier) {
+                                    totalBytes = tier
+                                    break
+                                }
+                            }
+
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            val media = cachedMediaSizes?.takeIf { now - cachedMediaAt < STORAGE_MEDIA_RESCAN_MS }
+                                ?: scanMediaSizes().also {
+                                    cachedMediaSizes = it
+                                    cachedMediaAt = now
+                                }
+
+                            DeskdropJni.pushStorageStatus(h, media.first, media.second, 0L, freeBytes, totalBytes)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Storage telemetry failed", e)
+                    }
+                }
+            }
+        }
+    }
+
+    /** Total bytes of (images, videos) in MediaStore. */
+    private fun scanMediaSizes(): Pair<Long, Long> {
+        var imgSize = 0L
+        var vidSize = 0L
+
+        val uri = android.provider.MediaStore.Files.getContentUri("external")
+        val proj = arrayOf(
+            android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE,
+            android.provider.MediaStore.Files.FileColumns.SIZE
+        )
+        val sel = "${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE}=?"
+        val selArgs = arrayOf(
+            android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+            android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
+        )
+
+        contentResolver.query(uri, proj, sel, selArgs, null)?.use { cursor ->
+            val typeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE)
+            val sizeCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.SIZE)
+            while (cursor.moveToNext()) {
+                val type = cursor.getInt(typeCol)
+                val size = cursor.getLong(sizeCol)
+                if (type == android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE) {
+                    imgSize += size
+                } else {
+                    vidSize += size
+                }
+            }
+        }
+        return imgSize to vidSize
     }
 
     private fun stopStorageMonitor() {
@@ -3197,6 +3290,17 @@ class DeskdropService : Service() {
         }
     }
 
+    // Once a peer is connected, browsing only keeps the Wi-Fi chip sending
+    // mDNS queries. Our advertisement stays up, so a new device (which has
+    // no peers and is still browsing) finds us; browsing resumes when we go
+    // peerless (scheduleNsdRetry) or the user scans.
+    private fun pauseNsdBrowse() {
+        val listener = nsdDiscoveryListener ?: return
+        val nm = runCatching { getSystemService(NSD_SERVICE) as NsdManager }.getOrNull() ?: return
+        runCatching { nm.stopServiceDiscovery(listener) }
+        nsdDiscoveryListener = null
+    }
+
     private fun stopNsdDiscovery() {
         val nm = runCatching { getSystemService(NSD_SERVICE) as NsdManager }.getOrNull() ?: return
         
@@ -3316,7 +3420,7 @@ class DeskdropService : Service() {
     private fun scheduleNsdRetry() {
         cancelNsdRetry()
         val attempt = nsdRetryCount.getAndIncrement()
-        val delayMs = minOf(5_000L * (1L shl attempt.coerceAtMost(3).toInt()), 60_000L)
+        val delayMs = minOf(5_000L * (1L shl attempt.coerceAtMost(4).toInt()), 60_000L)
         Log.i(TAG, "NSD retry #$attempt scheduled in ${delayMs}ms")
         val r = Runnable {
             if (engineHandle != 0L && connectedPeerIds.isEmpty()) {
@@ -3510,6 +3614,8 @@ class DeskdropService : Service() {
     // Silent — no sound, no vibration, no heads-up banner.
     // Two action buttons: [Pause Sync] / [Resume Sync] and [Disconnect]
 
+    private var cachedLargeIcon: android.graphics.Bitmap? = null
+
     private fun buildForegroundNotification(): Notification {
         val launchPi = PendingIntent.getActivity(
             this, 0,
@@ -3530,7 +3636,8 @@ class DeskdropService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val largeIcon = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_round)
+        // Rebuilt on every peer change and service command; decode once.
+        val largeIcon = cachedLargeIcon ?: android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_round).also { cachedLargeIcon = it }
 
         val description = if (connectedPeerIds.isEmpty()) {
             "Scanning LAN for devices..."

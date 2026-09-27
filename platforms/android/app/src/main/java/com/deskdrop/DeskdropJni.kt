@@ -66,6 +66,10 @@ object DeskdropJni {
 
     // ── Event poll ────────────────────────────────────────────────────────────
     @JvmStatic external fun pollEvent(handle: Long): Long
+    /** Blocks until the engine emits an event; 0 once the engine is gone. */
+    @JvmStatic external fun waitEvent(handle: Long): Long
+    /** Wakes a thread blocked in [waitEvent] with an "interrupt" warning event. */
+    @JvmStatic external fun interruptWait(handle: Long)
     @JvmStatic external fun eventType(event: Long): Int
     @JvmStatic external fun freeEvent(event: Long)
 

@@ -151,23 +151,9 @@ class MainActivity : ComponentActivity() {
             prefs.edit().putBoolean("has_completed_onboarding", true).apply()
             hasCompletedOnboarding.value = true
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // API 30+: use the modern `display` property (defaultDisplay is deprecated)
-            val displayModes = display?.supportedModes ?: emptyArray()
-            val bestMode = displayModes.maxByOrNull { it.refreshRate }
-            if (bestMode != null) {
-                window.attributes = window.attributes.apply {
-                    preferredDisplayModeId = bestMode.modeId
-                }
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            @Suppress("DEPRECATION")
-            val displayModes = window.windowManager.defaultDisplay.supportedModes
-            val bestRate = displayModes.maxByOrNull { it.refreshRate }?.refreshRate ?: 60f
-            window.attributes = window.attributes.apply {
-                preferredRefreshRate = bestRate
-            }
-        }
+        // No preferred display mode: pinning the panel's top rate kept a
+        // 120 Hz screen at 120 Hz while the dashboard sat still. The system
+        // already raises the rate for scrolling and animation.
 
         if (intent?.getBooleanExtra("request_permissions", false) == true) {
             requestRuntimePermissions()
