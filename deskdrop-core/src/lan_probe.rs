@@ -31,7 +31,8 @@
 
 use crate::discovery_manager::{DiscoveredPeer, DiscoveryInputHandle};
 use crate::network_manager;
-use crate::peer_manager::DiscoverySource;
+use crate::peer_manager::{DiscoverySource, PeerManager};
+use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
@@ -90,10 +91,21 @@ const _: () = assert!(
 /// Runs forever as a background tokio task. Re-reads the active network
 /// interface on every tick, so it naturally adapts to network changes
 /// without needing to be restarted.
-pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
+///
+/// Sweeps pause while any peer is connected: a device that joins later
+/// has no connections of its own, so its sweep finds us instead. That
+/// keeps an idle, paired phone from sending ~250 SYNs every 25 s.
+pub fn spawn_lan_probe(
+    port: u16,
+    discovery_handle: DiscoveryInputHandle,
+    peer_manager: Arc<PeerManager>,
+) {
     tokio::spawn(async move {
         // Consecutive sweeps that found nothing new — drives idle backoff.
         let mut consecutive_empty_sweeps: u32 = 0;
+        // Hosts that answered the previous sweep. A host that keeps
+        // answering isn't news, so it must not hold off the backoff.
+        let mut previously_found: HashSet<IpAddr> = HashSet::new();
         // The first sweep runs at once; after that the loop waits the
         // cadence picked for the current network before the next one.
         let mut next_wait = Duration::ZERO;
@@ -102,10 +114,22 @@ pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
             tokio::time::sleep(next_wait).await;
             next_wait = HOTSPOT_SWEEP_INTERVAL;
 
+            if peer_manager.connected_count() > 0 {
+                next_wait = LAN_SWEEP_INTERVAL;
+                continue;
+            }
+
             let iface = match network_manager::get_active_interface() {
                 Ok(iface) => iface,
                 Err(_) => continue,
             };
+
+            // Carriers hand out private (CGNAT / 10.x) addresses too; a
+            // sweep there would run over the cellular radio for nothing.
+            if network_manager::looks_like_cellular(&iface.name) {
+                next_wait = LAN_SWEEP_INTERVAL;
+                continue;
+            }
 
             let base = match iface.ip {
                 IpAddr::V4(ip) if ip.is_private() => ip,
@@ -140,7 +164,9 @@ pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
                 254
             };
             let found = sweep_subnet(base, port, max_host, &discovery_handle).await;
-            if found > 0 {
+            let any_new = found.iter().any(|ip| !previously_found.contains(ip));
+            previously_found = found;
+            if any_new {
                 consecutive_empty_sweeps = 0;
             } else {
                 consecutive_empty_sweeps = consecutive_empty_sweeps.saturating_add(1);
@@ -151,13 +177,13 @@ pub fn spawn_lan_probe(port: u16, discovery_handle: DiscoveryInputHandle) {
 
 /// Actively connect-probe host addresses `1..=max_host` on `base`'s subnet,
 /// reporting any that accept a TCP connection on `port` as a discovered
-/// peer. Returns the number of peers found this sweep.
+/// peer. Returns the addresses that answered this sweep.
 async fn sweep_subnet(
     base: Ipv4Addr,
     port: u16,
     max_host: u8,
     handle: &DiscoveryInputHandle,
-) -> usize {
+) -> HashSet<IpAddr> {
     let o = base.octets();
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_PROBES));
     let mut tasks = tokio::task::JoinSet::new();
@@ -179,11 +205,11 @@ async fn sweep_subnet(
         });
     }
 
-    let mut found_count = 0usize;
+    let mut found = HashSet::new();
     while let Some(result) = tasks.join_next().await {
         if let Ok(Some(ip)) = result {
             info!("lan_probe: Deskdrop responding at {}:{}", ip, port);
-            found_count += 1;
+            found.insert(ip);
             handle
                 .found(DiscoveredPeer {
                     device_id: placeholder_id(ip),
@@ -199,9 +225,9 @@ async fn sweep_subnet(
     }
     debug!(
         "lan_probe: sweep of {}.{}.{}.0/{} complete ({} found)",
-        o[0], o[1], o[2], max_host, found_count
+        o[0], o[1], o[2], max_host, found.len()
     );
-    found_count
+    found
 }
 
 /// Attempt a TCP connect to check if Deskdrop is listening at this address.
@@ -291,6 +317,6 @@ mod tests {
         // Nothing listens on this port within the tiny scanned range, on
         // loopback — should report zero finds, not error.
         let found = sweep_subnet(Ipv4Addr::new(127, 0, 0, 1), 1, 3, &handle).await;
-        assert_eq!(found, 0);
+        assert!(found.is_empty());
     }
 }

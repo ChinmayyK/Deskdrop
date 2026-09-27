@@ -23,6 +23,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+/// How stale a persisted `last_seen` may get before a sighting alone is
+/// worth a peers.json write.
+const LAST_SEEN_PERSIST_SECS: u64 = 300;
+
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -395,6 +399,11 @@ impl PeerManager {
             }
         }
         let now = now_secs();
+        // Beacons repeat every few seconds for every peer on the LAN, so
+        // rewriting peers.json on each sighting kept the disk (and, on
+        // phones, the CPU) busy for nothing. Persist only when something
+        // durable changed, or to refresh a stale last_seen.
+        let mut changed = !self.store.contains_key(&device_id);
         let record = {
             let is_placeholder = |name: &str| {
                 name.starts_with("device-") || name.eq_ignore_ascii_case("Deskdrop Device")
@@ -416,6 +425,7 @@ impl PeerManager {
                 }
                 for id in duplicates {
                     self.store.remove(&id);
+                    changed = true;
                 }
             }
 
@@ -458,29 +468,46 @@ impl PeerManager {
             });
 
             // Do not overwrite a real name with a placeholder name.
-            if !is_placeholder(&friendly_name)
+            if (!is_placeholder(&friendly_name)
                 || is_placeholder(&record.friendly_name)
-                || record.friendly_name.is_empty()
+                || record.friendly_name.is_empty())
+                && record.friendly_name != friendly_name
             {
                 record.friendly_name = friendly_name;
+                changed = true;
             }
-            if platform.is_some() {
+            if platform.is_some() && record.platform != platform {
                 record.platform = platform;
+                changed = true;
             }
             if !record.ips.contains(&endpoint.ip()) {
                 record.ips.push(endpoint.ip());
+                // Every stored IP is dialled on reconnect; a phone that
+                // roams DHCP leases would otherwise grow this forever.
+                if record.ips.len() > 8 {
+                    record.ips.remove(0);
+                }
+                changed = true;
             }
-            record.port = endpoint.port();
-            record.trusted = trusted;
+            if record.port != endpoint.port() || record.trusted != trusted {
+                record.port = endpoint.port();
+                record.trusted = trusted;
+                changed = true;
+            }
+            if record.last_seen.map_or(true, |t| now.saturating_sub(t) >= LAST_SEEN_PERSIST_SECS) {
+                changed = true;
+            }
             record.last_seen = Some(now);
             if record.discovery == DiscoverySource::Unknown {
                 record.discovery = discovery;
+                changed = true;
             }
 
             // Track multi-layer discovery metadata.
             record.last_discovery_at = Some(now);
             if !record.discovery_sources.contains(&discovery) {
                 record.discovery_sources.push(discovery);
+                changed = true;
             }
             // Maintain address history (cap at 10 entries).
             let addr = endpoint;
@@ -488,6 +515,7 @@ impl PeerManager {
                 existing.last_seen_at = now;
                 existing.success_count = existing.success_count.saturating_add(1);
             } else {
+                changed = true;
                 record.addr_history.push(AddrRecord {
                     addr,
                     last_seen_at: now,
@@ -505,7 +533,9 @@ impl PeerManager {
             record.clone()
         };
 
-        self.save()?;
+        if changed {
+            self.save()?;
+        }
         Ok(record)
     }
 

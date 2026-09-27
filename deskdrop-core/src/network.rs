@@ -68,8 +68,11 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// v3 fix: TCP keepalive — detect silently-dropped Wi-Fi connections.
 /// Idle time before the first probe, then interval between probes.
-const KEEPALIVE_IDLE: Duration = Duration::from_secs(10);
-const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(3);
+/// While both sides are awake the 5 s app heartbeat keeps the socket busy
+/// and catches dead links first, so keepalive only matters while a phone
+/// sleeps - and a 10 s idle there woke it every 10 s for a probe.
+const KEEPALIVE_IDLE: Duration = Duration::from_secs(120);
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
 #[allow(dead_code)]
 const KEEPALIVE_RETRIES: u32 = 3;
 const SOCKET_BUFFER_MIN: usize = 8 * 1024 * 1024; // 8 MB

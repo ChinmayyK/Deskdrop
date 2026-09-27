@@ -366,7 +366,7 @@ impl DiscoveryManager {
             peers: HashMap::new(),
             input_rx,
             output_tx,
-            eviction_interval: Duration::from_secs(3),
+            eviction_interval: Duration::from_secs(10),
         };
 
         let handle = DiscoveryInputHandle { tx: input_tx };

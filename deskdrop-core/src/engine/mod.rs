@@ -430,7 +430,15 @@ impl Default for EngineConfig {
             heartbeat_timeout: Duration::from_secs(12),
             bind_ip: None,
             enable_discovery: true,
-            network_poll_interval: Duration::from_secs(1),
+            // Android has no netlink hint path (see network_manager) and the
+            // app already reports connectivity changes through
+            // notifyNetworkRestored, so a 1 s interface poll only kept the
+            // phone's CPU ticking.
+            network_poll_interval: if cfg!(target_os = "android") {
+                Duration::from_secs(15)
+            } else {
+                Duration::from_secs(1)
+            },
             data_dir: default_peer_store_path()
                 .parent()
                 .map(PathBuf::from)
@@ -568,6 +576,9 @@ pub(crate) struct EngineShared {
     pub(crate) feedback: Arc<Mutex<crate::engine_support::FeedbackLog>>,
     /// Tracks when the local device woke up from sleep. Prevents immediate disconnects when waking from deep sleep.
     pub(crate) local_last_wake: Arc<std::sync::atomic::AtomicU64>,
+    /// Set while the host says this device is asleep (phone screen off).
+    /// Heartbeats and reconnect attempts slow down so the radio can idle.
+    pub(crate) local_sleeping: Arc<std::sync::atomic::AtomicBool>,
     /// Active phone call state (set on ringing/offhook, cleared on idle).
     pub(crate) active_call: Arc<Mutex<Option<ActiveCallState>>>,
     /// Per-peer battery levels (F20). Keyed by device UUID.
@@ -706,6 +717,7 @@ impl Engine {
                     .unwrap()
                     .as_millis() as u64,
             )),
+            local_sleeping: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             active_call: Arc::new(Mutex::new(None)),
             peer_batteries: Arc::new(dashmap::DashMap::new()),
             peer_storage: Arc::new(dashmap::DashMap::new()),
@@ -849,20 +861,35 @@ impl Engine {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
 
-            // While no peer is connected yet, beacon fast so first pairing
-            // is quick. Once at least one peer is connected, there's no
-            // rush — back off to a steady-state cadence so we're not
-            // broadcasting + enumerating interfaces every 1.5s forever.
-            // Drops back to the fast cadence automatically if we ever go
-            // back to zero connected peers (e.g. everyone disconnects).
+            // Beacon fast for a short window after start, or after the last
+            // peer drops, so first pairing and reconnects are quick. Outside
+            // that window there's no rush: a newly arriving device beacons
+            // fast itself and we answer it, so a slow cadence here costs
+            // little latency but saves waking every phone on the LAN.
             const BEACON_FAST_INTERVAL: tokio::time::Duration =
                 tokio::time::Duration::from_millis(1500);
             const BEACON_STEADY_INTERVAL: tokio::time::Duration =
-                tokio::time::Duration::from_secs(5);
+                tokio::time::Duration::from_secs(15);
+            const BEACON_FAST_WINDOW: tokio::time::Duration =
+                tokio::time::Duration::from_secs(60);
 
-            let mut interval = tokio::time::interval(BEACON_FAST_INTERVAL);
+            let mut fast_until = tokio::time::Instant::now() + BEACON_FAST_WINDOW;
+            let mut had_peers = false;
             loop {
-                interval.tick().await;
+                // A fresh `tokio::time::interval` completes its first tick at
+                // once, so rebuilding one per pass (as this loop used to)
+                // broadcast back to back with no wait at all. Sleep instead.
+                let has_peers = shared.peer_manager.connected_count() > 0;
+                if had_peers && !has_peers {
+                    fast_until = tokio::time::Instant::now() + BEACON_FAST_WINDOW;
+                }
+                had_peers = has_peers;
+                let wait = if !has_peers && tokio::time::Instant::now() < fast_until {
+                    BEACON_FAST_INTERVAL
+                } else {
+                    BEACON_STEADY_INTERVAL
+                };
+                tokio::time::sleep(wait).await;
                 // Send to limited broadcast address.
                 if let Err(err) = socket.send_to(&payload, broadcast_addr).await {
                     tracing::trace!(error = %err, "failed to send UDP beacon");
@@ -884,12 +911,6 @@ impl Engine {
                         }
                     }
                 }
-
-                interval = tokio::time::interval(if shared.peer_manager.connected_count() > 0 {
-                    BEACON_STEADY_INTERVAL
-                } else {
-                    BEACON_FAST_INTERVAL
-                });
             }
         });
     }
@@ -906,6 +927,12 @@ impl Engine {
             };
             let socket = Arc::new(socket);
             let mut buf = vec![0u8; 1024];
+            // Each beacon arrives twice (limited + subnet broadcast), and
+            // older builds sent them back to back with no delay. Handle at
+            // most one per peer per second; the rest carry nothing new.
+            const BEACON_MIN_GAP: Duration = Duration::from_secs(1);
+            let mut last_beacon: std::collections::HashMap<Uuid, Instant> =
+                std::collections::HashMap::new();
             loop {
                 match socket.recv_from(&mut buf).await {
                     Ok((len, addr)) => {
@@ -934,6 +961,22 @@ impl Engine {
 
                             // Skip if already connected to this peer.
                             if shared.peer_manager.is_connected(peer_id) {
+                                continue;
+                            }
+                            // Strangers get the same dial cooldown as beacons.
+                            let has_relationship = shared
+                                .peer_manager
+                                .get(peer_id)
+                                .map(|r| {
+                                    r.trusted
+                                        || r.remembered
+                                        || r.pairing_requested
+                                        || r.outgoing_pairing_waiting
+                                })
+                                .unwrap_or(false);
+                            if !has_relationship
+                                && !allow_discovery_connect_attempt(peer_id, peer_addr)
+                            {
                                 continue;
                             }
 
@@ -979,6 +1022,17 @@ impl Engine {
                         if peer_id == shared.config.device_id {
                             continue;
                         }
+                        let now = Instant::now();
+                        if last_beacon
+                            .get(&peer_id)
+                            .is_some_and(|t| now.duration_since(*t) < BEACON_MIN_GAP)
+                        {
+                            continue;
+                        }
+                        if last_beacon.len() > 1000 {
+                            last_beacon.retain(|_, t| now.duration_since(*t) < BEACON_MIN_GAP);
+                        }
+                        last_beacon.insert(peer_id, now);
                         let peer_port = match parts[2].parse::<u16>() {
                             Ok(p) => p,
                             Err(_) => continue,
@@ -1032,10 +1086,30 @@ impl Engine {
                             if shared.peer_manager.live_endpoint(peer_id) == Some(peer_addr) {
                                 continue;
                             }
+                            let record = shared.peer_manager.get(peer_id);
                             if matches!(
-                                shared.peer_manager.get(peer_id),
+                                &record,
                                 Some(record) if record.status == PeerConnectionState::Connecting && record.socket_addrs().contains(&peer_addr)
                             ) {
+                                continue;
+                            }
+                            // A stranger we can't reach beacons on regardless;
+                            // without this, every beacon after a failed
+                            // connect_loop started another one - on a busy
+                            // office LAN, hundreds of doomed dials a minute.
+                            // Same cooldown the mDNS path applies.
+                            let has_relationship = trusted
+                                || record
+                                    .as_ref()
+                                    .map(|r| {
+                                        r.remembered
+                                            || r.pairing_requested
+                                            || r.outgoing_pairing_waiting
+                                    })
+                                    .unwrap_or(false);
+                            if !has_relationship
+                                && !allow_discovery_connect_attempt(peer_id, peer_addr)
+                            {
                                 continue;
                             }
 
@@ -1909,6 +1983,9 @@ impl Engine {
 
     /// Broadcast sleep state to all connected peers.
     pub async fn notify_sleep_state(&self, is_asleep: bool) {
+        self.shared
+            .local_sleeping
+            .store(is_asleep, std::sync::atomic::Ordering::Relaxed);
         if !is_asleep {
             let now_millis = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2800,7 +2877,7 @@ impl Engine {
         // Only prune the cache directory, leaving user's downloaded files safely intact.
         let cache_dir = self.shared.config.data_dir.join("cache");
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let mut disk_prune_counter = 0;
             loop {
@@ -2811,8 +2888,8 @@ impl Engine {
                 }
 
                 disk_prune_counter += 1;
-                // Run the expensive filesystem scan only once every 10 minutes (120 ticks of 5s)
-                if disk_prune_counter >= 120 {
+                // Run the expensive filesystem scan only once every 10 minutes (60 ticks of 10s)
+                if disk_prune_counter >= 60 {
                     disk_prune_counter = 0;
                     let retention_days = settings.lock().unwrap().history_retention_days;
                     if retention_days > 0 {
@@ -2865,20 +2942,33 @@ impl Engine {
     fn spawn_auto_reconnector(&self) {
         let shared = self.shared.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(3));
+            // Retrying an unreachable peer every few seconds forever kept a
+            // phone's radio (Wi-Fi, or cellular when away from home) from
+            // ever idling. Back off per peer, exponentially, to a cap;
+            // network changes still reconnect at once via
+            // reconnect_known_peers, which doesn't go through here.
+            const RETRY_BASE: Duration = Duration::from_secs(5);
+            const RETRY_CAP: Duration = Duration::from_secs(5 * 60);
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            // Track when we last attempted reconnection per peer to avoid flooding.
-            let mut last_attempt: std::collections::HashMap<uuid::Uuid, tokio::time::Instant> =
+            // Per peer: earliest next attempt and attempts made so far.
+            let mut backoff: std::collections::HashMap<uuid::Uuid, (tokio::time::Instant, u32)> =
                 std::collections::HashMap::new();
             loop {
                 interval.tick().await;
                 let peers = shared.peer_manager.list();
+                let sleeping = shared
+                    .local_sleeping
+                    .load(std::sync::atomic::Ordering::Relaxed);
                 for peer in peers {
                     // Only consider peers that are not currently connected.
                     let is_offline = peer.status
                         == crate::peer_manager::PeerConnectionState::Disconnected
                         || peer.status == crate::peer_manager::PeerConnectionState::Failed;
                     if !is_offline {
+                        if peer.status == crate::peer_manager::PeerConnectionState::Connected {
+                            backoff.remove(&peer.id);
+                        }
                         continue;
                     }
                     // Must be trusted + remembered + auto_connect.
@@ -2889,16 +2979,21 @@ impl Engine {
                     if peer.explicit_disconnect {
                         continue;
                     }
-                    // Rate-limit: don't attempt more than once every 5 seconds per peer.
                     let now = tokio::time::Instant::now();
-                    if let Some(&last) = last_attempt.get(&peer.id) {
-                        if now.duration_since(last) < Duration::from_secs(5) {
-                            continue;
-                        }
-                    }
+                    let attempts = match backoff.get(&peer.id) {
+                        Some(&(next, _)) if now < next => continue,
+                        Some(&(_, attempts)) => attempts,
+                        None => 0,
+                    };
                     let endpoints = peer.socket_addrs();
                     if !endpoints.is_empty() {
-                        last_attempt.insert(peer.id, now);
+                        let mut delay = RETRY_BASE
+                            .saturating_mul(1u32 << attempts.min(6))
+                            .min(RETRY_CAP);
+                        if sleeping {
+                            delay = RETRY_CAP;
+                        }
+                        backoff.insert(peer.id, (now + delay, attempts.saturating_add(1)));
                         let shared_clone = shared.clone();
                         let peer_id = peer.id;
                         let discovery = peer.discovery;
@@ -3139,7 +3234,11 @@ fn spawn_firewall_free_discovery(shared: EngineShared) {
     let (manager, discovery_handle, mut output_rx) = DiscoveryManager::new(shared.config.device_id);
     tokio::spawn(manager.run());
 
-    spawn_lan_probe(shared.config.port, discovery_handle);
+    spawn_lan_probe(
+        shared.config.port,
+        discovery_handle,
+        shared.peer_manager.clone(),
+    );
 
     tokio::spawn(async move {
         while let Some(event) = output_rx.recv().await {
@@ -4225,6 +4324,9 @@ fn register_session(
         }
         .split();
         let mut heartbeat = tokio::time::interval(shared.config.heartbeat_interval);
+        // After a suspend, the default Burst behaviour fires every missed
+        // tick back to back - a pointless ping storm on wake.
+        heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         let last_seen = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(
             std::time::SystemTime::now()
@@ -6373,7 +6475,13 @@ fn register_session(
                         shared.local_last_wake.store(now_millis, std::sync::atomic::Ordering::Relaxed);
                     }
 
-                    let is_sleeping = peer_sleeping.load(std::sync::atomic::Ordering::Relaxed);
+                    // Either side being asleep relaxes the heartbeat: the
+                    // sleeping side pings rarely, and the awake side was told
+                    // (DeviceSleepState) to do the same, so neither may time
+                    // the other out on silence. Dead links still surface as
+                    // TCP errors via keepalive.
+                    let is_sleeping = peer_sleeping.load(std::sync::atomic::Ordering::Relaxed)
+                        || shared.local_sleeping.load(std::sync::atomic::Ordering::Relaxed);
                     let timeout = if is_sleeping {
                         // 24 hours timeout if peer is sleeping
                         24 * 60 * 60 * 1000

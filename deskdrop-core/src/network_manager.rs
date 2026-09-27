@@ -282,6 +282,16 @@ fn looks_like_usb_tether(name: &str) -> bool {
         || name.contains("bridge")
 }
 
+/// Mobile-data interfaces as Android names them (Qualcomm `rmnet*`,
+/// MediaTek `ccmni*`, 464XLAT `v4-rmnet*`, generic `pdp*`).
+pub fn looks_like_cellular(name: &str) -> bool {
+    let name = name.to_lowercase();
+    name.starts_with("rmnet")
+        || name.starts_with("ccmni")
+        || name.starts_with("v4-")
+        || name.starts_with("pdp")
+}
+
 fn is_android_hotspot_subnet(ip: Ipv4Addr) -> bool {
     let o = ip.octets();
     matches!(
