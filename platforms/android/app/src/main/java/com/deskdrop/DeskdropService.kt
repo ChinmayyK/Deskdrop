@@ -955,7 +955,39 @@ class DeskdropService : Service() {
         Log.i(TAG, "WifiLock acquired (mode: $mode)")
     }
 
+    // Wi-Fi power-save wakes the radio only every beacon interval, which
+    // showed up as 80-200 ms pings to the phone and capped transfers. The
+    // always-on lock above can't prevent it (FULL_HIGH_PERF is a no-op
+    // since Android 10), so hold a low-latency lock only while files move.
+    private var transferWifiLock: android.net.wifi.WifiManager.WifiLock? = null
+
+    private fun syncTransferWifiLock() {
+        val busy = TransferManager.activeTransfers.isNotEmpty() || TransferManager.activeSpeedTests.isNotEmpty()
+        val held = transferWifiLock?.isHeld == true
+        if (busy == held) return
+        runCatching {
+            if (busy) {
+                val wm = applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager
+                val mode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                }
+                transferWifiLock = wm.createWifiLock(mode, "Deskdrop::Transfer").apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+            } else {
+                transferWifiLock?.release()
+                transferWifiLock = null
+            }
+        }.onFailure { Log.w(TAG, "Transfer WifiLock change failed", it) }
+    }
+
     private fun releaseWifiLock() {
+        runCatching { transferWifiLock?.let { if (it.isHeld) it.release() } }
+        transferWifiLock = null
         runCatching { wifiLock?.let { if (it.isHeld) it.release() } }
         wifiLock = null
         Log.i(TAG, "WifiLock released")
@@ -1117,6 +1149,7 @@ class DeskdropService : Service() {
                     handler.post {
                         try { 
                             for (e in batch) { handleEvent(e) } 
+                            syncTransferWifiLock()
                         } finally { 
                             for (e in batch) { DeskdropJni.freeEvent(e) }
                             releaseWakeLock() 

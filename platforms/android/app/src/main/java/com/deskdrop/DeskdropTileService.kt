@@ -262,8 +262,14 @@ class DeskdropShareTarget : ComponentActivity() {
                 getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).edit().putString("last_used_device_id", it).apply()
             }
         }
-        runCatching { ContextCompat.startForegroundService(this@DeskdropShareTarget, svc) }
-        Toast.makeText(this@DeskdropShareTarget, "Sending to Deskdrop", Toast.LENGTH_SHORT).show()
+        val started = runCatching { ContextCompat.startForegroundService(this@DeskdropShareTarget, svc) }
+            .onFailure { android.util.Log.w("Deskdrop", "Share: could not hand files to the service", it) }
+            .isSuccess
+        Toast.makeText(
+            this@DeskdropShareTarget,
+            if (started) "Sending to Deskdrop" else "Couldn't send. Open Deskdrop and try again.",
+            Toast.LENGTH_SHORT
+        ).show()
         finish()
     }
 }

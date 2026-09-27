@@ -422,7 +422,19 @@ private fun TransferRow(
     val ratio = if (transfer.totalBytes > 0L) {
         (transfer.bytesReceived.toDouble() / transfer.totalBytes).coerceIn(0.0, 1.0).toFloat()
     } else transfer.percent / 100f
-    val animated by animateFloatAsState(ratio, tween(150), label = "transfer")
+    // Data lands in 4 MB chunks, so the raw ratio moves in steps. Glide to
+    // each new value over roughly the time the last step took, which keeps
+    // the bar moving steadily instead of jumping.
+    val shown = remember(transfer.id) { Animatable(ratio) }
+    var lastStepAt by remember(transfer.id) { mutableLongStateOf(0L) }
+    LaunchedEffect(ratio) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val gap = if (lastStepAt == 0L) 300L else (now - lastStepAt).coerceIn(120L, 1200L)
+        lastStepAt = now
+        if (ratio < shown.value) shown.snapTo(ratio)
+        else shown.animateTo(ratio, tween(gap.toInt(), easing = LinearEasing))
+    }
+    val animated = shown.value
     val speed = when {
         transfer.isPaused -> "Paused"
         transfer.speedBps >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB/s", transfer.speedBps / (1024.0 * 1024))
@@ -446,7 +458,7 @@ private fun TransferRow(
                     maxLines = 1
                 )
             }
-            Text("${(ratio * 100).toInt()}%", style = DdType.mono, color = c.text)
+            Text("${(animated * 100).toInt()}%", style = DdType.mono, color = c.text)
             IconButton(onClick = if (transfer.isPaused) onResume else onPause) {
                 Icon(
                     if (transfer.isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
