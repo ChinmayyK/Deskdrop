@@ -63,15 +63,15 @@ namespace Deskdrop.WinUI
                 var files = await picker.PickMultipleFilesAsync();
                 if (files == null || files.Count == 0) return;
 
-                var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(
+                var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync(
                     (this.Content as FrameworkElement)?.XamlRoot, mgr.ConnectedPeers);
-                if (target == null && mgr.ConnectedPeers.Count > 0) return; // user cancelled
+                if (target == null) return; // user cancelled
 
                 foreach (var file in files)
                 {
                     // Argument order is (path, name, mime, targetDevice, ...); see the
                     // matching fix note in DashboardWindow.xaml.cs.
-                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target?.device_id;
+                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target.DeviceId;
                     DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                 }
             }

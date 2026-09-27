@@ -20,6 +20,27 @@ namespace Deskdrop.WinUI.Services
             if (peers.Count == 1) return peers[0];
             if (xamlRoot == null) return peers[0];
 
+            var choice = await ShowAsync(xamlRoot, peers, offerAll: false);
+            return choice?.Peer;
+        }
+
+        // File sends can also go to every connected device at once - a null
+        // target in send_file_path, same as Android and macOS. Returns null
+        // when the user cancels; otherwise the chosen target, where a null
+        // DeviceId means all connected devices.
+        public static async Task<SendTarget?> PickSendTargetAsync(XamlRoot? xamlRoot, IEnumerable<PeerViewModel> connectedPeers)
+        {
+            var peers = connectedPeers.ToList();
+            if (peers.Count == 0) return new SendTarget(null);
+            if (peers.Count == 1 || xamlRoot == null) return new SendTarget(peers[0].device_id);
+
+            var choice = await ShowAsync(xamlRoot, peers, offerAll: true);
+            if (choice == null) return null;
+            return new SendTarget(choice.Value.All ? null : choice.Value.Peer?.device_id);
+        }
+
+        private static async Task<(PeerViewModel? Peer, bool All)?> ShowAsync(XamlRoot xamlRoot, List<PeerViewModel> peers, bool offerAll)
+        {
             // Show the same identity people see on the Devices page - a
             // device glyph, its name, and its platform - rather than a bare
             // string list. Choosing a target is a recognition task, and
@@ -38,10 +59,27 @@ namespace Deskdrop.WinUI.Services
             if (template != null) listView.ItemTemplate = template;
             else listView.DisplayMemberPath = nameof(PeerViewModel.DisplayName);
 
+            CheckBox? allBox = null;
+            object content = listView;
+            if (offerAll)
+            {
+                allBox = new CheckBox
+                {
+                    Content = $"All connected devices ({peers.Count})",
+                    Margin = new Thickness(4, 8, 0, 0),
+                };
+                allBox.Checked += (_, _) => listView.IsEnabled = false;
+                allBox.Unchecked += (_, _) => listView.IsEnabled = true;
+                var panel = new StackPanel();
+                panel.Children.Add(listView);
+                panel.Children.Add(allBox);
+                content = panel;
+            }
+
             var dialog = new ContentDialog
             {
                 Title = "Send to which device?",
-                Content = listView,
+                Content = content,
                 PrimaryButtonText = "Send",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Primary,
@@ -50,7 +88,10 @@ namespace Deskdrop.WinUI.Services
 
             var result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return null;
-            return listView.SelectedItem as PeerViewModel;
+            bool all = allBox?.IsChecked == true;
+            var peer = listView.SelectedItem as PeerViewModel;
+            if (!all && peer == null) return null;
+            return (peer, all);
         }
 
         // Built in code rather than XAML because this picker is raised from
@@ -92,4 +133,6 @@ namespace Deskdrop.WinUI.Services
             }
         }
     }
+
+    public sealed record SendTarget(string? DeviceId);
 }

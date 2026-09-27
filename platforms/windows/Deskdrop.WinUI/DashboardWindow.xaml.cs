@@ -55,30 +55,22 @@ namespace Deskdrop.WinUI
             this.SetTitleBar(AppTitleBar);
             Deskdrop.WinUI.Services.ThemeService.Register(this);
 
-            // AppWindow.Resize/Move take physical pixels, but the whole
-            // rest of this app (fonts, paddings, the 240px sidebar) is
-            // measured in DIPs. Without correcting for the monitor's DPI
-            // scale, a 1180x740 physical-pixel window is smaller in DIPs
-            // than the layout assumes on any scaled display (100% is the
-            // only scale where physical pixels and DIPs match) - text,
-            // buttons and icons then all read as oversized for the space
-            // they're crammed into, and tightly-packed rows (like the
-            // title bar) can visually collide.
+            // A utility-sized window, sized in DIPs and clamped to the
+            // monitor's work area, centred. The old fixed 1180x740 was
+            // bigger than the whole screen at 175% scaling, so the right
+            // edge and the sidebar footer (Settings) sat off-screen and the
+            // window couldn't be resized to reach them.
             double dpiScale = Deskdrop.WinUI.Services.WindowIconHelper.GetDpiScale(hwnd);
-            _appWindow.Resize(new Windows.Graphics.SizeInt32((int)(1180 * dpiScale), (int)(740 * dpiScale)));
-            _appWindow.Move(new Windows.Graphics.PointInt32((int)(120 * dpiScale), (int)(80 * dpiScale)));
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeAndCenterDips(_appWindow, hwnd, 920, 620);
 
-            // Fixed size, not user-resizable: the header/hero-card layout
-            // is tuned for this exact width (see the DPI-scale comment
-            // above and the per-page Frame-margin logic in SetPageTitle),
-            // and an arbitrarily resized window reopens the same
-            // "everything collides or looks cramped" problems that DPI fix
-            // exists to prevent. Maximize is blocked for the same reason -
-            // there's no responsive breakpoint above this size to grow into.
+            // Resizable down to a floor the layout still fits (pages cap
+            // their content width and scroll vertically, so larger is fine).
             if (_appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
             {
-                presenter.IsResizable = false;
-                presenter.IsMaximizable = false;
+                presenter.IsResizable = true;
+                presenter.IsMaximizable = true;
+                presenter.PreferredMinimumWidth = (int)(720 * dpiScale);
+                presenter.PreferredMinimumHeight = (int)(480 * dpiScale);
             }
 
             _appWindow.Show(true);
@@ -270,8 +262,8 @@ namespace Deskdrop.WinUI
                 var files = await picker.PickMultipleFilesAsync();
                 if (files != null && files.Count > 0)
                 {
-                    var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync((this.Content as FrameworkElement)?.XamlRoot, mgr.ConnectedPeers);
-                    if (target == null && mgr.ConnectedPeers.Count > 0) return; // user cancelled the picker
+                    var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync((this.Content as FrameworkElement)?.XamlRoot, mgr.ConnectedPeers);
+                    if (target == null) return; // user cancelled
                     foreach (var file in files)
                     {
                         // SendFilePath's signature is (path, name, mime, targetDevice, ...) -
@@ -280,7 +272,7 @@ namespace Deskdrop.WinUI
                         // path field, the real path in name, the name in mime, and the
                         // mime type in targetDevice. The daemon then had no real path to
                         // read and no real device to send to, so nothing ever arrived.
-                        var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target?.device_id;
+                        var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target.DeviceId;
                         DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                     }
                     NavigateTo("Transfers");
@@ -390,15 +382,15 @@ namespace Deskdrop.WinUI
                 var files = items.OfType<Windows.Storage.StorageFile>().ToList();
                 if (files.Count == 0) return;
 
-                var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(
+                var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync(
                     (this.Content as FrameworkElement)?.XamlRoot, mgr.ConnectedPeers);
-                if (target == null && mgr.ConnectedPeers.Count > 0) return; // user cancelled
+                if (target == null) return; // user cancelled
 
                 foreach (var file in files)
                 {
                     // Argument order is (path, name, mime, targetDevice, ...); see the
                     // matching fix note above in OnTitleBarSendClicked.
-                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target?.device_id;
+                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target.DeviceId;
                     DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                 }
                 NavigateTo("Transfers");
