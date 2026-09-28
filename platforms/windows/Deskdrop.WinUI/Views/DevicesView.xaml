@@ -370,6 +370,9 @@
                                 <MenuFlyoutItem Text="Scan for devices" Click="OnScanNearbyClicked">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE72C;" /></MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Connect by IP address" Click="OnConnectByIpClicked">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE968;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
                                 <MenuFlyoutItem Text="Open downloads folder" Click="OnOpenDownloadsClicked">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xED25;" /></MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
@@ -471,6 +474,9 @@
                         <TextBlock Style="{StaticResource AppCaption}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left"
                                    Margin="0,6,0,0"
                                    Text="Devices find each other on the same Wi-Fi. Away from home, join your phone's hotspot from this PC." />
+                        <HyperlinkButton Padding="0" Margin="0,-4,0,0"
+                                         Content="Can't find your device? Connect by IP address"
+                                         Click="OnConnectByIpClicked" />
                     </StackPanel>
 
                     <!-- Transfer in progress -->

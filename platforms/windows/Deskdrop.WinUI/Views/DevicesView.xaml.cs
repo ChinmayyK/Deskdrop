@@ -188,6 +188,19 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
+        private async void OnConnectByIpClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await new ConnectByIpDialog { XamlRoot = this.XamlRoot }.ShowAsync();
+                mgr.UpdateStateFromDaemon();
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
         private void OnOpenActivityClicked(object sender, RoutedEventArgs e)
         {
             DashboardWindow.Current?.NavigateTo("Activity");

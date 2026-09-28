@@ -104,13 +104,6 @@ namespace Deskdrop.WinUI
         public static JsonDocument? Ping()       => Send(new { cmd = "ping" });
         public static JsonDocument? Status()     => Send(new { cmd = "status" });
         public static JsonDocument? Peers()      => Send(new { cmd = "peers" });
-        public static JsonDocument? ConnectManual(string host, int? port = null)
-        {
-            object cmd = port.HasValue
-                ? new { cmd = "connect_peer", ip = host, port = port.Value }
-                : (object)new { cmd = "connect_peer", ip = host, port = 47823 };
-            return Send(cmd);
-        }
 
         public static JsonDocument? PatchSettings(object patch)
         {
