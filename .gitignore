@@ -91,3 +91,6 @@ build/
 # Swift macro plugins pulled from a local Xcode install for CLT-only builds —
 # Apple-proprietary binaries, must never be committed.
 /.build-tools/
+
+# cargo-ndk copies dependency cdylibs next to the core; only libdeskdrop_core.so ships
+platforms/android/app/src/main/jniLibs/**/libandroid_native_keyring_store-*.so

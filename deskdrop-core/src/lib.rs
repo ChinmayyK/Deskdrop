@@ -65,7 +65,6 @@ pub mod speed_test;
 pub mod sync_controller;
 pub mod transformer;
 pub mod trust;
-pub mod udp_discovery;
 
 #[cfg(target_os = "android")]
 pub mod jni_android;
