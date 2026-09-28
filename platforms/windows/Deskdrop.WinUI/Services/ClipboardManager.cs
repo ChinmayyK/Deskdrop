@@ -75,7 +75,6 @@ namespace Deskdrop.WinUI.Services
                 {
                     int kind = NativeCore.deskdrop_event_type(ev);
                     if (kind != NativeCore.PB_EVENT_FILE_TRANSFER_PROGRESS) onlyProgress = false;
-                    TraceLog.Write($"DrainEvents: kind={kind}");
                     switch (kind)
                     {
                         case NativeCore.PB_EVENT_CLIPBOARD_TEXT:
@@ -192,9 +191,12 @@ namespace Deskdrop.WinUI.Services
                         {
                             var message = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? "A device reported an issue";
                             var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev));
-                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                NotificationHelper.ShowToast(string.IsNullOrEmpty(device) ? "Deskdrop Warning" : $"Warning from {device}", message);
-                            });
+                            if (ShouldToastWarning(message))
+                            {
+                                (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                    NotificationHelper.ShowToast(string.IsNullOrEmpty(device) ? "Deskdrop Warning" : $"Warning from {device}", message);
+                                });
+                            }
                             break;
                         }
                         // Cross-device link handoff: a trusted, connected peer asked us
@@ -270,6 +272,26 @@ namespace Deskdrop.WinUI.Services
         private const long ProgressRefreshIntervalMs = 500;
         private long _lastProgressRefreshMs;
 
+        // While the network is down the engine re-reports the same connect
+        // failure every time discovery retries a peer - the trace log shows
+        // 26k identical warnings in one hour. One toast per distinct message
+        // per window is all a person can use; the rest is noise and memory.
+        private const long WarningToastWindowMs = 5 * 60 * 1000;
+        private const int MaxHistoryItems = 100;
+        private readonly Dictionary<string, long> _lastWarningToastMs = new();
+
+        private bool ShouldToastWarning(string message)
+        {
+            var now = Environment.TickCount64;
+            lock (_lastWarningToastMs)
+            {
+                if (_lastWarningToastMs.TryGetValue(message, out var last) && now - last < WarningToastWindowMs) return false;
+                if (_lastWarningToastMs.Count > 64) _lastWarningToastMs.Clear();
+                _lastWarningToastMs[message] = now;
+                return true;
+            }
+        }
+
         private void AddHistoryItem(string summary, string source, string icon, string fullText)
         {
             var item = new HistoryItem
@@ -284,8 +306,20 @@ namespace Deskdrop.WinUI.Services
                 is_text = icon == "📝"
             };
             History.Insert(0, item);
-            if (History.Count > 100) History.RemoveAt(History.Count - 1);
-            try { DeskdropStore.Shared.History.Insert(0, item); } catch (Exception ex) { App.HandleError(ex); }
+            if (History.Count > MaxHistoryItems) History.RemoveAt(History.Count - 1);
+            try
+            {
+                // Same cap for the store's copy, which used to grow for the
+                // life of the process (every clipboard text kept in full).
+                // Pinned items are kept regardless; the oldest unpinned goes.
+                var shared = DeskdropStore.Shared.History;
+                shared.Insert(0, item);
+                for (var i = shared.Count - 1; i >= 0 && shared.Count > MaxHistoryItems; i--)
+                {
+                    if (!shared[i].IsPinned) shared.RemoveAt(i);
+                }
+            }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private async Task CheckClipboardAsync()

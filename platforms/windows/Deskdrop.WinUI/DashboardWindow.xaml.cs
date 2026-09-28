@@ -59,9 +59,10 @@ namespace Deskdrop.WinUI
             // monitor's work area, centred. The old fixed 1180x740 was
             // bigger than the whole screen at 175% scaling, so the right
             // edge and the sidebar footer (Settings) sat off-screen and the
-            // window couldn't be resized to reach them.
+            // window couldn't be resized to reach them. 1060 wide leaves
+            // comfortable room for three Remote files preview tiles per row.
             double dpiScale = Deskdrop.WinUI.Services.WindowIconHelper.GetDpiScale(hwnd);
-            Deskdrop.WinUI.Services.WindowIconHelper.ResizeAndCenterDips(_appWindow, hwnd, 920, 620);
+            Deskdrop.WinUI.Services.WindowIconHelper.ResizeAndCenterDips(_appWindow, hwnd, 1060, 620);
 
             // Resizable down to a floor the layout still fits (pages cap
             // their content width and scroll vertically, so larger is fine).

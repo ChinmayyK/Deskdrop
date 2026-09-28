@@ -23,14 +23,21 @@ namespace Deskdrop.WinUI
         // replacement for exactly this unpackaged-app scenario - it only
         // needs AppNotificationManager.Default.Register(), no shortcut
         // shenanigans.
+        //
+        // Attempted once per process. A failure here is environmental (the
+        // trace shows "module could not be found"), so retrying can't fix
+        // it - and retrying on every toast subscribed another
+        // NotificationInvoked handler and threw a COM exception each time,
+        // tens of thousands of times during a warning storm. Show() still
+        // works without registration; only button activation is lost.
         public static void EnsureRegistered()
         {
             if (_registered) return;
+            _registered = true;
             try
             {
                 AppNotificationManager.Default.NotificationInvoked += OnNotificationInvoked;
                 AppNotificationManager.Default.Register();
-                _registered = true;
                 Trace("AppNotificationManager registered successfully");
             }
             catch (Exception ex)

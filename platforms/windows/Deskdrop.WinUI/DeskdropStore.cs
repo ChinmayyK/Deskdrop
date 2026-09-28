@@ -792,6 +792,23 @@ namespace Deskdrop.WinUI
         public string FormattedDate => EffectiveDate == 0 ? "--" : DateTimeOffset.FromUnixTimeMilliseconds((long)EffectiveDate).ToLocalTime().ToString("MMM dd, yyyy HH:mm");
         public string size_text => FormattedSize;
         public string modified_text => FormattedDate;
+
+        // Remote files page: one caption line under the name, since the
+        // name needs the row's full width more than dates need a column.
+        public string DetailText => $"{FormattedSize} · {FormattedDate}";
+        public string SummaryText => EffectiveDate == 0
+            ? FormattedSize
+            : $"{FormattedSize} · {DateTimeOffset.FromUnixTimeMilliseconds((long)EffectiveDate).ToLocalTime():MMM d}";
+        // "PDF", "APK"... shown under the glyph when there's no preview, so
+        // two generic-document tiles can still be told apart at a glance.
+        public string ExtensionLabel
+        {
+            get
+            {
+                var ext = System.IO.Path.GetExtension(display_name ?? "");
+                return ext.Length > 1 ? ext.Substring(1).ToUpperInvariant() : "";
+            }
+        }
         public string IconKind => is_dir ? "Folder" : "File";
         public string IconColor => is_dir ? "#0055CC" : "#555555";
 

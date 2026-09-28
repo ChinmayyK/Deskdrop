@@ -33,6 +33,12 @@ namespace Deskdrop.WinUI.Views
         private int _loadGeneration = 0;
         private static readonly System.Collections.Generic.Dictionary<string, JsonDocument> _cache = new();
         private static readonly System.Collections.Generic.Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _thumbnailCache = new();
+        // Insertion order for _thumbnailCache, so the oldest previews are
+        // dropped once MaxCachedThumbnails is reached. A decoded 320px
+        // preview is ~0.4 MB and the cache outlives this page, so unbounded
+        // it grew with every library browsed for the life of the process.
+        private static readonly System.Collections.Generic.Queue<string> _thumbnailCacheOrder = new();
+        private const int MaxCachedThumbnails = 150;
 
         // Each thumbnail is a peer-to-peer round trip (the daemon asks the
         // Android device to generate/send one). The request/response
@@ -46,6 +52,11 @@ namespace Deskdrop.WinUI.Views
         // one-at-a-time behind each other's timeouts.
         private static readonly SemaphoreSlim _thumbnailThrottle = new(8, 8);
 
+        // Sized for the grid view's large tiles (~200 DIP wide at up to 150%
+        // scaling) so previews stay sharp; the list's small thumbnail shares
+        // the same cached bitmap.
+        private const uint ThumbnailSizePx = 320;
+
         public RemoteExplorerView()
         {
             this.InitializeComponent();
@@ -53,6 +64,7 @@ namespace Deskdrop.WinUI.Views
             {
                 mgr.PropertyChanged += OnStorePropertyChanged;
                 SyncDeviceSwitcher();
+                ApplyViewMode();
                 _ = LoadRemoteDirectory("/");
             };
             this.Unloaded += (s, e) => mgr.PropertyChanged -= OnStorePropertyChanged;
@@ -111,6 +123,7 @@ namespace Deskdrop.WinUI.Views
             _currentPath = path;
             if (PathBox != null) PathBox.Text = _currentPath;
             UpdatePathSegments();
+            UpdateActiveLibrary();
 
             var peer = mgr.SelectedPeer;
             if (peer == null || string.IsNullOrEmpty(peer.device_id))
@@ -187,7 +200,7 @@ namespace Deskdrop.WinUI.Views
             ["category/Images"] = "Pictures",
             ["category/Documents"] = "Documents",
             ["category/Audio"] = "Music",
-            ["category/Videos"] = "Movies",
+            ["category/Videos"] = "Videos",
             ["source/Camera"] = "Camera",
             ["source/Downloads"] = "Downloads",
         };
@@ -261,8 +274,8 @@ namespace Deskdrop.WinUI.Views
 
                 NoDeviceState.Visibility = hasPeer ? Visibility.Collapsed : Visibility.Visible;
                 EmptyFolderState.Visibility = (hasPeer && !hasFiles) ? Visibility.Visible : Visibility.Collapsed;
-                FileList.Visibility = hasFiles ? Visibility.Visible : Visibility.Collapsed;
-                FilePanel.Visibility = hasFiles ? Visibility.Visible : Visibility.Collapsed;
+                FileGrid.Visibility = (hasFiles && _gridMode) ? Visibility.Visible : Visibility.Collapsed;
+                FilePanel.Visibility = (hasFiles && !_gridMode) ? Visibility.Visible : Visibility.Collapsed;
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
@@ -323,27 +336,153 @@ namespace Deskdrop.WinUI.Views
         }
 
         // Android's remote browsing is flat/category-based (DeskdropStore.cs's
-        // RemoteFile comment), not real folders - these must resolve to the
+        // RemoteFile comment), not real folders - each library row's Tag is a
         // "/category/<RemoteFileCategory>" or "/source/<RemoteFileSource>"
-        // prefixes LoadRemoteDirectory parses (protocol.rs's enum variant
-        // names). Previously these pointed at literal filesystem-looking
-        // paths ("/DCIM/Camera", "/Download", ...) that matched neither
-        // prefix, so category/source stayed null and every shortcut silently
-        // fell back to the unfiltered "All files" query.
-        private void OnShortcutRootClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/");
-        private void OnShortcutDCIMClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/source/Camera");
-        private void OnShortcutPicturesClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/category/Images");
-        private void OnShortcutDownloadsClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/source/Downloads");
-        private void OnShortcutDocumentsClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/category/Documents");
-        private void OnShortcutMusicClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/category/Audio");
-        private void OnShortcutMoviesClicked(object sender, RoutedEventArgs e) => _ = LoadRemoteDirectory("/category/Videos");
-
-        private void OnItemClicked(object sender, RoutedEventArgs e)
+        // path that LoadRemoteDirectory parses (protocol.rs's enum variant
+        // names), or "/" for the unfiltered listing.
+        private void OnShortcutClicked(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is RemoteFile item)
+            if ((sender as FrameworkElement)?.Tag is string path) _ = LoadRemoteDirectory(path);
+        }
+
+        // Tints the library row being browsed. A path that isn't exactly a
+        // library (typed into "Go to path") highlights nothing rather than
+        // guessing.
+        private void UpdateActiveLibrary()
+        {
+            foreach (var child in LibraryList.Children)
             {
-                OpenIfDirectory(item);
+                if (child is Button button)
+                    SetActive(button, string.Equals(button.Tag as string, _currentPath, StringComparison.OrdinalIgnoreCase));
             }
+        }
+
+        private static void SetActive(Button button, bool active)
+        {
+            if (active)
+            {
+                button.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AppAccentSubtleBrush"];
+                button.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AppAccentBrush"];
+            }
+            else
+            {
+                button.ClearValue(Control.BackgroundProperty);
+                button.ClearValue(Control.ForegroundProperty);
+            }
+        }
+
+        // ------------------------------------------------ view mode
+
+        // Large previews by default: the point of this page is recognising
+        // what's on the phone, which a 36px thumbnail can't do.
+        private const string ViewModeSettingKey = "RemoteFilesViewMode";
+        private bool _gridMode = Services.LocalSettingsStore.Get(ViewModeSettingKey) != "list";
+
+        private void OnGridViewClicked(object sender, RoutedEventArgs e) => SetViewMode(grid: true);
+        private void OnListViewClicked(object sender, RoutedEventArgs e) => SetViewMode(grid: false);
+
+        private void SetViewMode(bool grid)
+        {
+            if (_gridMode == grid) return;
+            _gridMode = grid;
+            Services.LocalSettingsStore.Set(ViewModeSettingKey, grid ? "grid" : "list");
+            ApplyViewMode();
+        }
+
+        private void ApplyViewMode()
+        {
+            SetActive(GridViewButton, _gridMode);
+            SetActive(ListViewButton, !_gridMode);
+            UpdateEmptyStates();
+        }
+
+        // Grid tiles are at least MinTileWidth wide and stretched so each row
+        // fills edge to edge. The preview keeps a fixed aspect ratio and the
+        // text under it is a fixed height (two name lines plus the size/date
+        // line), so ItemHeight follows directly from the width.
+        private const double MinTileWidth = 160;
+        private const double TileGap = 10;          // AppPlainGridItem's right/bottom margin
+        private const double TileChrome = 14;       // tile border (1+1) + padding (6+6)
+        private const double TileTextHeight = 64;   // row spacing 8 + name 36 + spacing 3 + caption ~15 + bottom padding 4
+        private const double PreviewAspect = 0.8;   // height / width
+        private const double ScrollbarGutter = 16;
+
+        private void OnFileGridSizeChanged(object sender, SizeChangedEventArgs e) => FitTiles();
+
+        private ScrollViewer? _fileGridScroller;
+
+        private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+        {
+            var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (var i = 0; i < count; i++)
+            {
+                var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is T match) return match;
+                if (FindDescendant<T>(child) is { } nested) return nested;
+            }
+            return null;
+        }
+
+        // Measured from the GridView's inner ScrollViewer viewport, not the
+        // GridView itself: the template's gutters make the panel a few DIPs
+        // narrower than the control, which was enough to wrap the third tile.
+        private void FitTiles()
+        {
+            if (_fileGridScroller == null)
+            {
+                _fileGridScroller = FindDescendant<ScrollViewer>(FileGrid);
+                if (_fileGridScroller != null) _fileGridScroller.SizeChanged += (_, _) => FitTiles();
+            }
+            if (FileGrid.ItemsPanelRoot is not ItemsWrapGrid panel)
+            {
+                // The panel is only created once the first items realise,
+                // which can land after the first size change - retry then.
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    if (FileGrid.ItemsPanelRoot is ItemsWrapGrid) FitTiles();
+                });
+                return;
+            }
+            // ScrollbarGutter: the row loses a few DIPs to the vertical
+            // scrollbar that ViewportWidth does not report, which was enough
+            // to wrap the third tile at ~1000 DIP windows. Reserving it also
+            // keeps the scrollbar off the last column.
+            var available = (_fileGridScroller?.ViewportWidth ?? FileGrid.ActualWidth) - FileGrid.Padding.Left - FileGrid.Padding.Right - ScrollbarGutter;
+            if (available <= 0) return;
+
+            var columns = Math.Max(1, (int)((available + TileGap) / (MinTileWidth + TileGap)));
+            // Snap to whole physical pixels: at 150% a 175 DIP cell rounds up
+            // to 263px, three of those overflow the row by a pixel and the
+            // third tile wraps, leaving two tiles and a gap.
+            var scale = XamlRoot?.RasterizationScale ?? 1.0;
+            var cell = Math.Floor((available * scale - 1) / columns) / scale;
+            var previewWidth = cell - TileGap - TileChrome;
+
+            panel.ItemWidth = cell;
+            panel.ItemHeight = Math.Round(previewWidth * PreviewAspect + TileTextHeight + TileChrome + TileGap);
+            // ItemsWrapGrid keeps the column count from its first measure
+            // (taken before the page had its final width) and does not
+            // re-wrap when only ItemWidth changes - that is why the default
+            // window showed two columns until the user resized it. Pinning
+            // the count and re-measuring makes the layout match this math.
+            panel.MaximumRowsOrColumns = columns;
+            panel.InvalidateMeasure();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                panel.InvalidateMeasure();
+                FileGrid.InvalidateMeasure();
+            });
+        }
+
+        // The file menu is one shared resource used by every tile and row, so
+        // its items don't inherit a DataContext from whichever element opened
+        // it - hand them the target's file before the menu shows so the Click
+        // handlers can resolve which file they act on.
+        private void OnFileMenuOpening(object sender, object e)
+        {
+            if (sender is not MenuFlyout menu) return;
+            var item = (menu.Target as FrameworkElement)?.DataContext;
+            foreach (var entry in menu.Items) entry.DataContext = item;
         }
 
         // Double-click to open, matching File Explorer. Single-click used to
@@ -471,6 +610,17 @@ namespace Deskdrop.WinUI.Views
             _ = FetchThumbnailAsync(file, fileId, cacheKey);
         }
 
+        // UI thread only (both callers run there), so no locking.
+        private static void CacheThumbnail(string key, Microsoft.UI.Xaml.Media.Imaging.BitmapImage bitmap)
+        {
+            if (!_thumbnailCache.ContainsKey(key)) _thumbnailCacheOrder.Enqueue(key);
+            _thumbnailCache[key] = bitmap;
+            while (_thumbnailCache.Count > MaxCachedThumbnails && _thumbnailCacheOrder.TryDequeue(out var oldest))
+            {
+                _thumbnailCache.Remove(oldest);
+            }
+        }
+
         private async Task FetchThumbnailAsync(RemoteFile file, ulong fileId, string cacheKey)
         {
             var peer = mgr.SelectedPeer;
@@ -484,7 +634,7 @@ namespace Deskdrop.WinUI.Views
                 JsonDocument? doc;
                 try
                 {
-                    doc = await DaemonClient.RemoteThumbnailRequestAsync(peer.device_id, fileId, 160);
+                    doc = await DaemonClient.RemoteThumbnailRequestAsync(peer.device_id, fileId, ThumbnailSizePx);
                 }
                 catch (Exception ex) { App.HandleError(ex); doc = null; }
                 finally { _thumbnailThrottle.Release(); }
@@ -527,7 +677,7 @@ namespace Deskdrop.WinUI.Views
 
                     var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
                     await bitmap.SetSourceAsync(stream);
-                    _thumbnailCache[cacheKey] = bitmap;
+                    CacheThumbnail(cacheKey, bitmap);
                     file.Thumbnail = bitmap;
                 }
                 catch (Exception ex) { App.HandleError(ex); }
