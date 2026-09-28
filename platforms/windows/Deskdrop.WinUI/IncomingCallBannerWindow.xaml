@@ -9,8 +9,8 @@
     Title="Incoming call">
 
     <!--
-        Incoming-call banner, laid out as a single list row: an initials
-        well, caller and one line of detail, then round Decline and Accept
+        Call banner for the paired phone, laid out as a single list row: an initials
+        well, caller and the call state, then round Decline (or End) and Answer
         buttons built on the shared pill styles.
     -->
     <Grid Background="Transparent">
@@ -39,25 +39,28 @@
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                     <TextBlock x:Name="TxtCallerName" Text="Incoming call"
-                               Style="{StaticResource AppBodyStrong}" />
-                    <TextBlock Text="Camera stream from a paired device"
+                               Style="{StaticResource AppBodyStrong}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="TxtDetail" Text="Incoming call"
                                Style="{StaticResource AppSecondary}"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-                    <Button Style="{StaticResource AppDestructiveButton}"
+                    <Button x:Name="BtnDecline"
+                            Style="{StaticResource AppDestructiveButton}"
                             Width="40" Height="40" MinHeight="0" Padding="0"
                             Click="BtnDecline_Click"
                             ToolTipService.ToolTip="Decline"
                             AutomationProperties.Name="Decline the call">
-                        <FontIcon Glyph="&#xE711;" FontSize="14" />
+                        <FontIcon Glyph="&#xE778;" FontSize="15" />
                     </Button>
-                    <Button Style="{StaticResource AppPrimaryButton}"
+                    <Button x:Name="BtnAccept"
+                            Style="{StaticResource AppPrimaryButton}"
                             Width="40" Height="40" MinHeight="0" Padding="0"
                             Click="BtnAccept_Click"
-                            ToolTipService.ToolTip="Accept"
-                            AutomationProperties.Name="Accept the call">
+                            ToolTipService.ToolTip="Answer on phone"
+                            AutomationProperties.Name="Answer the call on your phone">
                         <FontIcon Glyph="&#xE717;" FontSize="15" />
                     </Button>
                 </StackPanel>

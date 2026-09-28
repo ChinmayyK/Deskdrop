@@ -115,9 +115,14 @@ namespace Deskdrop.WinUI.Services
                         }
                         case NativeCore.PB_EVENT_CALL_STATE_CHANGED:
                         {
-                            var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                            var call = new PhoneCall(
+                                DeviceId: NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_id(ev)) ?? "",
+                                DeviceName: NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "",
+                                State: NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? "",
+                                Number: NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_call_number(ev)) ?? "",
+                                ContactName: NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_call_contact_name(ev)) ?? "");
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                try { new IncomingCallBannerWindow().Activate(); } catch (Exception ex) { App.HandleError(ex); }
+                                try { IncomingCallBannerWindow.OnCallState(call); } catch (Exception ex) { App.HandleError(ex); }
                             });
                             break;
                         }

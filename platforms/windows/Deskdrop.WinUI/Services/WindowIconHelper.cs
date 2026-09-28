@@ -73,6 +73,21 @@ namespace Deskdrop.WinUI.Services
             }
         }
 
+        // Size the window and pin it to the top-right corner of its monitor's
+        // work area, where Windows puts its own call and meeting banners.
+        public static void ResizeAndPlaceTopRightDips(AppWindow appWindow, IntPtr hwnd, int widthDips, int heightDips, int marginDips)
+        {
+            var size = FitToWorkArea(appWindow, hwnd, widthDips, heightDips);
+            appWindow.Resize(size);
+            if (GetWorkArea(appWindow) is { } area)
+            {
+                int margin = (int)(marginDips * GetDpiScale(hwnd));
+                appWindow.Move(new Windows.Graphics.PointInt32(
+                    area.X + area.Width - size.Width - margin,
+                    area.Y + margin));
+            }
+        }
+
         private static Windows.Graphics.RectInt32? GetWorkArea(AppWindow appWindow)
         {
             try

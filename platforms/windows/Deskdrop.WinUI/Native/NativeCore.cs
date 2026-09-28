@@ -210,6 +210,12 @@ namespace Deskdrop.WinUI
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int deskdrop_event_open_url_ack_success(IntPtr ev);
 
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_call_number(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_call_contact_name(IntPtr ev);
+
         public const uint ES_CONTINUOUS = 0x80000000;
         public const uint ES_SYSTEM_REQUIRED = 0x00000001;
 
