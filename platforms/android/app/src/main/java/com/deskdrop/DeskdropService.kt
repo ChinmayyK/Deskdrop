@@ -1270,9 +1270,13 @@ class DeskdropService : Service() {
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
                 )
+                // The core clears auto-apply when clipboard sharing is off
+                // (or timeline-first mode holds it); text already honoured
+                // that, images didn't and overwrote the clipboard anyway.
+                val applied = DeskdropJni.eventAutoApplied(ev) == 1
                 addActivity(ActivityEntry(deviceName = from, kind = ActivityKind.CLIPBOARD_IMAGE,
-                    preview = "image ($mime)", appliedLocally = true))
-                applyBinaryClipboard(bytes, imageNameForMime(mime), mime, from, isFile = false)
+                    preview = "image ($mime)", appliedLocally = applied))
+                if (applied) applyBinaryClipboard(bytes, imageNameForMime(mime), mime, from, isFile = false)
             }
 
             // ── File received (legacy clipboard file) ─────────────────────────

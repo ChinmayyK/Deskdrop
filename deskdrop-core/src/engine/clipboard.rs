@@ -130,6 +130,20 @@ impl crate::engine::Engine {
                 continue;
             }
 
+            // The peer told us (DeviceSyncState) it has clipboard sharing
+            // off. A broadcast would only land in its history unapplied, so
+            // skip it; a send aimed at that device on purpose still goes.
+            if matches!(target, SyncTarget::All) && !peer.remote_sync_enabled {
+                report.peers.push(SyncDispatchPeer {
+                    device_id: peer_id,
+                    device_name: peer.friendly_name,
+                    delivered: false,
+                    metadata_only: false,
+                    reason: Some("clipboard sharing is off on this device".into()),
+                });
+                continue;
+            }
+
             let is_target = match target {
                 SyncTarget::All => true,
                 SyncTarget::Device(target_id) => target_id == peer_id,

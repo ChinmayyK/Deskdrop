@@ -1329,6 +1329,21 @@ namespace Deskdrop.WinUI
                                 }
                             });
                         }
+                        // Same for "Share clipboard": without this the switch
+                        // showed On after every launch whatever was saved.
+                        if (settingsDataElem.TryGetProperty("sync_enabled", out var syncElem))
+                        {
+                            bool sync = syncElem.GetBoolean();
+                            App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                            {
+                                if (_syncEnabled != sync)
+                                {
+                                    _syncEnabled = sync;
+                                    OnPropertyChanged(nameof(SyncEnabled));
+                                    OnPropertyChanged(nameof(ClipboardSummaryText));
+                                }
+                            });
+                        }
                     }
                 }
             }

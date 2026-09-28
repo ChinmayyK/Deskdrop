@@ -292,6 +292,12 @@ namespace Deskdrop.WinUI.Services
         {
             try
             {
+                // "Share clipboard automatically" off: this watcher is the
+                // automatic path, and it used to push every copy (and send
+                // every copied file) regardless. Explicit sends elsewhere
+                // still work.
+                if (!DeskdropStore.Shared.SyncEnabled) return;
+
                 var packageView = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
                 if (packageView == null) return;
                 

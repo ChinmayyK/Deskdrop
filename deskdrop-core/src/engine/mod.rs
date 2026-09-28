@@ -812,6 +812,14 @@ impl Engine {
             }
         }
 
+        // Embedded hosts (Windows FFI, Android JNI) never loaded the saved
+        // settings, so every launch ran on defaults - "Share clipboard" came
+        // back on after each restart, and the next save overwrote the file
+        // with those defaults.
+        if let Ok(store) = SettingsStore::load(engine.settings_path()) {
+            engine.apply_settings(store.get().clone()).await;
+        }
+
         engine.spawn_network_monitor().await?;
         engine.spawn_peer_pruner();
         engine.spawn_sensitive_history_pruner();
@@ -1193,9 +1201,30 @@ impl Engine {
         self.shared.settings.lock().unwrap().clone()
     }
 
+    /// Where this engine's settings.json lives. Android can't use a fixed
+    /// path (it used to be hard-coded to the `.debug` package's directory,
+    /// which a release build can't write), so it lives in the app's data dir.
+    fn settings_path(&self) -> PathBuf {
+        if cfg!(target_os = "android") {
+            self.shared.config.data_dir.join("settings.json")
+        } else {
+            default_settings_path()
+        }
+    }
+
+    /// Tell every connected peer whether we share our clipboard, so they
+    /// stop broadcasting to us while it's off.
+    async fn announce_sync_state(&self, enabled: bool) {
+        for (_peer_id, tx) in self.shared.peer_manager.active_senders() {
+            let _ = tx
+                .send(crate::protocol::AppMessage::DeviceSyncState { enabled })
+                .await;
+        }
+    }
+
     fn persist_settings_snapshot(&self, settings: Settings) -> Result<Settings> {
         let sanitized = settings.sanitize();
-        let mut store = SettingsStore::load(default_settings_path())?;
+        let mut store = SettingsStore::load(self.settings_path())?;
         *store.get_mut() = sanitized.clone();
         store.save()?;
         Ok(sanitized)
@@ -1209,8 +1238,13 @@ impl Engine {
         json_merge_patch(&mut current, &patch_val);
         let new_settings: Settings = serde_json::from_value(current)
             .context("patch_settings: patched value is invalid Settings")?;
+        let was_on = self.shared.settings.lock().unwrap().sync_enabled;
         let persisted = self.persist_settings_snapshot(new_settings)?;
+        let now_on = persisted.sync_enabled;
         self.apply_settings(persisted).await;
+        if was_on != now_on {
+            self.announce_sync_state(now_on).await;
+        }
         Ok(())
     }
 
@@ -1306,12 +1340,7 @@ impl Engine {
         settings.sync_enabled = enabled;
         let persisted = self.persist_settings_snapshot(settings)?;
         self.apply_settings(persisted).await;
-        let peers = self.shared.peer_manager.active_senders();
-        for (_peer_id, tx) in peers {
-            let _ = tx
-                .send(crate::protocol::AppMessage::DeviceSyncState { enabled })
-                .await;
-        }
+        self.announce_sync_state(enabled).await;
         Ok(())
     }
 
@@ -1952,11 +1981,20 @@ impl Engine {
         sync_images: bool,
         sync_files: bool,
     ) {
-        let mut settings = self.shared.settings.lock().unwrap();
-        settings.sync_enabled = sync_enabled;
-        settings.sync_text = sync_text;
-        settings.sync_images = sync_images;
-        settings.sync_files = sync_files;
+        let was_on = {
+            let mut settings = self.shared.settings.lock().unwrap();
+            let was_on = settings.sync_enabled;
+            settings.sync_enabled = sync_enabled;
+            settings.sync_text = sync_text;
+            settings.sync_images = sync_images;
+            settings.sync_files = sync_files;
+            was_on
+        };
+        // Android's Sync switch arrives here, not via set_sync_enabled, so
+        // peers were never told it changed.
+        if was_on != sync_enabled {
+            self.announce_sync_state(sync_enabled).await;
+        }
         tracing::info!(
             sync_enabled,
             sync_text,
@@ -4245,11 +4283,23 @@ fn register_session(
         let _ = outbox_tx.try_send(pairing_request_message(&shared, peer_id));
     }
 
+    // A peer's "clipboard sharing off" notice only lives as long as the
+    // session it arrived on: it isn't resent on its own, so a stale flag from
+    // an old session would block broadcasts to it forever. Reset here; a
+    // peer that has sharing off re-announces it right below.
+    let _ = shared.peer_manager.set_remote_sync_enabled(peer_id, true);
+
     // Push local battery and network status to the newly connected peer if trusted.
     if trusted {
         let outbox = outbox_tx.clone();
         let sh = shared.clone();
         tokio::spawn(async move {
+            let sharing_on = sh.settings.lock().unwrap().sync_enabled;
+            if !sharing_on {
+                let _ = outbox
+                    .send(AppMessage::DeviceSyncState { enabled: false })
+                    .await;
+            }
             let battery_val = *sh.local_battery.lock().unwrap();
             if let Some((level, charging)) = battery_val {
                 let _ = outbox
@@ -4678,11 +4728,18 @@ fn register_session(
                                 continue;
                             }
 
-                            let auto_apply = shared
-                                .apply_policy
-                                .lock()
-                                .await
-                                .should_auto_apply(origin_device);
+                            // The global "Share clipboard" switch. It used to be
+                            // saved and never read, so turning it off changed
+                            // nothing. Off: remote clips still land in history
+                            // (so they can be applied by hand) but never
+                            // overwrite the local clipboard or get relayed on.
+                            let sharing_on = shared.settings.lock().unwrap().sync_enabled;
+                            let auto_apply = sharing_on
+                                && shared
+                                    .apply_policy
+                                    .lock()
+                                    .await
+                                    .should_auto_apply(origin_device);
 
                             // Record in activity feed.
                             let activity_id = {
@@ -4771,7 +4828,11 @@ fn register_session(
                             // Wrap content in Arc so each relay hop shares the same
                             // heap allocation instead of cloning the full payload
                             // (MED-01 — AppMessage::clone on relay hops).
-                            let fanout_peers = shared.peer_manager.active_senders();
+                            let fanout_peers = if sharing_on {
+                                shared.peer_manager.active_senders()
+                            } else {
+                                Vec::new()
+                            };
                             let mut router = shared.mesh_router.lock().await;
                             // shared_content is already Arc-wrapped above; no further
                             // full clone needed here — each fan-out is a pointer clone
