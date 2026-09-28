@@ -62,12 +62,12 @@ impl crate::engine::Engine {
     /// Get the current active phone call state, if any.
     /// Returns None when no call is in progress.
     pub async fn active_call(&self) -> Option<ActiveCallState> {
-        self.shared.active_call.lock().await.clone()
+        self.shared.device_status.active_call.lock().await.clone()
     }
 
     /// Push this device's battery status to all connected trusted peers.
     pub async fn push_battery_status(&self, level: u8, charging: bool) {
-        *self.shared.local_battery.lock().unwrap() = Some((level, charging));
+        *self.shared.device_status.local_battery.lock().unwrap() = Some((level, charging));
         let msg = AppMessage::BatteryStatus {
             level,
             charging,
@@ -85,7 +85,7 @@ impl crate::engine::Engine {
 
     /// Push this device's network status to all connected trusted peers.
     pub async fn push_network_status(&self, network_type: String) {
-        *self.shared.local_network.lock().unwrap() = Some(network_type.clone());
+        *self.shared.device_status.local_network.lock().unwrap() = Some(network_type.clone());
         let msg = AppMessage::NetworkStatus {
             network_type,
             origin_device: self.shared.config.device_id,
@@ -188,6 +188,7 @@ impl crate::engine::Engine {
     /// Get battery states for all peers that have reported their level.
     pub async fn peer_batteries(&self) -> Vec<PeerBatteryState> {
         self.shared
+            .device_status
             .peer_batteries
             .iter()
             .map(|r| r.value().clone())
@@ -197,6 +198,7 @@ impl crate::engine::Engine {
     /// Get network states for all peers that have reported their network.
     pub async fn peer_networks(&self) -> Vec<PeerNetworkState> {
         self.shared
+            .device_status
             .peer_networks
             .iter()
             .map(|r| r.value().clone())
@@ -211,7 +213,7 @@ impl crate::engine::Engine {
         free_bytes: u64,
         total_bytes: u64,
     ) {
-        *self.shared.local_storage.lock().unwrap() = Some((
+        *self.shared.device_status.local_storage.lock().unwrap() = Some((
             images_bytes,
             videos_bytes,
             apps_bytes,
@@ -240,6 +242,7 @@ impl crate::engine::Engine {
     /// Get storage states for all peers that have reported their storage.
     pub async fn peer_storages(&self) -> Vec<PeerStorageState> {
         self.shared
+            .device_status
             .peer_storage
             .iter()
             .map(|r| r.value().clone())

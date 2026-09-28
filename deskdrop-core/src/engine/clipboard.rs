@@ -511,3 +511,39 @@ impl crate::engine::Engine {
         Ok(())
     }
 }
+
+impl crate::engine::Engine {
+    /// Record a local text entry in history without syncing it to peers.
+    pub async fn remember_text(&self, text: String) -> Result<()> {
+        let device_name = self.shared.config.device_name.clone();
+        let max_bytes = self.shared.settings.lock().unwrap().max_history_text_bytes;
+        let content = crate::protocol::ClipboardContent::Text(text);
+        self.shared
+            .history
+            .lock()
+            .await
+            .push_with_options(&content, device_name, max_bytes)?;
+        Ok(())
+    }
+
+    /// Return the raw clipboard content for a pending incoming item by ID.
+    pub async fn incoming_clipboard(&self, id: u64) -> Option<serde_json::Value> {
+        let entries: Vec<_> = self
+            .shared
+            .activity
+            .lock()
+            .await
+            .pending_remote_clipboards()
+            .into_iter()
+            .cloned()
+            .collect();
+        entries
+            .iter()
+            .find(|e| e.id == id)
+            .and_then(|e| serde_json::to_value(e).ok())
+    }
+
+    // ── Templates ─────────────────────────────────────────────────────────────
+
+    // ── Per-peer settings ─────────────────────────────────────────────────────
+}
