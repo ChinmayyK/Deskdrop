@@ -161,6 +161,8 @@ class DeskdropShareTarget : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
         window.decorView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -209,19 +211,23 @@ class DeskdropShareTarget : ComponentActivity() {
             val peers = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
                 .peerSnapshots()
                 .filter { it.isConnected }
-            val isDark = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE).getBoolean("dark_mode", false)
+            val prefs = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
+            val isDark = prefs.getBoolean("dark_mode", false)
+            val lastUsedId = prefs.getString("last_used_device_id", null)
 
             setContent {
                 AppTheme(useDarkTheme = isDark) {
-                    ShareTargetUI(
+                    com.deskdrop.ui.ShareSheet(
                         sharedUris = sharedUris,
-                        sharedName = sharedName,
                         peers = peers,
+                        lastUsedDeviceId = lastUsedId,
                         isDark = isDark,
                         onCancel = { finish() },
-                        onSend = { targetId ->
-                            sendFiles(sharedUris, sharedName, targetId)
-                        }
+                        onSend = { targetId -> sendFiles(sharedUris, sharedName, targetId) },
+                        onOpenApp = {
+                            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            finish()
+                        },
                     )
                 }
             }
@@ -229,6 +235,14 @@ class DeskdropShareTarget : ComponentActivity() {
             Toast.makeText(this, "Nothing to push", Toast.LENGTH_SHORT).show()
             finish()
         }
+    }
+
+    // The sheet animates itself in and out over a dimmed scrim; the default
+    // activity slide on top of that looked like two things opening at once.
+    override fun finish() {
+        super.finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
     }
 
     private fun sendFiles(sharedUris: List<Uri>, sharedName: String?, targetId: String?) {
@@ -274,308 +288,3 @@ class DeskdropShareTarget : ComponentActivity() {
     }
 }
 
-@Composable
-fun ShareTargetUI(
-    sharedUris: List<Uri>,
-    sharedName: String?,
-    peers: List<PeerSnapshot>,
-    isDark: Boolean,
-    onCancel: () -> Unit,
-    onSend: (String?) -> Unit
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val prefs = context.getSharedPreferences(com.deskdrop.DeskdropService.PREFS_NAME, android.content.Context.MODE_PRIVATE)
-    val lastUsedId = prefs.getString("last_used_device_id", null)
-    
-    var selectedDevice by remember { 
-        mutableStateOf<String?>(
-            if (peers.size == 1) peers.first().id 
-            else peers.find { it.id == lastUsedId }?.id
-        ) 
-    }
-    var isSending by remember { mutableStateOf(false) }
-
-    val sheetBg = if (isDark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
-    val cardBg = if (isDark) Color(0xFF2C2C2E) else Color.White
-    val sheetShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable(
-                indication = null,
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                onClick = onCancel
-            ),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        // Apply the clipping and background at this container level to fix the overflow issue
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(sheetShape)
-                .background(sheetBg)
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    onClick = {} // consume clicks
-                )
-        ) {
-            // Inner subtle border for premium feel
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .border(
-                        1.dp,
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = if (isDark) 0.15f else 0.5f),
-                                Color.Transparent
-                            )
-                        ),
-                        sheetShape
-                    )
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(bottom = 32.dp)
-            ) {
-                // Drag handle
-                Box(
-                    modifier = Modifier
-                        .padding(top = 16.dp, bottom = 24.dp)
-                        .width(48.dp)
-                        .height(5.dp)
-                        .clip(CircleShape)
-                        .background(if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.2f))
-                        .align(Alignment.CenterHorizontally)
-                )
-
-                if (isSending) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator(
-                            color = CRTheme.brandElectric,
-                            strokeWidth = 3.dp,
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = "Preparing secure transfer...",
-                            color = CRTheme.textHigh(isDark),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Staging ${sharedUris.size} files locally",
-                            color = CRTheme.textMedium(isDark),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
-                } else {
-                    // Header
-                    Row(
-                        modifier = Modifier.padding(horizontal = 24.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    Brush.linearGradient(listOf(CRTheme.brandElectric, CRTheme.brandViolet)),
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Fallback to text icon if material icons are missing
-                            Text("↑", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Column(modifier = Modifier.padding(start = 16.dp)) {
-                            Text(
-                                text = "Send with Deskdrop",
-                                color = CRTheme.textHigh(isDark),
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            val noun = if (sharedUris.size == 1) "file" else "files"
-                            Text(
-                                text = "Sharing ${sharedUris.size} $noun",
-                                color = CRTheme.brandElectric,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Text(
-                        text = if (peers.isEmpty()) "NO DEVICES FOUND" else "SELECT DEVICE",
-                        color = CRTheme.textMedium(isDark),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp,
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Peer Grid (No scrolling for up to 4 items)
-                    if (peers.isEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp)
-                                .background(cardBg, RoundedCornerShape(20.dp))
-                                .padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "No connected devices",
-                                color = CRTheme.textHigh(isDark),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Open Deskdrop on your Mac, or launch the app to search again.",
-                                color = CRTheme.textMedium(isDark),
-                                fontSize = 14.sp,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    } else {
-                        // Use a horizontal scrolling row for a more compact "Command Deck" feel
-                        androidx.compose.foundation.lazy.LazyRow(
-                            contentPadding = PaddingValues(horizontal = 24.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            item {
-                                PeerSelectionCard(
-                                    title = "All Devices",
-                                    subtitle = "Broadcast",
-                                    avatarText = "ALL",
-                                    gradient = listOf(CRTheme.brandElectric, CRTheme.brandViolet),
-                                    isSelected = selectedDevice == null,
-                                    isDark = isDark,
-                                    cardBg = cardBg,
-                                    onClick = { selectedDevice = null }
-                                )
-                            }
-                            items(peers) { peer ->
-                                val isMac = peer.name.contains("mac", ignoreCase = true) || peer.name.contains("book", ignoreCase = true)
-                                val gradient = if (isMac) listOf(Color(0xFF5E5CE6), Color(0xFF3F3D96)) else listOf(CRTheme.accentGreen, Color(0xFF1E6E3C))
-                                PeerSelectionCard(
-                                    title = peer.name,
-                                    subtitle = if (peer.trusted) "Ready" else "Connected",
-                                    avatarText = peer.name.firstOrNull()?.uppercase() ?: "?",
-                                    gradient = gradient,
-                                    isSelected = selectedDevice == peer.id,
-                                    isDark = isDark,
-                                    cardBg = cardBg,
-                                    onClick = { selectedDevice = peer.id }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Action Buttons
-                    Row(modifier = Modifier.padding(horizontal = 24.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(cardBg)
-                                .clickable(onClick = onCancel),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Cancel", color = CRTheme.textHigh(isDark), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(if (peers.isNotEmpty()) Brush.horizontalGradient(listOf(CRTheme.brandElectric, CRTheme.brandViolet)) else Brush.horizontalGradient(listOf(Color.Gray, Color.DarkGray)))
-                                .clickable(enabled = peers.isNotEmpty()) {
-                                    isSending = true
-                                    onSend(selectedDevice)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Send", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun PeerSelectionCard(
-    title: String,
-    subtitle: String,
-    avatarText: String,
-    gradient: List<Color>,
-    isSelected: Boolean,
-    isDark: Boolean,
-    cardBg: Color,
-    onClick: () -> Unit
-) {
-    val borderColor = if (isSelected) CRTheme.brandElectric else if (isDark) Color.White.copy(alpha=0.05f) else Color.Black.copy(alpha=0.05f)
-    val bgColor = if (isSelected) CRTheme.brandElectric.copy(alpha = 0.15f) else cardBg
-    
-    Column(
-        modifier = Modifier
-            .width(120.dp)
-            .height(140.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(bgColor)
-            .border(2.dp, borderColor, RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(Brush.linearGradient(gradient), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(avatarText, color = Color.White, fontSize = if (avatarText.length > 1) 14.sp else 20.sp, fontWeight = FontWeight.Bold)
-            if (isSelected) {
-                // Checkmark or dot overlay
-                Box(modifier = Modifier.align(Alignment.BottomEnd).offset(x=4.dp, y=4.dp).size(16.dp).background(Color.White, CircleShape).padding(2.dp).background(CRTheme.brandElectric, CircleShape))
-            }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            title, 
-            color = CRTheme.textHigh(isDark), 
-            fontSize = 14.sp, 
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            subtitle, 
-            color = CRTheme.textMedium(isDark), 
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-        )
-    }
-}

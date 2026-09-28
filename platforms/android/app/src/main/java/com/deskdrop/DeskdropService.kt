@@ -183,6 +183,19 @@ class DeskdropService : Service() {
         private const val NSD_SERVICE_TYPE       = "_deskdrop._tcp."
         internal const val DEFAULT_DESKDROP_PORT = 47823
 
+        // Connect by IP: result broadcast for the dialog, plus recent addresses.
+        const val ACTION_MANUAL_CONNECT_RESULT = "com.deskdrop.MANUAL_CONNECT_RESULT"
+        const val EXTRA_MANUAL_HOST  = "manual_host"
+        const val EXTRA_MANUAL_OK    = "manual_ok"
+        const val EXTRA_MANUAL_ERROR = "manual_error"
+        private const val PREF_RECENT_MANUAL = "recent_manual_addresses"
+        private const val MAX_RECENT_MANUAL  = 5
+
+        fun recentManualAddresses(context: Context): List<String> =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(PREF_RECENT_MANUAL, null)
+                ?.split("\n")?.filter { it.isNotBlank() }.orEmpty()
+
 
     }
 
@@ -225,7 +238,7 @@ class DeskdropService : Service() {
     private var myDeviceUuidPrefix: String? = null
     private var myDeviceId: String? = null
     private var pendingManualConnectIp: String? = null
-    private var pendingManualConnectPort: Int = 47823
+    private var pendingManualConnectPort: Int = DEFAULT_DESKDROP_PORT
 
     // Actual NSD service name as reported by onServiceRegistered (may differ from requested
     // if Android resolved a collision by appending " (2)" etc.).
@@ -575,21 +588,14 @@ class DeskdropService : Service() {
             ACTION_RESUME_SYNC  -> { setSyncEnabled(true);  return START_STICKY }
             ACTION_DISCONNECT_ALL -> { disconnectAllPeers(); return START_STICKY }
             ACTION_CONNECT_MANUAL -> {
-                val ip = intent?.getStringExtra("ip")
-                val port = intent?.getIntExtra("port", 47823) ?: 47823
-                println("DeskdropService_DEBUG: ACTION_CONNECT_MANUAL received. ip=$ip, port=$port, engineHandle=$engineHandle")
-                if (!ip.isNullOrBlank()) {
+                val host = intent?.getStringExtra("ip")?.trim()
+                val port = intent?.getIntExtra("port", DEFAULT_DESKDROP_PORT) ?: DEFAULT_DESKDROP_PORT
+                if (!host.isNullOrBlank()) {
                     if (engineHandle != 0L) {
-                        println("DeskdropService_DEBUG: Triggering connectToPeer immediately")
-                        val h = engineHandle
-                        serviceScope.launch {
-                            val result = DeskdropJni.connectToPeer(h, ip, port)
-                            Log.i(TAG, "Manual connect to $ip:$port triggered, result = $result")
-                        }
+                        connectManual(host, port)
                     } else {
-                        println("DeskdropService_DEBUG: Engine not ready, queuing manual connect to $ip:$port")
-                        Log.i(TAG, "Engine not ready, queuing manual connect to $ip:$port")
-                        pendingManualConnectIp = ip
+                        Log.i(TAG, "Engine not ready, queuing manual connect to $host:$port")
+                        pendingManualConnectIp = host
                         pendingManualConnectPort = port
                     }
                 }
@@ -833,9 +839,8 @@ class DeskdropService : Service() {
             if (pIp != null && engineHandle != 0L) {
                 pendingManualConnectIp = null
                 val pPort = pendingManualConnectPort
-                println("DeskdropService_DEBUG: Processing pending manual connect to $pIp:$pPort")
                 Log.i(TAG, "Processing pending manual connect to $pIp:$pPort")
-                DeskdropJni.connectToPeer(engineHandle, pIp, pPort)
+                connectManual(pIp, pPort)
             }
 
             if (intent?.action == ACTION_PUSH_TEXT) {
@@ -3832,14 +3837,47 @@ class DeskdropService : Service() {
         broadcastStatus()
     }
 
+    /**
+     * Direct connect for networks where mDNS is blocked. The engine only
+     * takes IP literals, so hostnames are resolved here first. The outcome is
+     * broadcast for the Connect by IP dialog, keyed by the host as typed.
+     */
+    private fun connectManual(host: String, port: Int) {
+        val h = engineHandle
+        serviceScope.launch {
+            val ip = runCatching { java.net.InetAddress.getByName(host).hostAddress }.getOrNull()
+            val error = when {
+                ip == null -> "Couldn't find \"$host\" on this network."
+                getLocalIpAddresses().contains(ip) -> "That's this phone's own address. Enter the other device's IP."
+                DeskdropJni.connectToPeer(h, ip, port) != 0 ->
+                    "Couldn't reach $host:$port. Check both devices are on the same network and Deskdrop is open on the other one."
+                else -> null
+            }
+            Log.i(TAG, "Manual connect to $host:$port (ip=$ip): ${error ?: "ok"}")
+            if (error == null) rememberManualAddress(if (port == DEFAULT_DESKDROP_PORT) host else "$host:$port")
+            sendBroadcast(Intent(ACTION_MANUAL_CONNECT_RESULT).setPackage(packageName).apply {
+                putExtra(EXTRA_MANUAL_HOST, host)
+                putExtra(EXTRA_MANUAL_OK, error == null)
+                error?.let { putExtra(EXTRA_MANUAL_ERROR, it) }
+            })
+        }
+    }
+
+    private fun rememberManualAddress(address: String) {
+        val updated = (listOf(address) + recentManualAddresses(this)).distinct().take(MAX_RECENT_MANUAL)
+        prefs().edit().putString(PREF_RECENT_MANUAL, updated.joinToString("\n")).apply()
+    }
+
     private fun broadcastStatus() {
         sendBroadcast(Intent(ACTION_STATUS_CHANGED).setPackage(packageName))
+        DeskdropWidget.updateAll(this)
     }
 
     private fun setServiceRunning(running: Boolean) {
         prefs().edit()
             .putBoolean(PREF_SERVICE_RUNNING, running)
             .apply()
+        DeskdropWidget.updateAll(this)
     }
 
     private fun hasFilePermissions(): Boolean {

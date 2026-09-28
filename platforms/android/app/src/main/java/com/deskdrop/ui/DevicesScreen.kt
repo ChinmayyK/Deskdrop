@@ -121,7 +121,10 @@ fun DevicesTab(
                     EmptyBox(
                         c, Icons.Outlined.Devices,
                         "No devices yet. Open Deskdrop on your computer on the same Wi-Fi, or use + to scan its code."
-                    )
+                    ) {
+                        Spacer(Modifier.height(12.dp))
+                        PillButton(c, "Can't find it? Connect by IP", filled = false, compact = true, icon = Icons.Outlined.Lan, onClick = onManualIp)
+                    }
                 }
             }
         }

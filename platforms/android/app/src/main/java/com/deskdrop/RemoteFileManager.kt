@@ -352,7 +352,13 @@ object RemoteFileManager {
                     context.contentResolver.openInputStream(uri)?.use { stream2 ->
                         val rawBitmap = BitmapFactory.decodeStream(stream2, null, options)
                         if (rawBitmap != null) {
-                            bitmap = Bitmap.createScaledBitmap(rawBitmap, sizePx, sizePx, true)
+                            // Fit the longest side to sizePx, keeping aspect -
+                            // a plain sizePx x sizePx scale squashed every
+                            // non-square photo in the desktop preview grid.
+                            val scale = sizePx.toFloat() / maxOf(rawBitmap.width, rawBitmap.height)
+                            val w = (rawBitmap.width * scale).toInt().coerceAtLeast(1)
+                            val h = (rawBitmap.height * scale).toInt().coerceAtLeast(1)
+                            bitmap = Bitmap.createScaledBitmap(rawBitmap, w, h, true)
                             if (bitmap != rawBitmap) rawBitmap.recycle()
                         }
                     }

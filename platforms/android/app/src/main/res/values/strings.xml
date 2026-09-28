@@ -8,6 +8,14 @@
     <string name="notif_channel_alerts_name">Deskdrop Alerts</string>
     <string name="notif_channel_alerts_desc">Trust requests, received files, and connection failures</string>
 
+    <!-- Home screen widget -->
+    <string name="widget_description">Connection status and one-tap sending</string>
+    <string name="widget_status_idle">Looking for devices</string>
+    <string name="widget_status_paused">Sync paused</string>
+    <string name="widget_status_off">Not running · tap to open</string>
+    <string name="widget_send_clipboard">Clipboard</string>
+    <string name="widget_send_files">Send files</string>
+
     <!-- Persistent notification -->
     <string name="notif_service_title">Deskdrop</string>
     <string name="notif_service_active">Syncing</string>

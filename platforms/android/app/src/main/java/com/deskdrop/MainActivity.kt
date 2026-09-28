@@ -178,36 +178,14 @@ class MainActivity : ComponentActivity() {
             AppTheme(useDarkTheme = isDarkMode.value) {
                 var showManualIpDialog by remember { mutableStateOf(false) }
                 if (showManualIpDialog) {
-                    var ipInput by remember { mutableStateOf("") }
-                    androidx.compose.material3.AlertDialog(
-                        modifier = Modifier.glassmorphism(cornerRadius = 24.dp),
-                        onDismissRequest = { showManualIpDialog = false },
-                        title = { Text("Enter Device IP") },
-                        text = {
-                            androidx.compose.material3.OutlinedTextField(
-                                value = ipInput,
-                                onValueChange = { ipInput = it },
-                                label = { Text("e.g. 192.168.1.50") },
-                                singleLine = true,
-                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri,
-                                    autoCorrect = false
-                                )
-                            )
+                    com.deskdrop.ui.ConnectByIpDialog(
+                        isDark = isDarkMode.value,
+                        onDismiss = { showManualIpDialog = false },
+                        onConnected = { address ->
+                            showManualIpDialog = false
+                            showSnack("Connected to $address")
                         },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = {
-                                if (handlePairingInput(ipInput)) {
-                                    showSnack("Connecting...")
-                                } else {
-                                    showSnack("Invalid IP format")
-                                }
-                                showManualIpDialog = false
-                            }) { Text("Connect") }
-                        },
-                        dismissButton = {
-                            androidx.compose.material3.TextButton(onClick = { showManualIpDialog = false }) { Text("Cancel") }
-                        }
+                        onPairingLink = { link -> handlePairingInput(link) },
                     )
                 }
 

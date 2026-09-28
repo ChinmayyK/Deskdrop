@@ -121,6 +121,26 @@
             </intent-filter>
         </activity>
 
+        <!-- ── Home screen widget ─────────────────────────────────────── -->
+        <receiver
+            android:name=".DeskdropWidget"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/deskdrop_widget_info" />
+        </receiver>
+
+        <activity
+            android:name=".WidgetActionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Deskdrop.ShareTarget" />
+
         <!-- ── Foreground service ─────────────────────────────────────── -->
         <!--
             foregroundServiceType="connectedDevice" tells Android this service
