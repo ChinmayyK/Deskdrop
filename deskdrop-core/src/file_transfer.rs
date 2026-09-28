@@ -672,9 +672,11 @@ impl InboundTransfer {
     }
 
     pub fn commit_chunk(&mut self, chunk_index: u32, data_len: usize) -> TransferProgress {
-        self.bytes_received += data_len as u64;
-        self.received_chunk_count += 1;
-        self.last_confirmed_chunk = chunk_index;
+        if chunk_index == self.received_chunk_count {
+            self.bytes_received += data_len as u64;
+            self.received_chunk_count += 1;
+            self.last_confirmed_chunk = chunk_index;
+        }
         self.progress_snapshot()
     }
 

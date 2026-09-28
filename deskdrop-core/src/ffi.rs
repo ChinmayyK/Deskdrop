@@ -461,6 +461,7 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::BatteryStateChanged { from_name, .. } => Some(from_name.clone()),
         EngineEvent::NetworkStateChanged { from_name, .. } => Some(from_name.clone()),
         EngineEvent::OpenUrlOnDeviceRequested { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::CallStateChanged { from_name, .. } => Some(from_name.clone()),
         _ => None,
     };
     if let Some(n) = name {
@@ -1469,6 +1470,40 @@ pub unsafe extern "C" fn deskdrop_event_open_url_ack_success(event: *const PbEve
     match (*event).inner {
         EngineEvent::OpenUrlOnDeviceAckReceived { success, .. } => success as c_int,
         _ => 0,
+    }
+}
+
+/// The caller's phone number from a CALL_STATE_CHANGED event, or NULL.
+/// Empty when the phone hides it (no call-log permission, or a private number).
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_call_number(event: *mut PbEvent) -> *const c_char {
+    if event.is_null() {
+        return std::ptr::null();
+    }
+    let e = &mut *event;
+    match &e.inner {
+        EngineEvent::CallStateChanged { number, .. } => {
+            let number = number.clone();
+            e.cache_str(number)
+        }
+        _ => std::ptr::null(),
+    }
+}
+
+/// The caller's contact name from a CALL_STATE_CHANGED event, or NULL.
+/// Empty when the number isn't in the phone's contacts.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_call_contact_name(event: *mut PbEvent) -> *const c_char {
+    if event.is_null() {
+        return std::ptr::null();
+    }
+    let e = &mut *event;
+    match &e.inner {
+        EngineEvent::CallStateChanged { contact_name, .. } => {
+            let name = contact_name.clone();
+            e.cache_str(name)
+        }
+        _ => std::ptr::null(),
     }
 }
 
