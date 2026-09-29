@@ -368,25 +368,44 @@ impl ActivityFeed {
         // Mark the corresponding FileTransferStarted entry to show it completed,
         // but DO NOT change its kind to FileTransferComplete, to avoid
         // duplicate notifications on clients that poll incrementally.
+        let is_outbound = dest_path.is_none();
         for e in self.entries.iter_mut() {
             if e.transfer_id.as_deref() == Some(&transfer_id)
                 && e.kind == ActivityKind::FileTransferStarted
             {
-                e.summary = format!(
-                    "[{}] received file: {} ({} KB)",
-                    device_name,
-                    file_name,
-                    file_bytes / 1024
-                );
+                e.summary = if is_outbound {
+                    format!(
+                        "[{}] sent file: {} ({} KB)",
+                        device_name,
+                        file_name,
+                        file_bytes / 1024
+                    )
+                } else {
+                    format!(
+                        "[{}] received file: {} ({} KB)",
+                        device_name,
+                        file_name,
+                        file_bytes / 1024
+                    )
+                };
                 e.dest_path = dest_path.clone();
             }
         }
-        let summary = format!(
-            "[{}] file ready: {} ({} KB)",
-            device_name,
-            file_name,
-            file_bytes / 1024
-        );
+        let summary = if is_outbound {
+            format!(
+                "[{}] sent file: {} ({} KB)",
+                device_name,
+                file_name,
+                file_bytes / 1024
+            )
+        } else {
+            format!(
+                "[{}] file ready: {} ({} KB)",
+                device_name,
+                file_name,
+                file_bytes / 1024
+            )
+        };
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
             id,

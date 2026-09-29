@@ -1204,7 +1204,8 @@ impl FileTransferManager {
                 "status": status_str,
                 "is_directory": t.meta.is_directory,
                 "item_count": t.meta.item_count,
-                "batch_id": t.meta.batch_id.clone()
+                "batch_id": t.meta.batch_id.clone(),
+                "is_outbound": false
             }));
         }
         for t in self.outbound.values_mut() {
@@ -1238,7 +1239,8 @@ impl FileTransferManager {
                 "status": status_str,
                 "is_directory": t.meta.is_directory,
                 "item_count": t.meta.item_count,
-                "batch_id": t.meta.batch_id.clone()
+                "batch_id": t.meta.batch_id.clone(),
+                "is_outbound": true
             }));
         }
         transfers

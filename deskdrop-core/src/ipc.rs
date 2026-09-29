@@ -1536,14 +1536,5 @@ pub mod server {
 
 #[cfg(windows)]
 pub mod client {
-    use super::*;
-    pub struct IpcClient;
-    impl IpcClient {
-        pub async fn connect() -> Result<Self> {
-            anyhow::bail!("Windows IPC client not yet implemented");
-        }
-        pub async fn request(&mut self, _req: &IpcRequest) -> Result<IpcResponse> {
-            anyhow::bail!("Windows IPC client not yet implemented");
-        }
-    }
+    pub use crate::ipc_windows::client::WinIpcClient as IpcClient;
 }

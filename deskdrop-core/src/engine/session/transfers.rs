@@ -412,11 +412,11 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 return Flow::Continue;
             }
 
-            let (file_name, peer_name) = {
+            let (file_name, peer_name, file_bytes) = {
                 let mut mgr = shared.file_transfers.lock().await;
-                let fname = mgr
+                let (fname, fbytes) = mgr
                     .get_outbound_mut(&transfer_id)
-                    .map(|t| t.meta.file_name.clone())
+                    .map(|t| (t.meta.file_name.clone(), t.meta.size_bytes))
                     .unwrap_or_default();
                 mgr.remove_outbound(&transfer_id);
                 let pname = shared
@@ -424,10 +424,24 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     .get(peer_id)
                     .map(|p| p.friendly_name.clone())
                     .unwrap_or_default();
-                (fname, pname)
+                (fname, pname, fbytes)
             };
 
             if success {
+                let hex_tid = hex::encode(transfer_id);
+                shared
+                    .activity
+                    .lock()
+                    .await
+                    .record_file_transfer_complete(
+                        peer_id,
+                        peer_name.clone(),
+                        file_name.clone(),
+                        file_bytes,
+                        hex_tid,
+                        None,
+                    );
+
                 let _ = shared
                     .event_tx
                     .send(EngineEvent::FileTransferComplete {

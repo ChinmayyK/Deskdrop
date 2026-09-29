@@ -160,17 +160,9 @@ fn normalize_args(mut args: Vec<String>) -> Vec<String> {
 }
 
 async fn try_ipc(req: &IpcRequest) -> Option<IpcResponse> {
-    #[cfg(unix)]
-    {
-        use deskdrop_core::ipc::client::IpcClient;
-        let mut client = IpcClient::connect().await.ok()?;
-        client.request(req).await.ok()
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = req;
-        None
-    }
+    use deskdrop_core::ipc::client::IpcClient;
+    let mut client = IpcClient::connect().await.ok()?;
+    client.request(req).await.ok()
 }
 
 async fn ipc(req: &IpcRequest) -> Result<IpcResponse> {

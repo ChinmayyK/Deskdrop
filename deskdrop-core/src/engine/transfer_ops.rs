@@ -302,6 +302,8 @@ impl Engine {
         {
             let mut mgr = self.shared.file_transfers.lock().await;
             if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
+                let resume_chunk = t.last_acked_chunk.map(|c| c + 1).unwrap_or(0);
+                t.resume_from(resume_chunk);
                 t.paused = false;
                 was_outbound = true;
                 target_device = t.target_device;
@@ -334,19 +336,20 @@ impl Engine {
                 tokio::spawn(async move {
                     const BATCH_SIZE: usize = 4;
                     'outer: loop {
-                        let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
+                        let (next_chunk, _last_acked, total_chunks, is_paused): (u32, u32, u32, bool) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
                             if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
                                 (
                                     t.next_chunk,
                                     t.last_acked_chunk.unwrap_or(0),
                                     t.total_chunks,
+                                    t.paused,
                                 )
                             } else {
                                 break 'outer;
                             }
                         };
-                        if next_chunk >= total_chunks {
+                        if is_paused || next_chunk >= total_chunks {
                             break 'outer;
                         }
 
