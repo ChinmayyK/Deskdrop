@@ -104,6 +104,8 @@ object DeskdropJni {
     @JvmStatic external fun eventTransferBytesReceived(event: Long): Long
     @JvmStatic external fun eventTransferSpeedBps(event: Long): Long
     @JvmStatic external fun eventTransferEtaSecs(event: Long): Long
+    /** 1 = this device is sending, 0 = receiving, -1 = not a progress event. */
+    @JvmStatic external fun eventTransferIsOutbound(event: Long): Int
     @JvmStatic external fun eventTransferTotalBytes(event: Long): Long
     @JvmStatic external fun eventTransferDestPath(event: Long): String?
     /** Accept an incoming file transfer (identified by hex transfer ID). */

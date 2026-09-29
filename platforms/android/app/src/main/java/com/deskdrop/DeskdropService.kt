@@ -1388,10 +1388,14 @@ class DeskdropService : Service() {
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
                 )
-                // Unknown transfers default to outbound, as before; incoming
-                // ones were registered by FILE_TRANSFER_INCOMING already.
-                val isOutbound = existing == null || existing.isOutbound ||
-                    TransferManager.pendingOutboundTransferIds.contains(tid)
+                // The core reports direction on every progress event; transfers from
+                // trusted peers are auto-accepted without an INCOMING event, so
+                // `existing` alone cannot tell.
+                val isOutbound = when (DeskdropJni.eventTransferIsOutbound(ev)) {
+                    1 -> true
+                    0 -> false
+                    else -> existing?.isOutbound ?: TransferManager.pendingOutboundTransferIds.contains(tid)
+                }
                 
                 TransferManager.activeTransfers[tid] = TransferProgress(
                     id = tid, fileName = name, percent = percent, bytesReceived = bytesReceived, 
@@ -1448,7 +1452,20 @@ class DeskdropService : Service() {
                     val publicUriStr = saveFileToPublicDownloads(File(destPath))
                     
                     val finalPath = publicUriStr ?: destPath
-                    updateActivityTransferComplete(tid, finalPath)
+                    if (ActivityFeedManager.getFeedSnapshot().none { it.transferId == tid }) {
+                        // The core auto-accepts transfers from trusted peers without an
+                        // INCOMING event, so no feed entry exists yet: record the file now.
+                        addActivity(ActivityEntry(
+                            deviceName = from,
+                            kind = ActivityKind.FILE_TRANSFER_COMPLETE,
+                            preview = fileName,
+                            transferId = tid,
+                            progressPercent = 100,
+                            destPath = finalPath
+                        ))
+                    } else {
+                        updateActivityTransferComplete(tid, finalPath)
+                    }
                     cancelFileTransferNotification(tid)
 
                     val uriToOpen = if (publicUriStr != null) {
@@ -2258,15 +2275,7 @@ class DeskdropService : Service() {
         clipboardManager.setPrimaryClip(
             android.content.ClipData.newPlainText("deskdrop", text)
         )
-
-        // Silently add to activity feed — zero notification
-        ActivityFeedManager.addToFeed(
-            ActivityEntry(
-                deviceName = from,
-                kind = ActivityKind.CLIPBOARD_TEXT,
-                preview = text.take(100)
-            )
-        )
+        // The event handler that received this text already added its feed entry.
         broadcastStatus()
 
         // Respect user opt-in for clipboard copy notifications (default OFF)

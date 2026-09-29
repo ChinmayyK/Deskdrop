@@ -349,6 +349,10 @@ class MainActivity : ComponentActivity() {
                         ActivityFeedManager.removeFromFeed(entry.id)
                         
                     },
+                    onClearActivity = {
+                        ActivityFeedManager.clearFeed()
+                        showSnack("Activity cleared")
+                    },
                     onTrustPeer = { peer ->
                         ContextCompat.startForegroundService(this@MainActivity,
                             Intent(this@MainActivity, DeskdropService::class.java).apply {

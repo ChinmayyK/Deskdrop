@@ -45,7 +45,7 @@ fun DevicesTab(
     val c = rememberDdColors(isDark)
     val requests = peers.filter { it.pairingRequested && !it.trusted }
     val paired = peers.filter { it.trusted }
-    val nearby = peers.filter { !it.trusted && !it.pairingRequested }
+    val nearby = peers.filter { !it.trusted && !it.pairingRequested && it.isListable }
     val online = paired.count { it.isConnected }
 
     LazyColumn(

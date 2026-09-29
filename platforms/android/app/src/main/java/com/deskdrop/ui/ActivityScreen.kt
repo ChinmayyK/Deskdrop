@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.deskdrop.ActivityEntry
 import com.deskdrop.ActivityKind
@@ -42,7 +43,8 @@ fun ActivityTab(
     feed: List<ActivityEntry>,
     onApply: (ActivityEntry) -> Unit,
     onResend: (ActivityEntry) -> Unit,
-    onDelete: (ActivityEntry) -> Unit
+    onDelete: (ActivityEntry) -> Unit,
+    onClearAll: () -> Unit = {}
 ) {
     val c = rememberDdColors(isDark)
     var filter by rememberSaveable { mutableStateOf(ActivityFilter.All) }
@@ -58,7 +60,19 @@ fun ActivityTab(
     ) {
         item {
             Column {
-                PageTitle(c, "Activity", if (feed.isEmpty()) null else "${feed.size} items")
+                PageTitle(c, "Activity", if (feed.isEmpty()) null else "${feed.size} items") {
+                    if (feed.isNotEmpty()) {
+                        Text(
+                            "Clear",
+                            style = DdType.small.copy(fontWeight = FontWeight.Medium),
+                            color = c.accent,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable(onClickLabel = "Clear all activity", onClick = onClearAll)
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
                 Spacer(Modifier.height(14.dp))
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),

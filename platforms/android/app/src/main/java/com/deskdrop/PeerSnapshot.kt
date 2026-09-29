@@ -5,6 +5,9 @@ import org.json.JSONArray
 
 const val PREF_PEER_SNAPSHOTS_JSON = "peer_snapshots_json"
 
+/** An unpaired peer not seen for this long is treated as gone. */
+const val NEARBY_WINDOW_SECS = 300L
+
 @androidx.compose.runtime.Immutable
 data class PeerSnapshot(
     val id: String,
@@ -27,6 +30,12 @@ data class PeerSnapshot(
     val isConnecting: Boolean get() = status == "connecting"
     val isReconnectable: Boolean get() = trusted && remembered && autoConnect && !isConnected && !explicitDisconnect
     val needsAttention: Boolean get() = status == "failed"
+    /**
+     * Whether the peer belongs in device lists. The core keeps every untrusted peer it has
+     * ever discovered, so an unpaired one only counts while it has been seen recently.
+     */
+    val isListable: Boolean get() = trusted || pairingRequested || isConnecting ||
+        (lastSeenSecs ?: 0L) >= System.currentTimeMillis() / 1000 - NEARBY_WINDOW_SECS
     val needsTrust: Boolean get() = !trusted && (needsAttention || status == "disconnected")
     val isRejected: Boolean get() = lastError?.contains("rejected", ignoreCase = true) == true ||
         lastError?.contains("not trusted", ignoreCase = true) == true
@@ -55,7 +64,9 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             lastSeenSecs = obj.takeIf { !it.isNull("last_seen") }?.optLong("last_seen"),
             lastSyncSecs = obj.takeIf { !it.isNull("last_sync") }?.optLong("last_sync"),
             lastError = obj.takeIf { !it.isNull("last_error") }?.optString("last_error"),
-            ip = obj.takeIf { !it.isNull("ips") }?.optJSONArray("ips")?.let { if (it.length() > 0) it.optString(0) else null } ?: if (!obj.isNull("ip")) obj.optString("ip") else null,
+            ip = (obj.takeIf { !it.isNull("ips") }?.optJSONArray("ips")?.let { if (it.length() > 0) it.optString(0) else null } ?: if (!obj.isNull("ip")) obj.optString("ip") else null)
+                // IPv4 peers arrive IPv6-mapped ("::ffff:192.168.1.5"); show the plain address.
+                ?.removePrefix("::ffff:"),
             pairingRequested = obj.optBoolean("pairing_requested", false) || obj.optBoolean("outgoing_pairing_waiting", false),
             pairingPin = if (obj.isNull("pairing_pin")) null else obj.optString("pairing_pin"),
             lifecycleState = obj.optString("lifecycle_state", "discovered"),

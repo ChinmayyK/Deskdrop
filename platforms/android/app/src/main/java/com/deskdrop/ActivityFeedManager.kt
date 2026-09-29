@@ -94,6 +94,10 @@ object ActivityFeedManager {
         }
     }
 
+    fun clearFeed() {
+        _feedFlow.value = emptyList()
+    }
+
     fun updateFeedByTransferId(tid: String, transform: (ActivityEntry) -> ActivityEntry) {
         _feedFlow.update { current ->
             val idx = current.indexOfFirst { it.transferId == tid }

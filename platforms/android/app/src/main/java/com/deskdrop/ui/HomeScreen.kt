@@ -187,12 +187,13 @@ fun HomeTab(
             }
         }
 
-        if (peers.isNotEmpty()) {
-            SectionHeader(c, "Devices", "${connected.size} of ${peers.size} online") {
+        val listed = peers.filter { it.isListable }
+        if (listed.isNotEmpty()) {
+            SectionHeader(c, "Devices", "${connected.size} of ${listed.size} online") {
                 onTabSelected(AppTab.Devices)
             }
             Panel(c) {
-                peers.forEachIndexed { i, peer ->
+                listed.forEachIndexed { i, peer ->
                     if (i > 0) Hairline(c)
                     DeviceRow(
                         c = c,

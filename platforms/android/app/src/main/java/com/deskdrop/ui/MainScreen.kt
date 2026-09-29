@@ -162,6 +162,7 @@ fun MainScreen(
     onStorageSettingsClicked: () -> Unit = {},
     onNotificationSettingsClicked: () -> Unit = {},
     onDeleteActivity: (ActivityEntry) -> Unit = {},
+    onClearActivity: () -> Unit = {},
     onResendActivity: (ActivityEntry) -> Unit = {},
     onReplayOnboarding: () -> Unit = {}
 ) {
@@ -231,7 +232,8 @@ fun MainScreen(
                                 feed = feed,
                                 onApply = onApplyClipboard,
                                 onResend = onResendActivity,
-                                onDelete = onDeleteActivity
+                                onDelete = onDeleteActivity,
+                                onClearAll = onClearActivity
                             )
                             AppTab.Devices -> DevicesTab(
                                 isDark = isDark,
