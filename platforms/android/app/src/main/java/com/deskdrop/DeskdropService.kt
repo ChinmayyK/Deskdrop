@@ -794,8 +794,11 @@ class DeskdropService : Service() {
             if (!engineStarted.getAndSet(true)) {
                 val deviceName = resolvedDeviceName()
                 val dataDir = File(filesDir, "deskdrop").also { it.mkdirs() }.absolutePath
-                val fileSaveDir = android.os.Environment.getExternalStoragePublicDirectory(
-                    android.os.Environment.DIRECTORY_DOWNLOADS
+                val fileSaveDir = File(
+                    android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_DOWNLOADS
+                    ),
+                    "Deskdrop"
                 ).apply { mkdirs() }
                 DeskdropJni.initContext(applicationContext)
                 engineHandle = DeskdropJni.start(
@@ -1449,7 +1452,15 @@ class DeskdropService : Service() {
                 }
                 // Offload the heavy file copy to a background coroutine so we don't block the JNI thread and freeze the UI
                 serviceScope.launch {
-                    val publicUriStr = saveFileToPublicDownloads(File(destPath))
+                    val srcFile = File(destPath)
+                    val publicUriStr = if (srcFile.parentFile?.name == "Deskdrop") {
+                        android.media.MediaScannerConnection.scanFile(this@DeskdropService, arrayOf(destPath), null, null)
+                        null
+                    } else {
+                        val uriStr = saveFileToPublicDownloads(srcFile)
+                        try { srcFile.delete() } catch (_: Exception) {}
+                        uriStr
+                    }
                     
                     val finalPath = publicUriStr ?: destPath
                     if (ActivityFeedManager.getFeedSnapshot().none { it.transferId == tid }) {

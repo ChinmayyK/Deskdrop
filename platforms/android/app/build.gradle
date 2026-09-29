@@ -60,7 +60,6 @@ android {
             signingConfig useReleaseKey ? signingConfigs.release : signingConfigs.debug
         }
         debug {
-            applicationIdSuffix ".debug"
             debuggable true
         }
     }

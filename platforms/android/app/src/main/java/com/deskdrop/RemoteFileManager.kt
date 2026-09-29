@@ -275,6 +275,7 @@ object RemoteFileManager {
                     put("category", item.category)
                     put("source", item.source)
                     put("content_uri", item.contentUri)
+                    put("path", item.dataPath)
                 }
                 jsonArray.put(obj)
             }
@@ -307,6 +308,8 @@ object RemoteFileManager {
             val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) ?: "" else ""
             val dateMod = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
             val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
+
+            if (dataPath.isNotEmpty() && !java.io.File(dataPath).exists()) continue
 
             val cat = getCategory(mime, name)
             val src = getSource(dataPath)
