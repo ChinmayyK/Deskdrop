@@ -657,9 +657,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let mirrorEnabled = UserDefaults.standard.object(forKey: "mirrorAndroidNotifications") as? Bool ?? true
             guard mirrorEnabled else { return }
 
-            let title = entry.summary.components(separatedBy: ": ").first ?? "Notification"
-            let body = entry.summary.components(separatedBy: ": ").dropFirst().joined(separator: ": ")
-            
+            // The core sends the title and text as separate fields (title in `file_name`).
+            // Splitting `summary` instead left "[Device] " glued to the title.
+            let title = entry.file_name.flatMap { $0.isEmpty ? nil : $0 } ?? entry.device_name
+            let body = entry.text_preview ?? ""
+
             // Send native macOS notification (which also plays sound based on OS settings)
             sendSystemNotification(title: title, body: body.isEmpty ? entry.summary : body)
 
