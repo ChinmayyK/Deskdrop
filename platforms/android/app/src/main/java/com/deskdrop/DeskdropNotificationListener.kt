@@ -58,7 +58,9 @@ class DeskdropNotificationListener : NotificationListenerService() {
         if ((notif.flags and Notification.FLAG_ONGOING_EVENT) != 0) return
         
         val title = notif.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val text = notif.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        // Messaging apps put the full message in EXTRA_BIG_TEXT; EXTRA_TEXT is often a one-line preview.
+        val text = (notif.extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)
+            ?: notif.extras?.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
         val id = sbn.key ?: "${sbn.id}"
         
         if (title.isBlank() && text.isBlank()) return

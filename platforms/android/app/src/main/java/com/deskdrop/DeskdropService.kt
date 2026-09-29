@@ -780,6 +780,8 @@ class DeskdropService : Service() {
                 }
                 return START_STICKY
             }
+            // Handled after the engine start below.
+            ACTION_PUSH_TEXT, ACTION_PUSH_SHARED_URI, ACTION_PUSH_NOTIFICATION -> Unit
             else -> Log.w(TAG, "Unknown action: ${intent?.action}")
         }
 
@@ -856,6 +858,20 @@ class DeskdropService : Service() {
                         Unit
                     }
                 }
+            }
+
+            // Sent by DeskdropNotificationListener for every notification the phone posts.
+            if (intent?.action == ACTION_PUSH_NOTIFICATION &&
+                prefs().getBoolean("notification_mirroring", false) &&
+                engineHandle != 0L && hasConnectedPeers()
+            ) {
+                DeskdropJni.pushNotification(
+                    engineHandle,
+                    intent.getStringExtra(EXTRA_NOTIFICATION_ID) ?: "",
+                    intent.getStringExtra(EXTRA_NOTIFICATION_PKG) ?: "",
+                    intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: "",
+                    intent.getStringExtra(EXTRA_NOTIFICATION_TEXT) ?: "",
+                )
             }
 
             if (intent?.action == ACTION_PUSH_SHARED_URI) {
