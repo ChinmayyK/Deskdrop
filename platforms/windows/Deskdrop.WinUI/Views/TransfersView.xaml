@@ -35,7 +35,7 @@
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0" Style="{StaticResource AppIconTile}">
-                        <FontIcon Glyph="{x:Bind IsDirectory, Converter={StaticResource BoolToFolderIconConverter}, Mode=OneWay}"
+                        <FontIcon Glyph="{x:Bind TransferIcon, Mode=OneWay}"
                                   FontSize="18"
                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -121,7 +121,7 @@
                 <Border Grid.Column="0" Width="36" Height="36"
                         CornerRadius="{StaticResource RadiusMedium}"
                         Background="{ThemeResource AppSurfaceSubtleBrush}">
-                    <FontIcon Glyph="{x:Bind kind, Converter={StaticResource ActivityKindToGlyphConverter}, Mode=OneWay}"
+                    <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}"
                               FontSize="14"
                               Foreground="{x:Bind AccentColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
                               HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -244,14 +244,14 @@
             <StackPanel Spacing="10">
                 <TextBlock Text="History" Style="{StaticResource AppSectionTitle}" />
                 <Border Style="{StaticResource AppGroupCard}"
-                        Visibility="{x:Bind mgr.ActivityCount, Converter={StaticResource CountToVisibilityConverter}, Mode=OneWay}">
+                        Visibility="{x:Bind mgr.TransferHistoryCount, Converter={StaticResource CountToVisibilityConverter}, Mode=OneWay}">
                     <ItemsControl Margin="0,-1,0,0"
-                                  ItemsSource="{x:Bind mgr.ActivityFeed, Mode=OneWay}"
+                                  ItemsSource="{x:Bind mgr.TransferHistory, Mode=OneWay}"
                                   ItemTemplate="{StaticResource HistoryRowTemplate}" />
                 </Border>
                 <TextBlock Style="{StaticResource AppSecondary}"
                            Text="No completed transfers yet."
-                           Visibility="{x:Bind mgr.ActivityCount, Converter={StaticResource InverseCountToVisibilityConverter}, Mode=OneWay}" />
+                           Visibility="{x:Bind mgr.TransferHistoryCount, Converter={StaticResource InverseCountToVisibilityConverter}, Mode=OneWay}" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

@@ -70,5 +70,15 @@ namespace Deskdrop.WinUI.Services
             bool.TryParse(Get(key), out var b) ? b : defaultValue;
 
         public static void SetBool(string key, bool value) => Set(key, value.ToString());
+
+        public static string DeviceName
+        {
+            get
+            {
+                var custom = Get("DeviceName") ?? Get("pc_name") ?? Get("device_name");
+                return !string.IsNullOrWhiteSpace(custom) ? custom : Environment.MachineName;
+            }
+            set => Set("DeviceName", value);
+        }
     }
 }

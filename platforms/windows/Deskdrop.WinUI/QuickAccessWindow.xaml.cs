@@ -44,7 +44,7 @@ namespace Deskdrop.WinUI
             Deskdrop.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 360, 600);
 
             TimelineList.ItemsSource = DeskdropStore.Shared.History;
-            if (DeviceTargetsList != null) DeviceTargetsList.ItemsSource = DeskdropStore.Shared.Peers;
+            if (DeviceTargetsList != null) DeviceTargetsList.ItemsSource = DeskdropStore.WithoutStaleDuplicates(DeskdropStore.Shared.Peers).ToList();
             DeskdropStore.Shared.PropertyChanged += OnStoreChanged;
             this.Closed += (s, e) => {
                 DeskdropStore.Shared.PropertyChanged -= OnStoreChanged;
@@ -68,7 +68,7 @@ namespace Deskdrop.WinUI
                     }
                     else if (e.PropertyName == nameof(DeskdropStore.Peers) && DeviceTargetsList != null)
                     {
-                        DeviceTargetsList.ItemsSource = DeskdropStore.Shared.Peers;
+                        DeviceTargetsList.ItemsSource = DeskdropStore.WithoutStaleDuplicates(DeskdropStore.Shared.Peers).ToList();
                     }
                 }
                 catch (Exception ex) { App.HandleError(ex); }

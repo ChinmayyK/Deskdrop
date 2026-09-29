@@ -111,6 +111,7 @@ namespace Deskdrop.Tray
             Log($"PID: {Environment.ProcessId}");
             Log($"BaseDirectory: {AppContext.BaseDirectory}");
 
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 

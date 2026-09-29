@@ -11,7 +11,7 @@ namespace Deskdrop.WinUI
     public sealed partial class MainWindow : Window
     {
         public DeskdropStore mgr => DeskdropStore.Shared;
-        public string localMachineName => System.Environment.MachineName;
+        public string localMachineName => Deskdrop.WinUI.Services.LocalSettingsStore.DeviceName;
 
         public MainWindow()
         {

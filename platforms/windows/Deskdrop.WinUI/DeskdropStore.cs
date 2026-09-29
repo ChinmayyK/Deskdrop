@@ -140,6 +140,11 @@ namespace Deskdrop.WinUI
         public bool CanApply => kind == "remote_clipboard_available" && !applied_locally && !string.IsNullOrWhiteSpace(content_hash);
         public bool HasPreview => !string.IsNullOrWhiteSpace(text_preview);
         public bool HasDestination => !string.IsNullOrWhiteSpace(dest_path);
+        public string Glyph => kind switch
+        {
+            "file_transfer_complete" => HasDestination ? "\uE896" : "\uE898",
+            _ => ActivityKindToGlyphConverter.ToGlyph(kind)
+        };
         public string FormattedSize => file_bytes.HasValue ? DeskdropFormatting.FormatBytes(file_bytes.Value) : "";
         public string RelayPathDisplay => relay_path.Count == 0 ? "" : string.Join(" -> ", relay_path);
         public string RelativeTime => timestamp_ms == 0 ? "Just now" : DeskdropFormatting.RelativeTimeFromUnixMs(timestamp_ms);
@@ -553,6 +558,14 @@ namespace Deskdrop.WinUI
         public bool is_directory { get => _is_directory; set { if (SetProperty(ref _is_directory, value)) OnPropertyChanged(nameof(IsDirectory)); } }
         private int _item_count = 1;
         public int item_count { get => _item_count; set { if (SetProperty(ref _item_count, value)) OnPropertyChanged(nameof(ItemCount)); } }
+        private bool _is_outbound;
+        public bool is_outbound
+        {
+            get => _is_outbound || from_device == "Sending";
+            set { if (SetProperty(ref _is_outbound, value)) OnPropertyChanged(nameof(TransferIcon)); }
+        }
+
+        public string TransferIcon => is_directory ? "\uE8B7" : (is_outbound ? "\uE898" : "\uE896");
 
         public string FileName => file_name;
         public bool IsDirectory => is_directory;
@@ -687,6 +700,8 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(StateColor));
             OnPropertyChanged(nameof(RateText));
             OnPropertyChanged(nameof(PeerLabel));
+            OnPropertyChanged(nameof(is_outbound));
+            OnPropertyChanged(nameof(TransferIcon));
 
             try
             {
@@ -894,11 +909,6 @@ namespace Deskdrop.WinUI
             Peers.CollectionChanged += (_, _) => NotifyPeerMetrics();
             ActiveTransfers.CollectionChanged += (_, _) => NotifyTransferMetrics();
             ActiveSpeedTests.CollectionChanged += (_, _) => NotifyTransferMetrics();
-            ActivityFeed.CollectionChanged += (_, _) =>
-            {
-                OnPropertyChanged(nameof(ActivityCount));
-                SyncRecentActivity();
-            };
             PendingClipboards.CollectionChanged += (_, _) => NotifyPendingClipboardMetrics();
             
             StartPolling();
@@ -1004,7 +1014,54 @@ namespace Deskdrop.WinUI
         public ObservableCollection<ActivityEntry> ActivityFeed
         {
             get => _activityFeed;
-            set { _activityFeed = value; OnPropertyChanged(); }
+            set
+            {
+                if (_activityFeed != null)
+                {
+                    _activityFeed.CollectionChanged -= OnActivityFeedCollectionChanged;
+                }
+                _activityFeed = value;
+                if (_activityFeed != null)
+                {
+                    _activityFeed.CollectionChanged += OnActivityFeedCollectionChanged;
+                }
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ActivityCount));
+                UpdateTransferHistory();
+                SyncRecentActivity();
+            }
+        }
+
+        private void OnActivityFeedCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            OnPropertyChanged(nameof(ActivityCount));
+            UpdateTransferHistory();
+            SyncRecentActivity();
+        }
+
+        private ObservableCollection<ActivityEntry> _transferHistory = new();
+        public ObservableCollection<ActivityEntry> TransferHistory => _transferHistory;
+        public int TransferHistoryCount => _transferHistory.Count;
+
+        private void UpdateTransferHistory()
+        {
+            if (_activityFeed == null) return;
+            var completed = _activityFeed
+                .Where(e => e.kind is "file_transfer_complete" or "file_transfer_failed")
+                .ToList();
+
+            for (var i = _transferHistory.Count - 1; i >= 0; i--)
+            {
+                if (!completed.Contains(_transferHistory[i])) _transferHistory.RemoveAt(i);
+            }
+            for (var i = 0; i < completed.Count; i++)
+            {
+                var item = completed[i];
+                var existing = _transferHistory.IndexOf(item);
+                if (existing < 0) _transferHistory.Insert(i, item);
+                else if (existing != i) _transferHistory.Move(existing, i);
+            }
+            OnPropertyChanged(nameof(TransferHistoryCount));
         }
 
         private ObservableCollection<PendingClipboard> _pendingClipboards = null!;
@@ -1062,8 +1119,18 @@ namespace Deskdrop.WinUI
         public int ActiveTransferCount => ActiveTransfers?.Count ?? 0;
         public bool HasActiveTransfers => (ActiveTransfers?.Count ?? 0) > 0;
         public bool HasActiveSpeedTests => (ActiveSpeedTests?.Count ?? 0) > 0;
-        private bool _otpShieldEnabled = true;
-        public bool OtpShieldEnabled { get => _otpShieldEnabled; set => SetProperty(ref _otpShieldEnabled, value); }
+        private bool _otpShieldEnabled = Services.LocalSettingsStore.GetBool("OtpShieldEnabled", true);
+        public bool OtpShieldEnabled
+        {
+            get => _otpShieldEnabled;
+            set
+            {
+                if (SetProperty(ref _otpShieldEnabled, value))
+                {
+                    Services.LocalSettingsStore.SetBool("OtpShieldEnabled", value);
+                }
+            }
+        }
         private bool _syncEnabled = true;
         public bool SyncEnabled
         {
@@ -1702,7 +1769,7 @@ namespace Deskdrop.WinUI
         // be remembered several times. Among offline entries that share a
         // name, list only the most recently seen one; a connected entry, or
         // any other name, is always kept.
-        private static IEnumerable<PeerViewModel> WithoutStaleDuplicates(IEnumerable<PeerViewModel> peers)
+        public static IEnumerable<PeerViewModel> WithoutStaleDuplicates(IEnumerable<PeerViewModel> peers)
         {
             var list = peers.ToList();
             var keepOffline = list
@@ -1757,7 +1824,15 @@ namespace Deskdrop.WinUI
         {
             if (ActivityFeed == null) return;
 
-            var desired = ActivityFeed.Take(RecentActivityLimit).ToList();
+            var finishedTransferIds = ActivityFeed
+                .Where(e => e.kind is "file_transfer_complete" or "file_transfer_failed" && !string.IsNullOrEmpty(e.transfer_id))
+                .Select(e => e.transfer_id!)
+                .ToHashSet();
+
+            var desired = ActivityFeed
+                .Where(e => !(e.kind == "file_transfer_started" && !string.IsNullOrEmpty(e.transfer_id) && finishedTransferIds.Contains(e.transfer_id)))
+                .Take(RecentActivityLimit)
+                .ToList();
 
             for (var i = RecentActivity.Count - 1; i >= 0; i--)
             {
@@ -1888,10 +1963,10 @@ namespace Deskdrop.WinUI
             catch { return ""; }
         }
 
-        private static string RelativeTimeFrom(DateTimeOffset date)
+        internal static string RelativeTimeFrom(DateTimeOffset date)
         {
             var delta = DateTimeOffset.Now - date;
-            if (delta.TotalSeconds < 45) return "Just now";
+            if (delta.TotalSeconds < 60) return "Just now";
             if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m ago";
             if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h ago";
             if (delta.TotalDays < 7) return $"{(int)delta.TotalDays}d ago";
@@ -1899,18 +1974,6 @@ namespace Deskdrop.WinUI
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 namespace Deskdrop.WinUI { 
     public class HistoryItem : BaseViewModel { 
@@ -1945,8 +2008,18 @@ namespace Deskdrop.WinUI {
         public string Summary { get; set; } = "";
         public string FullText { get; set; } = "";
         public string Source { get; set; } = "";
-        public string RelativeTime { get; set; } = "Just now";
-        public DateTime Time { get; set; } = DateTime.Now;
+        public string RelativeTime
+        {
+            get => DeskdropFormatting.RelativeTimeFrom(new DateTimeOffset(Time));
+            set { }
+        }
+        private DateTime _time = DateTime.Now;
+        public DateTime Time
+        {
+            get => _time;
+            set { if (SetProperty(ref _time, value)) OnPropertyChanged(nameof(RelativeTime)); }
+        }
+        public void RefreshRelativeTime() => OnPropertyChanged(nameof(RelativeTime));
         // JsonIgnore: same "collides under case-insensitive matching" issue
         // as ActivityEntry.Source/FileTransferState.Percent above - latent
         // here since HistoryItem isn't JSON round-tripped today, but fixing

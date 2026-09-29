@@ -8,7 +8,7 @@ namespace Deskdrop.WinUI.Views
     public sealed partial class SettingsView : Page
     {
         public DeskdropStore mgr => DeskdropStore.Shared;
-        public string DeviceName => Environment.MachineName;
+        public string DeviceName => Deskdrop.WinUI.Services.LocalSettingsStore.DeviceName;
 
         private const string StartupRegistryKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string StartupRegistryValueName = "Deskdrop";

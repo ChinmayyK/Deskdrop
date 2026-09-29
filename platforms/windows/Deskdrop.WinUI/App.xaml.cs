@@ -208,7 +208,7 @@ public partial class App : Application
             {
                 try
                 {
-                    _engineHandle = Deskdrop.WinUI.NativeCore.deskdrop_start(System.Environment.MachineName, 0);
+                    _engineHandle = Deskdrop.WinUI.NativeCore.deskdrop_start(Deskdrop.WinUI.Services.LocalSettingsStore.DeviceName, 0);
                     TraceLog.Write("Native engine started gracefully. Handle: " + _engineHandle);
                 }
                 catch (Exception ex)

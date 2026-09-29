@@ -33,7 +33,9 @@ namespace Deskdrop.WinUI.Views
             try
             {
                 var query = SearchBox?.Text?.Trim() ?? "";
-                var snapshot = mgr.ActivityFeed.ToList();
+                var snapshot = mgr.ActivityFeed
+                    .Where(i => i.kind is "clipboard_text" or "clipboard_image" or "remote_clipboard_available" or "clipboard_applied" or "file_transfer_complete")
+                    .ToList();
                 var items = snapshot.AsEnumerable();
 
                 if (!string.IsNullOrEmpty(query))

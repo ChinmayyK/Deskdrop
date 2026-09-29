@@ -9,7 +9,7 @@ namespace Deskdrop.WinUI
     {
         public static new DashboardWindow? Current { get; private set; }
         public DeskdropStore mgr => DeskdropStore.Shared;
-        public string localMachineName => System.Environment.MachineName;
+        public string localMachineName => Deskdrop.WinUI.Services.LocalSettingsStore.DeviceName;
         public System.Windows.Input.ICommand ShowMainWindowCommand => ((App)App.Current).ShowMainWindowCommand;
 
         private Microsoft.UI.Windowing.AppWindow? _appWindow;

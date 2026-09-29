@@ -238,25 +238,49 @@
                 <TextBlock Text="Clipboard" Style="{StaticResource AppSectionTitle}" />
 
                 <Border Style="{StaticResource AppGroupCard}">
-                    <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
-                            <FontIcon Glyph="&#xE8C8;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                            <TextBlock Text="Share clipboard automatically" Style="{StaticResource AppBodyStrong}" />
-                            <TextBlock Text="Copy on one device, paste on another, without confirming each time"
-                                       Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <ToggleSwitch Grid.Column="2" IsOn="{x:Bind mgr.SyncEnabled, Mode=TwoWay}" MinWidth="0"
-                                      VerticalAlignment="Center"
-                                      AutomationProperties.Name="Share clipboard automatically" />
-                    </Grid>
+                    <StackPanel>
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Share clipboard automatically" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Copy on one device, paste on another, without confirming each time"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind mgr.SyncEnabled, Mode=TwoWay}" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          AutomationProperties.Name="Share clipboard automatically" />
+                        </Grid>
+
+                        <Border Height="1" Margin="54,0,16,0" Background="{ThemeResource AppDividerBrush}" />
+
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE72E;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Filter sensitive clipboard content" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Block OTP codes, API keys, and passwords from automatic sync"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind mgr.OtpShieldEnabled, Mode=TwoWay}" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          AutomationProperties.Name="Filter sensitive clipboard content" />
+                        </Grid>
+                    </StackPanel>
                 </Border>
             </StackPanel>
 
