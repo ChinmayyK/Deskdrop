@@ -365,6 +365,9 @@ private struct TransferHistoryRow: View {
         return formatter.string(from: date)
     }
     
+    /// The core only records a save path for incoming files; outgoing ones carry the local device's name.
+    var isReceived: Bool { !(entry.dest_path ?? "").isEmpty }
+
     var displaySize: String {
         guard let b = entry.file_bytes else { return "Unknown size" }
         let mb = Double(b) / 1_048_576.0
@@ -377,7 +380,7 @@ private struct TransferHistoryRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
             // Icon
-            Image(systemName: "arrow.down.doc")
+            Image(systemName: isReceived ? "arrow.down.doc" : "arrow.up.doc")
                 .font(.system(size: 18, weight: .light))
                 .foregroundStyle(CRTheme.inkSoft.opacity(0.8))
                 .frame(width: 32)
@@ -390,7 +393,7 @@ private struct TransferHistoryRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 
-                Text("Received from \(entry.device_name) • \(displaySize)")
+                Text(isReceived ? "Received from \(entry.device_name) • \(displaySize)" : "Sent • \(displaySize)")
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(CRTheme.inkSoft)
             }
