@@ -911,6 +911,27 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferEtaSecs(
     }
 }
 
+// ── eventTransferIsOutbound ──────────────────────────────────────────────────
+
+/// 1 if a FileTransferProgress event is for a file this device is sending, 0 if
+/// receiving, -1 for any other event.
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferIsOutbound(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jint {
+    if event == 0 {
+        return -1;
+    }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    if let crate::engine::EngineEvent::FileTransferProgress { outbound, .. } = ev {
+        *outbound as jint
+    } else {
+        -1
+    }
+}
+
 // ── eventTransferTotalBytes ──────────────────────────────────────────────────
 
 #[no_mangle]

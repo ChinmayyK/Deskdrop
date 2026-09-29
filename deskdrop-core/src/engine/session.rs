@@ -423,6 +423,7 @@ pub(super) fn register_session(
                                                     total_bytes: prog.total_bytes,
                                                     speed_bps: prog.speed_bps,
                                                     eta_secs: prog.eta_secs,
+                                                    outbound: false,
                                                 },
                                             );
                                         }

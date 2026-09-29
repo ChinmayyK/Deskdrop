@@ -121,6 +121,10 @@ pub enum EngineEvent {
         total_bytes: u64,
         speed_bps: Option<u64>,
         eta_secs: Option<u64>,
+        /// True when this device is the sender. Frontends cannot infer direction
+        /// from other events: transfers from trusted peers are auto-accepted
+        /// without a `FileTransferIncoming` event.
+        outbound: bool,
     },
     /// File transfer completed and is ready at `dest_path`.
     FileTransferComplete {

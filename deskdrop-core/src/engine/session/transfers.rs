@@ -204,6 +204,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                                     total_bytes: prog.total_bytes,
                                     speed_bps: prog.speed_bps,
                                     eta_secs: prog.eta_secs,
+                                    outbound: true,
                                 });
                             }
                         }
@@ -303,6 +304,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                                 total_bytes: prog.total_bytes,
                                 speed_bps: prog.speed_bps,
                                 eta_secs: prog.eta_secs,
+                                outbound: false,
                             });
                             if should_ack {
                                 let _ = ctx
@@ -367,6 +369,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                             total_bytes: prog.total_bytes,
                             speed_bps: prog.speed_bps,
                             eta_secs: prog.eta_secs,
+                            outbound: true,
                         });
                     });
                 }
@@ -591,6 +594,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                                     total_bytes: prog.total_bytes,
                                     speed_bps: prog.speed_bps,
                                     eta_secs: prog.eta_secs,
+                                    outbound: true,
                                 });
                             }
                         }

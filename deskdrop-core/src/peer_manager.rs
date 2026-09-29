@@ -1060,7 +1060,9 @@ impl PeerManager {
         let live_ids: std::collections::HashSet<Uuid> =
             self.live.iter().map(|r| *r.key()).collect();
         let now = now_secs();
-        const STALE_THRESHOLD_SECS: u64 = 24 * 3600; // 24 hours
+        // Discovery refreshes a present peer every few seconds, so an unpaired
+        // device silent this long has left (e.g. devices seen on another network).
+        const STALE_THRESHOLD_SECS: u64 = 10 * 60;
         let pruned = {
             let before = self.store.len();
             self.store.retain(|id, record| {
@@ -1076,7 +1078,10 @@ impl PeerManager {
                 if record.remembered {
                     return true;
                 }
-                // Remove untrusted, unremembered + disconnected peers not seen in 24h
+                if record.pairing_requested || record.outgoing_pairing_waiting {
+                    return true;
+                }
+                // Remove untrusted, unremembered, disconnected peers gone quiet
                 let last_activity = record.last_seen.or(record.last_discovery_at).unwrap_or(0);
                 if now.saturating_sub(last_activity) > STALE_THRESHOLD_SECS {
                     return false;
@@ -1301,6 +1306,33 @@ mod tests {
         let pruned = manager.prune_stale_peers();
         assert_eq!(pruned, 0);
         assert!(manager.get(id).is_some());
+    }
+
+    #[test]
+    fn prune_drops_unpaired_peers_not_seen_recently() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let gone = Uuid::new_v4();
+        let here = Uuid::new_v4();
+        for id in [gone, here] {
+            manager
+                .upsert_peer(
+                    id,
+                    "device-0000".into(),
+                    SocketAddr::from(([172, 16, 18, 11], 47823)),
+                    false,
+                    DiscoverySource::UdpBeacon,
+                )
+                .unwrap();
+        }
+        // Seen an hour ago on another network; the other peer is still beaconing.
+        if let Some(mut entry) = manager.store.get_mut(&gone) {
+            entry.last_seen = Some(now_secs() - 3600);
+            entry.last_discovery_at = Some(now_secs() - 3600);
+        }
+        assert_eq!(manager.prune_stale_peers(), 1);
+        assert!(manager.get(gone).is_none());
+        assert!(manager.get(here).is_some());
     }
 
     #[test]
