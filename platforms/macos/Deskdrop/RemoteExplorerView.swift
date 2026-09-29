@@ -629,9 +629,11 @@ struct SidebarRowView: View {
         }
     }
     
-    // MARK: - Date Grouped View (Sticky Headers)
+    // MARK: - Date Grouped View
     private func dateGroupedView(for files: [IpcRemoteFileEntry]) -> some View {
-        LazyVStack(alignment: .leading, spacing: 32, pinnedViews: [.sectionHeaders]) {
+        // Headers scroll with their files. The pane is translucent, so a pinned header needs
+        // a fill behind it, and any fill reads as a solid bar over the window material.
+        LazyVStack(alignment: .leading, spacing: 32) {
             ForEach(groupedFiles(from: files)) { group in
                 Section(header: stickyHeader(for: group)) {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 24)], alignment: .leading, spacing: 24) {
@@ -656,9 +658,8 @@ struct SidebarRowView: View {
             
             Spacer()
         }
-        .padding(.vertical, 12)
+        .padding(.top, 4)
         .padding(.horizontal, 4)
-        .background(CRTheme.surface.opacity(0.95)) // Slight translucency for sticky effect
     }
     
     // MARK: - Beautiful Empty State
