@@ -18,6 +18,7 @@ namespace Deskdrop.WinUI.Views
             this.InitializeComponent();
             StartupToggle.IsOn = IsLaunchAtStartupEnabled();
             ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
+            PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
 
             ThemeSelector.SelectedIndex = Deskdrop.WinUI.Services.ThemeService.CurrentPreference switch
             {
@@ -30,6 +31,11 @@ namespace Deskdrop.WinUI.Views
         private void OnScreenshotSyncToggled(object sender, RoutedEventArgs e)
         {
             App.SetScreenshotSyncEnabled(ScreenshotSyncToggle.IsOn);
+        }
+
+        private void OnPhoneNotificationsToggled(object sender, RoutedEventArgs e)
+        {
+            App.SetPhoneNotificationMirroringEnabled(PhoneNotificationsToggle.IsOn);
         }
 
         private void OnThemeSelectionChanged(object sender, SelectionChangedEventArgs e)

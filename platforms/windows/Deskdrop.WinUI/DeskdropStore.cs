@@ -1451,6 +1451,7 @@ namespace Deskdrop.WinUI
                     try
                     {
                         var ordered = entries.OrderByDescending(e => e.timestamp_ms).ToList();
+                        ToastNewPhoneNotifications(ordered);
                         // Polled every few seconds: swapping in a new collection
                         // makes every bound list re-template all rows, which
                         // stutters the UI. When nothing changed, only the
@@ -1465,6 +1466,35 @@ namespace Deskdrop.WinUI
                     }
                     catch (Exception ex) { App.HandleError(ex); }
                 });
+            }
+        }
+
+        // Highest activity id already seen; null until the first poll. The core only reaches the
+        // app as a generic "activity updated" signal, so mirrored phone notifications are toasted
+        // from the polled feed, the same way the macOS app does.
+        private ulong? _lastSeenActivityId;
+
+        private void ToastNewPhoneNotifications(System.Collections.Generic.List<ActivityEntry> entries)
+        {
+            if (entries.Count == 0) return;
+            var maxId = entries.Max(e => e.id);
+            // First poll seeds the watermark without replaying the backlog. Ids restart when the
+            // daemon restarts, so a lower maximum means a fresh feed: re-seed instead of going silent.
+            if (_lastSeenActivityId is not ulong last || maxId < last)
+            {
+                _lastSeenActivityId = maxId;
+                return;
+            }
+            if (maxId == last) return;
+            _lastSeenActivityId = maxId;
+            if (!App.PhoneNotificationMirroringEnabled) return;
+
+            foreach (var e in entries.Where(e => e.id > last && e.kind == "remote_notification").OrderBy(e => e.id))
+            {
+                // The core sends the notification title in file_name and its text in text_preview.
+                var title = string.IsNullOrWhiteSpace(e.file_name) ? e.device_name : e.file_name!;
+                var body = string.IsNullOrWhiteSpace(e.text_preview) ? e.summary : e.text_preview!;
+                NotificationHelper.ShowToast(title, body);
             }
         }
 

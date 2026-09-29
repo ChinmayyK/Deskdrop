@@ -55,6 +55,13 @@ public partial class App : Application
         catch (Exception ex) { App.HandleError(ex); }
     }
 
+    // Show phone notifications mirrored from Android as Windows toasts. On by default, as on macOS.
+    public static bool PhoneNotificationMirroringEnabled =>
+        Deskdrop.WinUI.Services.LocalSettingsStore.GetBool("PhoneNotificationMirroringEnabled", true);
+
+    public static void SetPhoneNotificationMirroringEnabled(bool enabled) =>
+        Deskdrop.WinUI.Services.LocalSettingsStore.SetBool("PhoneNotificationMirroringEnabled", enabled);
+
     public static bool ScreenshotSyncEnabled =>
         Deskdrop.WinUI.Services.LocalSettingsStore.GetBool("ScreenshotSyncEnabled");
 
