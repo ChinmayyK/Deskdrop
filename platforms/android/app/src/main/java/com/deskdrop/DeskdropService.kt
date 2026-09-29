@@ -2655,6 +2655,8 @@ class DeskdropService : Service() {
     // Remote call actions (accept/decline) from the Mac are executed via TelecomManager.
 
     private var callStateReceiver: android.content.BroadcastReceiver? = null
+    /** Last call state seen: "idle", "ringing", "offhook", or "outgoing" for a call this phone placed. */
+    private var lastCallState = "idle"
 
     private fun onCallStateUpdate(state: Int, incomingNumber: String?) {
         val stateStr = when (state) {
@@ -2663,6 +2665,21 @@ class DeskdropService : Service() {
             android.telephony.TelephonyManager.CALL_STATE_IDLE    -> "idle"
             else -> return
         }
+        // Android reports OFFHOOK for outgoing calls too (IDLE -> OFFHOOK, no RINGING). Those are
+        // this phone placing a call, not a call to take on the desktop, so they are not forwarded.
+        // Forwarding them let a caller's own "offhook" overwrite the callee's "ringing" on peers.
+        val previous = lastCallState
+        lastCallState = when {
+            stateStr == "offhook" && previous != "ringing" && previous != "offhook" -> "outgoing"
+            stateStr == "offhook" && previous == "outgoing" -> "outgoing"
+            else -> stateStr
+        }
+        if (lastCallState == "outgoing") {
+            Log.i(TAG, "Call state: outgoing call, not forwarded")
+            return
+        }
+        if (stateStr == "idle" && previous == "outgoing") return
+
         val number  = incomingNumber.orEmpty()
         val contact = resolveContactName(number)
         Log.i(TAG, "Call state: $stateStr number=$number contact=$contact")
