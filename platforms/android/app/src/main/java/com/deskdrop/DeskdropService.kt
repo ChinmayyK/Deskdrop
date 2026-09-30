@@ -477,9 +477,11 @@ class DeskdropService : Service() {
         createNotificationChannels()
         registerPairingReceiver()
         
-        // Register SMS receiver
-        val filter = IntentFilter(android.provider.Telephony.Sms.Intents.SMS_RECEIVED_ACTION)
-        registerReceiver(smsReceiver, filter)
+        // Register SMS receiver (the Play build has no RECEIVE_SMS permission)
+        if (BuildConfig.FULL_PERMISSIONS) {
+            val filter = IntentFilter(android.provider.Telephony.Sms.Intents.SMS_RECEIVED_ACTION)
+            registerReceiver(smsReceiver, filter)
+        }
 
         // Register screenshot observer
         contentResolver.registerContentObserver(
@@ -2395,6 +2397,8 @@ class DeskdropService : Service() {
                         inStream.copyTo(outStream)
                     }
                 }
+                // Files written straight to disk stay invisible to gallery apps until scanned.
+                android.media.MediaScannerConnection.scanFile(this, arrayOf(destFile.absolutePath), arrayOf(mimeType), null)
                 val uri = androidx.core.content.FileProvider.getUriForFile(
                     this, "$packageName.fileprovider",
                     destFile

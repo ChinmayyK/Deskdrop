@@ -187,11 +187,11 @@ log "Building Android APK (${BUILD_TYPE})..."
 cd "${ANDROID_DIR}"
 
 if [[ "${BUILD_TYPE}" == "release" ]]; then
-    "${GRADLE_CMD[@]}" assembleRelease
-    APK="${ANDROID_DIR}/app/build/outputs/apk/release/app-release.apk"
+    "${GRADLE_CMD[@]}" assembleFullRelease
+    APK="${ANDROID_DIR}/app/build/outputs/apk/full/release/app-full-release.apk"
 else
-    "${GRADLE_CMD[@]}" assembleDebug
-    APK="${ANDROID_DIR}/app/build/outputs/apk/debug/app-debug.apk"
+    "${GRADLE_CMD[@]}" assembleFullDebug
+    APK="${ANDROID_DIR}/app/build/outputs/apk/full/debug/app-full-debug.apk"
 fi
 
 log "✅ APK: ${APK}  ($(du -sh "${APK}" | cut -f1))"

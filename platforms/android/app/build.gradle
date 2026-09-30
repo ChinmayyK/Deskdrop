@@ -46,6 +46,22 @@ android {
         }
     }
 
+    // Two distributions from one codebase. "full" is the GitHub / direct-APK build with
+    // SMS code forwarding, call answering and all-files access. "play" drops the
+    // permissions Google Play only allows for default SMS/dialer apps and file managers
+    // (see src/play/AndroidManifest.xml); code checks BuildConfig.FULL_PERMISSIONS.
+    flavorDimensions "distribution"
+    productFlavors {
+        full {
+            dimension "distribution"
+            buildConfigField "boolean", "FULL_PERMISSIONS", "true"
+        }
+        play {
+            dimension "distribution"
+            buildConfigField "boolean", "FULL_PERMISSIONS", "false"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
@@ -75,6 +91,7 @@ android {
 
     buildFeatures {
         compose true
+        buildConfig true
     }
 
     composeOptions {

@@ -129,7 +129,7 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > platforms/android/app/release.keystore
 
       - name: Build APK
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew :app:assembleFullRelease
         working-directory: platforms/android
         env:
           DESKDROP_KEYSTORE: release.keystore
@@ -141,7 +141,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-android
-          path: platforms/android/app/build/outputs/apk/release/*.apk
+          path: platforms/android/app/build/outputs/apk/full/release/*.apk
 
   # ── macOS DMG ─────────────────────────────────────────────────────────────
   release-macos:
@@ -234,7 +234,7 @@ jobs:
             | Platform | File |
             |---|---|
             | Windows 10/11 x64 | `Deskdrop.exe` |
-            | Android 8.0+      | `app-release.apk` |
+            | Android 8.0+      | `app-full-release.apk` |
             | Linux x86_64      | `deskdrop-linux-x86_64.tar.gz` |
             | macOS (Apple Silicon) | `Deskdrop.dmg` |
 

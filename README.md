@@ -145,7 +145,7 @@ open /Applications/Deskdrop.app
 ```bash
 # Assemble debugging APK and deploy to a USB-connected Android device via ADB
 ./scripts/build-android.sh --debug --fast-abi
-adb install -r platforms/android/app/build/outputs/apk/debug/app-debug.apk
+adb install -r platforms/android/app/build/outputs/apk/full/debug/app-full-debug.apk
 adb shell monkey -p com.deskdrop.debug -c android.intent.category.LAUNCHER 1
 ```
 

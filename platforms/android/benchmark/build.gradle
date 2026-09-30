@@ -14,6 +14,8 @@ android {
     }
 
     targetProjectPath ':app'
+    // app has a "distribution" flavor dimension; benchmark the full build.
+    missingDimensionStrategy 'distribution', 'full'
     
     buildTypes {
         release {

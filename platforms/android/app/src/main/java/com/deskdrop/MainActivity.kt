@@ -632,7 +632,7 @@ class MainActivity : ComponentActivity() {
                 .show()
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+        if (BuildConfig.FULL_PERMISSIONS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
             runCatching {
                 val intent = Intent(
                     android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
@@ -695,11 +695,15 @@ class MainActivity : ComponentActivity() {
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             needed += android.Manifest.permission.READ_CONTACTS
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && ContextCompat.checkSelfPermission(this, android.Manifest.permission.ANSWER_PHONE_CALLS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            needed += android.Manifest.permission.ANSWER_PHONE_CALLS
-        }
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            needed += android.Manifest.permission.READ_CALL_LOG
+        // The Play build mirrors calls without these: no caller number on Android 9+
+        // and no answering from the computer.
+        if (BuildConfig.FULL_PERMISSIONS) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && ContextCompat.checkSelfPermission(this, android.Manifest.permission.ANSWER_PHONE_CALLS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += android.Manifest.permission.ANSWER_PHONE_CALLS
+            }
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += android.Manifest.permission.READ_CALL_LOG
+            }
         }
         if (needed.isNotEmpty()) {
             requestPermissions(needed.toTypedArray(), 1002)

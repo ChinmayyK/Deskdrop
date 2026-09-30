@@ -131,8 +131,11 @@ fun SettingsTab(
             Column {
                 SectionHeader(c, "Continuity", null)
                 Panel(c) {
-                    SwitchRow(c, Icons.Outlined.Sms, "SMS codes", "Copy one-time codes to your computer", autoForwardSms, onAutoForwardSmsChange)
-                    Hairline(c)
+                    // SMS reading is not allowed in the Play build.
+                    if (com.deskdrop.BuildConfig.FULL_PERMISSIONS) {
+                        SwitchRow(c, Icons.Outlined.Sms, "SMS codes", "Copy one-time codes to your computer", autoForwardSms, onAutoForwardSmsChange)
+                        Hairline(c)
+                    }
                     SwitchRow(c, Icons.Outlined.Screenshot, "Screenshots", "Send new screenshots automatically", autoForwardScreenshots, onAutoForwardScreenshotsChange)
                     Hairline(c)
                     SwitchRow(c, Icons.Outlined.Call, "Calls", "Needs Phone, Contacts and Call log access", callContinuityEnabled, onCallContinuityChange)
