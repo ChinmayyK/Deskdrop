@@ -363,28 +363,9 @@ namespace Deskdrop.WinUI.Services
                         AddHistoryItem(text, "local", "📝", text);
                     }
                 }
-                else if (packageView.Contains(StandardDataFormats.StorageItems))
-                {
-                    var items = await packageView.GetStorageItemsAsync();
-                    foreach (var item in items)
-                    {
-                        if (item is Windows.Storage.StorageFile file)
-                        {
-                            try {
-                                if (App.EngineHandle != IntPtr.Zero)
-                                {
-                                    var handle = App.EngineHandle; var filePath = file.Path; var fileName = file.Name;
-                                    RunNativeOffUiThread(() => NativeCore.deskdrop_send_file_path(handle, null, filePath, fileName, "application/octet-stream"));
-                                }
-                                else
-                                {
-                                    DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(file.Path, file.Name, "application/octet-stream"));
-                                }
-                                AddHistoryItem(file.Name, "local", "📎", file.Path);
-                            } catch (Exception ex) { App.HandleError(ex); }
-                        }
-                    }
-                }
+                // Files copied in Explorer (StorageItems) are deliberately not sent:
+                // Ctrl+C between local folders must never broadcast a file to peers.
+                // Files only leave the PC through an explicit send.
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
