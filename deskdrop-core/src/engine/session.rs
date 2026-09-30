@@ -387,7 +387,9 @@ pub(super) fn register_session(
                                 Ok((file, hasher, new_offset)) => {
                                     let mut mgr = dw_shared.file_transfers.lock().await;
                                     if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                        if t.status != crate::file_transfer::TransferStatus::Transferring {
+                                        if t.status
+                                            != crate::file_transfer::TransferStatus::Transferring
+                                        {
                                             tracing::debug!(
                                                 "discarding disk write for non-active transfer {:?} (status: {:?})",
                                                 transfer_id,

@@ -599,7 +599,10 @@ impl InboundTransfer {
     /// the transfer sat at the same percentage forever.
     fn reopen_for_resume(&mut self) -> Result<u32> {
         if self.file_handle.is_none() {
-            let dest = self.dest_path.as_ref().context("transfer has no destination")?;
+            let dest = self
+                .dest_path
+                .as_ref()
+                .context("transfer has no destination")?;
             let file = std::fs::OpenOptions::new()
                 .write(true)
                 .open(dest)

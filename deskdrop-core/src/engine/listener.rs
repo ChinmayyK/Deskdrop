@@ -246,36 +246,6 @@ pub(super) fn is_addr_not_available(err: &anyhow::Error) -> bool {
         .any(|cause| matches!(cause.downcast_ref::<std::io::Error>(), Some(io_err) if io_err.kind() == std::io::ErrorKind::AddrNotAvailable))
 }
 
-#[cfg(test)]
-mod is_addr_not_available_tests {
-    use super::*;
-
-    #[test]
-    fn detects_addr_not_available_through_context_chain() {
-        let io_err = std::io::Error::new(
-            std::io::ErrorKind::AddrNotAvailable,
-            "address not available",
-        );
-        let wrapped: anyhow::Error =
-            anyhow::Error::new(io_err).context("binding to 10.0.0.5:47823");
-        assert!(is_addr_not_available(&wrapped));
-    }
-
-    #[test]
-    fn does_not_flag_other_io_errors() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::AddrInUse, "address in use");
-        let wrapped: anyhow::Error =
-            anyhow::Error::new(io_err).context("binding to 10.0.0.5:47823");
-        assert!(!is_addr_not_available(&wrapped));
-    }
-
-    #[test]
-    fn does_not_flag_non_io_errors() {
-        let err = anyhow::anyhow!("mdns daemon failed for an unrelated reason");
-        assert!(!is_addr_not_available(&err));
-    }
-}
-
 pub(super) async fn bind_server_with_retry(addr: SocketAddr) -> Result<Server> {
     let mut attempt = 0u32;
 
@@ -489,4 +459,34 @@ pub(super) fn resolve_bind_address(
 ) -> Result<(Option<NetworkInterfaceInfo>, SocketAddr)> {
     let snapshot = network_manager::resolve_snapshot(config.bind_ip, config.port)?;
     Ok((snapshot.active_interface, snapshot.bind_addr))
+}
+
+#[cfg(test)]
+mod is_addr_not_available_tests {
+    use super::*;
+
+    #[test]
+    fn detects_addr_not_available_through_context_chain() {
+        let io_err = std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "address not available",
+        );
+        let wrapped: anyhow::Error =
+            anyhow::Error::new(io_err).context("binding to 10.0.0.5:47823");
+        assert!(is_addr_not_available(&wrapped));
+    }
+
+    #[test]
+    fn does_not_flag_other_io_errors() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::AddrInUse, "address in use");
+        let wrapped: anyhow::Error =
+            anyhow::Error::new(io_err).context("binding to 10.0.0.5:47823");
+        assert!(!is_addr_not_available(&wrapped));
+    }
+
+    #[test]
+    fn does_not_flag_non_io_errors() {
+        let err = anyhow::anyhow!("mdns daemon failed for an unrelated reason");
+        assert!(!is_addr_not_available(&err));
+    }
 }

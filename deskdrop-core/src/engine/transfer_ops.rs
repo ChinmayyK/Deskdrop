@@ -336,7 +336,12 @@ impl Engine {
                 tokio::spawn(async move {
                     const BATCH_SIZE: usize = 4;
                     'outer: loop {
-                        let (next_chunk, _last_acked, total_chunks, is_paused): (u32, u32, u32, bool) = {
+                        let (next_chunk, _last_acked, total_chunks, is_paused): (
+                            u32,
+                            u32,
+                            u32,
+                            bool,
+                        ) = {
                             let mut mgr = bg_shared.file_transfers.lock().await;
                             if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
                                 (

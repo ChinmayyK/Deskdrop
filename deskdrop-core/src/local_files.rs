@@ -43,7 +43,8 @@ pub fn handle_event(engine: &Engine, event: &EngineEvent) {
             let engine = engine.clone();
             let (request_id, from_device) = (*request_id, *from_device);
             let (summary_only, offset, limit) = (*summary_only, *offset, *limit);
-            let (category, source, search_query) = (category.clone(), source.clone(), search_query.clone());
+            let (category, source, search_query) =
+                (category.clone(), source.clone(), search_query.clone());
             tokio::spawn(async move {
                 let res = tokio::task::spawn_blocking(move || {
                     scan(summary_only, category, source, search_query, offset, limit)

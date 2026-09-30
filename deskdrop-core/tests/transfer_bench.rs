@@ -265,6 +265,9 @@ async fn transfer_resumes_after_reconnect() {
             other => panic!("no completion: {:?}", other.map(|o| o.is_some())),
         }
     };
-    assert!(dropped, "the transfer finished before the disconnect was injected");
+    assert!(
+        dropped,
+        "the transfer finished before the disconnect was injected"
+    );
     assert_eq!(std::fs::read(dest).unwrap(), data);
 }

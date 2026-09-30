@@ -225,7 +225,11 @@ async fn sweep_subnet(
     }
     debug!(
         "lan_probe: sweep of {}.{}.{}.0/{} complete ({} found)",
-        o[0], o[1], o[2], max_host, found.len()
+        o[0],
+        o[1],
+        o[2],
+        max_host,
+        found.len()
     );
     found
 }

@@ -429,18 +429,14 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
 
             if success {
                 let hex_tid = hex::encode(transfer_id);
-                shared
-                    .activity
-                    .lock()
-                    .await
-                    .record_file_transfer_complete(
-                        peer_id,
-                        peer_name.clone(),
-                        file_name.clone(),
-                        file_bytes,
-                        hex_tid,
-                        None,
-                    );
+                shared.activity.lock().await.record_file_transfer_complete(
+                    peer_id,
+                    peer_name.clone(),
+                    file_name.clone(),
+                    file_bytes,
+                    hex_tid,
+                    None,
+                );
 
                 let _ = shared
                     .event_tx
