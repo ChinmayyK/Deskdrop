@@ -258,11 +258,7 @@ final class DeskdropStore: ObservableObject {
         guard connectedCount > 0 else { return }
         Task { [weak self] in
             guard let self else { return }
-            _ = try? await self.ipc.send(cmd: [
-                "cmd":      "push_image",
-                "mime":     mimeType,
-                "data_b64": data.base64EncodedString(),
-            ])
+            _ = try? await self.ipc.sendPushImage(data, mimeType: mimeType)
         }
     }
 

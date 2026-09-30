@@ -554,9 +554,32 @@ extension DeskdropIPCClient {
     /// The text is read here and sent inline: the daemon has no OS clipboard
     /// access of its own, so its `push_clipboard` command finds nothing to send.
     func sendClipboardCurrent(targetDeviceId: String?) async throws {
-        let text = await MainActor.run { NSPasteboard.general.string(forType: .string) }
-        guard let text, !text.isEmpty else { return }
-        try await sendPushText(text, targetDeviceId: targetDeviceId)
+        let (text, image) = await MainActor.run { () -> (String?, Data?) in
+            let pb = NSPasteboard.general
+            if let text = pb.string(forType: .string), !text.isEmpty { return (text, nil) }
+            // Screenshots and "Copy Image" put only image data on the pasteboard.
+            if let png = pb.data(forType: .png) { return (nil, png) }
+            if let tiff = pb.data(forType: .tiff),
+               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                return (nil, png)
+            }
+            return (nil, nil)
+        }
+        if let text {
+            try await sendPushText(text, targetDeviceId: targetDeviceId)
+        } else if let image {
+            // The daemon's push_image has no per-peer variant; images go to every connected peer.
+            try await sendPushImage(image, mimeType: "image/png")
+        }
+    }
+
+    /// Push image bytes to all connected peers.
+    func sendPushImage(_ data: Data, mimeType: String) async throws {
+        _ = try await send(cmd: [
+            "cmd":         "push_image",
+            "mime":        mimeType,
+            "data_base64": data.base64EncodedString(),
+        ])
     }
 
     /// Push arbitrary text to connected peers without reading the OS clipboard.
