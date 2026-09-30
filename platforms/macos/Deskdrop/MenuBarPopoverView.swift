@@ -7,6 +7,7 @@ enum MenuBarPopoverAction {
     case pushClipboard
     case sendFile
     case scan
+    case connectByIP
     case diagnostics
     case quit
 }
@@ -120,6 +121,18 @@ struct MenuBarPopoverView: View {
                 
                 Button(action: { onAction(.scan) }) {
                     Text("Scan Network")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+
+                Divider().frame(height: 14)
+
+                // mDNS is blocked on networks with client isolation; this is the way in there.
+                Button(action: { onAction(.connectByIP) }) {
+                    Text("Connect by IP")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.secondary)
                         .frame(maxWidth: .infinity)

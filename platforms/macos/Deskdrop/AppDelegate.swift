@@ -258,6 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         case .pushClipboard: forcePushClipboard()
         case .sendFile: sendFileFromMenu()
         case .scan: scanDevices()
+        case .connectByIP: connectManually()
         case .diagnostics: openDiagnostics()
         case .quit: quitApp()
         }
@@ -1025,6 +1026,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         alert.accessoryView     = input
         alert.window.initialFirstResponder = input
 
+        // Menu bar apps are not frontmost; without this the alert opens behind other windows.
+        NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let host = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !host.isEmpty else { return }
