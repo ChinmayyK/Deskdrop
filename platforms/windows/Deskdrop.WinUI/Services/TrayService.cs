@@ -62,6 +62,10 @@ namespace Deskdrop.WinUI.Services
                                     ((App)App.Current).ShowMainWindowCommand?.Execute(null);
                                     DashboardWindow.Current?.NavigateTo("Settings");
                                 }
+                                else if (line == "RESCAN")
+                                {
+                                    DaemonActions.RunFireAndForget("Rescan", () => DaemonClient.RescanPeers());
+                                }
                             }
                             catch (Exception ex) { App.HandleError(ex); }
                         });
@@ -133,8 +137,8 @@ namespace Deskdrop.WinUI.Services
                 if (procs.Length == 0)
                 {
                     var baseDir = AppContext.BaseDirectory;
-                    // Tray lives in its own subdirectory to avoid DLL version conflicts
-                    // (WinUI uses System.Drawing.Common v9.x, Tray needs v8.x for WinForms)
+                    // The native tray helper (platforms/windows/tray), copied into
+                    // tray\ by the CopyTrayApp / PublishTrayApp build targets.
                     var trayExe = Path.Combine(baseDir, "tray", "Deskdrop.Tray.exe");
                     if (!File.Exists(trayExe))
                     {

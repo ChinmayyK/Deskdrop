@@ -3,6 +3,7 @@ members = [
     "deskdrop-core",
     "deskdrop-cli",
     "platforms/linux",
+    "platforms/windows/tray",
 ]
 resolver = "2"
 

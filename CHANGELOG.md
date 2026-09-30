@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ---
 
 ## [Unreleased]
+### Changed
+- **Windows:** The system tray helper is now a native Rust exe (`platforms/windows/tray`, ~0.3 MB) instead of a WinForms app with its own self-contained .NET runtime (~110 MB). Same process name, pipes and menu.
+- **Windows:** Only English language resources ship; WinUI's built-in control text shows in English on other display languages.
+- **Build:** Windows releases ship as a per-user MSI and a portable zip of the whole app folder instead of a single-file `Deskdrop.exe`. The MSI now installs every published file; before it listed only `Deskdrop.exe` and `deskdrop_core.dll`.
+
+### Fixed
+- **Windows:** The tray menu's "Rescan Network" now rescans. It used to post to a local HTTP port nothing listened on.
+- **Build:** A plain `dotnet build` no longer writes a stale 113 MB copy of the tray helper into `publish\`.
 
 ## [1.3.3] - 2026-09-05
 ### Fixed
