@@ -45,6 +45,10 @@ pub const FILE_CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4 MB per chunk — larger
 /// limit to prevent disk-bomb attacks via pre-allocation.
 pub const MAX_TRANSFER_BYTES: u64 = crate::protocol::MAX_FILE_BYTES;
 
+/// Suffix of the file an inbound transfer writes into. The file only gets its real
+/// name once size and SHA-256 check out, so a dropped or corrupt transfer never
+/// leaves a truncated file under the name the user expects.
+pub const PARTIAL_FILE_SUFFIX: &str = ".deskdrop-part";
 pub const FILE_ACK_EVERY_N_CHUNKS: u32 = 1; // ACK every chunk (4 MB); the sender progress bar moves on acks
 
 pub type TransferId = [u8; 16];
@@ -494,8 +498,11 @@ pub struct InboundTransfer {
 
     /// Persistent file handle to avoid re-opening on every chunk.
     pub file_handle: Option<BufWriter<std::fs::File>>,
-    /// Final destination path.
+    /// File the chunks are written to: `<name>.deskdrop-part` until `finalize`
+    /// renames it, then the final destination.
     pub dest_path: Option<PathBuf>,
+    /// Sanitized name the file takes on completion, next to `dest_path`.
+    final_name: Option<String>,
     pub from_device: Uuid,
     pub from_device_name: String,
     pub paused: bool,
@@ -523,6 +530,7 @@ impl InboundTransfer {
             last_written_offset: 0,
             file_handle: None,
             dest_path: None,
+            final_name: None,
             from_device,
             from_device_name,
             paused: false,
@@ -572,10 +580,12 @@ impl InboundTransfer {
             );
         }
 
-        let (dest, file) = create_unique_file(&actual_save_dir, &safe_name)
-            .with_context(|| "creating destination file atomically")?;
+        let partial_name = format!("{}{}", safe_name, PARTIAL_FILE_SUFFIX);
+        let (partial, file) = create_unique_file(&actual_save_dir, &partial_name)
+            .with_context(|| "creating partial download file")?;
 
-        self.dest_path = Some(dest);
+        self.dest_path = Some(partial);
+        self.final_name = Some(safe_name);
         self.file_handle = Some(BufWriter::with_capacity(4 * 1024 * 1024, file));
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
@@ -726,7 +736,20 @@ impl InboundTransfer {
         Ok(self.progress_snapshot())
     }
 
+    /// Verify the received file and move it to its final name. On failure the
+    /// partial file is deleted: every chunk has arrived by now, so it cannot resume.
     pub fn finalize(&mut self, expected_checksum: String) -> Result<PathBuf> {
+        let result = self.verify_and_publish(expected_checksum);
+        if result.is_err() {
+            self.file_handle = None;
+            if let Some(partial) = self.dest_path.take() {
+                let _ = std::fs::remove_file(partial);
+            }
+        }
+        result
+    }
+
+    fn verify_and_publish(&mut self, expected_checksum: String) -> Result<PathBuf> {
         anyhow::ensure!(
             self.received_chunk_count == self.total_chunks,
             "missing chunks: got {} of {}",
@@ -758,7 +781,19 @@ impl InboundTransfer {
             file.get_ref().sync_all()?;
         }
 
-        let dest = self.dest_path.as_ref().context("no dest path")?.clone();
+        let partial = self.dest_path.as_ref().context("no dest path")?.clone();
+        let final_name = self.final_name.as_deref().context("no final file name")?;
+        let dir = partial.parent().context("partial file has no parent dir")?;
+        // Reserve a free final name (create_new), then rename over the empty
+        // placeholder; rename replaces the target on every platform we ship.
+        let (dest, placeholder) =
+            create_unique_file(dir, final_name).context("reserving final file name")?;
+        drop(placeholder);
+        if let Err(e) = std::fs::rename(&partial, &dest) {
+            let _ = std::fs::remove_file(&dest);
+            return Err(e).with_context(|| format!("renaming download to {}", dest.display()));
+        }
+        self.dest_path = Some(dest.clone());
         self.status = TransferStatus::Complete;
         Ok(dest)
     }

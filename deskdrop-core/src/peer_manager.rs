@@ -494,7 +494,7 @@ impl PeerManager {
                 record.trusted = trusted;
                 changed = true;
             }
-            if record.last_seen.map_or(true, |t| now.saturating_sub(t) >= LAST_SEEN_PERSIST_SECS) {
+            if record.last_seen.is_none_or(|t| now.saturating_sub(t) >= LAST_SEEN_PERSIST_SECS) {
                 changed = true;
             }
             record.last_seen = Some(now);

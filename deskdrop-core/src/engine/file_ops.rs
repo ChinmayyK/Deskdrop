@@ -153,13 +153,17 @@ pub(crate) async fn read_outbound_chunks(
                             }
                             read_bytes += n;
                         }
+                        // `len` comes from the size announced at the start, so a short
+                        // read means the file shrank since. Sending the short chunk only
+                        // fails the receiver's size/checksum check after the whole file.
                         if read_bytes < len {
-                            tracing::warn!(
-                                "Outbound chunk truncated: read {} instead of {} bytes",
+                            anyhow::bail!(
+                                "file was modified or truncated on disk during transfer \
+                                 (chunk {}: read {} of {} bytes)",
+                                chunk_index,
                                 read_bytes,
                                 len
                             );
-                            buf.truncate(read_bytes);
                         }
                         hasher.update(&buf);
                         let sample_result = if try_compress {
@@ -199,8 +203,32 @@ pub(crate) async fn read_outbound_chunks(
         Ok(res) => res,
         Err(e) => {
             tracing::warn!(error = %e, "failed to read outbound file chunks");
-            let mut mgr = shared.file_transfers.lock().await;
-            mgr.cancel_outbound(&transfer_id);
+            let target = {
+                let mut mgr = shared.file_transfers.lock().await;
+                let target = mgr.get_outbound(&transfer_id).and_then(|t| t.target_device);
+                mgr.cancel_outbound(&transfer_id);
+                target
+            };
+            // Tell the receiver now instead of letting it wait for chunks that never come.
+            let reason = e.to_string();
+            if let Some(peer) = target {
+                if let Some(tx) = shared.peer_manager.sender(peer) {
+                    let _ = tx
+                        .send(AppMessage::FileTransferCancel {
+                            transfer_id,
+                            reason: reason.clone(),
+                        })
+                        .await;
+                }
+            }
+            let _ = shared
+                .event_tx
+                .send(EngineEvent::FileTransferFailed {
+                    transfer_id,
+                    from_device: target.unwrap_or_default(),
+                    reason,
+                })
+                .await;
             return None;
         }
     };
