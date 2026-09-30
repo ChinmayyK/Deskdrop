@@ -11,6 +11,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -30,7 +31,7 @@ namespace Deskdrop.WinUI
 
         public static JsonDocument? SendFilePath(string path, string name, string mime, string? targetDevice = null, string? batchId = null, bool isDirectory = false, int itemCount = 1)
         {
-            var req = new { cmd = "send_file_path", path = path, name = name, mime = mime, target_device = targetDevice, batch_id = batchId, is_directory = isDirectory, item_count = itemCount };
+            var req = Req("send_file_path", ("path", path), ("name", name), ("mime", mime), ("target_device", targetDevice), ("batch_id", batchId), ("is_directory", isDirectory), ("item_count", itemCount));
             return Send(req);
         }
 
@@ -61,9 +62,9 @@ namespace Deskdrop.WinUI
         /// Send a JSON command and return the parsed response.
         /// Returns null if the daemon is not running.
         /// </summary>
-        public static JsonDocument? Send(object request) => Send(request, TimeoutMs);
+        public static JsonDocument? Send(JsonObject request) => Send(request, TimeoutMs);
 
-        public static JsonDocument? Send(object request, int timeoutMs)
+        public static JsonDocument? Send(JsonObject request, int timeoutMs)
         {
             try
             {
@@ -71,7 +72,7 @@ namespace Deskdrop.WinUI
                 if (pipe == null) return null;
 
                 // Write request (newline-delimited JSON).
-                var json = JsonSerializer.Serialize(request) + "\n";
+                var json = request.ToJsonString() + "\n";
                 var bytes = Encoding.UTF8.GetBytes(json);
                 pipe.Write(bytes, 0, bytes.Length);
                 pipe.Flush();
@@ -88,29 +89,44 @@ namespace Deskdrop.WinUI
         }
 
         // Async version for use in async contexts (tray event handlers).
-        public static async Task<JsonDocument?> SendAsync(object request,
+        public static async Task<JsonDocument?> SendAsync(JsonObject request,
             CancellationToken ct = default)
         {
             return await Task.Run(() => Send(request), ct);
         }
 
-        public static async Task<JsonDocument?> SendAsync(object request, int timeoutMs, CancellationToken ct = default)
+        public static async Task<JsonDocument?> SendAsync(JsonObject request, int timeoutMs, CancellationToken ct = default)
         {
             return await Task.Run(() => Send(request, timeoutMs), ct);
         }
 
         // ── Convenience commands ──────────────────────────────────────────────
 
-        public static JsonDocument? Ping()       => Send(new { cmd = "ping" });
-        public static JsonDocument? Status()     => Send(new { cmd = "status" });
-        public static JsonDocument? Peers()      => Send(new { cmd = "peers" });
+        public static JsonDocument? Ping()       => Send(Req("ping"));
+        public static JsonDocument? Status()     => Send(Req("status"));
+        public static JsonDocument? Peers()      => Send(Req("peers"));
 
-        public static JsonDocument? PatchSettings(object patch)
+        // The daemon takes the settings patch as a JSON string field.
+        public static JsonDocument? PatchSettings(JsonObject patch) =>
+            Send(Req("patch_settings", ("patch", patch.ToJsonString())));
+
+        // Requests are built as JsonObject rather than serialised anonymous objects: reflection
+        // over anonymous types does not survive trimming or Native AOT, JsonObject does.
+        public static JsonObject Req(string cmd, params (string Key, JsonNode? Value)[] fields)
         {
-            return Send(new { cmd = "patch_settings", patch = JsonSerializer.Serialize(patch) });
+            var o = Fields(fields);
+            o.Insert(0, "cmd", cmd);
+            return o;
         }
 
-        public static JsonDocument? LatestCameraFrame(string peerId) => Send(new { cmd = "latest_camera_frame", target_device = peerId });
+        public static JsonObject Fields(params (string Key, JsonNode? Value)[] fields)
+        {
+            var o = new JsonObject();
+            foreach (var (key, value) in fields) o[key] = value;
+            return o;
+        }
+
+        public static JsonDocument? LatestCameraFrame(string peerId) => Send(Req("latest_camera_frame", ("target_device", peerId)));
 
         // ── Private transport ─────────────────────────────────────────────────
 
@@ -151,51 +167,44 @@ namespace Deskdrop.WinUI
         }
 
         public static JsonDocument? PushText(string text) =>
-            Send(new { cmd = "push_text", text });
+            Send(Req("push_text", ("text", text)));
 
         public static JsonDocument? PushTextTo(string text, string targetDevice) =>
-            Send(new { cmd = "push_text_to", text, target = targetDevice });
+            Send(Req("push_text_to", ("text", text), ("target", targetDevice)));
 
         public static JsonDocument? PushClipboard(string? targetDeviceId = null) =>
-            Send(new { cmd = "push_clipboard", target_device_id = targetDeviceId });
+            Send(Req("push_clipboard", ("target_device_id", targetDeviceId)));
 
         public static JsonDocument? SetSyncEnabled(bool enabled) =>
-            Send(new { cmd = "set_sync_enabled", enabled });
+            Send(Req("set_sync_enabled", ("enabled", enabled)));
 
         public static JsonDocument? PushBatteryStatus(int level, bool charging) =>
-            Send(new { cmd = "push_battery_status", level, charging });
+            Send(Req("push_battery_status", ("level", level), ("charging", charging)));
 
         public static JsonDocument? PushStorageStatus(ulong imagesBytes, ulong videosBytes, ulong appsBytes, ulong freeBytes, ulong totalBytes) =>
-            Send(new { 
-                cmd = "push_storage_status", 
-                images_bytes = imagesBytes, 
-                videos_bytes = videosBytes, 
-                apps_bytes = appsBytes, 
-                free_bytes = freeBytes, 
-                total_bytes = totalBytes 
-            });
+            Send(Req("push_storage_status", ("images_bytes", imagesBytes), ("videos_bytes", videosBytes), ("apps_bytes", appsBytes), ("free_bytes", freeBytes), ("total_bytes", totalBytes)));
 
-        public static JsonDocument? HistoryClear() => Send(new { cmd = "history_clear" });
+        public static JsonDocument? HistoryClear() => Send(Req("history_clear"));
 
         public static JsonDocument? History(int last = 20) =>
-            Send(new { cmd = "history", last });
+            Send(Req("history", ("last", last)));
 
         public static JsonDocument? RevokeTrustedDevice(string deviceId) =>
-            Send(new { cmd = "revoke_trusted_device", device_id = deviceId });
+            Send(Req("revoke_trusted_device", ("device_id", deviceId)));
 
         // ── Transfer Controls ─────────────────────────────────────────────────
-        public static JsonDocument? SendPairingRequest(string deviceId) => Send(new { cmd = "send_pairing_request", device_id = deviceId });
-        public static JsonDocument? GenerateQrToken() => Send(new { cmd = "generate_qr_token" });
-        public static JsonDocument? RespondToPairing(string deviceId, bool accepted) => Send(new { cmd = "respond_to_pairing", device_id = deviceId, accepted });
-        public static JsonDocument? AcceptFileTransfer(string transferId) => Send(new { cmd = "accept_file_transfer", transfer_id = transferId });
-        public static JsonDocument? RejectFileTransfer(string transferId, string reason) => Send(new { cmd = "reject_file_transfer", transfer_id = transferId, reason = reason });
-        public static JsonDocument? PauseFileTransfer(string transferId) => Send(new { cmd = "pause_file_transfer", transfer_id = transferId });
-        public static JsonDocument? ResumeFileTransfer(string transferId) => Send(new { cmd = "resume_file_transfer", transfer_id = transferId });
-        public static JsonDocument? CancelFileTransfer(string transferId) => Send(new { cmd = "cancel_file_transfer", transfer_id = transferId });
-        public static JsonDocument? StartSpeedTest(string deviceId, int durationSecs = 10) => Send(new { cmd = "start_speed_test", device_id = deviceId, duration_secs = durationSecs });
+        public static JsonDocument? SendPairingRequest(string deviceId) => Send(Req("send_pairing_request", ("device_id", deviceId)));
+        public static JsonDocument? GenerateQrToken() => Send(Req("generate_qr_token"));
+        public static JsonDocument? RespondToPairing(string deviceId, bool accepted) => Send(Req("respond_to_pairing", ("device_id", deviceId), ("accepted", accepted)));
+        public static JsonDocument? AcceptFileTransfer(string transferId) => Send(Req("accept_file_transfer", ("transfer_id", transferId)));
+        public static JsonDocument? RejectFileTransfer(string transferId, string reason) => Send(Req("reject_file_transfer", ("transfer_id", transferId), ("reason", reason)));
+        public static JsonDocument? PauseFileTransfer(string transferId) => Send(Req("pause_file_transfer", ("transfer_id", transferId)));
+        public static JsonDocument? ResumeFileTransfer(string transferId) => Send(Req("resume_file_transfer", ("transfer_id", transferId)));
+        public static JsonDocument? CancelFileTransfer(string transferId) => Send(Req("cancel_file_transfer", ("transfer_id", transferId)));
+        public static JsonDocument? StartSpeedTest(string deviceId, int durationSecs = 10) => Send(Req("start_speed_test", ("device_id", deviceId), ("duration_secs", durationSecs)));
 
         // ── Device Management ─────────────────────────────────────────────────
-        public static JsonDocument? DisconnectPeer(string deviceId) => Send(new { cmd = "disconnect_peer", device_id = deviceId });
+        public static JsonDocument? DisconnectPeer(string deviceId) => Send(Req("disconnect_peer", ("device_id", deviceId)));
         public static JsonDocument? DisconnectAllPeers()
         {
             try
@@ -209,7 +218,7 @@ namespace Deskdrop.WinUI
                 else
                 {
                     // If on background thread, send explicit IPC command or safely marshal
-                    Send(new { cmd = "disconnect_all_peers" });
+                    Send(Req("disconnect_all_peers"));
                     return null;
                 }
                 foreach (var id in ids) DisconnectPeer(id);
@@ -217,19 +226,19 @@ namespace Deskdrop.WinUI
             catch (Exception ex) { App.HandleError(ex); }
             return null;
         }
-        public static JsonDocument? RescanPeers() => Send(new { cmd = "rescan_peers" });
-        public static JsonDocument? RenameTrustedDevice(string deviceId, string displayName) => Send(new { cmd = "rename_trusted_device", device_id = deviceId, display_name = displayName });
-        public static JsonDocument? PauseSyncPeer(string deviceId) => Send(new { cmd = "pause_sync_peer", device_id = deviceId });
-        public static JsonDocument? ResumeSyncPeer(string deviceId) => Send(new { cmd = "resume_sync_peer", device_id = deviceId });
-        public static JsonDocument? ForgetDevice(string deviceId) => Send(new { cmd = "forget_device", device_id = deviceId });
-        public static JsonDocument? SetAutoConnect(string deviceId, bool enabled) => Send(new { cmd = "set_auto_connect", device_id = deviceId, enabled });
+        public static JsonDocument? RescanPeers() => Send(Req("rescan_peers"));
+        public static JsonDocument? RenameTrustedDevice(string deviceId, string displayName) => Send(Req("rename_trusted_device", ("device_id", deviceId), ("display_name", displayName)));
+        public static JsonDocument? PauseSyncPeer(string deviceId) => Send(Req("pause_sync_peer", ("device_id", deviceId)));
+        public static JsonDocument? ResumeSyncPeer(string deviceId) => Send(Req("resume_sync_peer", ("device_id", deviceId)));
+        public static JsonDocument? ForgetDevice(string deviceId) => Send(Req("forget_device", ("device_id", deviceId)));
+        public static JsonDocument? SetAutoConnect(string deviceId, bool enabled) => Send(Req("set_auto_connect", ("device_id", deviceId), ("enabled", enabled)));
 
         // ── Activity & Settings ───────────────────────────────────────────────
-        public static JsonDocument? ActivityRecent(int limit) => Send(new { cmd = "activity_recent", limit });
-        public static JsonDocument? PendingRemoteClipboards() => Send(new { cmd = "pending_remote_clipboards" });
-        public static JsonDocument? ApplyClipboard(string contentHash) => Send(new { cmd = "apply_clipboard", content_hash = contentHash });
-        public static JsonDocument? GetSettings() => Send(new { cmd = "get_settings" });
-        public static JsonDocument? GetMetrics() => Send(new { cmd = "get_metrics" });
+        public static JsonDocument? ActivityRecent(int limit) => Send(Req("activity_recent", ("limit", limit)));
+        public static JsonDocument? PendingRemoteClipboards() => Send(Req("pending_remote_clipboards"));
+        public static JsonDocument? ApplyClipboard(string contentHash) => Send(Req("apply_clipboard", ("content_hash", contentHash)));
+        public static JsonDocument? GetSettings() => Send(Req("get_settings"));
+        public static JsonDocument? GetMetrics() => Send(Req("get_metrics"));
 
         // ── Remote File Explorer ──────────────────────────────────────────────
         // The daemon waits up to 10s for the remote peer's reply
@@ -242,7 +251,7 @@ namespace Deskdrop.WinUI
         private const int RemoteFilesQueryTimeoutMs = 12000;
         public static async Task<JsonDocument?> RemoteFilesQueryAsync(string deviceId, bool summaryOnly = false, string? category = null, string? source = null, string? searchQuery = null, uint offset = 0, uint limit = 100)
         {
-            var req = new System.Collections.Generic.Dictionary<string, object>
+            var req = new JsonObject
             {
                 ["cmd"] = "remote_files_query",
                 ["target_device"] = deviceId,
@@ -257,7 +266,7 @@ namespace Deskdrop.WinUI
         }
             
         public static JsonDocument? RemoteFilePullRequest(string deviceId, ulong fileId) =>
-            Send(new { cmd = "remote_file_pull_request", target_device = deviceId, file_id = fileId });
+            Send(Req("remote_file_pull_request", ("target_device", deviceId), ("file_id", fileId)));
 
         // Asks the remote peer to generate/send a thumbnail for one file
         // (JPEG bytes, base64-encoded in the response) - the local daemon
@@ -267,11 +276,11 @@ namespace Deskdrop.WinUI
         // needs a longer local pipe read timeout than the default 1s.
         private const int ThumbnailTimeoutMs = 12000;
         public static async Task<JsonDocument?> RemoteThumbnailRequestAsync(string deviceId, ulong fileId, uint sizePx = 256) =>
-            await SendAsync(new { cmd = "remote_thumbnail_request", target_device = deviceId, file_id = fileId, size_px = sizePx }, ThumbnailTimeoutMs);
+            await SendAsync(Req("remote_thumbnail_request", ("target_device", deviceId), ("file_id", fileId), ("size_px", sizePx)), ThumbnailTimeoutMs);
 
         public static JsonDocument? RemoteFileActionRequest(string deviceId, ulong fileId, string action, string? newName = null)
         {
-            var req = new System.Collections.Generic.Dictionary<string, object>
+            var req = new JsonObject
             {
                 ["cmd"] = "remote_file_action_request",
                 ["target_device"] = deviceId,
@@ -287,13 +296,13 @@ namespace Deskdrop.WinUI
         // own AckOpenUrlOnDevice call once it knows whether the OS-level
         // open actually succeeded).
         public static JsonDocument? OpenUrlOnDevice(string deviceId, string url) =>
-            Send(new { cmd = "open_url_on_device", target_device = deviceId, url });
+            Send(Req("open_url_on_device", ("target_device", deviceId), ("url", url)));
 
         // Report back whether we actually managed to open a URL a peer asked
         // us to open. Called after the local Process.Start attempt.
         public static JsonDocument? AckOpenUrlOnDevice(string requesterDeviceId, bool success, string? error = null)
         {
-            var req = new System.Collections.Generic.Dictionary<string, object>
+            var req = new JsonObject
             {
                 ["cmd"] = "ack_open_url_on_device",
                 ["requester_device"] = requesterDeviceId,
@@ -303,7 +312,7 @@ namespace Deskdrop.WinUI
             return Send(req);
         }
 
-        public static JsonDocument? Shutdown() => Send(new { cmd = "shutdown" });
+        public static JsonDocument? Shutdown() => Send(Req("shutdown"));
         
         public void Dispose() { }
     }
@@ -352,7 +361,7 @@ namespace Deskdrop.WinUI
 
                     if (running)
                     {
-                        var resp = await DaemonClient.SendAsync(new { cmd = "status" }, token);
+                        var resp = await DaemonClient.SendAsync(DaemonClient.Req("status"), token);
                         if (resp != null)
                         {
                             try

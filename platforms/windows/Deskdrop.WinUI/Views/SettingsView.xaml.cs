@@ -77,7 +77,7 @@ namespace Deskdrop.WinUI.Views
 
                 if (StartupToggle.IsOn)
                 {
-                    var exePath = Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+                    var exePath = Environment.ProcessPath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "Deskdrop.exe");
                     key.SetValue(StartupRegistryValueName, $"\"{exePath}\"");
                 }
                 else
@@ -176,7 +176,7 @@ namespace Deskdrop.WinUI.Views
 
         private async void OnSaveClicked(object sender, RoutedEventArgs e)
         {
-            var resp = await Task.Run(() => DaemonClient.PatchSettings(new { sync_enabled = mgr.SyncEnabled }));
+            var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("sync_enabled", mgr.SyncEnabled))));
             DaemonActions.ReportIfFailed("Save Settings", resp);
         }
     }

@@ -3,7 +3,7 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>Deskdrop.WinUI</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -86,7 +86,6 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
-    <PackageReference Include="System.Drawing.Common" Version="9.0.1" />
   </ItemGroup>
 
   <!--
@@ -178,20 +177,15 @@
   </PropertyGroup>
 
 
-  <!-- Publish Properties -->
+  <!--
+    Publish as Native AOT: the app compiles to one native Deskdrop.exe with no .NET runtime
+    or JIT shipped alongside it, which is most of the size saved (see docs/windows-size-plan.md).
+    AOT also turns on the trim and AOT analyzers for every build. Keep them at zero warnings:
+    an IL2xxx/IL3xxx warning here is a crash at runtime in the published app. Do not add
+    NoWarn or SuppressTrimAnalysis to silence one; fix the code instead.
+  -->
   <PropertyGroup>
-    <!--
-      Tried disabling this to save size; it doesn't help. R2R only
-      precompiles THIS project's own IL (Deskdrop.dll, a couple MB) - the
-      300+ MB bulk of the publish is third-party WinUI/.NET runtime DLLs
-      that ship precompiled regardless of this setting. Measured delta:
-      <1 MB. Not worth the startup-latency cost for that.
-    -->
-    <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
-    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed>False</PublishTrimmed>
-    <SuppressTrimAnalysis>true</SuppressTrimAnalysis>
-    <NoWarn>$(NoWarn);IL2026;IL2037;IL2057</NoWarn>
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
 
 </Project>

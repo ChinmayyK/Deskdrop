@@ -68,7 +68,43 @@ Also in `137ee8c`: workspace-wide `cargo fmt`, and a clippy fix in `deskdrop-cor
    - Quit from the tray exits both `Deskdrop.exe` and `Deskdrop.Tray.exe`.
    - Kill `Deskdrop.Tray.exe`: the app's watchdog restarts it within ~20 s.
 
-## Next: phase 3 — .NET 10 + Native AOT
+## Phase 3 code changes (not yet built on Windows)
+
+Done on a Mac with the .NET 10 SDK. WinUI's XAML compiler and the Windows App SDK manifest tool
+only run on Windows, so the check was an analysis build with those switched off:
+
+```
+dotnet build platforms/windows/Deskdrop.WinUI/Deskdrop.WinUI.csproj -c Release -r win-x64 \
+  -p:EnableWindowsTargeting=true -p:SkipTrayBuild=true \
+  -p:EnableDefaultPageItems=false -p:EnableDefaultApplicationDefinition=false \
+  -p:WindowsAppSDKSelfContained=false
+```
+
+That build fails only on XAML-generated names (`InitializeComponent`, `x:Name` fields, the generated
+`Main`), as expected, and reports **zero IL2xxx/IL3xxx warnings**. Before these changes it reported 15.
+
+- **Retarget:** `net10.0-windows10.0.26100.0`; `PublishAot` on; `PublishReadyToRun`, `PublishTrimmed=False`,
+  `SuppressTrimAnalysis` and the `IL2026;IL2037;IL2057` `NoWarn` removed.
+- **IPC:** `DaemonClient.Send`/`SendAsync` take a `JsonObject`. Requests are built with
+  `DaemonClient.Req("cmd", ("key", value), …)`; `PatchSettings` takes `DaemonClient.Fields(…)`.
+  Same wire JSON as before, including `null` for missing optional values.
+- **JSON reading:** `DeskdropJsonContext` (source generator, case-insensitive like the old options)
+  covers every deserialised type in `DeskdropStore`, `LocalSettingsStore` and `RemoteExplorerView`.
+  Add any new type the app deserialises to it.
+- **XAML:** the only `{Binding}` is DevicePicker's runtime-loaded template; `PeerViewModel` now has
+  `[WinRT.GeneratedBindableCustomProperty]` so those bindings work without reflection.
+- **Libraries:** `System.Drawing.Common` removed (nothing used it). QRCoder is marked trimmable and the
+  app only uses `PngByteQRCode`, which is managed code; confirm ILC raises nothing for it.
+- **Launch at login:** uses `Environment.ProcessPath`, falling back to `AppContext.BaseDirectory`, not
+  `Assembly.Location` (empty under AOT).
+- **CI/release:** both workflows install the .NET 10 SDK with `actions/setup-dotnet@v4`.
+- `[DllImport]` is left as is: it raises no AOT warnings. Moving to `[LibraryImport]` is optional.
+
+Still to do on Windows: steps 4–6 below. The analyzers above run at compile time; the AOT compiler
+(ILC) runs only on `dotnet publish` and can report more (from WinRT interop or packages), so the
+publish must also come out with zero warnings.
+
+## Phase 3 plan — .NET 10 + Native AOT
 
 Target: installed ~70–90 MB, download ~30–40 MB (estimates). .NET 8 support ends November 2026, so the retarget is needed regardless.
 

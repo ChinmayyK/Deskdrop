@@ -244,7 +244,11 @@ namespace Deskdrop.WinUI
         public void RefreshRelativeTime() => OnPropertyChanged(nameof(RelativeTime));
     }
 
-    public class PeerViewModel : BaseViewModel
+    // DevicePicker binds DisplayName and PlatformLabel with {Binding} in a runtime-loaded template.
+    // {Binding} reads properties through reflection unless C#/WinRT generates the accessors, which
+    // this attribute does; without it the picker rows render blank under Native AOT.
+    [WinRT.GeneratedBindableCustomProperty]
+    public partial class PeerViewModel : BaseViewModel
     {
         private string _device_id = "";
         [System.Text.Json.Serialization.JsonPropertyName("id")]
@@ -893,11 +897,6 @@ namespace Deskdrop.WinUI
     public class DeskdropStore : BaseViewModel
     {
         public static DeskdropStore Shared { get; } = new DeskdropStore();
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
         private DeskdropStore()
         {
             Peers = new ObservableCollection<PeerViewModel>();
@@ -1145,7 +1144,7 @@ namespace Deskdrop.WinUI
             }
         }
         private bool _requireTofuConfirmation = true;
-        public bool RequireTofuConfirmation { get => _requireTofuConfirmation; set { if (SetProperty(ref _requireTofuConfirmation, value)) DaemonActions.RunFireAndForget("Settings", () => DaemonClient.PatchSettings(new { require_tofu_confirmation = value })); } }
+        public bool RequireTofuConfirmation { get => _requireTofuConfirmation; set { if (SetProperty(ref _requireTofuConfirmation, value)) DaemonActions.RunFireAndForget("Settings", () => DaemonClient.PatchSettings(DaemonClient.Fields(("require_tofu_confirmation", value)))); } }
         public string DaemonStatusText => IsDaemonRunning ? "Running" : "Stopped";
         public string HeaderStatusText
         {
@@ -1443,7 +1442,7 @@ namespace Deskdrop.WinUI
 
                 private void ParseActivityFeed(JsonElement dataElem)
         {
-            var entries = DeserializeList<ActivityEntry>(dataElem, "entries");
+            var entries = DeserializeList(dataElem, "entries", DeskdropJsonContext.Default.ListActivityEntry);
             if (entries != null)
             {
                 App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
@@ -1500,7 +1499,7 @@ namespace Deskdrop.WinUI
 
                 private void ParsePendingClipboards(JsonElement dataElem)
         {
-            var clips = DeserializeList<PendingClipboard>(dataElem, "clipboards");
+            var clips = DeserializeList(dataElem, "clipboards", DeskdropJsonContext.Default.ListPendingClipboard);
             if (clips != null)
             {
                 App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
@@ -1529,13 +1528,13 @@ namespace Deskdrop.WinUI
             System.Collections.Generic.List<PeerStorageState>? storages = null;
 
             if (dataElem.TryGetProperty("peers", out var peersElem))
-                newPeers = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerViewModel>>(peersElem.GetRawText(), JsonOptions);
+                newPeers = JsonSerializer.Deserialize(peersElem.GetRawText(), DeskdropJsonContext.Default.ListPeerViewModel);
             
             if (dataElem.TryGetProperty("peer_batteries", out var batElem))
-                batteries = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerBatteryState>>(batElem.GetRawText(), JsonOptions);
+                batteries = JsonSerializer.Deserialize(batElem.GetRawText(), DeskdropJsonContext.Default.ListPeerBatteryState);
 
             if (dataElem.TryGetProperty("peer_storages", out var storElem))
-                storages = JsonSerializer.Deserialize<System.Collections.Generic.List<PeerStorageState>>(storElem.GetRawText(), JsonOptions);
+                storages = JsonSerializer.Deserialize(storElem.GetRawText(), DeskdropJsonContext.Default.ListPeerStorageState);
 
             if (newPeers != null)
             {
@@ -1625,7 +1624,7 @@ namespace Deskdrop.WinUI
 
                 if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
                 {
-                    var transfers = JsonSerializer.Deserialize<System.Collections.Generic.List<FileTransferState>>(transfersElem.GetRawText(), JsonOptions);
+                    var transfers = JsonSerializer.Deserialize(transfersElem.GetRawText(), DeskdropJsonContext.Default.ListFileTransferState);
                     if (transfers != null)
                     {
                         var existing = ActiveTransfers.ToList();
@@ -1662,7 +1661,7 @@ namespace Deskdrop.WinUI
 
                 if (dataElem.TryGetProperty("active_speed_tests", out var speedElem))
                 {
-                    var speedTests = JsonSerializer.Deserialize<System.Collections.Generic.List<SpeedTestState>>(speedElem.GetRawText(), JsonOptions);
+                    var speedTests = JsonSerializer.Deserialize(speedElem.GetRawText(), DeskdropJsonContext.Default.ListSpeedTestState);
                     if (speedTests != null)
                     {
                         var existing = ActiveSpeedTests.ToList();
@@ -1696,7 +1695,7 @@ namespace Deskdrop.WinUI
 
                 if (dataElem.TryGetProperty("active_call", out var callElem) && callElem.ValueKind != JsonValueKind.Null)
                 {
-                    ActiveCall = JsonSerializer.Deserialize<ActiveCallState>(callElem.GetRawText());
+                    ActiveCall = JsonSerializer.Deserialize(callElem.GetRawText(), DeskdropJsonContext.Default.ActiveCallState);
                 }
                 else
                 {
@@ -1712,17 +1711,17 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(History));
         }
 
-        private static System.Collections.Generic.List<T>? DeserializeList<T>(JsonElement element, string wrapperName)
+        private static System.Collections.Generic.List<T>? DeserializeList<T>(JsonElement element, string wrapperName, System.Text.Json.Serialization.Metadata.JsonTypeInfo<System.Collections.Generic.List<T>> typeInfo)
         {
             try
             {
                 if (element.ValueKind == JsonValueKind.Array)
                 {
-                    return JsonSerializer.Deserialize<System.Collections.Generic.List<T>>(element.GetRawText(), JsonOptions);
+                    return JsonSerializer.Deserialize(element.GetRawText(), typeInfo);
                 }
                 if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(wrapperName, out var wrapped) && wrapped.ValueKind == JsonValueKind.Array)
                 {
-                    return JsonSerializer.Deserialize<System.Collections.Generic.List<T>>(wrapped.GetRawText(), JsonOptions);
+                    return JsonSerializer.Deserialize(wrapped.GetRawText(), typeInfo);
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }

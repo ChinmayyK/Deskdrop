@@ -65,6 +65,12 @@ jobs:
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
 
+      # Native AOT publish needs the SDK the project targets (net10.0); the runner's
+      # preinstalled SDKs are not guaranteed to include it.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Build Rust DLL
         run: cargo build --release -p deskdrop-core
 
@@ -72,8 +78,9 @@ jobs:
         run: |
           Copy-Item target\release\deskdrop_core.dll `
                     platforms\windows\Deskdrop.WinUI\
-          # A folder publish, not single-file: unpackaged WinUI doesn't run
-          # reliably from a single-file bundle, and the tray helper ships in tray\.
+          # Native AOT (PublishAot in the csproj): Deskdrop.exe is compiled to native code,
+          # with no .NET runtime shipped. Still a folder publish, since the Windows App SDK
+          # runtime, deskdrop_core.dll and tray\ sit next to the exe.
           dotnet publish platforms\windows\Deskdrop.WinUI\Deskdrop.WinUI.csproj `
             -c Release -r win-x64 --self-contained true `
             -o publish\windows

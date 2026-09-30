@@ -184,13 +184,13 @@ namespace Deskdrop.WinUI
                         // regardless of retries or timeout, and looked
                         // exactly like the daemon being unreachable even
                         // while it was answering fine.
-                        var status = DaemonClient.Send(new { cmd = "status" }, perCallTimeoutMs);
+                        var status = DaemonClient.Send(DaemonClient.Req("status"), perCallTimeoutMs);
                         if (status != null && status.RootElement.TryGetProperty("data", out var statusData))
                         {
                             fingerprint ??= statusData.TryGetProperty("local_fingerprint", out var fp) ? fp.GetString() : null;
                         }
 
-                        var tokenDoc = DaemonClient.Send(new { cmd = "generate_qr_token" }, perCallTimeoutMs);
+                        var tokenDoc = DaemonClient.Send(DaemonClient.Req("generate_qr_token"), perCallTimeoutMs);
                         if (tokenDoc != null && tokenDoc.RootElement.TryGetProperty("data", out var tokenData))
                         {
                             token ??= tokenData.TryGetProperty("token", out var tok) ? tok.GetString() : null;

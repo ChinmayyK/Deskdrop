@@ -159,15 +159,14 @@ namespace Deskdrop.WinUI.Views
 
                 if (doc != null && doc.RootElement.ValueKind != JsonValueKind.Null)
                 {
-                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                     RemoteFileListResponse? resp = null;
                     if (doc.RootElement.TryGetProperty("files", out _))
                     {
-                        resp = JsonSerializer.Deserialize<RemoteFileListResponse>(doc.RootElement.GetRawText(), options);
+                        resp = JsonSerializer.Deserialize(doc.RootElement.GetRawText(), DeskdropJsonContext.Default.RemoteFileListResponse);
                     }
                     else if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("files", out _))
                     {
-                        resp = JsonSerializer.Deserialize<RemoteFileListResponse>(dataEl.GetRawText(), options);
+                        resp = JsonSerializer.Deserialize(dataEl.GetRawText(), DeskdropJsonContext.Default.RemoteFileListResponse);
                     }
                     
                     App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>

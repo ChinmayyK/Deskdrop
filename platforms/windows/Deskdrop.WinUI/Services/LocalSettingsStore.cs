@@ -33,7 +33,7 @@ namespace Deskdrop.WinUI.Services
                 try
                 {
                     _cache = File.Exists(FilePath)
-                        ? JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(FilePath)) ?? new()
+                        ? JsonSerializer.Deserialize(File.ReadAllText(FilePath), DeskdropJsonContext.Default.DictionaryStringString) ?? new()
                         : new();
                 }
                 catch (Exception ex)
@@ -60,7 +60,7 @@ namespace Deskdrop.WinUI.Services
                 {
                     var dir = Path.GetDirectoryName(FilePath);
                     if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                    File.WriteAllText(FilePath, JsonSerializer.Serialize(dict));
+                    File.WriteAllText(FilePath, JsonSerializer.Serialize(dict, DeskdropJsonContext.Default.DictionaryStringString));
                 }
                 catch (Exception ex) { App.HandleError(ex); }
             }

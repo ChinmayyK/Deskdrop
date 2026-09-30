@@ -197,8 +197,7 @@ namespace Deskdrop.WinUI
             if (LocalIPv4Addresses().Contains(ip.ToString()))
                 return "That's this PC's own address. Enter the other device's IP.";
 
-            var response = await DaemonClient.SendAsync(
-                new { cmd = "connect_manual", host = ip.ToString(), port = address.Port },
+            var response = await DaemonClient.SendAsync(DaemonClient.Req("connect_manual", ("host", ip.ToString()), ("port", address.Port)),
                 ConnectTimeoutMs);
 
             if (response == null)

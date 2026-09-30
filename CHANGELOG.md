@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Changed
 - **Windows:** The system tray helper is now a native Rust exe (`platforms/windows/tray`, ~0.3 MB) instead of a WinForms app with its own self-contained .NET runtime (~110 MB). Same process name, pipes and menu.
 - **Windows:** Only English language resources ship; WinUI's built-in control text shows in English on other display languages.
+- **Windows:** The app targets .NET 10 and publishes with Native AOT: `Deskdrop.exe` is native code and no .NET runtime ships with it. Daemon requests are built as `JsonObject`s and all JSON reading goes through a source-generated `DeskdropJsonContext`, so nothing relies on reflection. The unused `System.Drawing.Common` package is removed.
+- **Windows:** The Rust engine DLL and tray helper link the C runtime statically, so they no longer need `vcruntime140.dll` (missing on some clean installs).
 - **Build:** Windows releases ship as a per-user MSI and a portable zip of the whole app folder instead of a single-file `Deskdrop.exe`. The MSI now installs every published file; before it listed only `Deskdrop.exe` and `deskdrop_core.dll`.
 
 ### Fixed
