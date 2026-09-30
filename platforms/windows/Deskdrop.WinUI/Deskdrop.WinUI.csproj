@@ -20,6 +20,8 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+    <!-- The UI is English-only; skip .NET satellite resource assemblies for other cultures. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
@@ -80,30 +82,6 @@
      above to opt out.
   -->
   <ItemGroup>
-    <!--
-      Deskdrop.Tray is a standalone companion exe (own process, own
-      System.Drawing.Common v8.x) that renders the system tray icon.
-      It must stay out-of-process: WinUI here pins System.Drawing.Common to
-      v9.x, and loading tray code in-process against that version is the
-      exact .NET 9 assembly crash that motivated splitting it out in the
-      first place. ReferenceOutputAssembly=false means this is a build-order
-      dependency only - its exe is copied into tray\ by the target below,
-      never linked into this assembly.
-    -->
-    <!--
-      SkipGetTargetFrameworkProperties is required alongside
-      ReferenceOutputAssembly="false" here: newer SDKs (observed on
-      8.0.4xx) run their self-contained-executable compatibility check
-      (NETSDK1151) against a referenced project's target-framework
-      properties regardless of ReferenceOutputAssembly, so building
-      against Deskdrop.Tray (a self-contained exe) fails that check even
-      though its assembly is never actually linked in. Skipping target-
-      framework property retrieval for this reference avoids the check;
-      it's safe here because we only need this as a build-order dependency
-      (see CopyTrayApp below), not an assembly reference.
-      https://aka.ms/netsdk1151
-    -->
-    <ProjectReference Include="..\Deskdrop.Tray\Deskdrop.Tray.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />
@@ -112,61 +90,57 @@
   </ItemGroup>
 
   <!--
-    Copy the built Deskdrop.Tray companion exe (and its dependencies) into a
-    tray\ subfolder of this project's own output, so TrayService.cs's
-    EnsureTrayProcessRunning() can find and launch it at
-    <baseDir>\tray\Deskdrop.Tray.exe. Runs after both Build and Publish so
-    `dotnet run`, `dotnet build`, and `dotnet publish` all produce a working
-    tray icon.
-  -->
-  <Target Name="CopyTrayApp" AfterTargets="Build;Publish">
-    <ItemGroup>
-      <!-- Deskdrop.Tray now builds self-contained win-x64, so its output lives
-           in a win-x64\ RID subfolder; point straight at it so files land
-           flat in tray\, where EnsureTrayProcessRunning() looks for them. -->
-      <TrayAppFiles Include="..\Deskdrop.Tray\bin\$(Configuration)\net8.0-windows10.0.26100.0\win-x64\**\*.*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(TrayAppFiles)" DestinationFolder="$(OutDir)tray\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'@(TrayAppFiles)' != ''" />
-    <Copy SourceFiles="@(TrayAppFiles)" DestinationFolder="$(PublishDir)tray\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and '@(TrayAppFiles)' != ''" />
+    System tray helper: platforms/windows/tray (Rust, native Win32, ~0.3 MB).
+    It runs as its own process so the icon survives UI crashes and the app can
+    drop its window while in the tray. It replaced the WinForms Deskdrop.Tray,
+    whose second self-contained .NET runtime cost ~110 MB.
 
-    <!--
-      Deskdrop.Tray.csproj has its own TrimUnusedDesktopRuntime target that
-      deletes these same files from ITS OWN bin output, but when this
-      project pulls Deskdrop.Tray in only as a build-order dependency
-      (ReferenceOutputAssembly=false), MSBuild's publish graph doesn't
-      reliably re-run that target before this Copy runs - so the files
-      copied here can be the untrimmed set even when Tray's own folder is
-      already clean. Deleting them again here, on the actual copy
-      destination, is what makes the result correct regardless of that
-      ordering.
-    -->
+    TrayService.cs launches and watches <baseDir>\tray\Deskdrop.Tray.exe, so the
+    Rust binary is copied under that name. BuildTrayApp runs cargo from the
+    repository root (Rust is already needed for deskdrop_core.dll); pass
+    -p:SkipTrayBuild=true to reuse an existing target\release\deskdrop-tray.exe.
+
+    The publish copy is its own target that runs only after Publish:
+    PublishDir defaults to $(OutDir)publish\ on every build, so a copy guarded
+    by a non-empty PublishDir used to write a stale tray\ into publish\ on
+    each plain `dotnet build`.
+  -->
+  <PropertyGroup>
+    <DeskdropRepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\..\'))</DeskdropRepoRoot>
+    <TrayExe>$(DeskdropRepoRoot)target\release\deskdrop-tray.exe</TrayExe>
+  </PropertyGroup>
+
+  <Target Name="BuildTrayApp" BeforeTargets="Build" Condition="'$(SkipTrayBuild)' != 'true'">
+    <Exec Command="cargo build --release -p deskdrop-tray" WorkingDirectory="$(DeskdropRepoRoot)" />
+  </Target>
+
+  <Target Name="CopyTrayApp" AfterTargets="Build">
+    <Error Condition="!Exists('$(TrayExe)')" Text="Tray helper not found at $(TrayExe). Run: cargo build --release -p deskdrop-tray" />
+    <!-- Clears any leftover WinForms tray files (runtime, DLLs) from older builds. -->
+    <RemoveDir Directories="$(OutDir)tray" ContinueOnError="true" />
+    <Copy SourceFiles="$(TrayExe)" DestinationFiles="$(OutDir)tray\Deskdrop.Tray.exe" />
+  </Target>
+
+  <Target Name="PublishTrayApp" AfterTargets="Publish">
+    <RemoveDir Directories="$(PublishDir)tray" ContinueOnError="true" />
+    <Copy SourceFiles="$(TrayExe)" DestinationFiles="$(PublishDir)tray\Deskdrop.Tray.exe" />
+  </Target>
+
+  <!--
+    WinUI ships Microsoft.ui.xaml.dll.mui string tables for about 90 locales,
+    one folder each. SatelliteResourceLanguages doesn't cover them: they are
+    Windows MUI files, not .NET satellite assemblies. The app's own UI is
+    English-only, so the published app keeps en-us and drops the rest. On
+    other display languages Windows' MUI loader falls back to the DLL's
+    built-in en-US strings, so built-in control text (context menus,
+    accessibility names) reads in English there.
+  -->
+  <Target Name="PruneWinUiLocales" AfterTargets="Publish">
     <ItemGroup>
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\Presentation*.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\WindowsBase.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\System.Xaml.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\System.Windows.Presentation.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\ReachFramework.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\System.Printing.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\*_cor3.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\DirectWriteForwarder.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\UIAutomation*.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\WindowsFormsIntegration.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\*.Design.dll" />
-      <UnusedTrayDesktopFiles Include="$(OutDir)tray\Microsoft.Windows.SDK.NET.dll" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\Presentation*.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\WindowsBase.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\System.Xaml.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\System.Windows.Presentation.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\ReachFramework.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\System.Printing.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\*_cor3.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\DirectWriteForwarder.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\UIAutomation*.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\WindowsFormsIntegration.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\*.Design.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedTrayDesktopFiles Include="$(PublishDir)tray\Microsoft.Windows.SDK.NET.dll" Condition="'$(PublishDir)' != ''" />
+      <ForeignMuiFiles Include="$(PublishDir)*\*.mui" Exclude="$(PublishDir)en-us\*.mui" />
+      <ForeignMuiDirs Include="@(ForeignMuiFiles->'%(RootDir)%(Directory)'->Distinct())" />
     </ItemGroup>
-    <Delete Files="@(UnusedTrayDesktopFiles)" TreatErrorsAsWarnings="true" />
+    <RemoveDir Directories="@(ForeignMuiDirs)" ContinueOnError="true" />
   </Target>
 
   <!--

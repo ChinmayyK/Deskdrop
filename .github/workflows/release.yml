@@ -72,16 +72,35 @@ jobs:
         run: |
           Copy-Item target\release\deskdrop_core.dll `
                     platforms\windows\Deskdrop.WinUI\
+          # A folder publish, not single-file: unpackaged WinUI doesn't run
+          # reliably from a single-file bundle, and the tray helper ships in tray\.
           dotnet publish platforms\windows\Deskdrop.WinUI\Deskdrop.WinUI.csproj `
             -c Release -r win-x64 --self-contained true `
-            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             -o publish\windows
+
+      - name: Check Windows publish
+        run: |
+          foreach ($f in 'Deskdrop.exe', 'deskdrop_core.dll', 'tray\Deskdrop.Tray.exe') {
+            if (-not (Test-Path "publish\windows\$f")) { throw "missing $f in publish output" }
+          }
+          pwsh scripts\windows-size.ps1 publish\windows
+
+      - name: Build MSI
+        run: |
+          dotnet tool install -g wix --version 5.*
+          wix build platforms\windows\installer\Deskdrop.wxs `
+            -bindpath App=publish\windows -bindpath platforms\windows\installer `
+            -o Deskdrop-windows-x64.msi
+          Compress-Archive -Path publish\windows\* -DestinationPath Deskdrop-windows-x64.zip
+          pwsh scripts\windows-size.ps1 publish\windows Deskdrop-windows-x64.msi
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-windows
-          path: publish\windows\Deskdrop.exe
+          path: |
+            Deskdrop-windows-x64.msi
+            Deskdrop-windows-x64.zip
 
   # ── Android APK ───────────────────────────────────────────────────────────
   release-android:
@@ -233,7 +252,7 @@ jobs:
             ### Downloads
             | Platform | File |
             |---|---|
-            | Windows 10/11 x64 | `Deskdrop.exe` |
+            | Windows 10/11 x64 | `Deskdrop-windows-x64.msi` (installer) or `Deskdrop-windows-x64.zip` (portable) |
             | Android 8.0+      | `app-full-release.apk` |
             | Linux x86_64      | `deskdrop-linux-x86_64.tar.gz` |
             | macOS (Apple Silicon) | `Deskdrop.dmg` |
@@ -241,7 +260,8 @@ jobs:
             ### What's new
             See [CHANGELOG.md](CHANGELOG.md).
           files: |
-            release-artifacts/**/*.exe
+            release-artifacts/**/*.msi
+            release-artifacts/**/*.zip
             release-artifacts/**/*.apk
             release-artifacts/**/*.tar.gz
             release-artifacts/**/*.dmg
