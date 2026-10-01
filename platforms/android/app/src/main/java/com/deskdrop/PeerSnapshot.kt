@@ -21,8 +21,15 @@ data class PeerSnapshot(
     val lastSyncSecs: Long?,
     val lastError: String?,
     val ip: String?,
+    /** This peer asked to pair and is waiting for our answer. */
     val pairingRequested: Boolean,
+    /** We asked this peer to pair and are waiting for its answer. */
+    val outgoingPairingWaiting: Boolean,
     val pairingPin: String?,
+    /** Seconds left on the pending request, either direction, as of the snapshot. */
+    val pairingExpiresInSecs: Int?,
+    /** How the last request ended: "accepted", "declined", "cancelled", "expired" or "update_needed". */
+    val pairingOutcome: String?,
     val lifecycleState: String,
     val remoteSyncEnabled: Boolean,
 ) {
@@ -34,8 +41,17 @@ data class PeerSnapshot(
      * Whether the peer belongs in device lists. The core keeps every untrusted peer it has
      * ever discovered, so an unpaired one only counts while it has been seen recently.
      */
-    val isListable: Boolean get() = trusted || pairingRequested || isConnecting ||
+    val isListable: Boolean get() = trusted || pairingRequested || outgoingPairingWaiting || isConnecting ||
         (lastSeenSecs ?: 0L) >= System.currentTimeMillis() / 1000 - NEARBY_WINDOW_SECS
+    /** Why the last request with an unpaired peer ended, for its status line. */
+    val pairingOutcomeLabel: String? get() = when {
+        trusted || pairingRequested || outgoingPairingWaiting -> null
+        pairingOutcome == "declined" -> "Declined · try again"
+        pairingOutcome == "expired" -> "No answer · try again"
+        pairingOutcome == "cancelled" -> "Request withdrawn"
+        pairingOutcome == "update_needed" -> "Update Deskdrop on it, then try again"
+        else -> null
+    }
     val needsTrust: Boolean get() = !trusted && (needsAttention || status == "disconnected")
     val isRejected: Boolean get() = lastError?.contains("rejected", ignoreCase = true) == true ||
         lastError?.contains("not trusted", ignoreCase = true) == true
@@ -67,8 +83,11 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             ip = (obj.takeIf { !it.isNull("ips") }?.optJSONArray("ips")?.let { if (it.length() > 0) it.optString(0) else null } ?: if (!obj.isNull("ip")) obj.optString("ip") else null)
                 // IPv4 peers arrive IPv6-mapped ("::ffff:192.168.1.5"); show the plain address.
                 ?.removePrefix("::ffff:"),
-            pairingRequested = obj.optBoolean("pairing_requested", false) || obj.optBoolean("outgoing_pairing_waiting", false),
+            pairingRequested = obj.optBoolean("pairing_requested", false),
+            outgoingPairingWaiting = obj.optBoolean("outgoing_pairing_waiting", false),
             pairingPin = if (obj.isNull("pairing_pin")) null else obj.optString("pairing_pin"),
+            pairingExpiresInSecs = if (obj.isNull("pairing_expires_in_secs")) null else obj.optInt("pairing_expires_in_secs"),
+            pairingOutcome = if (obj.isNull("pairing_outcome")) null else obj.optString("pairing_outcome"),
             lifecycleState = obj.optString("lifecycle_state", "discovered"),
             remoteSyncEnabled = obj.optBoolean("remote_sync_enabled", true),
         )

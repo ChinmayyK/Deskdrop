@@ -24,7 +24,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.deskdrop.PeerSnapshot
-import kotlinx.coroutines.delay
 
 /**
  * First run: find a computer, then show the pairing code while the other
@@ -35,6 +34,7 @@ fun OnboardingScreen(
     isDark: Boolean,
     peers: List<PeerSnapshot>,
     onConnectPeer: (PeerSnapshot) -> Unit,
+    onCancelPairing: (PeerSnapshot) -> Unit,
     onSendSampleText: (PeerSnapshot) -> Unit,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit,
@@ -61,7 +61,15 @@ fun OnboardingScreen(
             label = "onboarding"
         ) { pairing ->
             if (pairing && selectedPeer != null) {
-                PairStep(c, selectedPeer, onBack = { selectedPeerId = null })
+                PairStep(
+                    c,
+                    selectedPeer,
+                    onRetry = { onConnectPeer(selectedPeer) },
+                    onBack = {
+                        onCancelPairing(selectedPeer)
+                        selectedPeerId = null
+                    }
+                )
             } else {
                 FindStep(
                     c = c,
@@ -147,13 +155,14 @@ private fun FindStep(
 }
 
 @Composable
-private fun PairStep(c: DdColors, peer: PeerSnapshot, onBack: () -> Unit) {
-    var timedOut by remember(peer.id) { mutableStateOf(false) }
-    LaunchedEffect(peer.id) {
-        delay(30_000)
-        timedOut = true
-    }
-    val pin = peer.pairingPin
+private fun PairStep(c: DdColors, peer: PeerSnapshot, onRetry: () -> Unit, onBack: () -> Unit) {
+    // Driven by the request itself: the core expires it after a minute and
+    // says how it ended, so this screen never guesses with its own timer.
+    val ended = !peer.outgoingPairingWaiting && !peer.trusted && peer.pairingOutcome != null
+    val timedOut = ended && peer.pairingOutcome == "expired"
+    val declined = ended && peer.pairingOutcome == "declined"
+    val outdated = ended && peer.pairingOutcome == "update_needed"
+    val pin = peer.pairingPin.takeIf { peer.outgoingPairingWaiting }
 
     Column(
         modifier = Modifier
@@ -164,8 +173,10 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onBack: () -> Unit) {
         Spacer(Modifier.height(40.dp))
         Text(
             when {
+                declined -> "${peer.name} declined"
+                outdated -> "Update Deskdrop on ${peer.name}"
+                timedOut -> "No answer from ${peer.name}"
                 pin != null -> "Check the code"
-                timedOut -> "Couldn't reach ${peer.name}"
                 else -> "Connecting to ${peer.name}"
             },
             style = DdType.display,
@@ -174,8 +185,10 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onBack: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         Text(
             when {
-                pin != null -> "${peer.name} shows a pairing request with a code. Accept it there if it matches this one."
+                declined -> "Ask again if that was a mistake."
+                outdated -> "It runs an older Deskdrop that turns pairing requests down on its own. Update it, then try again."
                 timedOut -> "Make sure Deskdrop is open on it and both devices are on the same Wi-Fi."
+                pin != null -> "${peer.name} shows a pairing request with a code. Accept it there if it matches this one."
                 else -> "A pairing request will appear on ${peer.name} in a moment."
             },
             style = DdType.body,
@@ -192,8 +205,9 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onBack: () -> Unit) {
                     Spacer(Modifier.width(6.dp))
                     Text("Codes match only when nobody is in between.", style = DdType.small, color = c.textMuted)
                 }
+                PairingCountdown(c, peer)
             }
-            timedOut -> PillButton(c, "Try again", filled = true, modifier = Modifier.fillMaxWidth(), onClick = onBack)
+            ended -> PillButton(c, "Try again", filled = true, modifier = Modifier.fillMaxWidth(), onClick = onRetry)
             else -> LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().height(2.dp).clip(CircleShape),
                 color = c.accent,
@@ -202,7 +216,7 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onBack: () -> Unit) {
         }
 
         Spacer(Modifier.height(24.dp))
-        if (!timedOut) PillButton(c, "Cancel", filled = false, modifier = Modifier.fillMaxWidth(), onClick = onBack)
+        PillButton(c, if (ended) "Back" else "Cancel", filled = false, modifier = Modifier.fillMaxWidth(), onClick = onBack)
         Spacer(Modifier.height(40.dp))
     }
 }

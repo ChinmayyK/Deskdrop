@@ -202,6 +202,14 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             },
+                            onCancelPairing = { peer ->
+                                ContextCompat.startForegroundService(this@MainActivity,
+                                    Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                        action = DeskdropService.ACTION_CANCEL_PAIRING_REQUEST
+                                        putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                                    }
+                                )
+                            },
                             onSendSampleText = { peer ->
                                 val svc = Intent(this@MainActivity, DeskdropService::class.java).apply {
                                     action = DeskdropService.ACTION_PUSH_CLIPBOARD
@@ -399,6 +407,14 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         showSnack("Pairing request sent to ${peer.name}")
+                    },
+                    onCancelPairing = { peer ->
+                        ContextCompat.startForegroundService(this@MainActivity,
+                            Intent(this@MainActivity, DeskdropService::class.java).apply {
+                                action = DeskdropService.ACTION_CANCEL_PAIRING_REQUEST
+                                putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, peer.id)
+                            }
+                        )
                     },
                     onRespondPairing = { peer, accepted ->
                         ContextCompat.startForegroundService(this@MainActivity,

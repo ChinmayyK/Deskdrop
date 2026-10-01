@@ -36,6 +36,7 @@ fun DevicesTab(
     onDisconnectPeer: (PeerSnapshot) -> Unit,
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
+    onCancelPairing: (PeerSnapshot) -> Unit,
     onForgetPeer: (PeerSnapshot) -> Unit,
     onSendFiles: (String?) -> Unit,
     onSpeedTest: (String) -> Unit,
@@ -44,8 +45,10 @@ fun DevicesTab(
 ) {
     val c = rememberDdColors(isDark)
     val requests = peers.filter { it.pairingRequested && !it.trusted }
+    // A device that also asked us is answered through its request instead.
+    val outgoing = peers.filter { it.outgoingPairingWaiting && !it.pairingRequested && !it.trusted }
     val paired = peers.filter { it.trusted }
-    val nearby = peers.filter { !it.trusted && !it.pairingRequested && it.isListable }
+    val nearby = peers.filter { !it.trusted && !it.pairingRequested && !it.outgoingPairingWaiting && it.isListable }
     val online = paired.count { it.isConnected }
 
     LazyColumn(
@@ -67,6 +70,13 @@ fun DevicesTab(
             Column {
                 Spacer(Modifier.height(20.dp))
                 PairingPanel(c, peer, onRespondPairing)
+            }
+        }
+
+        items(outgoing, key = { "out_${it.id}" }) { peer ->
+            Column {
+                Spacer(Modifier.height(20.dp))
+                OutgoingPairingPanel(c, peer, onCancelPairing)
             }
         }
 
@@ -154,12 +164,15 @@ private fun PeerRow(
 ) {
     val haptic = LocalHapticFeedback.current
     var menuOpen by remember { mutableStateOf(false) }
-    val waiting = peer.lifecycleState == "pairing_in_progress"
+    // Only our own request: an unpaired peer that merely holds a session
+    // open is not waiting on anyone and keeps its Pair button.
+    val waiting = peer.outgoingPairingWaiting && !peer.trusted
     val (status, statusColor) = when {
         speedTest != null -> "${speedTest.phase} · ${speedTest.speedMbpsString}" to c.accent
         peer.isConnected -> (listOfNotNull("Connected", peer.ip).joinToString(" · ")) to c.live
         peer.isConnecting -> "Connecting…" to c.textMuted
-        waiting -> "Waiting for approval on ${peer.name}" to c.warn
+        waiting -> pairingWaitingLabel(peer) to c.warn
+        peer.pairingOutcomeLabel != null -> peer.pairingOutcomeLabel!! to c.warn
         peer.isRejected -> "Declined · try again" to c.danger
         peer.trusted -> (agoLabel(peer.lastSeenSecs)?.let { "Last seen $it" } ?: "Offline") to c.textMuted
         else -> (peer.ip ?: "On your network") to c.textMuted

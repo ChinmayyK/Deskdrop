@@ -119,7 +119,7 @@ class DeskdropService : Service() {
 
         // Notification IDs
         private const val NOTIF_ID_SERVICE           = 1001
-        private const val NOTIF_ID_TOFU              = 1002
+        private const val NOTIF_ID_PAIRING_BASE      = 7000  // + (deviceId.hashCode() and 0xFFF), one per asking device
         private const val NOTIF_ID_FILE              = 1003
         private const val NOTIF_ID_FAILURE           = 1004
         private const val NOTIF_ID_CLIPBOARD_AVAILABLE = 1005
@@ -154,6 +154,7 @@ class DeskdropService : Service() {
         const val ACTION_FORGET_PEER        = "com.deskdrop.FORGET_PEER"
         const val ACTION_SEND_PAIRING_REQUEST = "com.deskdrop.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "com.deskdrop.RESPOND_TO_PAIRING"
+        const val ACTION_CANCEL_PAIRING_REQUEST = "com.deskdrop.CANCEL_PAIRING_REQUEST"
         const val ACTION_DISCONNECT_PEER    = "com.deskdrop.DISCONNECT_PEER"
         const val ACTION_RECONNECT_PEER     = "com.deskdrop.RECONNECT_PEER"
 
@@ -271,7 +272,7 @@ class DeskdropService : Service() {
                 if (h != 0L) {
                     val result = DeskdropJni.respondToPairing(h, deviceId, approved)
                     Log.i(TAG, "Pairing result for $deviceId approved=$approved result=$result")
-                    notificationManager.cancel(NOTIF_ID_TOFU)
+                    notificationManager.cancel(pairingNotifId(deviceId))
                     persistStatus()
                 }
             }
@@ -661,6 +662,18 @@ class DeskdropService : Service() {
                 }
                 return START_STICKY
             }
+            ACTION_CANCEL_PAIRING_REQUEST -> {
+                val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
+                val h = engineHandle
+                if (h != 0L) {
+                    serviceScope.launch {
+                        val result = DeskdropJni.cancelPairingRequest(h, deviceId)
+                        Log.i(TAG, "Cancelled pairing request to $deviceId: result=$result")
+                        persistStatus()
+                    }
+                }
+                return START_STICKY
+            }
             ACTION_RESPOND_TO_PAIRING -> {
                 val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
                 val accepted = intent?.getBooleanExtra(PairingActivity.EXTRA_APPROVED, false) ?: false
@@ -670,8 +683,11 @@ class DeskdropService : Service() {
                         val result = DeskdropJni.respondToPairing(h, deviceId, accepted)
                         Log.i(TAG, "Pairing response for $deviceId accepted=$accepted result=$result")
                         persistStatus()
-                        notificationManager.cancel(NOTIF_ID_TOFU)
-                        sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
+                        notificationManager.cancel(pairingNotifId(deviceId))
+                        sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply {
+                            setPackage(packageName)
+                            putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
+                        })
                         if (accepted) {
                             runCatching {
                                 val toDashboard = Intent(this@DeskdropService, MainActivity::class.java).apply {
@@ -1589,7 +1605,6 @@ class DeskdropService : Service() {
                         putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
                         putExtra(PairingActivity.EXTRA_DEVICE_NAME, name)
                         putExtra(PairingActivity.EXTRA_PIN, pin)
-                        putExtra(PairingActivity.EXTRA_FINGERPRINT, pin)
                     }
                     startActivity(intent)
                 }
@@ -1603,6 +1618,19 @@ class DeskdropService : Service() {
                 // No need to launch PairingActivity here. 
                 // The OnboardingScreen or Dashboard naturally reflects this state via trust_store updates.
                 persistStatus()
+            }
+
+            // A request expired, was withdrawn by the other device, or lost
+            // its session. Whatever is on screen for it is stale now.
+            DeskdropJni.CR_EVENT_PAIRING_CHANGED -> {
+                val deviceId = DeskdropJni.eventDeviceId(ev) ?: return
+                Log.i(TAG, "Pairing state changed for $deviceId")
+                persistStatus()
+                notificationManager.cancel(pairingNotifId(deviceId))
+                sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply {
+                    setPackage(packageName)
+                    putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
+                })
             }
 
 
@@ -1629,7 +1657,10 @@ class DeskdropService : Service() {
                 connectedPeerIds[deviceId] = name
                 persistStatus()
                 updateForegroundNotification()
-                sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
+                sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply {
+                    setPackage(packageName)
+                    putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
+                })
                 // Connection established — cancel any pending retry scans and
                 // reset backoff so the next disconnect starts fresh.
                 cancelNsdRetry()
@@ -1672,7 +1703,10 @@ class DeskdropService : Service() {
                 if (msg == "interrupt") return // interruptWait wake-up, not a real warning
                 Log.w(TAG, "Engine warning: $msg")
                 if (msg == "Pairing request was declined." || msg == "Pairing request was accepted.") {
-                    sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply { setPackage(packageName) })
+                    sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply {
+                        setPackage(packageName)
+                        DeskdropJni.eventDeviceId(ev)?.let { putExtra(PairingActivity.EXTRA_DEVICE_ID, it) }
+                    })
                 }
                 if (isCriticalFailure(msg)) showFailureNotification(msg)
                 updateForegroundNotification()
@@ -1969,7 +2003,6 @@ class DeskdropService : Service() {
             putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
             putExtra(PairingActivity.EXTRA_DEVICE_NAME, name)
             putExtra(PairingActivity.EXTRA_PIN, pin)
-            putExtra(PairingActivity.EXTRA_FINGERPRINT, pin)
         }
         val optionsBundle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             android.app.ActivityOptions.makeBasic().apply {
@@ -2012,7 +2045,7 @@ class DeskdropService : Service() {
             .addAction(0, "Reject", rejectPi)
             .setOngoing(true)
             .build()
-        notificationManager.notify(NOTIF_ID_TOFU, notif)
+        notificationManager.notify(pairingNotifId(deviceId), notif)
     }
 
     private val lastTransferNotifTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -2093,6 +2126,7 @@ class DeskdropService : Service() {
     }
 
     private fun transferNotifId(tid: String): Int = NOTIF_ID_FILE_BASE + (tid.hashCode() and 0xFFF)
+    private fun pairingNotifId(deviceId: String): Int = NOTIF_ID_PAIRING_BASE + (deviceId.hashCode() and 0xFFF)
 
     private fun formatBytes(bytes: Long): String = when {
         bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)

@@ -147,6 +147,7 @@ fun MainScreen(
     onForgetPeer: (PeerSnapshot) -> Unit,
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
+    onCancelPairing: (PeerSnapshot) -> Unit,
     onSyncEnabledChange: (Boolean) -> Unit,
     onSyncTextChange: (Boolean) -> Unit,
     onSyncImagesChange: (Boolean) -> Unit,
@@ -225,7 +226,8 @@ fun MainScreen(
                                         }
                                     }
                                 },
-                                onRespondPairing = onRespondPairing
+                                onRespondPairing = onRespondPairing,
+                                onCancelPairing = onCancelPairing
                             )
                             AppTab.Activity -> ActivityTab(
                                 isDark = isDark,
@@ -243,6 +245,7 @@ fun MainScreen(
                                 onDisconnectPeer = onDisconnectPeer,
                                 onSendPairingRequest = onSendPairingRequest,
                                 onRespondPairing = onRespondPairing,
+                                onCancelPairing = onCancelPairing,
                                 onForgetPeer = onForgetPeer,
                                 onSendFiles = onActionSendFiles,
                                 onSpeedTest = onActionStartSpeedTest,
