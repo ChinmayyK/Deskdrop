@@ -154,8 +154,9 @@ jobs:
           fi
           echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > platforms/android/app/release.keystore
 
-      - name: Build APK
-        run: ./gradlew :app:assembleFullRelease
+      # Direct-download APK (full) and the Google Play bundle (play flavor).
+      - name: Build APK and Play bundle
+        run: ./gradlew :app:assembleFullRelease :app:bundlePlayRelease
         working-directory: platforms/android
         env:
           DESKDROP_KEYSTORE: release.keystore
@@ -168,6 +169,12 @@ jobs:
         with:
           name: deskdrop-android
           path: platforms/android/app/build/outputs/apk/full/release/*.apk
+
+      - name: Upload Play bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: deskdrop-android-play
+          path: platforms/android/app/build/outputs/bundle/playRelease/*.aab
 
   # ── macOS DMG ─────────────────────────────────────────────────────────────
   release-macos:
