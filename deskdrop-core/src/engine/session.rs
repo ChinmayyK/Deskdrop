@@ -212,12 +212,24 @@ pub(super) fn register_session(
     // The user asked to pair before this session existed (or on a session
     // that has since been replaced), or reconcile_one_sided_trust found the
     // peer no longer trusts us: deliver the request now.
-    if shared
+    // The code is per session, so tell the UI the one this request carries:
+    // if the request was sent before any session existed, the code it showed
+    // was a placeholder.
+    if let Some(peer) = shared
         .peer_manager
         .get(peer_id)
-        .is_some_and(|p| p.outgoing_pairing_waiting)
+        .filter(|p| p.outgoing_pairing_waiting)
     {
         let _ = outbox_tx.try_send(pairing_request_message(&shared, peer_id));
+        if let Some(pin) = peer.pairing_pin {
+            let _ = shared
+                .event_tx
+                .try_send(EngineEvent::OutgoingPairingWaiting {
+                    device_id: peer_id,
+                    device_name: peer_name.clone(),
+                    pin,
+                });
+        }
     }
 
     // A peer's "clipboard sharing off" notice only lives as long as the
@@ -761,9 +773,23 @@ pub(super) fn register_session(
                 // Drain pending remote file waiters and notify oneshot receivers with error fast-path
                 drain_remote_waiters(&shared, peer_id).await;
 
-                // FIX: Phantom Pairing Prompts. Clear incoming pairing state if connection drops.
-                let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
-                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                // FIX: Phantom Pairing Prompts. The code shown in a prompt
+                // belongs to this session, so the prompt closes with it; the
+                // requester resends (with the new session's code) once it is
+                // back. Our own outgoing request survives and is resent then.
+                // Skipped if a new session already registered in the awaits
+                // above: its code and any request it carried are current.
+                if shared.peer_manager.sender(peer_id).is_none() {
+                    let was_asked = shared
+                        .peer_manager
+                        .get(peer_id)
+                        .is_some_and(|p| p.pairing_requested);
+                    let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
+                    let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                    if was_asked {
+                        notify_pairing_changed(&shared, peer_id).await;
+                    }
+                }
 
                 // Record in activity feed.
                 let feed = shared.activity.clone();

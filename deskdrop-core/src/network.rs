@@ -409,6 +409,23 @@ pub struct HandshakeResult {
     pub peer_identity_pubkey_bytes: [u8; 32],
     pub peer_already_trusted: bool,
     pub is_manual_reconnect: bool,
+    /// Empty when the peer predates the version exchange.
+    pub peer_app_version: String,
+}
+
+fn my_metadata_json(device_name: &str, is_manual_reconnect: bool) -> Option<String> {
+    serde_json::to_string(&crate::protocol::DeviceMetadata {
+        device_name: device_name.to_string(),
+        app_version: crate::protocol::APP_VERSION.to_string(),
+        is_manual_reconnect: Some(is_manual_reconnect),
+        ..Default::default()
+    })
+    .ok()
+}
+
+fn parse_metadata(json: Option<String>) -> crate::protocol::DeviceMetadata {
+    json.and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_default()
 }
 
 /// Initiator side (we connected to the peer).
@@ -460,12 +477,7 @@ pub async fn handshake_initiator(
         .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
-    let metadata = crate::protocol::DeviceMetadata {
-        device_name: my_device_name.to_string(),
-        is_manual_reconnect: Some(is_manual_reconnect),
-        ..Default::default()
-    };
-    let metadata_json = serde_json::to_string(&metadata).ok();
+    let metadata_json = my_metadata_json(my_device_name, is_manual_reconnect);
 
     let mut hello = AppMessage::Hello {
         device_id: my_device_id,
@@ -495,7 +507,7 @@ pub async fn handshake_initiator(
         nonce_response,
         identity_proof,
         trusted,
-        ..
+        metadata_json: ack_metadata_json,
     } = ack_msg
     else {
         anyhow::bail!("expected HelloAck");
@@ -540,6 +552,7 @@ pub async fn handshake_initiator(
         peer_identity_pubkey_bytes: identity_pubkey,
         peer_already_trusted: trusted,
         is_manual_reconnect: false,
+        peer_app_version: parse_metadata(ack_metadata_json).app_version,
     })
 }
 
@@ -601,12 +614,8 @@ where
         anyhow::bail!("expected Hello");
     };
 
-    let mut is_manual_reconnect = false;
-    if let Some(json) = metadata_json {
-        if let Ok(metadata) = serde_json::from_str::<crate::protocol::DeviceMetadata>(&json) {
-            is_manual_reconnect = metadata.is_manual_reconnect.unwrap_or(false);
-        }
-    }
+    let peer_metadata = parse_metadata(metadata_json);
+    let is_manual_reconnect = peer_metadata.is_manual_reconnect.unwrap_or(false);
 
     if !ephemeral.verify_proof(&identity_pubkey, &session_salt, &identity_proof) {
         anyhow::bail!("handshake failed: invalid identity proof (MITM or spoofed key)");
@@ -634,7 +643,7 @@ where
         nonce_response,
         identity_proof,
         trusted: peer_is_trusted,
-        metadata_json: None,
+        metadata_json: my_metadata_json(&my_device_name, false),
     };
 
     send_encrypted(stream, &mut session, &mut ack)
@@ -649,6 +658,7 @@ where
         peer_identity_pubkey_bytes: identity_pubkey,
         peer_already_trusted: peer_is_trusted,
         is_manual_reconnect,
+        peer_app_version: peer_metadata.app_version,
     })
 }
 

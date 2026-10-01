@@ -18,6 +18,7 @@ impl Engine {
         trust.trust_peer(device_id)?;
         drop(trust);
         self.shared.peer_manager.update_trust(device_id, true)?;
+        retire_old_installs(&self.shared, device_id).await;
         Ok(())
     }
 
@@ -42,7 +43,8 @@ impl Engine {
         let token = hex::encode(bytes);
         *self.shared.qr_auth_token.lock().await = Some(QrAuthToken {
             token: token.clone(),
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(60),
+            // Pairing screens show one code for as long as they are open.
+            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(10 * 60),
         });
         token
     }
@@ -62,11 +64,12 @@ impl Engine {
                 if !addrs.is_empty() {
                     let shared = self.shared.clone();
                     tokio::spawn(async move {
-                        if let Ok(()) = connect_loop(
+                        if let Ok(()) = connect_loop_ext(
                             shared.clone(),
                             addrs,
                             Some(target_device),
                             DiscoverySource::Manual,
+                            true,
                         )
                         .await
                         {
@@ -114,6 +117,7 @@ impl Engine {
         if changed.is_some() {
             self.shared.peer_manager.update_trust(device_id, true)?;
             let _ = self.shared.peer_manager.set_auto_connect(device_id, true);
+            retire_old_installs(&self.shared, device_id).await;
 
             // Push local battery and network status to the newly trusted peer.
             let mut target_tx: Option<tokio::sync::mpsc::Sender<crate::protocol::AppMessage>> =
@@ -186,15 +190,35 @@ impl Engine {
     }
 
     pub async fn send_pairing_request(&self, target_device: Uuid) {
-        // Clear any previous Rejected or Revoked state so the outbound connection isn't blocked.
+        // Already paired: clients use Pair as "connect" on paired rows too.
+        // A pairing request there would show "waiting for approval" on a
+        // device nobody needs to approve. Dialing is enough: if the other
+        // side forgot us, reconcile_one_sided_trust asks it to re-pair.
+        if self.is_trusted(target_device).await {
+            let _ = self.reconnect_peer_by_id(target_device).await;
+            return;
+        }
+
+        // Clear any previous Rejected or Revoked state so the outbound connection isn't blocked,
+        // and a past Disconnect/Forget: asking to pair is asking to talk again.
         let _ = self.unreject_peer(target_device).await;
+        let _ = self
+            .shared
+            .peer_manager
+            .set_explicit_disconnect(target_device, false);
 
         // Mark that WE initiated a pairing request so the PairingResponse
-        // handler accepts the response (CRIT-03 anti-spoof check).
+        // handler accepts the response (CRIT-03 anti-spoof check). Lowering
+        // the flag first restarts the clock when the user taps Pair again.
+        let _ = self
+            .shared
+            .peer_manager
+            .set_outgoing_pairing_waiting(target_device, false);
         let _ = self
             .shared
             .peer_manager
             .set_outgoing_pairing_waiting(target_device, true);
+        arm_pairing_expiry(&self.shared, target_device);
 
         let live_tx = self
             .shared
@@ -223,11 +247,12 @@ impl Engine {
                     if !addrs.is_empty() {
                         let shared = self.shared.clone();
                         tokio::spawn(async move {
-                            if let Err(err) = connect_loop(
+                            if let Err(err) = connect_loop_ext(
                                 shared,
                                 addrs,
                                 Some(target_device),
                                 DiscoverySource::Manual,
+                                true,
                             )
                             .await
                             {
@@ -282,34 +307,68 @@ impl Engine {
         Ok(())
     }
     pub async fn respond_to_pairing(&self, requester_device: Uuid, accepted: bool) -> Result<()> {
-        let _ = self
+        // A prompt left on screen can outlive its request (expired, withdrawn,
+        // session gone). Accepting then would trust a device that is no
+        // longer asking, leaving trust one-sided.
+        let pending = self
             .shared
             .peer_manager
-            .set_pairing_requested(requester_device, false);
+            .get(requester_device)
+            .is_some_and(|p| p.pairing_requested);
+        if accepted && !pending {
+            anyhow::bail!("this pairing request is no longer pending");
+        }
         if accepted {
             // Trust them persistently
             self.trust_peer(requester_device).await?;
+        } else {
+            // Declining is "not now", not a block: the device stays reachable
+            // and may ask again once the cooldown passes. (Rejecting it in the
+            // trust store refused every later connection from it, so its user
+            // sat on "waiting" with no way to learn why.)
+            let _ = self
+                .shared
+                .peer_manager
+                .mark_pairing_declined(requester_device);
         }
-        let msg = AppMessage::PairingResponse {
-            origin_device: self.shared.config.device_id,
-            accepted,
-        };
-        let peers = self.shared.peer_manager.all_connected_senders();
-        if let Some(tx) = peers
-            .into_iter()
-            .find(|(id, _)| *id == requester_device)
-            .map(|(_, tx)| tx)
-        {
-            let _ = tx.send(msg).await;
+        // Closes our side in both directions: when both users tapped Pair at
+        // once, accepting their request also settles ours.
+        let _ = self.shared.peer_manager.end_pairing(requester_device, None);
+        if !pending {
+            // Declining an already-ended request: nothing to tell them, and a
+            // decline now would read as an answer to any request they send next.
+            return Ok(());
         }
-        if !accepted {
-            // Reject the peer in the trust store so they don't auto-reconnect
-            // and re-prompt endlessly. observe_trust checks for Rejected state
-            // and bails, preventing the re-prompt loop.
-            // reject_peer also disconnects the session internally.
-            let _ = self.reject_peer(requester_device).await;
-        }
+        send_to_live_session(
+            &self.shared,
+            requester_device,
+            AppMessage::PairingResponse {
+                origin_device: self.shared.config.device_id,
+                accepted,
+            },
+        )
+        .await;
         Ok(())
+    }
+
+    /// Withdraws our pending request: the other device's prompt closes too.
+    pub async fn cancel_pairing_request(&self, target_device: Uuid) {
+        let waiting = self
+            .shared
+            .peer_manager
+            .get(target_device)
+            .is_some_and(|p| p.outgoing_pairing_waiting);
+        if !waiting {
+            return;
+        }
+        let _ = self.shared.peer_manager.end_pairing(target_device, None);
+        send_to_live_session(
+            &self.shared,
+            target_device,
+            pairing_withdrawal(&self.shared),
+        )
+        .await;
+        notify_pairing_changed(&self.shared, target_device).await;
     }
 
     /// Pause Sync: keep connection alive, suppress clipboard data flow.
@@ -350,4 +409,92 @@ impl Engine {
             .peer_manager
             .set_auto_connect(device_id, enabled)
     }
+}
+
+/// Call after `kept` becomes trusted. See `TrustStore::retire_old_installs`.
+pub(super) async fn retire_old_installs(shared: &EngineShared, kept: Uuid) {
+    let retired = shared
+        .trust
+        .lock()
+        .await
+        .retire_old_installs(kept, |id| shared.peer_manager.sender(id).is_some());
+    match retired {
+        Ok(retired) => {
+            for id in retired {
+                tracing::info!(old = %id, new = %kept, "retired an old install of a paired device");
+                let _ = shared.peer_manager.forget_device(id);
+            }
+        }
+        Err(e) => tracing::warn!("could not retire old installs: {e:#}"),
+    }
+}
+
+async fn send_to_live_session(shared: &EngineShared, peer_id: Uuid, msg: AppMessage) {
+    if let Some(tx) = shared.peer_manager.sender(peer_id) {
+        let _ = tx.send(msg).await;
+    }
+}
+
+/// The wire has no "withdraw" message, and an unknown message variant would
+/// drop the session with an older peer. A decline sent by the device that
+/// *asked* means "withdrawn": newer peers close their prompt, older ones
+/// ignore it as an unsolicited response.
+pub(super) fn pairing_withdrawal(shared: &EngineShared) -> AppMessage {
+    AppMessage::PairingResponse {
+        origin_device: shared.config.device_id,
+        accepted: false,
+    }
+}
+
+pub(super) async fn notify_pairing_changed(shared: &EngineShared, peer_id: Uuid) {
+    let _ = shared
+        .event_tx
+        .send(EngineEvent::PairingChanged { device_id: peer_id })
+        .await;
+}
+
+/// Runs the pairing request with `peer_id` until it is answered, restarted
+/// or `PAIRING_TIMEOUT` passes, then expires it. While we are the one asking,
+/// it re-asks every `PAIRING_RESEND`: an answer sent on a session that was
+/// being replaced (both devices dialing at once) is lost, leaving the other
+/// device trusting us while we wait forever. A device that already trusts us
+/// answers a repeat at once, so that heals within one interval. Lives only
+/// as long as the request, so an idle phone never wakes for this.
+pub(super) fn arm_pairing_expiry(shared: &EngineShared, peer_id: Uuid) {
+    let Some(started) = shared
+        .peer_manager
+        .get(peer_id)
+        .and_then(|p| p.pairing_started_at)
+    else {
+        return;
+    };
+    let shared = shared.clone();
+    tokio::spawn(async move {
+        let deadline = tokio::time::Instant::now() + crate::pairing::PAIRING_TIMEOUT;
+        let peer = loop {
+            let next = (tokio::time::Instant::now() + crate::pairing::PAIRING_RESEND).min(deadline);
+            tokio::time::sleep_until(next).await;
+            let Some(peer) = shared.peer_manager.get(peer_id) else {
+                return;
+            };
+            if peer.pairing_started_at != Some(started) {
+                return; // answered, or a newer request owns the clock
+            }
+            if tokio::time::Instant::now() >= deadline {
+                break peer;
+            }
+            if peer.outgoing_pairing_waiting {
+                send_to_live_session(&shared, peer_id, pairing_request_message(&shared, peer_id))
+                    .await;
+            }
+        };
+        if peer.outgoing_pairing_waiting {
+            send_to_live_session(&shared, peer_id, pairing_withdrawal(&shared)).await;
+        }
+        info!(peer_id = %peer_id, "pairing request expired");
+        let _ = shared
+            .peer_manager
+            .end_pairing(peer_id, Some(PairingOutcome::Expired));
+        notify_pairing_changed(&shared, peer_id).await;
+    });
 }

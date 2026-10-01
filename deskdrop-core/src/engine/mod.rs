@@ -9,7 +9,7 @@ use crate::mesh::{ClipboardApplyPolicy, MeshRouter};
 use crate::network::{self, PeerSession, Server};
 use crate::network_manager::{self, NetworkChangeEvent, NetworkInterfaceInfo};
 use crate::peer_manager::{
-    DiscoverySource, PeerConnectionState, PeerManager, PeerRecord, SessionShutdown,
+    DiscoverySource, PairingOutcome, PeerConnectionState, PeerManager, PeerRecord, SessionShutdown,
 };
 use crate::probe::{self, ProbeResult, QualityProbe};
 use crate::protocol::{
@@ -61,6 +61,7 @@ use peer_discovery::*;
 pub(crate) use remote_ops::*;
 use session::*;
 pub(crate) use transfer_ops::*;
+use trust_ops::*;
 pub use types::*;
 
 #[derive(Clone)]
@@ -85,10 +86,18 @@ impl Engine {
                 let identity = IdentityStore::new(&config.identity_path)
                     .load_or_create()
                     .context("loading identity key")?;
-                let trust =
+                let mut trust =
                     TrustStore::load(&config.trust_store_path).context("loading trust store")?;
                 let peer_manager =
                     PeerManager::load(&config.peer_store_path).context("loading peer store")?;
+                match trust.clear_old_installs_once() {
+                    Ok(retired) => {
+                        for id in retired {
+                            let _ = peer_manager.forget_device(id);
+                        }
+                    }
+                    Err(e) => tracing::warn!("could not clear old installs: {e:#}"),
+                }
                 let history_path = config.data_dir.join("history.json");
                 let limit = config.history_limit.unwrap_or(500);
                 let history = crate::history::History::load_with_limit(&history_path, limit)
@@ -257,9 +266,13 @@ impl Engine {
         engine.spawn_sensitive_history_pruner();
         engine.spawn_auto_reconnector();
 
-        // Spawn UDP broadcast beacon and listener for resilient discovery
-        engine.spawn_udp_beacon();
-        engine.spawn_udp_listener();
+        // Spawn UDP broadcast beacon and listener for resilient discovery.
+        // Off with discovery: test engines beaconed onto the real LAN, and
+        // every running app listed them as phantom "device-xxxxxxxx" peers.
+        if engine.shared.config.enable_discovery {
+            engine.spawn_udp_beacon();
+            engine.spawn_udp_listener();
+        }
 
         Ok(engine)
     }

@@ -137,6 +137,13 @@ impl TrustRecord {
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct StoreData {
     devices: HashMap<Uuid, TrustRecord>,
+    /// Set once the blocks left by older builds are lifted (see `load`).
+    #[serde(default)]
+    legacy_blocks_cleared: bool,
+    /// Set once the duplicates left by reinstalls are cleared (see
+    /// `clear_old_installs_once`).
+    #[serde(default)]
+    old_installs_cleared: bool,
 }
 
 pub struct TrustStore {
@@ -164,6 +171,19 @@ impl TrustStore {
             {
                 record.state = TrustState::Trusted;
             }
+        }
+        // Older builds turned every declined pairing request into a block,
+        // and Android declined on its own after 30 s. Those devices could
+        // never reach this one again and their users never learned why.
+        // Declining is "not now" today, so lift those blocks once; a reject
+        // made after this (deskdrop-cli devices reject) stays.
+        if !data.legacy_blocks_cleared {
+            for record in data.devices.values_mut() {
+                if record.state == TrustState::Rejected {
+                    record.state = TrustState::Untrusted;
+                }
+            }
+            data.legacy_blocks_cleared = true;
         }
         Ok(Self { data, path })
     }
@@ -366,6 +386,77 @@ impl TrustStore {
             self.save()?;
         }
         Ok(changed)
+    }
+
+    /// Reinstalling Deskdrop or wiping its data gives a device a new identity,
+    /// so the same phone piles up as one trusted entry per install. Once
+    /// `kept` is trusted, other trusted entries with its name that are not
+    /// connected right now are old installs of that device: drop them.
+    /// Returns the dropped ids. A second device that really shares the name
+    /// is asked to pair again on its next connection.
+    pub fn retire_old_installs(
+        &mut self,
+        kept: Uuid,
+        is_connected: impl Fn(Uuid) -> bool,
+    ) -> Result<Vec<Uuid>> {
+        let Some(name) = self
+            .data
+            .devices
+            .get(&kept)
+            .filter(|r| r.state == TrustState::Trusted)
+            .map(|r| r.device_name.trim().to_lowercase())
+        else {
+            return Ok(Vec::new());
+        };
+        if name.is_empty() {
+            return Ok(Vec::new());
+        }
+        let retired: Vec<Uuid> = self
+            .data
+            .devices
+            .values()
+            .filter(|r| {
+                r.device_id != kept
+                    && r.state == TrustState::Trusted
+                    && r.device_name.trim().to_lowercase() == name
+                    && !is_connected(r.device_id)
+            })
+            .map(|r| r.device_id)
+            .collect();
+        if !retired.is_empty() {
+            for id in &retired {
+                self.data.devices.remove(id);
+            }
+            self.save()?;
+        }
+        Ok(retired)
+    }
+
+    /// Clears the duplicates that reinstalls left before
+    /// `retire_old_installs` existed: per name, the most recently seen
+    /// trusted entry stays. Runs once per store. Returns the dropped ids.
+    pub fn clear_old_installs_once(&mut self) -> Result<Vec<Uuid>> {
+        if self.data.old_installs_cleared {
+            return Ok(Vec::new());
+        }
+        let mut newest: HashMap<String, (u64, Uuid)> = HashMap::new();
+        for r in self.all_trusted() {
+            let name = r.device_name.trim().to_lowercase();
+            if name.is_empty() {
+                continue;
+            }
+            let entry = newest.entry(name).or_insert((r.last_seen, r.device_id));
+            if r.last_seen > entry.0 {
+                *entry = (r.last_seen, r.device_id);
+            }
+        }
+        let mut retired = Vec::new();
+        for (_, kept) in newest.into_values() {
+            retired.extend(self.retire_old_installs(kept, |_| false)?);
+        }
+        self.data.old_installs_cleared = true;
+        self.save()?;
+        Ok(retired)
     }
 
     pub fn set_capability_profile(
@@ -576,6 +667,89 @@ mod tests {
         store.trust_peer(id).unwrap();
         assert!(store.is_trusted(id));
         assert_eq!(store.trusted_count(), 1);
+    }
+
+    #[test]
+    fn legacy_blocks_are_lifted_once() {
+        let file = NamedTempFile::new().unwrap();
+        let id = Uuid::new_v4();
+        {
+            let mut store = TrustStore::load(file.path()).unwrap();
+            store.observe_peer(id, "Desk".into(), &[42u8; 32]).unwrap();
+            store.reject_peer(id).unwrap();
+        }
+        // What an older build left behind: a block and no migration marker.
+        let mut raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(file.path()).unwrap()).unwrap();
+        raw.as_object_mut().unwrap().remove("legacy_blocks_cleared");
+        std::fs::write(file.path(), serde_json::to_vec(&raw).unwrap()).unwrap();
+
+        let mut store = TrustStore::load(file.path()).unwrap();
+        assert_eq!(store.get(id).unwrap().state, TrustState::Untrusted);
+
+        // A reject made after the migration is kept.
+        store.reject_peer(id).unwrap();
+        let store = TrustStore::load(file.path()).unwrap();
+        assert_eq!(store.get(id).unwrap().state, TrustState::Rejected);
+    }
+
+    #[test]
+    fn pairing_a_reinstall_retires_its_old_installs() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        let (old, online_twin, other, new) = (
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+        );
+        for (id, name, key) in [
+            (old, "Pixel 8", 1u8),
+            (online_twin, "Pixel 8", 2),
+            (other, "Laptop", 3),
+            (new, " pixel 8 ", 4),
+        ] {
+            store.observe_peer(id, name.into(), &[key; 32]).unwrap();
+            store.trust_peer(id).unwrap();
+        }
+
+        let retired = store
+            .retire_old_installs(new, |id| id == online_twin)
+            .unwrap();
+        assert_eq!(retired, vec![old]);
+        assert!(store.get(old).is_none());
+        assert!(store.is_trusted(online_twin));
+        assert!(store.is_trusted(other));
+        assert!(store.is_trusted(new));
+    }
+
+    #[test]
+    fn old_installs_are_cleared_once_keeping_the_newest() {
+        let file = NamedTempFile::new().unwrap();
+        let (old, newest, other) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+        {
+            let mut store = TrustStore::load(file.path()).unwrap();
+            for (id, name, key) in [(old, "Phone", 1u8), (newest, "Phone", 2), (other, "Desk", 3)]
+            {
+                store.observe_peer(id, name.into(), &[key; 32]).unwrap();
+                store.trust_peer(id).unwrap();
+            }
+            store.data.devices.get_mut(&old).unwrap().last_seen = 100;
+            store.data.devices.get_mut(&newest).unwrap().last_seen = 200;
+            store.save().unwrap();
+        }
+
+        let mut store = TrustStore::load(file.path()).unwrap();
+        assert_eq!(store.clear_old_installs_once().unwrap(), vec![old]);
+        assert!(store.is_trusted(newest) && store.is_trusted(other));
+
+        // A same-named device paired later is left alone by the startup pass.
+        let twin = Uuid::new_v4();
+        store.observe_peer(twin, "Phone".into(), &[4u8; 32]).unwrap();
+        store.trust_peer(twin).unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        assert!(store.clear_old_installs_once().unwrap().is_empty());
+        assert!(store.is_trusted(twin) && store.is_trusted(newest));
     }
 
     #[test]

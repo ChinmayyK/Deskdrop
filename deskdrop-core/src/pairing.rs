@@ -16,7 +16,7 @@
 //! # Security properties
 //! - PIN changes with every new session (ephemeral ECDH).
 //! - A brute-force attacker needs 1,000,000 guesses per connection attempt.
-//! - The pairing window is short-lived (30 seconds before timeout).
+//! - The pairing window is short-lived (60 seconds before timeout).
 //! - After pairing, the device's long-term fingerprint is stored in the
 //!   trust store exactly as in TOFU mode.
 
@@ -186,8 +186,19 @@ impl PairingSession {
 
 // ── Pairing session ───────────────────────────────────────────────────────────
 
-/// How long a pairing request is valid before it auto-expires.
-pub const PAIRING_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a pairing request is valid before it auto-expires, on both the
+/// device that asked and the one being asked. Long enough to walk to the
+/// other device and compare codes.
+pub const PAIRING_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// While waiting on the other device, how often to ask again (see
+/// `arm_pairing_expiry`).
+pub const PAIRING_RESEND: Duration = Duration::from_secs(10);
+
+/// After our user declines a device, a new request from it within this window
+/// is declined automatically, so a declined device can't nag. Declining is
+/// otherwise "not now", never a block: the device may ask again later.
+pub const DECLINE_COOLDOWN: Duration = Duration::from_secs(30);
 
 #[derive(Debug)]
 pub enum PairingDecision {

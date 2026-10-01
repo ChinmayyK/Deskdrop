@@ -63,6 +63,24 @@ pub enum DiscoverySource {
     Unknown,
 }
 
+/// How the last pairing attempt with a peer ended, kept so the UI can say
+/// why a request disappeared instead of silently dropping back to "Pair".
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PairingOutcome {
+    Accepted,
+    /// The other device declined our request.
+    Declined,
+    /// The other device withdrew the request it sent us.
+    Cancelled,
+    /// Nobody answered within `pairing::PAIRING_TIMEOUT`.
+    Expired,
+    /// The other device runs a Deskdrop from before this pairing flow. Those
+    /// decline on their own after 30 s, so the answer says nothing about its
+    /// user; updating Deskdrop there fixes it.
+    UpdateNeeded,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceLifecycleState {
@@ -117,11 +135,25 @@ pub struct PeerRecord {
     /// User manually disconnected this peer and auto-reconnect must stay off
     /// until a fresh, explicit reconnect action is initiated.
     pub explicit_disconnect: bool,
-    /// Indicates that this untrusted peer has requested pairing.
+    /// This peer asked to pair and our user has not answered yet.
     pub pairing_requested: bool,
-    /// The generated pairing PIN to display, if pairing is requested.
+    /// We asked this peer to pair and are waiting for its answer.
     pub outgoing_pairing_waiting: bool,
+    /// Security code of the live session, shown on both devices while pairing.
     pub pairing_pin: Option<String>,
+    /// Unix seconds when the current pairing request (either direction) began.
+    #[serde(default)]
+    pub pairing_started_at: Option<u64>,
+    /// How the last pairing attempt ended; cleared when a new one starts.
+    #[serde(default)]
+    pub pairing_outcome: Option<PairingOutcome>,
+    /// Unix seconds when our user last declined this peer, for the re-ask cooldown.
+    #[serde(default)]
+    pub pairing_declined_at: Option<u64>,
+    /// Deskdrop version the peer sent in its last handshake. Empty when it
+    /// connected without one: builds before the version exchange.
+    #[serde(default)]
+    pub app_version: Option<String>,
 
     // ── Multi-layer discovery state ──────────────────────────────────────────
     /// When this peer was last seen via any discovery layer (separate from
@@ -151,6 +183,10 @@ pub struct PeerRecord {
     /// same as `fingerprint_display`.
     #[serde(default)]
     pub first_seen: Option<u64>,
+    /// Seconds left before the current pairing request expires. Populated at
+    /// status-serialization time from `pairing_started_at`.
+    #[serde(default)]
+    pub pairing_expires_in_secs: Option<u64>,
 }
 
 impl Default for PeerRecord {
@@ -175,6 +211,10 @@ impl Default for PeerRecord {
             pairing_requested: false,
             outgoing_pairing_waiting: false,
             pairing_pin: None,
+            pairing_started_at: None,
+            pairing_outcome: None,
+            pairing_declined_at: None,
+            app_version: None,
             last_discovery_at: None,
             discovery_sources: Vec::new(),
             addr_history: Vec::new(),
@@ -182,6 +222,7 @@ impl Default for PeerRecord {
             lifecycle_state: None,
             fingerprint_display: None,
             first_seen: None,
+            pairing_expires_in_secs: None,
         }
     }
 }
@@ -210,12 +251,29 @@ impl PeerRecord {
             DeviceLifecycleState::PendingApproval
         } else if self.status == PeerConnectionState::Connecting
             || self.status == PeerConnectionState::Connected
-            || self.pairing_pin.is_some()
+            || self.outgoing_pairing_waiting
         {
             DeviceLifecycleState::PairingInProgress
         } else {
             DeviceLifecycleState::Discovered
         }
+    }
+
+    /// Seconds left on the current pairing request, if one is in flight.
+    pub fn pairing_expires_in(&self) -> Option<u64> {
+        if !self.pairing_requested && !self.outgoing_pairing_waiting {
+            return None;
+        }
+        let started = self.pairing_started_at?;
+        let timeout = crate::pairing::PAIRING_TIMEOUT.as_secs();
+        Some((started + timeout).saturating_sub(now_secs()))
+    }
+
+    /// Whether our user declined this peer recently enough to refuse a re-ask.
+    pub fn in_decline_cooldown(&self) -> bool {
+        self.pairing_declined_at.is_some_and(|at| {
+            now_secs().saturating_sub(at) < crate::pairing::DECLINE_COOLDOWN.as_secs()
+        })
     }
 
     pub fn socket_addrs(&self) -> Vec<SocketAddr> {
@@ -308,6 +366,17 @@ impl PeerManager {
             if !peer.trusted && !peer.pairing_requested && !peer.outgoing_pairing_waiting {
                 peer.remembered = false;
             }
+        }
+
+        // Pairing requests ride on a session and its code, and neither
+        // survives a restart; their expiry timers are gone too. Cleared after
+        // the migration above, which reads the flags.
+        for peer in store.peers.values_mut() {
+            peer.pairing_requested = false;
+            peer.outgoing_pairing_waiting = false;
+            peer.pairing_pin = None;
+            peer.pairing_started_at = None;
+            peer.pairing_outcome = None; // "declined" days later is noise
         }
 
         let store_dashmap = dashmap::DashMap::new();
@@ -465,6 +534,7 @@ impl PeerManager {
                 lifecycle_state: None,
                 fingerprint_display: None,
                 first_seen: None,
+                ..PeerRecord::default()
             });
 
             // Do not overwrite a real name with a placeholder name.
@@ -805,10 +875,34 @@ impl PeerManager {
     }
 
     /// Sets whether this peer has an active pairing request pending.
+    /// Raising it (re)starts the request clock.
     pub fn set_pairing_requested(&self, device_id: Uuid, requested: bool) -> Result<bool> {
+        self.update_pairing_flags(device_id, |entry| entry.pairing_requested = requested)
+    }
+
+    /// Sets whether we are waiting on this peer to answer our request.
+    /// Raising it (re)starts the request clock.
+    pub fn set_outgoing_pairing_waiting(&self, device_id: Uuid, waiting: bool) -> Result<bool> {
+        self.update_pairing_flags(device_id, |entry| entry.outgoing_pairing_waiting = waiting)
+    }
+
+    fn update_pairing_flags(
+        &self,
+        device_id: Uuid,
+        apply: impl FnOnce(&mut PeerRecord),
+    ) -> Result<bool> {
         let changed = {
             if let Some(mut entry) = self.store.get_mut(&device_id) {
-                entry.pairing_requested = requested;
+                let was_pending = (entry.pairing_requested, entry.outgoing_pairing_waiting);
+                apply(&mut entry);
+                let now_pending = (entry.pairing_requested, entry.outgoing_pairing_waiting);
+                let raised = (now_pending.0 && !was_pending.0) || (now_pending.1 && !was_pending.1);
+                if raised {
+                    entry.pairing_started_at = Some(now_secs());
+                    entry.pairing_outcome = None;
+                } else if !now_pending.0 && !now_pending.1 {
+                    entry.pairing_started_at = None;
+                }
                 true
             } else {
                 false
@@ -820,19 +914,55 @@ impl PeerManager {
         Ok(changed)
     }
 
-    pub fn set_outgoing_pairing_waiting(&self, device_id: Uuid, waiting: bool) -> Result<bool> {
-        let changed = {
+    /// Closes any pairing request with this peer, in both directions, and
+    /// records how it ended. `None` means the local user ended it, which the
+    /// UI needs no message for.
+    pub fn end_pairing(&self, device_id: Uuid, outcome: Option<PairingOutcome>) -> Result<bool> {
+        let found = {
             if let Some(mut entry) = self.store.get_mut(&device_id) {
-                entry.outgoing_pairing_waiting = waiting;
+                let we_asked = entry.outgoing_pairing_waiting;
+                entry.pairing_requested = false;
+                entry.outgoing_pairing_waiting = false;
+                entry.pairing_started_at = None;
+                entry.pairing_outcome = match outcome {
+                    Some(PairingOutcome::Declined | PairingOutcome::Expired)
+                        if we_asked && entry.app_version.as_deref() == Some("") =>
+                    {
+                        Some(PairingOutcome::UpdateNeeded)
+                    }
+                    other => other,
+                };
                 true
             } else {
                 false
             }
         };
-        if changed {
+        if found {
             self.save()?;
         }
-        Ok(changed)
+        Ok(found)
+    }
+
+    pub fn set_app_version(&self, device_id: Uuid, version: String) {
+        if let Some(mut entry) = self.store.get_mut(&device_id) {
+            entry.app_version = Some(version);
+        }
+    }
+
+    /// Records that our user declined this peer, starting the re-ask cooldown.
+    pub fn mark_pairing_declined(&self, device_id: Uuid) -> Result<bool> {
+        let found = {
+            if let Some(mut entry) = self.store.get_mut(&device_id) {
+                entry.pairing_declined_at = Some(now_secs());
+                true
+            } else {
+                false
+            }
+        };
+        if found {
+            self.save()?;
+        }
+        Ok(found)
     }
 
     /// Sets the pairing PIN for this peer.
@@ -885,6 +1015,8 @@ impl PeerManager {
                 entry.auto_connect = false;
                 entry.explicit_disconnect = true;
                 entry.pairing_requested = false;
+                entry.outgoing_pairing_waiting = false;
+                entry.pairing_started_at = None;
                 entry.pairing_pin = None;
                 true
             } else {
@@ -1259,6 +1391,102 @@ mod tests {
             "legacy phantom peer must be demoted to Nearby on load"
         );
         assert!(!peer.trusted);
+    }
+
+    #[test]
+    fn a_no_from_an_old_build_asks_for_an_update() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let (old, new) = (Uuid::new_v4(), Uuid::new_v4());
+        for (id, version, name) in [(old, "", "Old phone"), (new, "1.3.4", "New phone")] {
+            manager
+                .upsert_peer(
+                    id,
+                    name.into(),
+                    SocketAddr::from(([192, 168, 1, 41], 47823)),
+                    false,
+                    DiscoverySource::Mdns,
+                )
+                .unwrap();
+            manager.set_app_version(id, version.into());
+            manager.set_outgoing_pairing_waiting(id, true).unwrap();
+            manager
+                .end_pairing(id, Some(PairingOutcome::Declined))
+                .unwrap();
+        }
+        assert_eq!(
+            manager.get(old).unwrap().pairing_outcome,
+            Some(PairingOutcome::UpdateNeeded)
+        );
+        assert_eq!(
+            manager.get(new).unwrap().pairing_outcome,
+            Some(PairingOutcome::Declined)
+        );
+    }
+
+    #[test]
+    fn pairing_clock_starts_on_request_and_records_outcome() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        manager
+            .upsert_peer(
+                id,
+                "Laptop".into(),
+                SocketAddr::from(([192, 168, 1, 41], 47823)),
+                false,
+                DiscoverySource::Mdns,
+            )
+            .unwrap();
+
+        manager
+            .end_pairing(id, Some(PairingOutcome::Declined))
+            .unwrap();
+        manager.set_outgoing_pairing_waiting(id, true).unwrap();
+        let peer = manager.get(id).unwrap();
+        assert!(peer.pairing_started_at.is_some());
+        assert_eq!(
+            peer.pairing_outcome, None,
+            "a new request clears the old outcome"
+        );
+        assert_eq!(
+            peer.pairing_expires_in(),
+            Some(crate::pairing::PAIRING_TIMEOUT.as_secs())
+        );
+
+        manager
+            .end_pairing(id, Some(PairingOutcome::Expired))
+            .unwrap();
+        let peer = manager.get(id).unwrap();
+        assert!(!peer.outgoing_pairing_waiting && peer.pairing_started_at.is_none());
+        assert_eq!(peer.pairing_outcome, Some(PairingOutcome::Expired));
+        assert_eq!(peer.pairing_expires_in(), None);
+    }
+
+    #[test]
+    fn pairing_requests_do_not_survive_a_restart() {
+        let file = NamedTempFile::new().unwrap();
+        let id = Uuid::new_v4();
+        {
+            let manager = PeerManager::load(file.path()).unwrap();
+            manager
+                .upsert_peer(
+                    id,
+                    "Laptop".into(),
+                    SocketAddr::from(([192, 168, 1, 41], 47823)),
+                    false,
+                    DiscoverySource::Mdns,
+                )
+                .unwrap();
+            if let Some(mut entry) = manager.store.get_mut(&id) {
+                entry.remembered = true; // kept on load, like any in-flight pairing
+            }
+            manager.set_outgoing_pairing_waiting(id, true).unwrap();
+            manager.set_pairing_pin(id, Some("123 456".into())).unwrap();
+        }
+        let peer = PeerManager::load(file.path()).unwrap().get(id).unwrap();
+        assert!(!peer.outgoing_pairing_waiting && !peer.pairing_requested);
+        assert!(peer.pairing_pin.is_none() && peer.pairing_started_at.is_none());
     }
 
     #[test]

@@ -76,6 +76,12 @@ pub enum EngineEvent {
     PairingRejected {
         device_id: Uuid,
     },
+    /// A pairing request with this peer started, ended or changed state
+    /// without any other event saying so (expired, withdrawn, cancelled).
+    /// Event-driven UIs re-read the peer snapshot.
+    PairingChanged {
+        device_id: Uuid,
+    },
     /// An untrusted peer was discovered on the network (useful for UI lists).
     PeerDiscovered {
         device_id: Uuid,
