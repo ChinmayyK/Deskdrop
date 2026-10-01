@@ -11,11 +11,11 @@ android {
         minSdk 28
         targetSdk 34
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // app has a "distribution" flavor dimension; benchmark the full build.
+        missingDimensionStrategy 'distribution', 'full'
     }
 
     targetProjectPath ':app'
-    // app has a "distribution" flavor dimension; benchmark the full build.
-    missingDimensionStrategy 'distribution', 'full'
     
     buildTypes {
         release {
