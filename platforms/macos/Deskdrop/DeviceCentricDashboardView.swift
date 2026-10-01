@@ -217,6 +217,7 @@ struct DeviceCard: View {
                             Text("Waiting...")
                                 .foregroundStyle(CRTheme.inkSoft)
                                 .font(.system(size: 13))
+                            ModernDeviceCardButton(icon: "xmark", color: CRTheme.inkSoft, help: "Cancel request") { store.cancelPairingRequest(device) }
                         }
                     } else {
                         ModernDeviceCardButton(icon: "link", color: CRTheme.brandElectric, help: "Pair") { store.sendPairingRequest(device) }
@@ -700,7 +701,7 @@ struct UntrustedDeviceCard: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(CRTheme.inkSoft)
                     } else {
-                        Text("Ready to pair")
+                        Text(device.pairingOutcomeText ?? "Ready to pair")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(CRTheme.inkSoft)
                     }
@@ -761,6 +762,9 @@ struct UntrustedDeviceCard: View {
                         }
                         .buttonStyle(.plain)
                         .scaleEffect(isHovered ? 1.05 : 1.0)
+                    } else {
+                        Button("Cancel") { store.cancelPairingRequest(device) }
+                            .buttonStyle(CRSecondaryButtonStyle())
                     }
                 } else {
                     Button("Pair Device") { store.sendPairingRequest(device) }.buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))

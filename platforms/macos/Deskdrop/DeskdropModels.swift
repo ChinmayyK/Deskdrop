@@ -31,6 +31,8 @@ struct PeerViewModel: Identifiable, Equatable {
     let outgoingPairingWaiting: Bool
     let pairingPin: String?
     let explicitDisconnect: Bool
+    /// How the last pairing request ended; nil while one is pending.
+    var pairingOutcome: String? = nil
 
     // ── Timing ────────────────────────────────────────────────────────────────
     let lastSeen: Date?

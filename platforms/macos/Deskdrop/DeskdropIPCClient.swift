@@ -27,6 +27,8 @@ struct IpcPeerRecord: Codable {
     let outgoing_pairing_waiting: Bool?
     let pairing_pin: String?
     let explicit_disconnect: Bool?
+    /// How the last pairing request ended: "accepted", "declined", "cancelled", "expired", "update_needed".
+    let pairing_outcome: String?
 }
 
 struct IpcStatusResponse: Codable {

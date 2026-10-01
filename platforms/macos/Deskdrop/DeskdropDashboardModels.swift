@@ -237,7 +237,19 @@ struct ManagedDevice: Identifiable {
     let pairingPin: String?
     let ip: String?
     let explicitDisconnect: Bool
+    let pairingOutcome: String?
     var isConnected: Bool { connectionState == .connected }
+    /// Why the last request with an unpaired device ended, for its status line.
+    var pairingOutcomeText: String? {
+        guard trustState != .trusted, !pairingRequested, !outgoingPairingWaiting else { return nil }
+        switch pairingOutcome {
+        case "declined": return "Declined · try again"
+        case "expired": return "No answer · try again"
+        case "cancelled": return "Request withdrawn"
+        case "update_needed": return "Update Deskdrop on it, then try again"
+        default: return nil
+        }
+    }
     var canReconnect: Bool { trustState == .trusted && remembered && autoConnect && connectionState != .connected && !explicitDisconnect }
 
     init(peer: PeerViewModel) {
@@ -279,6 +291,7 @@ struct ManagedDevice: Identifiable {
         self.pairingRequested = peer.pairingRequested
         self.outgoingPairingWaiting = peer.outgoingPairingWaiting
         self.pairingPin      = peer.pairingPin
+        self.pairingOutcome  = peer.pairingOutcome
     }
 }
 
