@@ -5,11 +5,11 @@ plugins {
 
 android {
     namespace 'com.deskdrop.benchmark'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         minSdk 28
-        targetSdk 34
+        targetSdk 36
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // app has a "distribution" flavor dimension; benchmark the full build.
         missingDimensionStrategy 'distribution', 'full'
