@@ -729,8 +729,11 @@ mod tests {
         let (old, newest, other) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
         {
             let mut store = TrustStore::load(file.path()).unwrap();
-            for (id, name, key) in [(old, "Phone", 1u8), (newest, "Phone", 2), (other, "Desk", 3)]
-            {
+            for (id, name, key) in [
+                (old, "Phone", 1u8),
+                (newest, "Phone", 2),
+                (other, "Desk", 3),
+            ] {
                 store.observe_peer(id, name.into(), &[key; 32]).unwrap();
                 store.trust_peer(id).unwrap();
             }
@@ -745,7 +748,9 @@ mod tests {
 
         // A same-named device paired later is left alone by the startup pass.
         let twin = Uuid::new_v4();
-        store.observe_peer(twin, "Phone".into(), &[4u8; 32]).unwrap();
+        store
+            .observe_peer(twin, "Phone".into(), &[4u8; 32])
+            .unwrap();
         store.trust_peer(twin).unwrap();
         let mut store = TrustStore::load(file.path()).unwrap();
         assert!(store.clear_old_installs_once().unwrap().is_empty());
