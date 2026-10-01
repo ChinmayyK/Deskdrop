@@ -47,6 +47,12 @@ async fn run() -> Result<()> {
         ["devices", "show", id] => cmd_devices_show(id).await,
         ["devices", "trust", id] | ["devices", "retrust", id] => cmd_devices_trust(id).await,
         ["devices", "reject", id] => cmd_devices_reject(id).await,
+        // Pairing requests: answering one tells the other device, unlike
+        // `devices trust`, which only changes trust here.
+        ["pair", id] => cmd_pair(id, PairAction::Request).await,
+        ["pair", "accept", id] => cmd_pair(id, PairAction::Accept).await,
+        ["pair", "decline", id] => cmd_pair(id, PairAction::Decline).await,
+        ["pair", "cancel", id] => cmd_pair(id, PairAction::Cancel).await,
         ["devices", "revoke", id] => cmd_devices_revoke(id),
         ["devices", "rename", id, name] => cmd_devices_rename(id, name).await,
         // Peer settings
@@ -507,6 +513,51 @@ async fn cmd_devices_reject(id_str: &str) -> Result<()> {
     .await?
     {
         IpcResponse::Ok { .. } => println!(" rejected {}", id),
+        IpcResponse::Error { message } => bail!("{}", message),
+        response => bail!("{:?}", response),
+    }
+    Ok(())
+}
+
+enum PairAction {
+    Request,
+    Accept,
+    Decline,
+    Cancel,
+}
+
+async fn cmd_pair(id_str: &str, action: PairAction) -> Result<()> {
+    let device_id = Uuid::parse_str(id_str).context("invalid UUID")?.to_string();
+    let (request, done) = match action {
+        PairAction::Request => (
+            IpcRequest::SendPairingRequest {
+                device_id: device_id.clone(),
+            },
+            "pairing request sent; compare the code shown on the other device",
+        ),
+        PairAction::Accept => (
+            IpcRequest::RespondToPairing {
+                device_id: device_id.clone(),
+                accepted: true,
+            },
+            "paired",
+        ),
+        PairAction::Decline => (
+            IpcRequest::RespondToPairing {
+                device_id: device_id.clone(),
+                accepted: false,
+            },
+            "declined",
+        ),
+        PairAction::Cancel => (
+            IpcRequest::CancelPairingRequest {
+                device_id: device_id.clone(),
+            },
+            "request cancelled",
+        ),
+    };
+    match ipc(&request).await? {
+        IpcResponse::Ok { .. } => println!(" {done} ({device_id})"),
         IpcResponse::Error { message } => bail!("{}", message),
         response => bail!("{:?}", response),
     }
@@ -1165,6 +1216,12 @@ DAEMON CONTROL
 PEERS
   peers                           List currently connected peers with stats
   events [--last N]               Show recent feedback events (default: last 20)
+
+PAIRING
+  pair <uuid>                     Ask a nearby device to pair (compare the code on both)
+  pair accept <uuid>              Accept a device's pairing request
+  pair decline <uuid>             Decline it (it may ask again later)
+  pair cancel <uuid>              Withdraw your own pending request
 
 DEVICES
   devices list                    List all known devices and their trust state
