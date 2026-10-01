@@ -45,6 +45,17 @@
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentGroupRef Id="Shortcuts" />
     </Feature>
+
+    <!-- Start Deskdrop (and with it the tray icon) once the files are in
+         place, so a double-clicked install ends with the app running instead
+         of leaving the user to find it in the Start menu. Only for an
+         interactive install or upgrade (UILevel > 2): a silent /qn install,
+         as used by scripts and IT deployment, stays silent. Never on
+         uninstall. asyncNoWait lets msiexec finish while the app runs. -->
+    <CustomAction Id="LaunchDeskdrop" FileRef="DeskdropExe" ExeCommand="" Return="asyncNoWait" Impersonate="yes" />
+    <InstallExecuteSequence>
+      <Custom Action="LaunchDeskdrop" After="InstallFinalize" Condition="UILevel &gt; 2 AND NOT (REMOVE~=&quot;ALL&quot;)" />
+    </InstallExecuteSequence>
   </Package>
 
   <!-- Install directory -->
