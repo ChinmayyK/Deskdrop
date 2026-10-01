@@ -22,10 +22,19 @@ impl Engine {
             // are broadcast. The friendly device name is exchanged only after a
             // successful encrypted handshake via HelloFrame/HelloAck.
             // Format: DESKDROP_BEACON:<uuid>:<tcp_port>:<protocol_version>
+            // The port we actually listen on: a configured 0 means "any", and
+            // advertising 0 sent peers dialing nowhere.
+            let port = loop {
+                let port = shared.network_state.lock().await.bind_addr.port();
+                if port != 0 {
+                    break port;
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            };
             let payload = format!(
                 "DESKDROP_BEACON:{}:{}:{}",
                 shared.config.device_id,
-                shared.config.port,
+                port,
                 crate::protocol::PROTOCOL_VERSION
             )
             .into_bytes();
@@ -134,8 +143,8 @@ impl Engine {
                                 continue;
                             }
                             let peer_port = match parts[2].parse::<u16>() {
-                                Ok(p) => p,
-                                Err(_) => continue,
+                                Ok(p) if p != 0 => p, // nothing to dial
+                                _ => continue,
                             };
                             let peer_addr = SocketAddr::new(addr.ip(), peer_port);
 
@@ -214,8 +223,8 @@ impl Engine {
                         }
                         last_beacon.insert(peer_id, now);
                         let peer_port = match parts[2].parse::<u16>() {
-                            Ok(p) => p,
-                            Err(_) => continue,
+                            Ok(p) if p != 0 => p, // nothing to dial
+                            _ => continue,
                         };
                         // Protocol version check: if the 4th field parses as a
                         // small integer, treat it as a version. Otherwise, treat
@@ -305,9 +314,10 @@ impl Engine {
                             // TCP connect attempt. This eliminates delay when
                             // asymmetric routing / AP isolation blocks outbound TCP.
                             if !shared.peer_manager.is_connected(peer_id) {
+                                let our_port = shared.network_state.lock().await.bind_addr.port();
                                 let connectback = format!(
                                     "DESKDROP_CONNECTBACK:{}:{}",
-                                    shared.config.device_id, shared.config.port,
+                                    shared.config.device_id, our_port,
                                 );
                                 let target = SocketAddr::new(
                                     addr.ip(),
@@ -331,9 +341,15 @@ impl Engine {
                                     tracing::warn!(peer_id = %peer_id, error = %err, "UDP beacon peer connection failed");
 
                                     if !shared_clone.peer_manager.is_connected(peer_id) {
+                                        let our_port = shared_clone
+                                            .network_state
+                                            .lock()
+                                            .await
+                                            .bind_addr
+                                            .port();
                                         let connectback = format!(
                                             "DESKDROP_CONNECTBACK:{}:{}",
-                                            shared_clone.config.device_id, shared_clone.config.port,
+                                            shared_clone.config.device_id, our_port,
                                         );
                                         let target =
                                             SocketAddr::new(beacon_source_addr.ip(), 47824);

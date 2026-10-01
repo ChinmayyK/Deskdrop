@@ -43,7 +43,7 @@ fn suppress_next() {
 #[cfg(target_os = "linux")]
 fn should_suppress() -> bool {
     SUPPRESS_COUNT
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
+        .try_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
             if v > 0 {
                 Some(v - 1)
             } else {
@@ -213,7 +213,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
                     Err(e) => {
                         tracing::warn!("Failed to apply clipboard: {e}");
                         SUPPRESS_COUNT
-                            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
+                            .try_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
                                 Some(v.saturating_sub(1))
                             })
                             .ok();
@@ -265,10 +265,13 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
                 .collect::<Vec<_>>()
                 .join("\n");
 
+            // `pair accept` answers the request, so the other device stops
+            // waiting; the old hint named a command that doesn't exist.
             tracing::warn!(
-                "🔐 Trust prompt for '{}' ({})\n{fp}\n\n\
-                 To trust:  deskdrop-cli trust {}\n\
-                 To reject: deskdrop-cli reject {}",
+                "🔐 Pairing request from '{}' ({})\n   Code:\n{fp}\n\n\
+                 Accept only if the other device shows the same code:\n\
+                 To accept:  deskdrop-cli pair accept {}\n\
+                 To decline: deskdrop-cli pair decline {}",
                 device_name,
                 device_id,
                 device_id,
@@ -277,8 +280,8 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
 
             rate_limited_notify(
                 last_notify,
-                &format!("New device: {device_name}"),
-                &format!("Run: deskdrop-cli trust {device_id}"),
+                &format!("{device_name} wants to pair · code {pin}"),
+                &format!("Run: deskdrop-cli pair accept {device_id}"),
             );
         }
 

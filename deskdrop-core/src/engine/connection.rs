@@ -187,6 +187,9 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
         trusted,
         DiscoverySource::Mdns,
     )?;
+    shared
+        .peer_manager
+        .set_app_version(hs.peer_device_id, hs.peer_app_version);
 
     register_session(
         shared,
@@ -209,6 +212,18 @@ pub(super) async fn connect_loop(
     expected_device_id: Option<Uuid>,
     discovery: DiscoverySource,
 ) -> Result<()> {
+    connect_loop_ext(shared, endpoints, expected_device_id, discovery, false).await
+}
+
+/// `connect_loop` for a dial the user asked for (pairing): `manual` marks the
+/// handshake so a device that disconnected or forgot us still lets it in.
+pub(super) async fn connect_loop_ext(
+    shared: EngineShared,
+    endpoints: Vec<SocketAddr>,
+    expected_device_id: Option<Uuid>,
+    discovery: DiscoverySource,
+    manual: bool,
+) -> Result<()> {
     if endpoints.is_empty() {
         return Ok(());
     }
@@ -229,7 +244,7 @@ pub(super) async fn connect_loop(
             endpoints.clone(),
             expected_device_id,
             discovery,
-            false,
+            manual,
         )
         .await
         {
@@ -437,6 +452,9 @@ pub(super) async fn connect_once(
         trusted,
         discovery,
     )?;
+    shared
+        .peer_manager
+        .set_app_version(hs.peer_device_id, hs.peer_app_version);
 
     register_session(
         shared,
@@ -476,6 +494,7 @@ pub(super) fn reconcile_one_sided_trust(
             let _ = shared
                 .peer_manager
                 .set_outgoing_pairing_waiting(peer_id, true);
+            arm_pairing_expiry(shared, peer_id);
             let _ = shared
                 .event_tx
                 .try_send(EngineEvent::OutgoingPairingWaiting {
@@ -485,10 +504,21 @@ pub(super) fn reconcile_one_sided_trust(
                 });
         }
         (false, true) => {
+            // Our user is already pairing with them: the request
+            // register_session delivers is auto-accepted by a peer that
+            // trusts us, so there is nothing to ask.
+            if shared
+                .peer_manager
+                .get(peer_id)
+                .is_some_and(|p| p.outgoing_pairing_waiting)
+            {
+                return;
+            }
             // We forgot them but they still remember us: ask our user,
             // exactly as if they had sent a PairingRequest.
             info!(peer_id = %peer_id, "peer still trusts us - prompting to re-pair");
             let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
+            arm_pairing_expiry(shared, peer_id);
             let _ = shared.event_tx.try_send(EngineEvent::PairingRequested {
                 device_id: peer_id,
                 device_name: peer_name.to_string(),
@@ -516,11 +546,15 @@ pub(super) async fn observe_trust(
             shared.peer_manager.update_trust(device_id, true)?;
             Ok(true)
         }
-        TrustState::Rejected | TrustState::Revoked => {
+        TrustState::Rejected => {
             shared.peer_manager.update_trust(device_id, false)?;
             anyhow::bail!("peer {} is not trusted ({:?})", device_id, record.state);
         }
-        TrustState::Untrusted => {
+        // Forgotten or revoked: no longer paired, but not blocked. It may
+        // reconnect and ask to pair again like any nearby device (refusing
+        // the connection left its user on "no answer" forever). Automatic
+        // reconnects stay off through explicit_disconnect.
+        TrustState::Revoked | TrustState::Untrusted => {
             shared.peer_manager.update_trust(device_id, false)?;
 
             // We NO LONGER emit PairingRequested or OutgoingPairingWaiting here.

@@ -24,6 +24,17 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 .unwrap_or(false);
             if is_trusted {
                 tracing::info!(peer_id = %peer_id, "Auto-accepting pairing request from already trusted device");
+                // Any prompt we still show for them is settled too.
+                let had_prompt = shared
+                    .peer_manager
+                    .get(peer_id)
+                    .is_some_and(|p| p.pairing_requested || p.outgoing_pairing_waiting);
+                if had_prompt {
+                    let _ = shared
+                        .peer_manager
+                        .end_pairing(peer_id, Some(PairingOutcome::Accepted));
+                    notify_pairing_changed(shared, peer_id).await;
+                }
                 let _ = ctx
                     .outbox_tx
                     .send(AppMessage::PairingResponse {
@@ -34,14 +45,46 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 return Flow::Continue;
             }
 
-            let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
+            // Our user just declined this device: answer for them rather than
+            // re-prompting, so a declined device can't nag.
+            if shared
+                .peer_manager
+                .get(peer_id)
+                .is_some_and(|p| p.in_decline_cooldown())
+            {
+                tracing::info!(peer_id = %peer_id, "declining pairing request inside decline cooldown");
+                let _ = ctx
+                    .outbox_tx
+                    .send(AppMessage::PairingResponse {
+                        origin_device: shared.config.device_id,
+                        accepted: false,
+                    })
+                    .await;
+                return Flow::Continue;
+            }
 
-            // Re-emit PairingRequested with the REAL name and PIN so the UI updates
+            // A repeat of a request we are already showing (the requester
+            // re-asks while waiting, or its session was replaced) keeps its
+            // clock; only a new one arms it.
+            let shown = shared.peer_manager.get(peer_id);
+            let already_shown = shown.as_ref().is_some_and(|p| p.pairing_requested);
+            let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
+            if !already_shown {
+                arm_pairing_expiry(shared, peer_id);
+            }
+
             let pin = ctx
                 .session_pin
                 .clone()
                 .or_else(|| shared.peer_manager.get(peer_id).and_then(|p| p.pairing_pin))
                 .unwrap_or_else(|| "------".to_string());
+            // Same request, same code: the prompt on screen is already right,
+            // and re-raising it would make it flash on every repeat.
+            if already_shown && shown.and_then(|p| p.pairing_pin).as_deref() == Some(pin.as_str()) {
+                return Flow::Continue;
+            }
+
+            // Re-emit PairingRequested with the REAL name and PIN so the UI updates
             let _ = shared
                 .peer_manager
                 .set_pairing_pin(peer_id, Some(pin.clone()));
@@ -84,21 +127,25 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             }
 
             // Check that we actually initiated pairing with this peer.
-            // The `pairing_requested` flag is set to true in observe_trust()
-            // when we emit PairingRequested, and cleared in respond_to_pairing().
+            // `outgoing_pairing_waiting` is set when our user taps Pair and
+            // cleared when the request is answered, withdrawn or expires.
             // A remote peer sending an unsolicited PairingResponse is rejected.
-            let we_requested_pairing = shared
-                .peer_manager
-                .get(peer_id)
-                .map(|p| p.outgoing_pairing_waiting)
-                .unwrap_or(false);
-            let we_already_trust_them = shared
-                .peer_manager
-                .get(peer_id)
-                .map(|p| p.trusted)
-                .unwrap_or(false);
+            let peer = shared.peer_manager.get(peer_id);
+            let we_requested_pairing = peer.as_ref().is_some_and(|p| p.outgoing_pairing_waiting);
+            let we_already_trust_them = peer.as_ref().is_some_and(|p| p.trusted);
+            let they_asked_us = peer.as_ref().is_some_and(|p| p.pairing_requested);
 
             if !we_requested_pairing && !we_already_trust_them {
+                // A decline from the device that asked us is its withdrawal
+                // (see pairing_withdrawal): close the prompt we are showing.
+                if they_asked_us && !accepted {
+                    tracing::info!(peer_id = %peer_id, "peer withdrew its pairing request");
+                    let _ = shared
+                        .peer_manager
+                        .end_pairing(peer_id, Some(PairingOutcome::Cancelled));
+                    notify_pairing_changed(shared, peer_id).await;
+                    return Flow::Continue;
+                }
                 tracing::warn!(
                     peer_id = %peer_id,
                     "ignoring unsolicited PairingResponse — no pending pairing request and not already trusted"
@@ -106,15 +153,11 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 return Flow::Continue;
             }
 
-            // Clear the pairing_requested flag now that we've received the response.
-            let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
-            let _ = shared
-                .peer_manager
-                .set_outgoing_pairing_waiting(peer_id, false);
-
             if !accepted {
                 tracing::info!(peer_id = %peer_id, "peer rejected pairing request");
-                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                let _ = shared
+                    .peer_manager
+                    .end_pairing(peer_id, Some(PairingOutcome::Declined));
                 let _ = shared
                     .event_tx
                     .send(EngineEvent::PairingResponse {
@@ -132,12 +175,16 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 // "not connected" and file transfers fail.
                 tracing::info!(peer_id = %peer_id, "peer accepted pairing — establishing mutual trust");
                 if !we_already_trust_them {
-                    let mut trust = shared.trust.lock().await;
-                    let _ = trust.trust_peer(peer_id);
+                    let _ = shared.trust.lock().await.trust_peer(peer_id);
                     let _ = shared.peer_manager.update_trust(peer_id, true);
+                    retire_old_installs(shared, peer_id).await;
                 }
                 let _ = shared.peer_manager.set_auto_connect(peer_id, true);
-                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                // Also closes the prompt for their request when both users
+                // tapped Pair at once.
+                let _ = shared
+                    .peer_manager
+                    .end_pairing(peer_id, Some(PairingOutcome::Accepted));
 
                 // Emit PeerConnected so the UI updates immediately.
                 let _ = shared
@@ -159,27 +206,27 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 .await;
         }
         AppMessage::QrAuth { token } => {
-            let valid = {
-                let mut stored = shared.qr_auth_token.lock().await;
-                if let Some(t) = stored.take() {
-                    t.token == token && t.expires_at > std::time::Instant::now()
-                } else {
-                    false
-                }
-            };
+            // Not consumed on use: the code stays on screen so a second
+            // device can scan it, and a wrong or stale attempt must not
+            // invalidate it for the real one. It only ever travels inside the
+            // encrypted session, so knowing it means having seen the screen.
+            let valid = shared
+                .qr_auth_token
+                .lock()
+                .await
+                .as_ref()
+                .is_some_and(|t| t.token == token && t.expires_at > std::time::Instant::now());
 
             if valid {
                 tracing::info!(peer_id = %peer_id, "peer provided valid QR auth token — establishing mutual trust");
-                let _ = shared.peer_manager.set_pairing_requested(peer_id, false);
                 let _ = shared
                     .peer_manager
-                    .set_outgoing_pairing_waiting(peer_id, false);
+                    .end_pairing(peer_id, Some(PairingOutcome::Accepted));
 
-                let mut trust = shared.trust.lock().await;
-                let _ = trust.trust_peer(peer_id);
+                let _ = shared.trust.lock().await.trust_peer(peer_id);
                 let _ = shared.peer_manager.update_trust(peer_id, true);
                 let _ = shared.peer_manager.set_auto_connect(peer_id, true);
-                let _ = shared.peer_manager.set_pairing_pin(peer_id, None);
+                retire_old_installs(shared, peer_id).await;
 
                 // Emit PeerConnected so the UI updates immediately.
                 let _ = shared

@@ -73,6 +73,7 @@ struct CommandSidebarView: View {
             }
             return "Waiting for approval on \(device.name)"
         }
+        if let outcome = device.pairingOutcomeText { return outcome }
         if connectingIds.contains(device.id) || device.connectionState == .connecting {
             return "Connecting…"
         }

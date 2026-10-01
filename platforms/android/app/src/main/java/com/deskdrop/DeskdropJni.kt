@@ -32,6 +32,8 @@ object DeskdropJni {
     const val CR_EVENT_CALL_ACTION              = 18
     const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
     const val CR_EVENT_OUTGOING_PAIRING_WAITING = 29
+    /** A pairing request started, ended or changed without another event saying so. Re-read peers. */
+    const val CR_EVENT_PAIRING_CHANGED         = 40
     const val CR_EVENT_REMOTE_FILES_QUERY      = 30
     const val CR_EVENT_REMOTE_THUMBNAIL_REQUEST = 31
     const val CR_EVENT_REMOTE_FILE_PULL_REQUEST = 32
@@ -96,6 +98,8 @@ object DeskdropJni {
     @JvmStatic external fun sendPairingRequest(engineHandle: Long, deviceId: String): Int
     /** Respond to an incoming pairing request. */
     @JvmStatic external fun respondToPairing(engineHandle: Long, deviceId: String, accepted: Boolean): Int
+    /** Withdraw our pending pairing request; the other device's prompt closes too. */
+    @JvmStatic external fun cancelPairingRequest(engineHandle: Long, deviceId: String): Int
 
     // ── File transfer accessors ───────────────────────────────────────────────
     @JvmStatic external fun eventTransferId(event: Long): String?

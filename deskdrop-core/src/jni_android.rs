@@ -396,6 +396,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         ClipboardDeliveryStatus { .. } => 7,
         PairingConfirmed { .. } => 7,
         PairingRejected { .. } => 7,
+        PairingChanged { .. } => 40,
         PeerConnected { .. } => 5,
         PeerDisconnected { .. } => 6,
         FileTransferIncoming { .. } => 12,
@@ -567,6 +568,8 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceId(
         OutgoingPairingWaiting { device_id, .. } => Some(*device_id),
         PairingConfirmed { device_id, .. } => Some(*device_id),
         PairingRejected { device_id, .. } => Some(*device_id),
+        PairingChanged { device_id } => Some(*device_id),
+        PairingResponse { device_id, .. } => Some(*device_id),
         ClipboardDeliveryStatus { .. } => None,
         PeerConnected { device_id, .. } => Some(*device_id),
         PeerDisconnected { device_id, .. } => Some(*device_id),
@@ -1205,6 +1208,28 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendPairingRequest(
     };
     let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
     rt().block_on(h.engine.send_pairing_request(device_id));
+    1
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_cancelPairingRequest(
+    mut env: JNIEnv,
+    _class: JClass,
+    engine_ptr: jlong,
+    device_id_jstr: JString,
+) -> jint {
+    if engine_ptr == 0 {
+        return 0;
+    }
+    let device_id: String = match env.get_string(&device_id_jstr) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let Ok(device_id) = uuid::Uuid::parse_str(&device_id) else {
+        return 0;
+    };
+    let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
+    rt().block_on(h.engine.cancel_pairing_request(device_id));
     1
 }
 

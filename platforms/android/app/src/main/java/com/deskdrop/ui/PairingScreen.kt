@@ -13,9 +13,13 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
+/** Matches the core's PAIRING_TIMEOUT. */
+private const val PAIRING_WINDOW_MS = 60_000L
+
 /**
  * Full-screen pairing prompt raised by the service. The responder compares
- * the code and accepts; the initiator only waits. Both expire after 30s.
+ * the code and accepts; the initiator only waits. The request lives for
+ * PAIRING_WINDOW_MS; when it runs out the screen closes without answering.
  */
 @Composable
 fun PairingScreen(
@@ -25,11 +29,12 @@ fun PairingScreen(
     fingerprint: String,
     isInitiator: Boolean = false,
     onApprove: () -> Unit,
-    onDeny: () -> Unit
+    onDeny: () -> Unit,
+    onExpire: () -> Unit
 ) {
     val c = rememberDdColors(isDark)
     val haptic = LocalHapticFeedback.current
-    var remainingMs by remember { mutableLongStateOf(30_000L) }
+    var remainingMs by remember { mutableLongStateOf(PAIRING_WINDOW_MS) }
 
     LaunchedEffect(Unit) {
         while (remainingMs > 0) {
@@ -37,7 +42,7 @@ fun PairingScreen(
             remainingMs -= 100
         }
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        onDeny()
+        onExpire()
     }
 
     Column(
@@ -78,7 +83,7 @@ fun PairingScreen(
 
         Spacer(Modifier.weight(1f))
         LinearProgressIndicator(
-            progress = { (remainingMs / 30_000f).coerceIn(0f, 1f) },
+            progress = { (remainingMs.toFloat() / PAIRING_WINDOW_MS).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().height(2.dp).clip(CircleShape),
             color = c.accent,
             trackColor = c.surfaceSunk

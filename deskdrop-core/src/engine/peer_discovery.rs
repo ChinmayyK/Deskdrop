@@ -37,6 +37,7 @@ pub(super) fn display_peers_for_status(
         .into_values()
         .map(|mut p| {
             p.lifecycle_state = Some(p.lifecycle_state());
+            p.pairing_expires_in_secs = p.pairing_expires_in();
             if let Some(rec) = trust_lookup.get(&p.id) {
                 p.fingerprint_display =
                     Some(crate::trust::format_fingerprint(&rec.key_fingerprint));

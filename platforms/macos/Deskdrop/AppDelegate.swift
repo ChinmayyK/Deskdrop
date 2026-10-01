@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var diagnosticsWindow: NSWindow?
     private var fileBannerManager: FileBannerWindowManager!
     private var previousConnectedDeviceIDs: Set<String> = []
+    /// Incoming pairing requests already notified, with the code each showed.
+    private var notifiedPairingCodes: [String: String] = [:]
+    private static let pairingCategory = "PAIRING_REQUEST"
     private var menuPanel: NSPanel!
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
@@ -64,6 +67,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Request permission for system notifications (device-connected alerts)
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(
+                identifier: Self.pairingCategory,
+                actions: [
+                    UNNotificationAction(identifier: "PAIR_ACCEPT", title: "Accept", options: []),
+                    UNNotificationAction(identifier: "PAIR_DECLINE", title: "Decline", options: [.destructive]),
+                ],
+                intentIdentifiers: [],
+                options: []
+            )
+        ])
         store.start()
         startMacScreenshotObserver()
         
@@ -443,6 +457,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
             .store(in: &cancellables)
 
+        // A pairing request used to surface only inside the dashboard, and a
+        // menu-bar app's dashboard is usually closed - the other device sat on
+        // "accept on Mac" while nothing here said anything. Notify with the
+        // code and Accept / Decline, like the Windows toast and Android's
+        // full-screen prompt; withdraw it when the request ends.
+        store.$peers
+            .receive(on: RunLoop.main)
+            .sink { [weak self] peers in
+                self?.syncPairingNotifications(peers.map(ManagedDevice.init))
+            }
+            .store(in: &cancellables)
+
         store.$pendingTrustRequest
             .compactMap { $0 }
             .sink { [weak self] detail in
@@ -510,12 +536,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         completionHandler([.banner, .sound])
     }
     
+    private func syncPairingNotifications(_ devices: [ManagedDevice]) {
+        let asking = devices.filter { $0.pairingRequested && $0.trustState != .trusted }
+        let center = UNUserNotificationCenter.current()
+
+        let ended = Set(notifiedPairingCodes.keys).subtracting(asking.map(\.id))
+        if !ended.isEmpty {
+            let ids = ended.map { "pairing-\($0)" }
+            center.removeDeliveredNotifications(withIdentifiers: ids)
+            ended.forEach { notifiedPairingCodes.removeValue(forKey: $0) }
+        }
+
+        for device in asking {
+            let code = device.pairingPin ?? ""
+            // New request, or the code changed (its session was replaced):
+            // re-post under the same identifier so the banner stays current.
+            guard notifiedPairingCodes[device.id] != code else { continue }
+            notifiedPairingCodes[device.id] = code
+
+            let content = UNMutableNotificationContent()
+            content.title = "\(device.name) wants to pair"
+            content.body = code.isEmpty
+                ? "Open Deskdrop to compare the security code."
+                : "Code \(code). Accept only if \(device.name) shows the same code."
+            content.sound = .default
+            content.categoryIdentifier = Self.pairingCategory
+            content.userInfo = ["device_id": device.id]
+            center.add(UNNotificationRequest(identifier: "pairing-\(device.id)", content: content, trigger: nil))
+            pulseMenuBarIcon()
+        }
+    }
+
     // Handle notification click
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        let category = response.notification.request.content.categoryIdentifier
+        let deviceId = response.notification.request.content.userInfo["device_id"] as? String
+        let action = response.actionIdentifier
         Task { @MainActor [weak self] in
+            defer { completionHandler() }
+            guard let self else { return }
+            if category == Self.pairingCategory, let deviceId,
+               let device = self.store.devices.first(where: { $0.id == deviceId }) {
+                switch action {
+                case "PAIR_ACCEPT": self.store.respondToPairing(device, accepted: true)
+                case "PAIR_DECLINE": self.store.respondToPairing(device, accepted: false)
+                default:
+                    // Tapping the banner: the dashboard shows the request
+                    // with its code and Accept / Decline.
+                    NSApp.activate(ignoringOtherApps: true)
+                    self.openDashboard()
+                }
+                return
+            }
             NSApp.activate(ignoringOtherApps: true)
-            self?.openQuickAccess()
-            completionHandler()
+            self.openQuickAccess()
         }
     }
 

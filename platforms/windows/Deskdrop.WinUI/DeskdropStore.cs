@@ -295,6 +295,7 @@ namespace Deskdrop.WinUI
                     return string.IsNullOrWhiteSpace(pairingPin)
                         ? $"Waiting for {DisplayName} to accept"
                         : $"Accept on {DisplayName} - code {pairingPin}";
+                if (PairingOutcomeText is { } outcome) return outcome;
                 if (status == "connected" && !sync_enabled) return "Connected - sync paused";
                 if (status == "connected" && !remote_sync_enabled) return "Connected - paused remotely";
                 if (status == "connected") return "Connected";
@@ -431,6 +432,22 @@ namespace Deskdrop.WinUI
         private bool _outgoingPairingWaiting;
         [JsonPropertyName("outgoing_pairing_waiting")]
         public bool outgoingPairingWaiting { get => _outgoingPairingWaiting; set { if (SetProperty(ref _outgoingPairingWaiting, value)) NotifyPeerStateProperties(); } }
+        // Seconds left on the pending request (either direction), as of the last poll.
+        private ulong? _pairingExpiresInSecs;
+        [JsonPropertyName("pairing_expires_in_secs")]
+        public ulong? pairingExpiresInSecs { get => _pairingExpiresInSecs; set => SetProperty(ref _pairingExpiresInSecs, value); }
+        // How the last request ended: "accepted", "declined", "cancelled", "expired" or "update_needed".
+        private string? _pairingOutcome;
+        [JsonPropertyName("pairing_outcome")]
+        public string? pairingOutcome { get => _pairingOutcome; set { if (SetProperty(ref _pairingOutcome, value)) NotifyPeerStateProperties(); } }
+        public string? PairingOutcomeText => is_trusted || pairingRequested || outgoingPairingWaiting ? null : pairingOutcome switch
+        {
+            "declined" => "Declined - try again",
+            "expired" => "No answer - try again",
+            "cancelled" => "Request withdrawn",
+            "update_needed" => "Update Deskdrop on it, then try again",
+            _ => null,
+        };
 
         private int _batteryLevel;
         public int BatteryLevel { get => _batteryLevel; set { if(SetProperty(ref _batteryLevel, value)) { OnPropertyChanged(nameof(ShowBattery)); OnPropertyChanged(nameof(BatteryIcon)); OnPropertyChanged(nameof(BatteryColor)); OnPropertyChanged(nameof(DetailLine)); } } }
@@ -1293,6 +1310,12 @@ namespace Deskdrop.WinUI
             DaemonActions.RunFireAndForget("Connect", () => DaemonClient.SendPairingRequest(deviceId));
         }
 
+        // Withdraws our request; the other device's prompt closes too.
+        public void CancelPairing(string deviceId)
+        {
+            DaemonActions.RunFireAndForget("Cancel Pairing", () => DaemonClient.CancelPairingRequest(deviceId));
+        }
+
         public void RespondToPairing(string deviceId, bool accepted)
         {
             DaemonActions.RunFireAndForget("Respond to Pairing", () => DaemonClient.RespondToPairing(deviceId, accepted));
@@ -1599,6 +1622,8 @@ namespace Deskdrop.WinUI
                             match.pairingPin = incoming.pairingPin;
                             match.pairingRequested = incoming.pairingRequested;
                             match.outgoingPairingWaiting = incoming.outgoingPairingWaiting;
+                            match.pairingExpiresInSecs = incoming.pairingExpiresInSecs;
+                            match.pairingOutcome = incoming.pairingOutcome;
                             match.BatteryLevel = incoming.BatteryLevel;
                             match.BatteryCharging = incoming.BatteryCharging;
                             match.StorageTotal = incoming.StorageTotal;

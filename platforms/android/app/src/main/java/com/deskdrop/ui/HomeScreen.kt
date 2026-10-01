@@ -110,11 +110,15 @@ fun HomeTab(
     onResendActivity: (ActivityEntry) -> Unit,
     onReplayOnboarding: () -> Unit,
     onTabSelected: (AppTab) -> Unit,
-    onRespondPairing: (PeerSnapshot, Boolean) -> Unit
+    onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
+    onCancelPairing: (PeerSnapshot) -> Unit
 ) {
     val c = remember(isDark) { DdColors(isDark) }
     val connected = peers.filter { it.isConnected }
+    // An incoming request outranks our own: when both users tapped Pair,
+    // accepting theirs settles both.
     val pairingRequest = peers.firstOrNull { it.pairingRequested && !it.trusted }
+    val outgoingRequest = peers.firstOrNull { it.outgoingPairingWaiting && !it.trusted }
     val liveTransfer = activeTransfers.firstOrNull { !it.isPaused && it.state == TransferState.PROGRESS }
     var sendTargetChoices by remember { mutableStateOf<List<PeerSnapshot>?>(null) }
 
@@ -142,6 +146,8 @@ fun HomeTab(
 
         if (pairingRequest != null) {
             PairingPanel(c, pairingRequest, onRespondPairing)
+        } else if (outgoingRequest != null) {
+            OutgoingPairingPanel(c, outgoingRequest, onCancelPairing)
         } else {
             StatusBlock(
                 c = c,
@@ -256,10 +262,12 @@ private fun HomeTopBar(
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f)) {
-            Text("Deskdrop", style = DdType.title.copy(fontSize = 22.sp, letterSpacing = (-0.6).sp), color = c.text)
+        // No app name: the launcher already says it. This phone's name is what
+        // other devices list it as when pairing, so that is what's worth showing.
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             if (deviceName.isNotBlank()) {
-                Text(deviceName, style = DdType.small, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Visible as ", style = DdType.small, color = c.textMuted, maxLines = 1)
+                Text(deviceName, style = DdType.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
@@ -340,7 +348,7 @@ internal fun PairingPanel(c: DdColors, peer: PeerSnapshot, onRespond: (PeerSnaps
         Text("Pairing request", style = DdType.label, color = c.accent)
         Spacer(Modifier.height(6.dp))
         Text(
-            "${peer.name} wants to link",
+            if (peer.outgoingPairingWaiting) "${peer.name} also wants to link" else "${peer.name} wants to link",
             style = DdType.display.copy(fontSize = 24.sp, lineHeight = 28.sp),
             color = c.text,
             maxLines = 2,
@@ -350,6 +358,7 @@ internal fun PairingPanel(c: DdColors, peer: PeerSnapshot, onRespond: (PeerSnaps
         PinTiles(c, peer.pairingPin)
         Spacer(Modifier.height(12.dp))
         Text("Only accept if this code matches the one on ${peer.name}.", style = DdType.small, color = c.textMuted)
+        PairingCountdown(c, peer)
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PillButton(c, "Decline", filled = false, modifier = Modifier.weight(1f)) { onRespond(peer, false) }
@@ -357,6 +366,61 @@ internal fun PairingPanel(c: DdColors, peer: PeerSnapshot, onRespond: (PeerSnaps
         }
     }
 }
+
+
+/** Our own request, waiting on the other device: the code to compare there, and a way out. */
+@Composable
+internal fun OutgoingPairingPanel(c: DdColors, peer: PeerSnapshot, onCancel: (PeerSnapshot) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(PanelShape)
+            .background(c.surface)
+            .border(1.dp, c.accent, PanelShape)
+            .padding(20.dp)
+    ) {
+        Text("Waiting for approval", style = DdType.label, color = c.accent)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Accept on ${peer.name}",
+            style = DdType.display.copy(fontSize = 24.sp, lineHeight = 28.sp),
+            color = c.text,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(18.dp))
+        PinTiles(c, peer.pairingPin)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            if (peer.pairingPin == null) "Connecting to ${peer.name}…"
+            else "${peer.name} shows a request with a code. Accept it there if it matches this one.",
+            style = DdType.small,
+            color = c.textMuted
+        )
+        PairingCountdown(c, peer)
+        Spacer(Modifier.height(18.dp))
+        PillButton(c, "Cancel request", filled = false, modifier = Modifier.fillMaxWidth()) { onCancel(peer) }
+    }
+}
+
+/** "Expires in 42s", ticking locally between snapshots. */
+@Composable
+internal fun PairingCountdown(c: DdColors, peer: PeerSnapshot) {
+    val expiresIn = peer.pairingExpiresInSecs ?: return
+    val deadline = remember(peer.id, expiresIn) { System.currentTimeMillis() + expiresIn * 1000L }
+    var left by remember(deadline) { mutableIntStateOf(expiresIn) }
+    LaunchedEffect(deadline) {
+        while (left > 0) {
+            delay(1_000)
+            left = ((deadline - System.currentTimeMillis()) / 1000L).toInt().coerceAtLeast(0)
+        }
+    }
+    Spacer(Modifier.height(4.dp))
+    Text("Expires in ${left}s", style = DdType.small, color = c.textMuted)
+}
+
+internal fun pairingWaitingLabel(peer: PeerSnapshot): String =
+    peer.pairingPin?.let { "Accept on ${peer.name} · code $it" } ?: "Waiting for ${peer.name}"
 
 
 private fun linkedHeadline(connected: List<PeerSnapshot>): String = when (connected.size) {
@@ -507,7 +571,8 @@ internal fun DeviceRow(
         speedTest != null -> "${speedTest.phase} · ${speedTest.speedMbpsString}" to c.accent
         peer.pairingRequested && !peer.trusted -> "Wants to pair" to c.accent
         peer.isConnected -> "Connected" to c.live
-        peer.lifecycleState == "pairing_in_progress" -> "Waiting for approval" to c.warn
+        peer.outgoingPairingWaiting && !peer.trusted -> pairingWaitingLabel(peer) to c.warn
+        peer.pairingOutcomeLabel != null -> peer.pairingOutcomeLabel!! to c.warn
         peer.isConnecting -> "Connecting…" to c.textMuted
         peer.trusted -> (agoLabel(peer.lastSeenSecs)?.let { "Seen $it" } ?: "Offline") to c.textMuted
         else -> "Not paired" to c.warn

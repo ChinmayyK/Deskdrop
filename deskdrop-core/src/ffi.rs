@@ -372,6 +372,8 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CameraStreamStop { .. } => PB_EVENT_CAMERA_STREAM_STOP,
         EngineEvent::CameraFrameReceived { .. } => PB_EVENT_CAMERA_FRAME,
         EngineEvent::PeerDiscovered { .. } => PB_EVENT_PEER_DISCOVERED,
+        // A refresh hint: re-read the peer list.
+        EngineEvent::PairingChanged { .. } => PB_EVENT_PEER_DISCOVERED,
         EngineEvent::OutgoingPairingWaiting { .. } => PB_EVENT_OUTGOING_PAIRING_WAITING,
         EngineEvent::RemoteFilesQueryReceived { .. } => PB_EVENT_REMOTE_FILES_QUERY,
         EngineEvent::RemoteThumbnailRequestReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_REQUEST,
@@ -620,6 +622,7 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
     let id_str = match &e.inner {
         EngineEvent::PairingRequested { device_id, .. } => Some(device_id.to_string()),
         EngineEvent::OutgoingPairingWaiting { device_id, .. } => Some(device_id.to_string()),
+        EngineEvent::PairingChanged { device_id } => Some(device_id.to_string()),
         EngineEvent::CallStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::BatteryStateChanged { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::NetworkStateChanged { from_device, .. } => Some(from_device.to_string()),

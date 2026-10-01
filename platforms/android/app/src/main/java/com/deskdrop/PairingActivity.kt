@@ -29,6 +29,9 @@ class PairingActivity : ComponentActivity() {
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             if (intent?.action == "com.deskdrop.CLOSE_PAIRING_UI") {
+                // A close aimed at another device's request leaves this one up.
+                val forDevice = intent.getStringExtra(EXTRA_DEVICE_ID)
+                if (forDevice != null && forDevice != targetDeviceId) return
                 val toDashboard = Intent(this@PairingActivity, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 }
@@ -74,8 +77,10 @@ class PairingActivity : ComponentActivity() {
 
         setContent {
             AppTheme(useDarkTheme = isDarkMode) {
+                // Back is "later", not "no": the request stays on the home
+                // screen until it is answered or expires.
                 androidx.activity.compose.BackHandler {
-                    sendResult(deviceId, false)
+                    closeToDashboard()
                 }
                 PairingScreen(
                     isDark = isDarkMode,
@@ -84,7 +89,10 @@ class PairingActivity : ComponentActivity() {
                     fingerprint = fingerprint,
                     isInitiator = isInitiator,
                     onApprove = { sendResult(deviceId, true) },
-                    onDeny = { sendResult(deviceId, false) }
+                    onDeny = { sendResult(deviceId, false) },
+                    // Running out of time is not a decline: the core expires the
+                    // request on both devices, so just step out of the way.
+                    onExpire = { closeToDashboard() }
                 )
             }
         }
@@ -97,6 +105,10 @@ class PairingActivity : ComponentActivity() {
             putExtra(EXTRA_APPROVED, approved)
         }
         sendBroadcast(intent)
+        closeToDashboard()
+    }
+
+    private fun closeToDashboard() {
         val toDashboard = Intent(this@PairingActivity, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }

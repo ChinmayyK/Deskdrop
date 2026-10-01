@@ -368,12 +368,14 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
         } => {
             tracing::info!("[DELIVERY] Activity {} status: {:?}", activity_id, status);
         }
+        // The engine sets the pairing flags itself before emitting these;
+        // setting them again here raced a cancel or expiry that landed while
+        // the event was queued and revived the request.
         EngineEvent::OutgoingPairingWaiting {
             device_id,
             device_name,
             pin,
         } => {
-            let _ = state.engine.set_outgoing_pairing_waiting(device_id, true);
             push_feedback(
                 &state,
                 FeedbackEvent {
@@ -392,7 +394,6 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             device_name,
             pin,
         } => {
-            let _ = state.engine.set_pairing_requested(device_id, true);
             push_feedback(
                 &state,
                 FeedbackEvent {

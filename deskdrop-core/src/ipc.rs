@@ -845,7 +845,7 @@ pub async fn handle_ipc_request(
         IpcRequest::CancelPairingRequest { device_id } => {
             match crate::ipc::parse_uuid(&device_id).ok() {
                 Some(id) => {
-                    let _ = eng.set_outgoing_pairing_waiting(id, false);
+                    eng.cancel_pairing_request(id).await;
                     IpcResponse::ok_empty()
                 }
                 None => IpcResponse::err("invalid device id"),

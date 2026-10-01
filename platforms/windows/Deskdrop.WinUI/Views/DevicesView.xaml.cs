@@ -53,6 +53,9 @@ namespace Deskdrop.WinUI.Views
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
             {
                 mgr.ConnectAndPair(peer.device_id);
+                // Also wired to Reconnect on paired rows, which needs no code.
+                if (!peer.is_trusted)
+                    Services.PairingPrompt.ShowOutgoing(peer, this.XamlRoot);
             }
         }
 

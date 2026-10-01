@@ -196,6 +196,7 @@ namespace Deskdrop.WinUI
         public static JsonDocument? SendPairingRequest(string deviceId) => Send(Req("send_pairing_request", ("device_id", deviceId)));
         public static JsonDocument? GenerateQrToken() => Send(Req("generate_qr_token"));
         public static JsonDocument? RespondToPairing(string deviceId, bool accepted) => Send(Req("respond_to_pairing", ("device_id", deviceId), ("accepted", accepted)));
+        public static JsonDocument? CancelPairingRequest(string deviceId) => Send(Req("cancel_pairing_request", ("device_id", deviceId)));
         public static JsonDocument? AcceptFileTransfer(string transferId) => Send(Req("accept_file_transfer", ("transfer_id", transferId)));
         public static JsonDocument? RejectFileTransfer(string transferId, string reason) => Send(Req("reject_file_transfer", ("transfer_id", transferId), ("reason", reason)));
         public static JsonDocument? PauseFileTransfer(string transferId) => Send(Req("pause_file_transfer", ("transfer_id", transferId)));
