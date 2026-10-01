@@ -14,7 +14,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Windows:** The Rust engine DLL and tray helper link the C runtime statically, so they no longer need `vcruntime140.dll` (missing on some clean installs).
 - **Build:** Windows releases ship as a per-user MSI and a portable zip of the whole app folder instead of a single-file `Deskdrop.exe`. The MSI now installs every published file; before it listed only `Deskdrop.exe` and `deskdrop_core.dll`.
 
+- **Android (battery):** No Wi-Fi lock is held while idle; only a transfer that is moving bytes takes one. The clipboard is polled at full rate only when it can be read (app in the foreground, an enabled accessibility service, or Android 9 and below), otherwise every 2 s instead of 2–5 times a second. Notification mirroring skips group summaries, media/progress/navigation updates and re-posts with unchanged text. Battery level is reported in 5% steps while the screen is off.
+- **Core (battery):** LAN discovery sweeps (~250 TCP connects each) pause while the device sleeps, and the steady UDP discovery beacon slows from every 15 s to every 60 s.
+
 ### Fixed
+- **Android:** The benchmark module failed to configure (`missingDimensionStrategy` outside `defaultConfig`), which broke every Android build after the `full`/`play` flavors were added.
 - **Windows:** The tray menu's "Rescan Network" now rescans. It used to post to a local HTTP port nothing listened on.
 - **Build:** A plain `dotnet build` no longer writes a stale 113 MB copy of the tray helper into `publish\`.
 - **Core:** Transfers interrupted by a reconnect now resume reliably; about half of them used to end with "missing chunks". Three races are closed: the old connection's teardown no longer pauses a transfer the new connection already resumed, a stale send loop can no longer skip chunks after a resume, and chunks still arriving on the old connection are dropped instead of being queued on a disk writer that is about to be torn down (which left the resumed copies skipped as duplicates).

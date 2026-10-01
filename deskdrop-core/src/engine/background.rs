@@ -45,11 +45,12 @@ impl Engine {
             // peer drops, so first pairing and reconnects are quick. Outside
             // that window there's no rush: a newly arriving device beacons
             // fast itself and we answer it, so a slow cadence here costs
-            // little latency but saves waking every phone on the LAN.
+            // little latency but saves waking every phone on the LAN (each
+            // beacon arrives as two broadcasts). mDNS also announces us.
             const BEACON_FAST_INTERVAL: tokio::time::Duration =
                 tokio::time::Duration::from_millis(1500);
             const BEACON_STEADY_INTERVAL: tokio::time::Duration =
-                tokio::time::Duration::from_secs(15);
+                tokio::time::Duration::from_secs(60);
             const BEACON_FAST_WINDOW: tokio::time::Duration = tokio::time::Duration::from_secs(60);
 
             let mut fast_until = tokio::time::Instant::now() + BEACON_FAST_WINDOW;

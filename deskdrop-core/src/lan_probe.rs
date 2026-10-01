@@ -94,11 +94,14 @@ const _: () = assert!(
 ///
 /// Sweeps pause while any peer is connected: a device that joins later
 /// has no connections of its own, so its sweep finds us instead. That
-/// keeps an idle, paired phone from sending ~250 SYNs every 25 s.
+/// keeps an idle, paired phone from sending ~250 SYNs every 25 s. They
+/// also pause while this device is asleep (screen off on a phone): each
+/// sweep is ~250 TCP connects over the radio, and nobody is pairing then.
 pub fn spawn_lan_probe(
     port: u16,
     discovery_handle: DiscoveryInputHandle,
     peer_manager: Arc<PeerManager>,
+    local_sleeping: Arc<std::sync::atomic::AtomicBool>,
 ) {
     tokio::spawn(async move {
         // Consecutive sweeps that found nothing new — drives idle backoff.
@@ -114,7 +117,9 @@ pub fn spawn_lan_probe(
             tokio::time::sleep(next_wait).await;
             next_wait = HOTSPOT_SWEEP_INTERVAL;
 
-            if peer_manager.connected_count() > 0 {
+            if peer_manager.connected_count() > 0
+                || local_sleeping.load(std::sync::atomic::Ordering::Relaxed)
+            {
                 next_wait = LAN_SWEEP_INTERVAL;
                 continue;
             }

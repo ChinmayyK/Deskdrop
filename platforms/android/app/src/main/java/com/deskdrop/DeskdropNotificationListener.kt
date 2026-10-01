@@ -9,6 +9,11 @@ import android.util.Log
 class DeskdropNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "DeskdropNotifListener"
+        private val SKIPPED_CATEGORIES = setOf(
+            Notification.CATEGORY_TRANSPORT,
+            Notification.CATEGORY_PROGRESS,
+            Notification.CATEGORY_NAVIGATION,
+        )
         private var instance: DeskdropNotificationListener? = null
 
         fun getActiveInstance(): DeskdropNotificationListener? = instance
@@ -18,6 +23,9 @@ class DeskdropNotificationListener : NotificationListenerService() {
             return inst.handleCallAction(action)
         }
     }
+
+    /** Title and text last forwarded per notification key; see onNotificationPosted. */
+    private val lastSentContent = HashMap<String, String>()
 
     override fun onCreate() {
         super.onCreate()
@@ -56,14 +64,23 @@ class DeskdropNotificationListener : NotificationListenerService() {
         // Skip our own notifications or ongoing/system ones that might be noisy
         if (pkg == packageName || pkg == "android" || pkg == "com.android.systemui") return
         if ((notif.flags and Notification.FLAG_ONGOING_EVENT) != 0) return
-        
+        // A group summary repeats its child notifications, which are sent on their own.
+        if ((notif.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return
+        // Media, progress and navigation updates re-post constantly; each send wakes the radio.
+        if (notif.category in SKIPPED_CATEGORIES) return
+
         val title = notif.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         // Messaging apps put the full message in EXTRA_BIG_TEXT; EXTRA_TEXT is often a one-line preview.
         val text = (notif.extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)
             ?: notif.extras?.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
         val id = sbn.key ?: "${sbn.id}"
-        
+
         if (title.isBlank() && text.isBlank()) return
+        // Apps re-post the same notification (timestamp, badge or silent
+        // updates) with unchanged text; the computer already shows it.
+        val content = "$title\u0000$text"
+        if (lastSentContent[id] == content) return
+        lastSentContent[id] = content
         
         Log.d(TAG, "Notification posted: pkg=$pkg, title=$title, text=$text")
         
@@ -75,6 +92,12 @@ class DeskdropNotificationListener : NotificationListenerService() {
             putExtra(DeskdropService.EXTRA_NOTIFICATION_TEXT, text)
         }
         startService(intent)
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        super.onNotificationRemoved(sbn)
+        // Dismissed: the same text posted again later is a new notification.
+        sbn?.key?.let { lastSentContent.remove(it) }
     }
 
     fun handleCallAction(actionWanted: String): Boolean {

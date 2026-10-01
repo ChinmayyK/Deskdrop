@@ -177,6 +177,7 @@ class DeskdropService : Service() {
         private const val POLL_REDUCED_MS   = 100L   // 10 Hz — battery-optimized mode
         private const val CLIP_FULL_MS      = 200L   // clipboard check interval (full)
         private const val CLIP_REDUCED_MS   = 500L   // clipboard check interval (reduced)
+        private const val CLIP_UNREADABLE_MS = 2_000L // while the clipboard can't be read (background, Android 10+)
         private const val ACTIVITY_FEED_MAX = 100
 
         // NSD (Network Service Discovery) — mirrors the mDNS service type used by the Rust engine
@@ -280,9 +281,6 @@ class DeskdropService : Service() {
     // NSD retry after all peers disconnect — exponential backoff, max 60 s.
     private val nsdRetryCount = AtomicLong(0L)
     private var nsdRetryRunnable: Runnable? = null
-
-    // WifiLock — keeps the Wi-Fi radio awake without disassociating during Doze mode.
-    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
     // WakeLock — keeps the CPU awake while the foreground service is active so tokio can answer heartbeats & receive files with the screen off.
     private var wakeLock: android.os.PowerManager.WakeLock? = null
@@ -980,35 +978,13 @@ class DeskdropService : Service() {
 
     // ── WifiLock ──────────────────────────────────────────────────────────────
     //
-    // Unlike a WakeLock (which forces the CPU to stay awake and drains 5% battery/hr),
-    // a WifiLock simply tells the Wi-Fi chipset not to disassociate from the router
-    // during Doze mode. When the Mac sends its 5-minute ping, the Wi-Fi chipset
-    // briefly wakes the CPU to ACK the TCP packet, then goes right back to sleep.
-
-    private fun acquireWifiLock() {
-        if (wifiLock?.isHeld == true) return
-        val wm = runCatching {
-            applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager
-        }.getOrNull() ?: return
-
-        val mode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
-        } else {
-            @Suppress("DEPRECATION")
-            android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
-        }
-
-        wifiLock = wm.createWifiLock(mode, "Deskdrop::WifiLock").apply {
-            setReferenceCounted(false)
-            acquire()
-        }
-        Log.i(TAG, "WifiLock acquired (mode: $mode)")
-    }
+    // No lock is held while idle: FULL_HIGH_PERF is a no-op since Android 10,
+    // and on Android 8–9 it disabled Wi-Fi power saving whenever the screen
+    // was on. Only a transfer that is moving bytes takes a lock (below).
 
     // Wi-Fi power-save wakes the radio only every beacon interval, which
-    // showed up as 80-200 ms pings to the phone and capped transfers. The
-    // always-on lock above can't prevent it (FULL_HIGH_PERF is a no-op
-    // since Android 10), so hold a low-latency lock only while files move.
+    // showed up as 80-200 ms pings to the phone and capped transfers, so hold
+    // a low-latency lock only while files move.
     private var transferWifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
     // Only bytes actually moving justify a lock: a transfer waiting on the
@@ -1044,8 +1020,6 @@ class DeskdropService : Service() {
     private fun releaseWifiLock() {
         runCatching { transferWifiLock?.let { if (it.isHeld) it.release() } }
         transferWifiLock = null
-        runCatching { wifiLock?.let { if (it.isHeld) it.release() } }
-        wifiLock = null
         Log.i(TAG, "WifiLock released")
     }
 
@@ -1096,8 +1070,8 @@ class DeskdropService : Service() {
     private var idleLockReleaseRunnable: Runnable? = null
 
     /**
-     * Acquires Wifi and Multicast locks required for active P2P discovery and high-speed transfers.
-     * Schedules them to be automatically released after 2 minutes of idleness to achieve zero overnight battery drain.
+     * Acquires the multicast lock that mDNS discovery needs.
+     * Schedules it to be released after 2 minutes of idleness so it never stays held overnight.
      */
     private fun acquireContinuousLocks() {
         handler.post {
@@ -1106,7 +1080,6 @@ class DeskdropService : Service() {
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             if (!pm.isInteractive && !isMovingData()) return@post
             acquireMulticastLock()
-            acquireWifiLock()
 
             idleLockReleaseRunnable?.let { handler.removeCallbacks(it) }
 
@@ -1117,7 +1090,6 @@ class DeskdropService : Service() {
                 } else {
                     Log.i(TAG, "Idle timeout reached (2m). Releasing continuous battery-draining locks to allow device sleep.")
                     releaseMulticastLock()
-                    releaseWifiLock()
                 }
             }
             idleLockReleaseRunnable = releaseTask
@@ -2171,12 +2143,27 @@ class DeskdropService : Service() {
         val interval = clipInterval
         handler.postDelayed(object : Runnable {
             override fun run() {
-                checkClipboard()
+                // Since Android 10 a background app reads an empty clipboard
+                // unless it has focus or an enabled accessibility service, so
+                // polling 2-5 times a second otherwise only kept the CPU awake.
+                // The slow tick notices the app coming to the foreground.
+                val canRead = DeskdropApp.isAppInForeground ||
+                    android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q ||
+                    isClipboardAccessibilityEnabled()
+                if (canRead) checkClipboard()
                 if (engineHandle != 0L) {
-                    handler.postDelayed(this, clipInterval)
+                    handler.postDelayed(this, if (canRead) clipInterval else CLIP_UNREADABLE_MS)
                 }
             }
         }, interval)
+    }
+
+    private fun isClipboardAccessibilityEnabled(): Boolean {
+        val enabled = android.provider.Settings.Secure.getString(
+            contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabled.contains("$packageName/", ignoreCase = true)
     }
 
     private fun checkClipboard() {
@@ -2907,7 +2894,11 @@ class DeskdropService : Service() {
                     val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
                                    status == android.os.BatteryManager.BATTERY_STATUS_FULL
 
-                    val levelChanged = Math.abs(level - lastLevel) >= 1 // Update on 1% change instead of 5% for better UX
+                    // 1% steps while the screen is on (someone may be watching the
+                    // desktop's battery readout), 5% while it's off: each push
+                    // wakes the radio. Charging changes always go out.
+                    val interactive = (context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isInteractive
+                    val levelChanged = Math.abs(level - lastLevel) >= (if (interactive) 1 else 5)
                     val statusChanged = charging != lastChargingState
 
                     if (levelChanged || statusChanged || lastLevel == -1) {

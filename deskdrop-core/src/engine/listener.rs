@@ -187,6 +187,7 @@ pub(super) fn spawn_firewall_free_discovery(shared: EngineShared) {
         shared.config.port,
         discovery_handle,
         shared.peer_manager.clone(),
+        shared.local_sleeping.clone(),
     );
 
     tokio::spawn(async move {
