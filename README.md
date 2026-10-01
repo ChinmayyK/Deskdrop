@@ -8,22 +8,30 @@
     <img src="https://img.shields.io/badge/Platform-macOS-lightgrey?style=for-the-badge&logo=apple" alt="macOS" />
     <img src="https://img.shields.io/badge/Platform-Android-brightgreen?style=for-the-badge&logo=android" alt="Android" />
     <img src="https://img.shields.io/badge/Platform-Linux-orange?style=for-the-badge&logo=linux" alt="Linux" />
-    <img src="https://img.shields.io/badge/Platform-Windows%20(.NET%20%2F%20WPF)-blue?style=for-the-badge&logo=windows" alt="Windows" />
+    <img src="https://img.shields.io/badge/Platform-Windows%20(WinUI%203)-blue?style=for-the-badge&logo=windows" alt="Windows" />
     <img src="https://img.shields.io/badge/Core-Rust-B7410E?style=for-the-badge&logo=rust" alt="Rust Core" />
   </div>
 
   <br />
 
+  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-devices.png" /><img src="assets/screenshots/light/mac-devices.png" width="820" alt="Deskdrop on macOS: a connected phone with its battery and storage, and quick actions" /></picture>
+
   <table>
     <tr>
-      <td align="center"><b>macOS Menu Bar Dropzone</b></td>
-      <td align="center"><b>macOS Activity Dashboard</b></td>
-      <td align="center"><b>Android Client & Timeline</b></td>
+      <td align="center"><b>Windows</b></td>
+      <td align="center"><b>Android</b></td>
     </tr>
     <tr>
-      <td align="center"><img src="assets/screenshots/macos_menubar_card.png" width="300" alt="macOS Menu Bar Dropzone" /></td>
-      <td align="center"><img src="assets/screenshots/macos_dashboard.png" width="360" alt="macOS Activity Dashboard" /></td>
-      <td align="center"><img src="assets/screenshots/mobile_dashboard.jpg" width="180" alt="Android Dashboard" /> &nbsp; <img src="assets/screenshots/mobile_activity_feed.jpg" width="180" alt="Android Activity Feed" /></td>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-clipboard.png" /><img src="assets/screenshots/light/win-clipboard.png" width="420" alt="Deskdrop on Windows: shared clipboard history" /></picture><br /><br /><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-devices.png" /><img src="assets/screenshots/light/win-devices.png" width="420" alt="Deskdrop on Windows: paired devices" /></picture></td>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-home.png" /><img src="assets/screenshots/light/android-home.png" width="180" alt="Deskdrop on Android: home screen" /></picture> &nbsp; <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-devices.png" /><img src="assets/screenshots/light/android-devices.png" width="180" alt="Deskdrop on Android: devices" /></picture></td>
+    </tr>
+    <tr>
+      <td align="center"><b>macOS menu bar</b></td>
+      <td align="center"><b>Transfers on macOS</b></td>
+    </tr>
+    <tr>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-menubar-card.png" /><img src="assets/screenshots/light/mac-menubar-card.png" width="300" alt="Deskdrop in the macOS menu bar" /></picture></td>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-transfers-active.png" /><img src="assets/screenshots/light/mac-transfers-active.png" width="420" alt="A transfer in progress on macOS" /></picture></td>
     </tr>
   </table>
 
@@ -76,7 +84,8 @@ Deskdrop operates under a zero-trust model for local wireless broadcast networks
 - **Replay Protection**: All network frames integrate strictly increasing 64-bit counter nonces, rejecting unordered or replayed packet transmission at the parsing layer.
 - **Memory Zeroization**: Secret Diffie-Hellman keys and session material are zeroed directly from physical RAM immediately upon derivation or termination via the `zeroize` crate to mitigate memory exposure.
 - **mDNS Privacy Enforcer**: Friendly device names are obfuscated during general network broadcasting; only unprivileged UUID identifiers are visible over open mDNS until a cryptographic pairing verification concludes.
-- **PIN-Verified Trust On First Use (TOFU)**: Initial device pairing enforces an out-of-band numeric PIN confirmation (`PairingPin`), preventing active Man-in-the-Middle (MITM) redirection on untrusted networks.
+- **Code-Verified Pairing**: Pairing shows the same security code on both devices, derived from the encrypted session, so a Man-in-the-Middle shows a different one. A request stays open for 60 seconds on both sides and always ends the same way on each (accepted, declined, withdrawn or expired). Declining means "not now", never a silent block. Pairing can also be done by scanning a QR code, valid for 10 minutes.
+- **Reinstall-Aware Trust**: Reinstalling Deskdrop gives a device a new identity. Pairing the new install replaces its old entries instead of listing the device twice.
 
 ---
 
@@ -89,7 +98,7 @@ Deskdrop combines a unified high-performance Rust core with platform-native inte
 | **macOS** | Swift & SwiftUI | Direct C-FFI / Unix Sockets | 🟢 **Production Ready** (Menu bar integration, native notifications, continuity camera support) |
 | **Android** | Kotlin & Jetpack Compose | JNI Bridge | 🟢 **Production Ready** (Background service runtime, native share-sheet target, QR/PIN pairing) |
 | **Linux** | GTK3 & D-Bus | Unix Sockets / D-Bus | 🟢 **Production Ready** (XDG notification integration, `systemd` user service runtime) |
-| **Windows** | WPF / .NET 8 Hybrid | Named Pipes / C-FFI | 🟠 **Alpha / Experimental** (Active developmental architecture; GUI layer undergoing stabilization) |
+| **Windows** | WinUI 3 / .NET 10 | In-process C-FFI / Named Pipes | 🟠 **Alpha / Experimental** (Active developmental architecture; GUI layer undergoing stabilization) |
 
 ---
 
@@ -113,7 +122,7 @@ Below is a technical feature comparison between Deskdrop and existing cross-plat
 ## Getting Started & Usage
 
 ### Prerequisites for Compiling from Source
-- **Rust Toolchain**: Stable version `1.75+` (managed via [rustup](https://rustup.rs/)).
+- **Rust Toolchain**: Latest stable (managed via [rustup](https://rustup.rs/)).
 - **C Compiler & Build Tools**: Needed for native cryptography bindings (`build-essential` on Linux, `Xcode command-line tools` on macOS).
 
 ### 1. Unified Automated Build & Install
@@ -155,7 +164,7 @@ adb shell monkey -p com.deskdrop.debug -c android.intent.category.LAUNCHER 1
 cargo run -p deskdrop-linux
 ```
 
-#### Windows Client (`Deskdrop.WinUI` - WPF / .NET Hybrid)
+#### Windows Client (`Deskdrop.WinUI`, WinUI 3)
 ```bash
 # Compile native core dynamic library for Windows
 cargo build --release -p deskdrop-core
@@ -190,6 +199,12 @@ cargo run -p deskdrop-cli -- history pin <id>
 # Enumerate active discovered and trusted peer nodes on local subnet
 cargo run -p deskdrop-cli -- devices list
 
+# Ask a device to pair, then answer or withdraw requests (handy on Linux)
+cargo run -p deskdrop-cli -- pair <device-id>
+cargo run -p deskdrop-cli -- pair accept <device-id>
+cargo run -p deskdrop-cli -- pair decline <device-id>
+cargo run -p deskdrop-cli -- pair cancel <device-id>
+
 # Toggle sync permissions for specific hardware UUIDs
 cargo run -p deskdrop-cli -- devices peer-settings <device-id> pause
 cargo run -p deskdrop-cli -- devices peer-settings <device-id> resume
@@ -201,20 +216,20 @@ cargo run -p deskdrop-cli -- devices peer-settings <device-id> resume
 
 Deskdrop maintains clean configuration boundaries conforming to OS standard conventions:
 
-| Platform | Configuration & Storage Directory |
-| :--- | :--- |
-| **macOS** | `~/Library/Application Support/deskdrop/` |
-| **Linux** | `~/.config/deskdrop/` |
-| **Windows** | `%APPDATA%\deskdrop\` |
+| Platform | Configuration & Storage Directory | Identity key |
+| :--- | :--- | :--- |
+| **macOS** | `~/Library/Application Support/deskdrop/` | same folder |
+| **Linux** | `~/.config/deskdrop/` | `~/.local/share/deskdrop/` |
+| **Windows** | `%APPDATA%\deskdrop\` | `%LOCALAPPDATA%\deskdrop\` |
 
 - `settings.json`: User runtime configurations, interface bindings, and custom filtering heuristics.
 - `peers.json`: Locally cached network peers, mDNS mappings, and device nicknames.
 - `trust.json`: Persistent public keys of verified trusted nodes.
 - `history.json`: Bounded NDJSON ring buffer logging historical payloads and activity events.
-- `identity.json`: Local cryptographic device identity key pair (`Curve25519`, stored with strict `0600` POSIX permissions).
+- `identity.key`: The device's private identity key (32 bytes, mode `0600` on macOS and Linux). Its hash is the device ID, so deleting it makes the device look new to every paired device.
 
 > [!CAUTION]
-> The `identity.json` file contains your device's private identity keys used for network authentication and DH key exchange. Do not expose, commit, or transfer this file across insecure channels.
+> The `identity.key` file contains your device's private identity keys used for network authentication and DH key exchange. Do not expose, commit, or transfer this file across insecure channels.
 
 ---
 
