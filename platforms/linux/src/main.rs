@@ -43,7 +43,7 @@ fn suppress_next() {
 #[cfg(target_os = "linux")]
 fn should_suppress() -> bool {
     SUPPRESS_COUNT
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
+        .try_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
             if v > 0 {
                 Some(v - 1)
             } else {
@@ -213,7 +213,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
                     Err(e) => {
                         tracing::warn!("Failed to apply clipboard: {e}");
                         SUPPRESS_COUNT
-                            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
+                            .try_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
                                 Some(v.saturating_sub(1))
                             })
                             .ok();
