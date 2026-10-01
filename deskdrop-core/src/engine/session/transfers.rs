@@ -139,12 +139,15 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     })
                     .await;
             } else {
-                {
+                let Some(bg_send_run) = ({
                     let mut mgr = shared.file_transfers.lock().await;
-                    if let Some(transfer) = mgr.get_outbound_mut(&transfer_id) {
+                    mgr.get_outbound_mut(&transfer_id).map(|transfer| {
                         transfer.resume_from(resume_from_chunk);
-                    }
-                }
+                        transfer.start_send_run()
+                    })
+                }) else {
+                    return Flow::Continue;
+                };
                 let bg_outbox = shared
                     .peer_manager
                     .file_sender(peer_id)
@@ -178,6 +181,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                             bg_shared.clone(),
                             bg_transfer_id,
                             BATCH_SIZE,
+                            bg_send_run,
                         )
                         .await
                         {
@@ -276,6 +280,15 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
                     if transfer.from_device != peer_id {
                         Err(anyhow::anyhow!("peer mismatch"))
+                    } else if !transfer.accepts_chunks_from(ctx.session_id) {
+                        // Sent on a connection that has since been replaced; the
+                        // sender resends it on the new one.
+                        tracing::debug!(
+                            "dropping chunk {} of {:?} from a stale session",
+                            chunk_index,
+                            transfer_id
+                        );
+                        return Flow::Continue;
                     } else {
                         transfer.validate_chunk(chunk_index, data.len())
                     }
@@ -525,12 +538,14 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         AppMessage::FileTransferResume { transfer_id } => {
             ctx.touch_last_seen();
             let mut was_outbound = false;
+            let mut bg_send_run = 0;
             {
                 let mut mgr = shared.file_transfers.lock().await;
                 if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
                     if t.target_device == Some(peer_id) || t.target_device.is_none() {
                         t.paused = false;
                         was_outbound = true;
+                        bg_send_run = t.start_send_run();
                     }
                 } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
                     if t.from_device == peer_id {
@@ -578,6 +593,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                             bg_shared.clone(),
                             bg_transfer_id,
                             BATCH_SIZE,
+                            bg_send_run,
                         )
                         .await
                         {

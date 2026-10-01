@@ -913,6 +913,11 @@ impl PeerManager {
             .collect()
     }
 
+    /// Id of the peer's live session, if it has one.
+    pub fn live_session_id(&self, device_id: Uuid) -> Option<u64> {
+        self.live.get(&device_id).map(|s| s.session_id)
+    }
+
     pub fn sender(&self, device_id: Uuid) -> Option<mpsc::Sender<AppMessage>> {
         self.live.get(&device_id).map(|s| s.sender.clone())
     }

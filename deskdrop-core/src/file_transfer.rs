@@ -166,6 +166,12 @@ pub struct OutboundTransfer {
     /// Set on resume: chunks the receiver never got are sent again, and
     /// hashing them a second time would break the final checksum.
     rehash_chunks: u32,
+    /// Id of the send loop allowed to advance this transfer. Each loop
+    /// (on accept, on resume) claims a new id with `start_send_run`, and
+    /// `read_outbound_chunks` stops a loop whose id is stale. Without it, a
+    /// loop left over from a dropped connection could read one more batch
+    /// after a resume rewound `next_chunk`, skipping those chunks for good.
+    send_run: u32,
 }
 
 impl OutboundTransfer {
@@ -198,6 +204,7 @@ impl OutboundTransfer {
             compression_verdict: CompressionVerdict::default(),
             consecutive_poor_compression: 0,
             rehash_chunks: 0,
+            send_run: 0,
         }
     }
 
@@ -230,6 +237,7 @@ impl OutboundTransfer {
             compression_verdict: CompressionVerdict::default(),
             consecutive_poor_compression: 0,
             rehash_chunks: 0,
+            send_run: 0,
         })
     }
 
@@ -436,6 +444,16 @@ impl OutboundTransfer {
         self.last_acked_chunk = Some(last_confirmed);
     }
 
+    /// Claims the transfer for a new send loop; see `send_run`.
+    pub fn start_send_run(&mut self) -> u32 {
+        self.send_run = self.send_run.wrapping_add(1);
+        self.send_run
+    }
+
+    pub fn is_send_run(&self, run: u32) -> bool {
+        self.send_run == run
+    }
+
     /// Resume from the given chunk (skip already-delivered ones).
     pub fn resume_from(&mut self, chunk_index: u32) {
         if self.started_at.is_none() {
@@ -501,6 +519,11 @@ pub struct InboundTransfer {
     /// File the chunks are written to: `<name>.deskdrop-part` until `finalize`
     /// renames it, then the final destination.
     pub dest_path: Option<PathBuf>,
+    /// Session that accepted or last resumed this transfer. Chunks from any
+    /// other session are stale: after a reconnect the old connection can still
+    /// deliver chunks sent before the drop, which its own disk writer then
+    /// loses on teardown while the resumed copies get skipped as duplicates.
+    owner_session: Option<u64>,
     /// Sanitized name the file takes on completion, next to `dest_path`.
     final_name: Option<String>,
     pub from_device: Uuid,
@@ -530,6 +553,7 @@ impl InboundTransfer {
             last_written_offset: 0,
             file_handle: None,
             dest_path: None,
+            owner_session: None,
             final_name: None,
             from_device,
             from_device_name,
@@ -615,6 +639,12 @@ impl InboundTransfer {
         self.queued_chunk_count = self.received_chunk_count;
         self.status = TransferStatus::Transferring;
         Ok(self.received_chunk_count)
+    }
+
+    /// Whether chunks from `session` belong to this transfer. A transfer not
+    /// yet tied to a session accepts any.
+    pub fn accepts_chunks_from(&self, session: u64) -> bool {
+        self.owner_session.is_none_or(|owner| owner == session)
     }
 
     pub fn take_io_context(&mut self) -> Option<(BufWriter<std::fs::File>, sha2::Sha256, u64)> {
@@ -1030,8 +1060,15 @@ impl FileTransferManager {
     }
 
     /// Accept inbound with resume support: if we have partial state, return resume chunk.
-    pub fn accept_inbound_or_resume(&mut self, tid: &TransferId) -> Result<u32> {
+    /// `session` (the peer's live session) becomes the only one whose chunks
+    /// the transfer accepts; see `InboundTransfer::accepts_chunks_from`.
+    pub fn accept_inbound_or_resume(
+        &mut self,
+        tid: &TransferId,
+        session: Option<u64>,
+    ) -> Result<u32> {
         let transfer = self.inbound.get_mut(tid).context("unknown transfer")?;
+        transfer.owner_session = session;
         if transfer.dest_path.is_none() {
             transfer.accept(&self.save_dir)?;
             return Ok(0);

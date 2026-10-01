@@ -4,6 +4,7 @@ pub(crate) async fn read_outbound_chunks(
     shared: crate::engine::EngineShared,
     transfer_id: [u8; 16],
     batch_size: usize,
+    send_run: u32,
 ) -> Option<(
     Vec<AppMessage>,
     Vec<(crate::file_transfer::TransferProgress, String)>,
@@ -15,6 +16,10 @@ pub(crate) async fn read_outbound_chunks(
     {
         let mut mgr = shared.file_transfers.lock().await;
         let t = mgr.get_outbound_mut(&transfer_id)?;
+        // A newer send loop owns this transfer (it resumed after a reconnect).
+        if !t.is_send_run(send_run) {
+            return None;
+        }
         io_ctx = t.take_io_context();
         rehash_bytes = t.take_rehash_bytes();
         let effective_batch = t.adaptive_batch_size(batch_size);

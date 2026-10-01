@@ -42,6 +42,8 @@ pub(super) struct InboundCtx {
     pub(super) peer_sleeping: Arc<std::sync::atomic::AtomicBool>,
     pub(super) disk_tx: mpsc::Sender<DiskTaskMsg>,
     pub(super) endpoint: SocketAddr,
+    /// This connection's id in the peer manager.
+    pub(super) session_id: u64,
     last_seen: Arc<std::sync::atomic::AtomicU64>,
 }
 
@@ -567,6 +569,7 @@ pub(super) fn register_session(
             peer_name: rx_peer_name,
             outbox_tx: session_outbox_tx,
             endpoint,
+            session_id,
             session_pin: rx_session_pin,
             ping_sent_at: rx_ping_sent_at,
             peer_sleeping: rx_peer_sleeping,
@@ -741,11 +744,17 @@ pub(super) fn register_session(
 
                 shared.dedup.lock().await.remove_peer(peer_id);
 
-                shared
-                    .file_transfers
-                    .lock()
-                    .await
-                    .pause_all_for_device(peer_id);
+                {
+                    // A reconnect can register a new session and resume the
+                    // transfers in the awaits since mark_disconnected_if_current;
+                    // pausing then would strand the resumed transfer. Checking
+                    // under the transfers lock orders this against the resume,
+                    // which takes the same lock.
+                    let mut transfers = shared.file_transfers.lock().await;
+                    if shared.peer_manager.sender(peer_id).is_none() {
+                        transfers.pause_all_for_device(peer_id);
+                    }
+                }
                 shared.camera_frames.remove(&peer_id);
                 pump_transfer_queue(&shared).await;
 

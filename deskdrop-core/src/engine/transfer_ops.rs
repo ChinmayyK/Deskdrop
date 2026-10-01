@@ -122,8 +122,9 @@ impl Engine {
 
         for (tid, peer_id) in to_start {
             let resume_from = {
+                let session = self.shared.peer_manager.live_session_id(peer_id);
                 let mut mgr = self.shared.file_transfers.lock().await;
-                mgr.accept_inbound_or_resume(&tid).unwrap_or(0)
+                mgr.accept_inbound_or_resume(&tid, session).unwrap_or(0)
             };
 
             let accept_msg = AppMessage::FileTransferAccept {
@@ -299,6 +300,7 @@ impl Engine {
         let resume_msg = AppMessage::FileTransferResume { transfer_id };
         let mut was_outbound = false;
         let mut target_device = None;
+        let mut bg_send_run = 0;
         {
             let mut mgr = self.shared.file_transfers.lock().await;
             if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
@@ -306,6 +308,7 @@ impl Engine {
                 t.resume_from(resume_chunk);
                 t.paused = false;
                 was_outbound = true;
+                bg_send_run = t.start_send_run();
                 target_device = t.target_device;
             } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
                 t.paused = false;
@@ -362,6 +365,7 @@ impl Engine {
                             bg_shared.clone(),
                             bg_transfer_id,
                             BATCH_SIZE,
+                            bg_send_run,
                         )
                         .await
                         {
@@ -442,8 +446,9 @@ pub(crate) async fn pump_transfer_queue(shared: &EngineShared) {
 
     for (tid, peer_id) in to_start {
         let resume_from = {
+            let session = shared.peer_manager.live_session_id(peer_id);
             let mut mgr = shared.file_transfers.lock().await;
-            mgr.accept_inbound_or_resume(&tid).unwrap_or(0)
+            mgr.accept_inbound_or_resume(&tid, session).unwrap_or(0)
         };
 
         let accept_msg = AppMessage::FileTransferAccept {
