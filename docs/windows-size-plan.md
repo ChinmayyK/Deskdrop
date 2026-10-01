@@ -57,7 +57,7 @@ Also in `137ee8c`: workspace-wide `cargo fmt`, and a clippy fix in `deskdrop-cor
    ```
    dotnet publish platforms\windows\Deskdrop.WinUI\Deskdrop.WinUI.csproj -c Release -r win-x64 --self-contained true -o publish\windows
    pwsh scripts\windows-size.ps1 publish\windows
-   wix build platforms\windows\installer\Deskdrop.wxs -bindpath App=publish\windows -bindpath platforms\windows\installer -o Deskdrop-windows-x64.msi
+   wix build platforms\windows\installer\Deskdrop.wxs -d "AppDir=%CD%\publish\windows" -bindpath platforms\windows\installer -arch x64 -o Deskdrop-windows-x64.msi
    pwsh scripts\windows-size.ps1 publish\windows Deskdrop-windows-x64.msi
    ```
    Expected: ~185 MB installed (estimate, not yet measured).

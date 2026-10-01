@@ -24,6 +24,7 @@ platforms/windows/**/bin/
 platforms/windows/**/obj/
 platforms/windows/**/deskdrop_core.dll
 *.msi
+*.wixpdb
 
 # Allow Rust source bins under deskdrop-core
 !deskdrop-core/src/bin/

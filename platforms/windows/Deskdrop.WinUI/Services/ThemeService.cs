@@ -36,7 +36,12 @@ namespace Deskdrop.WinUI.Services
         // Dashboard/tray windows).
         public static void Register(Window window)
         {
-            TrackedWindows.Add(new WeakReference<Window>(window));
+            var entry = new WeakReference<Window>(window);
+            TrackedWindows.Add(entry);
+            // A closed window can stay alive (still referenced) but throws
+            // "window has already been closed" on any access, so stop
+            // re-theming it once it closes.
+            window.Closed += (_, _) => TrackedWindows.Remove(entry);
             Apply(window);
         }
 

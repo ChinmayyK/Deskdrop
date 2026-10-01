@@ -17,6 +17,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - **Windows:** The tray menu's "Rescan Network" now rescans. It used to post to a local HTTP port nothing listened on.
 - **Build:** A plain `dotnet build` no longer writes a stale 113 MB copy of the tray helper into `publish\`.
+- **Core:** Transfers interrupted by a reconnect now resume reliably; about half of them used to end with "missing chunks". Three races are closed: the old connection's teardown no longer pauses a transfer the new connection already resumed, a stale send loop can no longer skip chunks after a resume, and chunks still arriving on the old connection are dropped instead of being queued on a disk writer that is about to be torn down (which left the resumed copies skipped as duplicates).
+- **Windows:** The taskbar progress bar uses source-generated COM interop; the old `[ComImport]` code is not supported under Native AOT and would have thrown on the first transfer. Value converters are `partial` for the same reason.
+- **Windows:** The MSI now builds with WiX 5 (it had an invalid XML comment, an unsupported `Condition` attribute, and a `<Files>` path that produced an empty installer), and installing a rebuilt MSI of the same version replaces the installed app instead of registering a second Deskdrop entry. The native `Deskdrop.pdb` (~52 MB) no longer ships.
 
 ## [1.3.3] - 2026-09-05
 ### Fixed

@@ -96,7 +96,7 @@ jobs:
         run: |
           dotnet tool install -g wix --version 5.*
           wix build platforms\windows\installer\Deskdrop.wxs `
-            -bindpath App=publish\windows -bindpath platforms\windows\installer `
+            -d "AppDir=$PWD\publish\windows" -bindpath platforms\windows\installer -arch x64 `
             -o Deskdrop-windows-x64.msi
           Compress-Archive -Path publish\windows\* -DestinationPath Deskdrop-windows-x64.zip
           pwsh scripts\windows-size.ps1 publish\windows Deskdrop-windows-x64.msi

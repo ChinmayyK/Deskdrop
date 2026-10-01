@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Deskdrop Windows Installer (WiX v5+)
-  Build from the repository root, after publishing the app folder:
-    dotnet tool install -g wix --version 5.*
-    dotnet publish platforms\windows\Deskdrop.WinUI\Deskdrop.WinUI.csproj -c Release -r win-x64 --self-contained true -o publish\windows
-    wix build platforms\windows\installer\Deskdrop.wxs -bindpath App=publish\windows -bindpath platforms\windows\installer -o Deskdrop-windows-x64.msi
+  Build from the repository root after publishing the app folder to
+  publish\windows: install the WiX 5 dotnet tool, then run wix build on this
+  file with the define AppDir=<absolute path of publish\windows> (Files
+  resolves relative paths against this file's folder, not bind paths) and the
+  bind path platforms\windows\installer for the icon.
+  The exact commands are in the "Build MSI" step of
+  .github/workflows/release.yml. (XML comments cannot contain a double dash,
+  so command-line flags are not spelled out here.)
 
-  The MSI installs the whole publish folder (self-contained .NET runtime,
-  Windows App SDK, deskdrop_core.dll, tray\ helper), picked up with <Files>,
-  so it never goes stale when the published file set changes.
+  The MSI installs the whole publish folder (self-contained app, Windows App
+  SDK, deskdrop_core.dll, tray\ helper), picked up with <Files>, so it never
+  goes stale when the published file set changes.
 -->
 
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
@@ -24,7 +28,9 @@
          install - a dead end for those users. Do not switch this back to
          perMachine. -->
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Deskdrop is already installed." />
+    <!-- AllowSameVersionUpgrades: a rebuilt MSI with the same version replaces the
+         installed one instead of registering a second Deskdrop product. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of Deskdrop is already installed." />
 
     <!-- One embedded cabinet at the highest compression: a smaller download,
          at the cost of a slower MSI build. -->
@@ -57,25 +63,16 @@
   <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
 
-      <!-- Main executable, kept as its own component for the Run key below. -->
+      <!-- Main executable. Launch at login is not set here: the app's
+           Settings screen owns the HKCU Run value. -->
       <Component Id="MainExe" Guid="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-        <File Id="DeskdropExe" Source="!(bindpath.App)\Deskdrop.exe" KeyPath="yes" />
-
-        <!-- Run on startup (optional — controlled by app settings) -->
-        <RegistryValue
-          Root="HKCU"
-          Key="Software\Microsoft\Windows\CurrentVersion\Run"
-          Name="Deskdrop"
-          Value="[INSTALLFOLDER]Deskdrop.exe"
-          Type="string"
-          Action="write"
-          Condition="STARTUPCHECK" />
+        <File Id="DeskdropExe" Source="$(var.AppDir)\Deskdrop.exe" KeyPath="yes" />
       </Component>
 
       <!-- Everything else in the publish folder, subfolders included
            (tray\, Assets\, en-us\, …): runtime, WinUI, deskdrop_core.dll. -->
-      <Files Include="!(bindpath.App)\**">
-        <Exclude Files="!(bindpath.App)\Deskdrop.exe" />
+      <Files Include="$(var.AppDir)\**">
+        <Exclude Files="$(var.AppDir)\Deskdrop.exe" />
       </Files>
 
       <!-- App registration. No util:FirewallException entries here: adding

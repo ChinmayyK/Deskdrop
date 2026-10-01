@@ -50,8 +50,12 @@
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
                 <!-- Shown instead of the plain name once more than one device
-                     is connected; populated from code-behind (SyncDeviceSwitcher). -->
+                     is connected; populated from code-behind (SyncDeviceSwitcher).
+                     Its items are PeerViewModel, which has
+                     [GeneratedBindableCustomProperty], so DisplayMemberPath is
+                     AOT-safe even though the XAML compiler can't see the type. -->
                 <ComboBox x:Name="DeviceSwitcher"
+                          x:SuppressXamlTrimWarnings="True"
                           Visibility="Collapsed"
                           MinWidth="180"
                           VerticalAlignment="Center"

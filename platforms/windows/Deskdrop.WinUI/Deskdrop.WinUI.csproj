@@ -143,6 +143,33 @@
   </Target>
 
   <!--
+    Self-contained Windows App SDK deployment leaves out
+    Microsoft.WindowsAppRuntime.Insights.Resource.dll, although the runtime
+    MSIX ships it. AppNotificationManager.Register() needs it and failed with
+    0x8007007E ("module could not be found") on every launch without it, so
+    toast buttons never activated the app. Copy it out of the runtime MSIX in
+    the Microsoft.WindowsAppSDK.Runtime package (MicrosoftWindowsAppSDKPackageDir
+    is that package's root), so it follows the SDK version.
+  -->
+  <Target Name="_FindWindowsAppRuntimeMsix">
+    <PropertyGroup>
+      <_RuntimeMsixPath>$(MicrosoftWindowsAppSDKPackageDir)tools\MSIX\win10-$(RuntimeIdentifier.Replace('win-', ''))\Microsoft.WindowsAppRuntime.2.msix</_RuntimeMsixPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <_RuntimeMsix Include="$(_RuntimeMsixPath)" Condition="Exists('$(_RuntimeMsixPath)')" />
+    </ItemGroup>
+    <Error Condition="'@(_RuntimeMsix)' == ''" Text="Windows App Runtime MSIX not found at $(_RuntimeMsixPath); cannot copy Microsoft.WindowsAppRuntime.Insights.Resource.dll." />
+  </Target>
+
+  <Target Name="CopyWindowsAppRuntimeInsights" AfterTargets="Build" DependsOnTargets="_FindWindowsAppRuntimeMsix">
+    <Unzip SourceFiles="@(_RuntimeMsix)" DestinationFolder="$(OutDir)" Include="Microsoft.WindowsAppRuntime.Insights.Resource.dll" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishWindowsAppRuntimeInsights" AfterTargets="Publish" DependsOnTargets="_FindWindowsAppRuntimeMsix">
+    <Unzip SourceFiles="@(_RuntimeMsix)" DestinationFolder="$(PublishDir)" Include="Microsoft.WindowsAppRuntime.Insights.Resource.dll" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!--
     Self-contained Microsoft.WindowsAppSDK 2.3.1 deploys its Windows AI /
     Copilot Runtime component (Phi Silica, ContentSafety, Imaging super
     resolution, OnnxRuntime + DirectML) unconditionally - there is no project
@@ -186,6 +213,9 @@
   -->
   <PropertyGroup>
     <PublishAot>true</PublishAot>
+    <!-- The native Deskdrop.pdb is ~52 MB. Keep it in bin\ for crash debugging,
+         out of the publish folder that the MSI and zip ship. -->
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
   </PropertyGroup>
 
 </Project>

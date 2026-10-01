@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Data;
 
 namespace Deskdrop.WinUI
 {
-    public sealed class StringToVisibilityConverter : IValueConverter
+    public sealed partial class StringToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -19,7 +19,7 @@ namespace Deskdrop.WinUI
         }
     }
 
-    public sealed class EmptyStringToVisibilityConverter : IValueConverter
+    public sealed partial class EmptyStringToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -32,7 +32,7 @@ namespace Deskdrop.WinUI
         }
     }
 
-    public class NullToVisibilityConverter : IValueConverter
+    public partial class NullToVisibilityConverter : IValueConverter
     {
         public Visibility NullValue { get; set; } = Visibility.Collapsed;
         public Visibility NonNullValue { get; set; } = Visibility.Visible;
@@ -48,7 +48,7 @@ namespace Deskdrop.WinUI
         }
     }
 
-    public class MultiplyConverter : IValueConverter
+    public partial class MultiplyConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -68,7 +68,7 @@ namespace Deskdrop.WinUI
         }
     }
 
-    public sealed class BoolToFolderIconConverter : IValueConverter
+    public sealed partial class BoolToFolderIconConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -77,7 +77,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class BoolToItemCountDotConverter : IValueConverter
+    public sealed partial class BoolToItemCountDotConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -86,7 +86,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class ItemCountTextConverter : IValueConverter
+    public sealed partial class ItemCountTextConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -99,7 +99,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class InverseBoolToVisibilityConverter : IValueConverter
+    public sealed partial class InverseBoolToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -108,7 +108,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class CountToVisibilityConverter : IValueConverter
+    public sealed partial class CountToVisibilityConverter : IValueConverter
     {
         public static Visibility ToVisibility(int count) => count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -121,7 +121,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class InverseCountToVisibilityConverter : IValueConverter
+    public sealed partial class InverseCountToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -132,7 +132,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class PlatformToGlyphConverter : IValueConverter
+    public sealed partial class PlatformToGlyphConverter : IValueConverter
     {
         public static string ToGlyph(string? value)
         {
@@ -150,7 +150,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class BatteryGlyphConverter : IValueConverter
+    public sealed partial class BatteryGlyphConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -167,7 +167,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class NetworkTypeToGlyphConverter : IValueConverter
+    public sealed partial class NetworkTypeToGlyphConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -180,7 +180,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class FileTypeToGlyphConverter : IValueConverter
+    public sealed partial class FileTypeToGlyphConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -202,7 +202,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class BoolToVisibleConverter : IValueConverter
+    public sealed partial class BoolToVisibleConverter : IValueConverter
     {
         // Exposed as a static method, not just Convert(), because WinUI 3's
         // x:Bind codegen calls SetConverterLookupRoot(this) for ANY {x:Bind
@@ -222,7 +222,7 @@ namespace Deskdrop.WinUI
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
-    public sealed class StringToBrushConverter : IValueConverter
+    public sealed partial class StringToBrushConverter : IValueConverter
     {
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Microsoft.UI.Xaml.Media.SolidColorBrush> _cache = new();
         private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _transparent = new(Microsoft.UI.Colors.Transparent);
@@ -269,7 +269,7 @@ namespace Deskdrop.WinUI
     // storage bar) where a full ProgressBar would be visually far heavier
     // than the single number it carries. `parameter` is the track width in
     // DIPs, so the same converter serves a 22px battery and a 120px bar.
-    public sealed class PercentToWidthConverter : IValueConverter
+    public sealed partial class PercentToWidthConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -304,7 +304,7 @@ namespace Deskdrop.WinUI
     //
     // Glyphs are built from code points rather than written as literals so
     // this file stays pure ASCII and survives any tooling that re-encodes it.
-    public sealed class ActivityKindToGlyphConverter : IValueConverter
+    public sealed partial class ActivityKindToGlyphConverter : IValueConverter
     {
         private static string G(int codePoint) => char.ConvertFromUtf32(codePoint);
 
@@ -339,7 +339,7 @@ namespace Deskdrop.WinUI
     // Dims an element instead of collapsing it, so a de-emphasised row keeps
     // its place in the layout and nothing reflows when the state flips.
     // `parameter` overrides the "false" opacity; default 0.45.
-    public sealed class BoolToOpacityConverter : IValueConverter
+    public sealed partial class BoolToOpacityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {

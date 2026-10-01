@@ -1943,7 +1943,7 @@ namespace Deskdrop.WinUI
         }
     }
 
-    public class RatioToStarConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public partial class RatioToStarConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
