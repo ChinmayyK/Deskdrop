@@ -131,14 +131,20 @@ fun SettingsTab(
             Column {
                 SectionHeader(c, "Continuity", null)
                 Panel(c) {
-                    // SMS reading is not allowed in the Play build.
+                    // The Play build may not read SMS, or all photos in the
+                    // background (see src/play/AndroidManifest.xml).
                     if (com.deskdrop.BuildConfig.FULL_PERMISSIONS) {
                         SwitchRow(c, Icons.Outlined.Sms, "SMS codes", "Copy one-time codes to your computer", autoForwardSms, onAutoForwardSmsChange)
                         Hairline(c)
+                        SwitchRow(c, Icons.Outlined.Screenshot, "Screenshots", "Send new screenshots automatically", autoForwardScreenshots, onAutoForwardScreenshotsChange)
+                        Hairline(c)
                     }
-                    SwitchRow(c, Icons.Outlined.Screenshot, "Screenshots", "Send new screenshots automatically", autoForwardScreenshots, onAutoForwardScreenshotsChange)
-                    Hairline(c)
-                    SwitchRow(c, Icons.Outlined.Call, "Calls", "Needs Phone, Contacts and Call log access", callContinuityEnabled, onCallContinuityChange)
+                    SwitchRow(
+                        c, Icons.Outlined.Call, "Calls",
+                        if (com.deskdrop.BuildConfig.FULL_PERMISSIONS) "Needs Phone, Contacts and Call log access"
+                        else "Show incoming calls on your computer. Needs Phone access",
+                        callContinuityEnabled, onCallContinuityChange
+                    )
                     Hairline(c)
                     SwitchRow(c, Icons.Outlined.Notifications, "Notifications", "Mirror phone notifications", notificationMirroringEnabled, onNotificationMirroringChange)
                 }

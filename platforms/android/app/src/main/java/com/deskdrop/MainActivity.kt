@@ -266,19 +266,29 @@ class MainActivity : ComponentActivity() {
                             syncFiles.value = it
                             saveBooleanPref("sync_files", it)
                         },
-                        onCallContinuityChange = {
-                            callContinuityEnabled.value = it
-                            saveBooleanPref("call_continuity_enabled", it)
-                            if (it) {
-                                requestCallContinuityPermissions()
+                        onCallContinuityChange = { enabled ->
+                            val apply = {
+                                callContinuityEnabled.value = enabled
+                                saveBooleanPref("call_continuity_enabled", enabled)
+                                if (enabled) requestCallContinuityPermissions()
                             }
+                            if (enabled) confirmDataSharing(
+                                "Show calls on your computer?",
+                                "When your phone rings, Deskdrop sends the caller's number and name, when Android provides them, to your paired devices. It goes directly over your network, never through a server.",
+                                apply
+                            ) else apply()
                         },
-                        onNotificationMirroringChange = {
-                            notificationMirroringEnabled.value = it
-                            saveBooleanPref("notification_mirroring", it)
-                            if (it) {
-                                requestNotificationListenerPermission()
+                        onNotificationMirroringChange = { enabled ->
+                            val apply = {
+                                notificationMirroringEnabled.value = enabled
+                                saveBooleanPref("notification_mirroring", enabled)
+                                if (enabled) requestNotificationListenerPermission()
                             }
+                            if (enabled) confirmDataSharing(
+                                "Mirror notifications?",
+                                "Deskdrop sends the notifications this phone receives, including their text, to your paired devices. It goes directly over your network, never through a server.",
+                                apply
+                            ) else apply()
                         },
                         onAutoForwardSmsChange = {
                             autoForwardSms.value = it
@@ -615,10 +625,18 @@ class MainActivity : ComponentActivity() {
     private fun requestRuntimePermissions() {
         val needed = mutableListOf<String>()
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            needed += Manifest.permission.POST_NOTIFICATIONS
+        }
+        // The Play build asks for notifications only; phone access is asked
+        // for when the user turns on Calls.
+        if (!BuildConfig.FULL_PERMISSIONS) {
+            if (needed.isNotEmpty()) requestPermissions(needed.toTypedArray(), 1001)
+            return
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                needed += Manifest.permission.POST_NOTIFICATIONS
-            }
             if (checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 needed += Manifest.permission.READ_MEDIA_IMAGES
             }
@@ -660,6 +678,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestBatteryOptimizationExemption() {
+        // Play restricts the direct request; that build offers the system
+        // list from Settings instead of opening it on every launch.
+        if (!BuildConfig.FULL_PERMISSIONS) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
             if (!pm.isIgnoringBatteryOptimizations(packageName)) {
@@ -703,17 +724,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Says what leaves the phone before asking for the access that allows it. */
+    private fun confirmDataSharing(title: String, message: String, onAllow: () -> Unit) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Allow") { _, _ -> onAllow() }
+            .setNegativeButton("Not now", null)
+            .show()
+    }
+
     private fun requestCallContinuityPermissions() {
         val needed = mutableListOf<String>()
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_PHONE_STATE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             needed += android.Manifest.permission.READ_PHONE_STATE
         }
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            needed += android.Manifest.permission.READ_CONTACTS
-        }
         // The Play build mirrors calls without these: no caller number on Android 9+
-        // and no answering from the computer.
+        // (so no contact to look up) and no answering from the computer.
         if (BuildConfig.FULL_PERMISSIONS) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed += android.Manifest.permission.READ_CONTACTS
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && ContextCompat.checkSelfPermission(this, android.Manifest.permission.ANSWER_PHONE_CALLS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 needed += android.Manifest.permission.ANSWER_PHONE_CALLS
             }
@@ -764,9 +795,15 @@ class MainActivity : ComponentActivity() {
 
     private fun openBatterySettings() {
         runCatching {
-            startActivity(Intent(
-                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                android.net.Uri.parse("package:$packageName")))
+            startActivity(
+                if (BuildConfig.FULL_PERMISSIONS) Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    android.net.Uri.parse("package:$packageName"))
+                else Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            )
+            if (!BuildConfig.FULL_PERMISSIONS) {
+                Toast.makeText(this, "Find Deskdrop and choose \"Don't optimize\"", Toast.LENGTH_LONG).show()
+            }
         }.onFailure {
             runCatching {
                 startActivity(Intent(

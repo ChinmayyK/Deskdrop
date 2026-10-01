@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Google Play build: strip permissions that Play's SMS/Call Log and All Files Access
-  policies reject for an app that is not the default SMS/dialer app or a file manager.
-  Received files still land in Downloads/Deskdrop through MediaStore (scoped storage).
+  Google Play build: strip what Play policy rejects or restricts for this app.
+  - SMS/Call Log and All Files Access: only for default SMS/dialer apps and file managers.
+    Received files still land in Downloads/Deskdrop through MediaStore (scoped storage).
+  - Photos and videos: only for apps built around broad media access (galleries).
+    Browsing the phone's files from the computer is off; sharing files still works.
+  - Contacts: without the call log there is no caller number to look up.
+  - Full-screen intents: only for calling and alarm apps; pairing prompts fall back
+    to a heads-up notification.
+  - Battery optimisation request: the app opens the system list instead.
+  - Accessibility service: Play only accepts accessibility tools.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
@@ -11,4 +18,17 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" tools:node="remove" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" tools:node="remove" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" tools:node="remove" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" tools:node="remove" />
+
+    <application>
+        <service android:name=".DeskdropAccessibilityService" tools:node="remove" />
+    </application>
 </manifest>

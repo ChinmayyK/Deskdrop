@@ -330,7 +330,7 @@ class DeskdropService : Service() {
                 
                 // Check settings first
                 val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                if (!prefs.getBoolean("auto_forward_screenshots", false)) return@readLock
+                if (!BuildConfig.FULL_PERMISSIONS || !prefs.getBoolean("auto_forward_screenshots", false)) return@readLock
 
                 if (h == 0L || !hasConnectedPeers()) return@readLock
 
@@ -1749,7 +1749,9 @@ class DeskdropService : Service() {
                             Log.e(TAG, "Failed to show permission notification", e)
                         }
                         DeskdropJni.sendRemoteFilesResponse(
-                            engineHandle, requestId, targetDeviceId, null, null, 0, "Permission Denied: Please grant storage permission on your Android device to browse files."
+                            engineHandle, requestId, targetDeviceId, null, null, 0,
+                            if (BuildConfig.FULL_PERMISSIONS) "Permission Denied: Please grant storage permission on your Android device to browse files."
+                            else "Browsing phone files isn't available in the Google Play version of Deskdrop. Share files from the phone instead."
                         )
                         return@executeInBackgroundWithWakeLock
                     }
@@ -3978,6 +3980,8 @@ class DeskdropService : Service() {
     }
 
     private fun showPermissionRequiredNotification() {
+        // The Play build cannot ask for the access this notification asks for.
+        if (!BuildConfig.FULL_PERMISSIONS) return
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("request_permissions", true)
