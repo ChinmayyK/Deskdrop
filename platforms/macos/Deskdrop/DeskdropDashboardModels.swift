@@ -238,6 +238,9 @@ struct ManagedDevice: Identifiable {
     let ip: String?
     let explicitDisconnect: Bool
     let pairingOutcome: String?
+    /// "Android", "macOS", "Windows" or "Linux"; nil until the device connects with 1.3.4+.
+    let platform: String?
+    var os: DeviceOS { DeviceOS(platform: platform, name: rawName) }
     var isConnected: Bool { connectionState == .connected }
     /// Why the last request with an unpaired device ended, for its status line.
     var pairingOutcomeText: String? {
@@ -259,6 +262,7 @@ struct ManagedDevice: Identifiable {
         self.endpoint        = nil
         self.ip              = peer.ip
         self.explicitDisconnect = peer.explicitDisconnect
+        self.platform        = peer.platform
         self.connectionState = if peer.connectionStatus == "connecting" {
             .connecting
         } else if peer.connectionStatus == "failed" {

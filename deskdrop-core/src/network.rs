@@ -411,12 +411,26 @@ pub struct HandshakeResult {
     pub is_manual_reconnect: bool,
     /// Empty when the peer predates the version exchange.
     pub peer_app_version: String,
+    /// "Android", "macOS", "Windows" or "Linux"; empty from older peers.
+    pub peer_platform: String,
 }
+
+/// The OS this build runs on, as peers show it.
+pub const MY_PLATFORM: &str = if cfg!(target_os = "android") {
+    "Android"
+} else if cfg!(target_os = "macos") {
+    "macOS"
+} else if cfg!(target_os = "windows") {
+    "Windows"
+} else {
+    "Linux"
+};
 
 fn my_metadata_json(device_name: &str, is_manual_reconnect: bool) -> Option<String> {
     serde_json::to_string(&crate::protocol::DeviceMetadata {
         device_name: device_name.to_string(),
         app_version: crate::protocol::APP_VERSION.to_string(),
+        platform: MY_PLATFORM.to_string(),
         is_manual_reconnect: Some(is_manual_reconnect),
         ..Default::default()
     })
@@ -544,6 +558,8 @@ pub async fn handshake_initiator(
 
     info!("Handshake complete with '{}' ({})", device_name, device_id);
 
+    let ack_metadata = parse_metadata(ack_metadata_json);
+
     Ok(HandshakeResult {
         session,
         pin,
@@ -552,7 +568,8 @@ pub async fn handshake_initiator(
         peer_identity_pubkey_bytes: identity_pubkey,
         peer_already_trusted: trusted,
         is_manual_reconnect: false,
-        peer_app_version: parse_metadata(ack_metadata_json).app_version,
+        peer_app_version: ack_metadata.app_version,
+        peer_platform: ack_metadata.platform,
     })
 }
 
@@ -659,6 +676,7 @@ where
         peer_already_trusted: peer_is_trusted,
         is_manual_reconnect,
         peer_app_version: peer_metadata.app_version,
+        peer_platform: peer_metadata.platform,
     })
 }
 

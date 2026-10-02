@@ -30,6 +30,8 @@ data class PeerSnapshot(
     val pairingExpiresInSecs: Int?,
     /** How the last request ended: "accepted", "declined", "cancelled", "expired" or "update_needed". */
     val pairingOutcome: String?,
+    /** "Android", "macOS", "Windows" or "Linux"; null until the device has connected with 1.3.4+. */
+    val platform: String? = null,
     val lifecycleState: String,
     val remoteSyncEnabled: Boolean,
 ) {
@@ -88,6 +90,7 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             pairingPin = if (obj.isNull("pairing_pin")) null else obj.optString("pairing_pin"),
             pairingExpiresInSecs = if (obj.isNull("pairing_expires_in_secs")) null else obj.optInt("pairing_expires_in_secs"),
             pairingOutcome = if (obj.isNull("pairing_outcome")) null else obj.optString("pairing_outcome"),
+            platform = if (obj.isNull("platform")) null else obj.optString("platform").ifBlank { null },
             lifecycleState = obj.optString("lifecycle_state", "discovered"),
             remoteSyncEnabled = obj.optBoolean("remote_sync_enabled", true),
         )

@@ -221,16 +221,8 @@ private struct DiscoveryDeviceCard: View {
                         .fill(isSelected ? CRTheme.brandElectric.opacity(0.15) : CRTheme.surfaceStrong)
                         .frame(width: 72, height: 72)
                     
-                    if #available(macOS 14.0, *) {
-                        Image(systemName: peer.displayName.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
-                            .font(.system(size: 32, weight: .light))
-                            .foregroundStyle(isSelected ? CRTheme.brandElectric : CRTheme.ink)
-                            .symbolEffect(.bounce, value: isSelected)
-                    } else {
-                        Image(systemName: peer.displayName.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
-                            .font(.system(size: 32, weight: .light))
-                            .foregroundStyle(isSelected ? CRTheme.brandElectric : CRTheme.ink)
-                    }
+                    OSIcon(platform: peer.platform, name: peer.displayName, size: 30)
+                        .foregroundStyle(isSelected ? CRTheme.brandElectric : CRTheme.ink)
                 }
                 
                 VStack(spacing: 4) {

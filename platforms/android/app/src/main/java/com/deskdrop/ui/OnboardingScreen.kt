@@ -139,7 +139,7 @@ private fun FindStep(
                     if (i > 0) Hairline(c)
                     ListRow(
                         c,
-                        if (isPhoneName(peer.name)) Icons.Outlined.Smartphone else Icons.Outlined.LaptopMac,
+                        osIcon(peer.platform, peer.name),
                         peer.name,
                         detail = peer.ip ?: "On your network",
                         iconTint = c.accent,

@@ -228,7 +228,7 @@ fun ShareSheet(
                             if (index > 0) Hairline(c)
                             DeviceOption(
                                 c,
-                                icon = deviceIcon(peer.name),
+                                icon = osIcon(peer.platform, peer.name),
                                 title = peer.name,
                                 detail = "Connected",
                                 selected = selected == peer.id,
@@ -274,15 +274,6 @@ fun ShareSheet(
                 }
             }
         }
-    }
-}
-
-private fun deviceIcon(name: String): ImageVector {
-    val n = name.lowercase()
-    return when {
-        "phone" in n || "pixel" in n || "galaxy" in n || "oneplus" in n -> Icons.Outlined.PhoneAndroid
-        "tab" in n || "ipad" in n -> Icons.Outlined.Tablet
-        else -> Icons.Outlined.Computer
     }
 }
 

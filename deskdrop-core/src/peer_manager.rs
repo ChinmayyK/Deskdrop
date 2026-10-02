@@ -943,9 +943,23 @@ impl PeerManager {
         Ok(found)
     }
 
-    pub fn set_app_version(&self, device_id: Uuid, version: String) {
-        if let Some(mut entry) = self.store.get_mut(&device_id) {
-            entry.app_version = Some(version);
+    /// Records what the peer said about itself in its handshake. An empty
+    /// platform (older peers) keeps whatever was known before.
+    pub fn set_handshake_info(&self, device_id: Uuid, version: String, platform: String) {
+        let changed = match self.store.get_mut(&device_id) {
+            Some(mut entry) => {
+                entry.app_version = Some(version);
+                if !platform.is_empty() && entry.platform.as_deref() != Some(platform.as_str()) {
+                    entry.platform = Some(platform);
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false,
+        };
+        if changed {
+            let _ = self.save();
         }
     }
 
@@ -1408,7 +1422,7 @@ mod tests {
                     DiscoverySource::Mdns,
                 )
                 .unwrap();
-            manager.set_app_version(id, version.into());
+            manager.set_handshake_info(id, version.into(), String::new());
             manager.set_outgoing_pairing_waiting(id, true).unwrap();
             manager
                 .end_pairing(id, Some(PairingOutcome::Declined))

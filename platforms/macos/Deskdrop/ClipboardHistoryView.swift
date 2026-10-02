@@ -286,7 +286,7 @@ private struct QuickSendStrip: View {
                             store.sendQuickContext(to: device)
                         } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: "desktopcomputer").font(.system(size: 9.5))
+                                OSIcon(device.os, size: 10)
                                 Text(device.name).font(.system(size: 11, weight: .medium))
                             }
                             .foregroundStyle(CRTheme.ink.opacity(0.90))
