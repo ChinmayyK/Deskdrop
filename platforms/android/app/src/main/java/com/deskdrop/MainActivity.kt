@@ -1,5 +1,8 @@
 package com.deskdrop
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Security
 import com.deskdrop.ui.theme.*
 
 import android.Manifest
@@ -68,6 +71,17 @@ class MainActivity : ComponentActivity() {
     private val toastMessage = mutableStateOf("")
 
     private var targetDeviceIdForNextSend: String? = null
+
+    /** A question shown in the app's own sheet (see ConfirmSheet). */
+    private data class Prompt(
+        val icon: androidx.compose.ui.graphics.vector.ImageVector,
+        val title: String,
+        val message: String,
+        val confirm: String,
+        val dismiss: String?,
+        val onConfirm: () -> Unit,
+    )
+    private val prompt = mutableStateOf<Prompt?>(null)
 
     private val filePickerLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
@@ -190,6 +204,18 @@ class MainActivity : ComponentActivity() {
             val feedState by ActivityFeedManager.feedFlow.collectAsStateWithLifecycle()
 
             AppTheme(useDarkTheme = isDarkMode.value) {
+                prompt.value?.let { p ->
+                    com.deskdrop.ui.ConfirmSheet(
+                        c = com.deskdrop.ui.rememberDdColors(isDarkMode.value),
+                        icon = p.icon,
+                        title = p.title,
+                        message = p.message,
+                        confirm = p.confirm,
+                        dismiss = p.dismiss,
+                        onConfirm = p.onConfirm,
+                        onDismiss = { prompt.value = null },
+                    )
+                }
                 var showManualIpDialog by remember { mutableStateOf(false) }
                 if (showManualIpDialog) {
                     com.deskdrop.ui.ConnectByIpDialog(
@@ -711,14 +737,14 @@ class MainActivity : ComponentActivity() {
         }
 
         if (needed.isNotEmpty()) {
-            android.app.AlertDialog.Builder(this)
-                .setTitle("Permissions Required")
-                .setMessage("Deskdrop needs access to storage (for saving and sending files), notifications (for file transfer updates), and phone state (for call continuity features).")
-                .setPositiveButton("Continue") { _, _ ->
-                    requestPermissions(needed.toTypedArray(), 1001)
-                }
-                .setCancelable(false)
-                .show()
+            prompt.value = Prompt(
+                icon = Icons.Outlined.Security,
+                title = "A few permissions",
+                message = "Deskdrop needs storage to save and send files, notifications to show transfer progress, and phone state for calls on your computer. Android asks for each one next.",
+                confirm = "Continue",
+                dismiss = null,
+                onConfirm = { requestPermissions(needed.toTypedArray(), 1001) },
+            )
         }
 
         if (BuildConfig.FULL_PERMISSIONS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
@@ -781,12 +807,14 @@ class MainActivity : ComponentActivity() {
 
     /** Says what leaves the phone before asking for the access that allows it. */
     private fun confirmDataSharing(title: String, message: String, onAllow: () -> Unit) {
-        android.app.AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("Allow") { _, _ -> onAllow() }
-            .setNegativeButton("Not now", null)
-            .show()
+        prompt.value = Prompt(
+            icon = Icons.Outlined.Lock,
+            title = title,
+            message = message,
+            confirm = "Allow",
+            dismiss = "Not now",
+            onConfirm = onAllow,
+        )
     }
 
     private fun requestCallContinuityPermissions() {

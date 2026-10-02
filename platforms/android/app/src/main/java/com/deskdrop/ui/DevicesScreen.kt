@@ -221,18 +221,23 @@ private fun PeerRow(
             }
         }
 
-        DropdownMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false },
-            modifier = Modifier.background(c.surface)
-        ) {
-            if (peer.isConnected) {
-                MenuItem(c, "Send files", Icons.Outlined.UploadFile) { menuOpen = false; onSendFiles() }
-                MenuItem(c, "Send folder", Icons.Outlined.DriveFolderUpload) { menuOpen = false; onSendFolder() }
-                MenuItem(c, "Test speed", Icons.Outlined.Speed) { menuOpen = false; onSpeedTest() }
-                MenuItem(c, "Disconnect", Icons.Outlined.LinkOff) { menuOpen = false; onPrimary() }
-            }
-            MenuItem(c, "Forget device", Icons.Outlined.DeleteOutline, tint = c.danger) { menuOpen = false; onForget() }
+        if (menuOpen) {
+            ActionSheet(
+                c,
+                icon = osIcon(peer.platform, peer.name),
+                title = peer.name,
+                subtitle = status,
+                actions = buildList {
+                    if (peer.isConnected) {
+                        add(SheetAction(Icons.Outlined.UploadFile, "Send files", "Photos, videos, documents, anything", onClick = onSendFiles))
+                        add(SheetAction(Icons.Outlined.DriveFolderUpload, "Send a folder", "Everything in it, subfolders included", onClick = onSendFolder))
+                        add(SheetAction(Icons.Outlined.Speed, "Test speed", "How fast this link is right now", onClick = onSpeedTest))
+                        add(SheetAction(Icons.Outlined.LinkOff, "Disconnect", "Reconnect any time from here", onClick = onPrimary))
+                    }
+                    add(SheetAction(Icons.Outlined.DeleteOutline, "Forget device", danger = true, onClick = onForget))
+                },
+                onDismiss = { menuOpen = false }
+            )
         }
     }
 }
