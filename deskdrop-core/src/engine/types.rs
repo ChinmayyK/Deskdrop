@@ -130,6 +130,24 @@ pub enum EngineEvent {
         transfer_id: [u8; 16],
         from_device: Uuid,
         reason: String,
+        /// One file of a folder transfer. Set on the way to the host; see
+        /// `FolderTransferComplete`.
+        in_folder: bool,
+    },
+    /// Every file of a folder transfer has finished, in either direction.
+    /// The per-file events still arrive; hosts show this one instead of a
+    /// notification per file (see `is_folder_item`).
+    FolderTransferComplete {
+        batch_id: String,
+        peer_id: Uuid,
+        peer_name: String,
+        folder_name: String,
+        file_count: u32,
+        failed_count: u32,
+        /// True when this device sent the folder.
+        outbound: bool,
+        /// The folder on this device; `None` when we were the sender.
+        dest_dir: Option<PathBuf>,
     },
     /// File transfer was paused.
     FileTransferPaused {
@@ -491,6 +509,8 @@ pub(crate) struct EngineShared {
     pub(crate) activity: Arc<Mutex<ActivityFeed>>,
     /// File transfer manager.
     pub(crate) file_transfers: Arc<Mutex<FileTransferManager>>,
+    /// Per-folder tallies for folder transfers.
+    pub(crate) folders: Arc<std::sync::Mutex<super::folder_ops::FolderTallies>>,
     /// Speed tests manager.
     pub(crate) speed_tests:
         Arc<Mutex<std::collections::HashMap<uuid::Uuid, crate::speed_test::SpeedTestState>>>,

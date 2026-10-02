@@ -494,10 +494,10 @@ pub(super) fn register_session(
                                 let file_bytes = transfer.meta.size_bytes;
                                 match transfer.finalize(sha256_checksum.clone()) {
                                     Ok(dest) => Ok((dest, file_name, file_bytes)),
-                                    Err(e) => Err(e.to_string()),
+                                    Err(e) => Err((e.to_string(), Some(file_name))),
                                 }
                             } else {
-                                Err("transfer not found".into())
+                                Err(("transfer not found".to_string(), None))
                             }
                         };
                         match result {
@@ -538,7 +538,7 @@ pub(super) fn register_session(
                                     })
                                     .await;
                             }
-                            Err(e) => {
+                            Err((e, failed_name)) => {
                                 // Drop it and its partial file. Marking it failed
                                 // and keeping it left it in the active list, and
                                 // the desktop apps showed it in progress for good.
@@ -551,7 +551,7 @@ pub(super) fn register_session(
                                 dw_shared.activity.lock().await.record_file_transfer_failed(
                                     dw_peer_id,
                                     dw_peer_name.clone(),
-                                    None,
+                                    failed_name,
                                     hex_tid,
                                     e.clone(),
                                 );
@@ -564,6 +564,7 @@ pub(super) fn register_session(
                                     .await;
                                 let _ = dw_event_tx
                                     .send(EngineEvent::FileTransferFailed {
+                                        in_folder: false,
                                         transfer_id,
                                         from_device: dw_peer_id,
                                         reason: e,

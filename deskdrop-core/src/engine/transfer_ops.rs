@@ -106,10 +106,19 @@ impl Engine {
     }
 
     pub async fn accept_file_transfer(&self, transfer_id: [u8; 16]) -> Result<()> {
-        let _ = {
+        {
             let mut mgr = self.shared.file_transfers.lock().await;
-            mgr.queue_inbound(&transfer_id)
-        };
+            let _ = mgr.queue_inbound(&transfer_id);
+            // Accepting one file of a folder accepts the folder: its other
+            // files already waiting are queued too, and later ones are
+            // accepted as they arrive.
+            if let Some(batch_id) = mgr.folder_of(&transfer_id) {
+                self.shared.folders.lock().unwrap().decide(&batch_id, true);
+                for tid in mgr.inbound_in_folder(&batch_id) {
+                    let _ = mgr.queue_inbound(&tid);
+                }
+            }
+        }
         pump_transfer_queue(&self.shared).await;
         Ok(())
     }
@@ -183,29 +192,34 @@ impl Engine {
 
     /// Reject an incoming file transfer.
     pub async fn reject_file_transfer(&self, transfer_id: [u8; 16], reason: String) -> Result<()> {
-        let from_device = {
+        let declined: Vec<([u8; 16], Uuid)> = {
             let mut mgr = self.shared.file_transfers.lock().await;
-            let dev = mgr
-                .all_inbound()
-                .iter()
-                .find(|t| t.transfer_id == transfer_id)
-                .map(|t| t.from_device);
-            mgr.reject_inbound(&transfer_id);
-            dev
+            // Declining one file of a folder declines the folder: its other
+            // waiting files go too, later ones are declined as they arrive,
+            // and there is no folder result.
+            let mut tids = vec![transfer_id];
+            if let Some(batch_id) = mgr.folder_of(&transfer_id) {
+                let mut folders = self.shared.folders.lock().unwrap();
+                folders.decide(&batch_id, false);
+                folders.forget(&batch_id);
+                tids = mgr.inbound_in_folder(&batch_id);
+            }
+            tids.into_iter()
+                .filter_map(|tid| {
+                    let from = mgr.get_inbound_mut(&tid).map(|t| t.from_device)?;
+                    mgr.reject_inbound(&tid);
+                    Some((tid, from))
+                })
+                .collect()
         };
-        if let Some(from_device) = from_device {
-            let reject_msg = AppMessage::FileTransferAccept {
-                transfer_id,
-                accepted: false,
-                resume_from_chunk: 0,
-                reject_reason: Some(reason),
-            };
-            let peers = self.shared.peer_manager.all_trusted_senders();
-            for (peer_id, tx) in peers {
-                if peer_id == from_device {
-                    let _ = tx.try_send(reject_msg);
-                    break;
-                }
+        for (tid, from_device) in declined {
+            if let Some(tx) = self.shared.peer_manager.sender(from_device) {
+                let _ = tx.try_send(AppMessage::FileTransferAccept {
+                    transfer_id: tid,
+                    accepted: false,
+                    resume_from_chunk: 0,
+                    reject_reason: Some(reason.clone()),
+                });
             }
         }
         Ok(())
@@ -235,6 +249,7 @@ impl Engine {
             .shared
             .event_tx
             .send(EngineEvent::FileTransferFailed {
+                in_folder: false,
                 transfer_id,
                 from_device: Uuid::nil(),
                 reason: "User cancelled".to_string(),
@@ -451,6 +466,7 @@ pub(crate) async fn pump_transfer_queue(shared: &EngineShared) {
                         transfer_id: tid,
                         from_device: peer_id,
                         reason: e.to_string(),
+                        in_folder: false,
                     })
                     .await;
                 AppMessage::FileTransferAccept {

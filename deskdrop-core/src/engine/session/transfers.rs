@@ -36,6 +36,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             let file_name = meta.file_name.clone();
             let file_bytes = meta.size_bytes;
             let mime_type = meta.mime_type.clone();
+            let folder = crate::engine::folder_ops::incoming_folder(&meta);
 
             // Register inbound transfer.
             let reg_result = shared
@@ -66,9 +67,52 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 .map(|p| p.trusted)
                 .unwrap_or(false);
             let settings = shared.settings.lock().unwrap().clone();
-            let auto_accept = (is_trusted || settings.auto_accept_file_transfers)
+            let mut auto_accept = (is_trusted || settings.auto_accept_file_transfers)
                 && (settings.auto_accept_max_bytes == 0
                     || file_bytes <= settings.auto_accept_max_bytes);
+
+            // One answer covers a whole folder: once any file of it is
+            // accepted the rest are too, and once declined the rest are
+            // declined without asking again.
+            if let Some((batch_id, folder_name, total)) = &folder {
+                let decision = {
+                    let mut folders = shared.folders.lock().unwrap();
+                    let decision = folders.decision(batch_id);
+                    if decision != Some(false) {
+                        folders.track(
+                            transfer_id,
+                            batch_id,
+                            folder_name,
+                            *total,
+                            peer_id,
+                            peer_name,
+                            false,
+                        );
+                    }
+                    decision
+                };
+                match decision {
+                    Some(false) if !resuming => {
+                        shared
+                            .file_transfers
+                            .lock()
+                            .await
+                            .reject_inbound(&transfer_id);
+                        let _ = ctx
+                            .outbox_tx
+                            .send(AppMessage::FileTransferAccept {
+                                transfer_id,
+                                accepted: false,
+                                resume_from_chunk: 0,
+                                reject_reason: Some("folder declined".into()),
+                            })
+                            .await;
+                        return Flow::Continue;
+                    }
+                    Some(true) => auto_accept = true,
+                    _ => {}
+                }
+            }
 
             if resuming {
                 let _ = shared
@@ -125,14 +169,17 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         } => {
             ctx.touch_last_seen();
             if !accepted {
-                shared
-                    .file_transfers
-                    .lock()
-                    .await
-                    .cancel_outbound(&transfer_id);
+                let mut mgr = shared.file_transfers.lock().await;
+                // The receiver declined a folder: send none of the rest.
+                if let Some(batch_id) = mgr.folder_of(&transfer_id) {
+                    shared.folders.lock().unwrap().stop_sending(&batch_id);
+                }
+                mgr.cancel_outbound(&transfer_id);
+                drop(mgr);
                 let _ = shared
                     .event_tx
                     .send(EngineEvent::FileTransferFailed {
+                        in_folder: false,
                         transfer_id,
                         from_device: peer_id,
                         reason: reject_reason.unwrap_or_else(|| "rejected".into()),
@@ -465,6 +512,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 let _ = shared
                     .event_tx
                     .send(EngineEvent::FileTransferFailed {
+                        in_folder: false,
                         transfer_id,
                         from_device: peer_id,
                         reason: error.unwrap_or_else(|| "Unknown error".to_string()),
@@ -501,6 +549,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             let _ = shared
                 .event_tx
                 .send(EngineEvent::FileTransferFailed {
+                    in_folder: false,
                     transfer_id,
                     from_device: peer_id,
                     reason,

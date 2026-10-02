@@ -302,6 +302,11 @@ pub const PB_EVENT_OPEN_URL_ON_DEVICE_ACK: c_int = 39;
 /// A notification mirrored from a phone: title via
 /// `deskdrop_event_notification_title`, body via `deskdrop_event_text`.
 pub const PB_EVENT_NOTIFICATION_RECEIVED: c_int = 40;
+/// Every file of a folder transfer finished: folder name via
+/// `deskdrop_event_transfer_file_name`, folder path (receiver only) via
+/// `deskdrop_event_transfer_dest_path`, counts via
+/// `deskdrop_event_folder_file_count` / `deskdrop_event_folder_failed_count`.
+pub const PB_EVENT_FOLDER_TRANSFER_COMPLETE: c_int = 41;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -391,6 +396,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::FileTransferProgress { .. } => PB_EVENT_FILE_TRANSFER_PROGRESS,
         EngineEvent::FileTransferComplete { .. } => PB_EVENT_FILE_TRANSFER_COMPLETE,
         EngineEvent::FileTransferFailed { .. } => PB_EVENT_FILE_TRANSFER_FAILED,
+        EngineEvent::FolderTransferComplete { .. } => PB_EVENT_FOLDER_TRANSFER_COMPLETE,
         EngineEvent::FileTransferPaused { .. } => PB_EVENT_FILE_TRANSFER_PAUSED,
         EngineEvent::FileTransferResumed { .. } => PB_EVENT_FILE_TRANSFER_RESUMED,
         EngineEvent::ActivityFeedUpdated { .. } => PB_EVENT_ACTIVITY_UPDATED,
@@ -498,6 +504,7 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::OpenUrlOnDeviceRequested { from_name, .. } => Some(from_name.clone()),
         EngineEvent::CallStateChanged { from_name, .. } => Some(from_name.clone()),
         EngineEvent::NotificationReceived { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::FolderTransferComplete { peer_name, .. } => Some(peer_name.clone()),
         _ => None,
     };
     if let Some(n) = name {
@@ -571,6 +578,7 @@ pub unsafe extern "C" fn deskdrop_event_transfer_file_name(event: *mut PbEvent) 
         EngineEvent::FileTransferIncoming { file_name, .. } => Some(file_name.clone()),
         EngineEvent::FileTransferProgress { file_name, .. } => Some(file_name.clone()),
         EngineEvent::FileTransferComplete { file_name, .. } => Some(file_name.clone()),
+        EngineEvent::FolderTransferComplete { folder_name, .. } => Some(folder_name.clone()),
         _ => None,
     };
     if let Some(n) = name {
@@ -626,11 +634,59 @@ pub unsafe extern "C" fn deskdrop_event_transfer_dest_path(event: *mut PbEvent) 
         return std::ptr::null();
     }
     let e = &mut *event;
-    if let EngineEvent::FileTransferComplete { dest_path, .. } = &e.inner {
-        e.cache_str(dest_path.to_string_lossy().into_owned())
-    } else {
-        std::ptr::null()
+    let path = match &e.inner {
+        EngineEvent::FileTransferComplete { dest_path, .. } => Some(dest_path.clone()),
+        EngineEvent::FolderTransferComplete { dest_dir, .. } => {
+            Some(dest_dir.clone().unwrap_or_default())
+        }
+        _ => None,
+    };
+    match path {
+        Some(p) => e.cache_str(p.to_string_lossy().into_owned()),
+        None => std::ptr::null(),
     }
+}
+
+/// Files in a FOLDER_TRANSFER_COMPLETE event's folder; 0 otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_folder_file_count(event: *const PbEvent) -> c_int {
+    if event.is_null() {
+        return 0;
+    }
+    match &(*event).inner {
+        EngineEvent::FolderTransferComplete { file_count, .. } => *file_count as c_int,
+        _ => 0,
+    }
+}
+
+/// Files of a FOLDER_TRANSFER_COMPLETE event's folder that did not arrive.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_folder_failed_count(event: *const PbEvent) -> c_int {
+    if event.is_null() {
+        return 0;
+    }
+    match &(*event).inner {
+        EngineEvent::FolderTransferComplete { failed_count, .. } => *failed_count as c_int,
+        _ => 0,
+    }
+}
+
+/// 1 when a file transfer event is for one file of a folder transfer.
+/// Hosts skip their per-file notifications for these and show the folder's
+/// FOLDER_TRANSFER_COMPLETE instead.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_transfer_in_folder(event: *const PbEvent) -> c_int {
+    if event.is_null() {
+        return 0;
+    }
+    let name = match &(*event).inner {
+        EngineEvent::FileTransferIncoming { file_name, .. }
+        | EngineEvent::FileTransferProgress { file_name, .. }
+        | EngineEvent::FileTransferComplete { file_name, .. } => file_name.as_str(),
+        EngineEvent::FileTransferFailed { in_folder, .. } => return *in_folder as c_int,
+        _ => return 0,
+    };
+    crate::file_transfer::is_folder_item(name) as c_int
 }
 
 /// Get the fingerprint display string for TOFU_PROMPT events.
@@ -679,6 +735,7 @@ pub unsafe extern "C" fn deskdrop_event_device_id(event: *mut PbEvent) -> *const
         EngineEvent::CameraStreamAccept { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::CameraStreamStop { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::OpenUrlOnDeviceRequested { from_device, .. } => Some(from_device.to_string()),
+        EngineEvent::FolderTransferComplete { peer_id, .. } => Some(peer_id.to_string()),
         EngineEvent::OpenUrlOnDeviceAckReceived { from_device, .. } => {
             Some(from_device.to_string())
         }

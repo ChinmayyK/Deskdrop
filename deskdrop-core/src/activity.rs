@@ -42,6 +42,21 @@ fn safe_truncate(text: &str, max_chars: usize) -> String {
     format!("{}…", &text[..last_valid])
 }
 
+/// "12 files", or "11 of 12 files" when some failed.
+fn folder_files_label(file_count: u32, failed_count: u32) -> String {
+    let noun = if file_count == 1 { "file" } else { "files" };
+    if failed_count == 0 {
+        format!("{} {}", file_count, noun)
+    } else {
+        format!(
+            "{} of {} {}",
+            file_count.saturating_sub(failed_count),
+            file_count,
+            noun
+        )
+    }
+}
+
 // ── Activity kinds ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -71,6 +86,8 @@ pub enum ActivityKind {
     ClipboardApplied,
     /// A remote push notification was relayed.
     RemoteNotification,
+    /// Every file of a folder transfer finished (sent or received).
+    FolderTransferComplete,
 }
 
 /// A single entry in the activity feed.
@@ -333,6 +350,9 @@ impl ActivityFeed {
         transfer_id: String,
         is_sender: bool,
     ) -> u64 {
+        if crate::file_transfer::is_folder_item(&file_name) {
+            return 0;
+        }
         let summary = if is_sender {
             format!("[{}] sending file: {}", device_name, file_name)
         } else {
@@ -365,6 +385,9 @@ impl ActivityFeed {
         transfer_id: String,
         dest_path: Option<String>,
     ) -> u64 {
+        if crate::file_transfer::is_folder_item(&file_name) {
+            return 0;
+        }
         // Mark the corresponding FileTransferStarted entry to show it completed,
         // but DO NOT change its kind to FileTransferComplete, to avoid
         // duplicate notifications on clients that poll incrementally.
@@ -431,6 +454,12 @@ impl ActivityFeed {
         transfer_id: String,
         reason: String,
     ) -> u64 {
+        if file_name
+            .as_deref()
+            .is_some_and(crate::file_transfer::is_folder_item)
+        {
+            return 0;
+        }
         for e in self.entries.iter_mut() {
             if e.transfer_id.as_deref() == Some(&transfer_id) {
                 e.kind = ActivityKind::FileTransferFailed;
@@ -451,6 +480,42 @@ impl ActivityFeed {
         );
         entry.file_name = file_name;
         entry.transfer_id = Some(transfer_id);
+        self.push(entry);
+        id
+    }
+
+    /// Record a whole folder transfer finishing. `dest_dir` is the folder
+    /// on this device; `None` when this device sent it.
+    pub fn record_folder_transfer_complete(
+        &mut self,
+        device_id: Uuid,
+        device_name: String,
+        folder_name: String,
+        file_count: u32,
+        failed_count: u32,
+        dest_dir: Option<String>,
+    ) -> u64 {
+        let files = folder_files_label(file_count, failed_count);
+        let verb = if dest_dir.is_none() {
+            "sent"
+        } else {
+            "received"
+        };
+        let summary = format!(
+            "[{}] {} folder: {} ({})",
+            device_name, verb, folder_name, files
+        );
+        let id = self.alloc_id();
+        let mut entry = ActivityEntry::new(
+            id,
+            device_id,
+            device_name,
+            ActivityKind::FolderTransferComplete,
+            summary,
+        );
+        entry.file_name = Some(folder_name);
+        entry.text_preview = Some(files);
+        entry.dest_path = dest_dir;
         self.push(entry);
         id
     }

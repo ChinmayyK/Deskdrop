@@ -567,6 +567,32 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             )
             .await;
         }
+        EngineEvent::FolderTransferComplete {
+            peer_name,
+            folder_name,
+            file_count,
+            failed_count,
+            outbound,
+            ..
+        } => {
+            let verb = if outbound { "Sent" } else { "Received" };
+            push_feedback(
+                &state,
+                FeedbackEvent {
+                    timestamp: now_secs(),
+                    kind: "folder_transfer_complete".into(),
+                    message: format!(
+                        "{verb} folder {folder_name} ({} of {file_count} files) {} {peer_name}",
+                        file_count.saturating_sub(failed_count),
+                        if outbound { "to" } else { "from" },
+                    ),
+                    device_id: None,
+                    device_name: Some(peer_name),
+                    clipboard_id: None,
+                },
+            )
+            .await;
+        }
         EngineEvent::FileTransferPaused { .. } | EngineEvent::FileTransferResumed { .. } => {
             // These are informational only; no feedback needed.
         }
@@ -1084,6 +1110,23 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 )
                 .await?;
             Ok(IpcResponse::ok(hex::encode(transfer_id)))
+        }
+        IpcRequest::SendFolder {
+            path,
+            target_device,
+        } => {
+            let send = state
+                .engine
+                .send_folder(
+                    std::path::PathBuf::from(path),
+                    target_device.as_deref().map(parse_uuid).transpose()?,
+                )
+                .await?;
+            Ok(IpcResponse::ok(json!(send)))
+        }
+        IpcRequest::CancelFolder { batch_id } => {
+            state.engine.cancel_folder(&batch_id).await?;
+            Ok(IpcResponse::ok_empty())
         }
         IpcRequest::AcceptFileTransfer { transfer_id } => {
             state

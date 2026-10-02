@@ -44,6 +44,7 @@ mod background;
 pub(crate) mod clipboard;
 mod connection;
 pub(crate) mod file_ops;
+mod folder_ops;
 mod health;
 mod listener;
 mod peer_discovery;
@@ -57,6 +58,7 @@ mod types;
 
 use connection::*;
 pub(crate) use file_ops::*;
+pub use folder_ops::{FolderItem, FolderSend};
 pub use health::HealthIssue;
 use listener::*;
 use peer_discovery::*;
@@ -129,6 +131,9 @@ impl Engine {
             None
         };
 
+        // Engine events pass through the folder tap on their way to the host.
+        let host_event_tx = event_tx;
+        let (event_tx, tap_rx) = mpsc::channel(1024);
         let shared = EngineShared {
             config: config.clone(),
             trust,
@@ -148,6 +153,7 @@ impl Engine {
                 config.device_name.clone(),
             ))),
             activity: Arc::new(Mutex::new(ActivityFeed::new(200))),
+            folders: Arc::default(),
             file_transfers: Arc::new(Mutex::new(FileTransferManager::new(
                 config
                     .file_save_dir
@@ -182,6 +188,12 @@ impl Engine {
             shared: shared.clone(),
             seq: Arc::new(Mutex::new(0)),
         };
+        folder_ops::spawn_folder_event_tap(
+            shared.folders.clone(),
+            shared.activity.clone(),
+            tap_rx,
+            host_event_tx,
+        );
 
         spawn_listener_supervisor(shared.clone(), listener_rx);
         if let Some((_, discovery_rx)) = discovery_pair {
