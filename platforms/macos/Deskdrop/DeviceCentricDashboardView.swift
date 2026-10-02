@@ -118,8 +118,7 @@ struct DeviceCard: View {
                 ZStack {
                     Circle().fill(accent.opacity(0.12))
                         .frame(width: 38, height: 38)
-                    Image(systemName: device.name.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
-                        .font(.system(size: 18, weight: .light))
+                    OSIcon(device.os, size: 18)
                         .foregroundStyle(accent)
                 }
 
@@ -537,15 +536,8 @@ struct CompactDeviceCard: View {
                     .fill(CRTheme.brandElectric.opacity(0.1))
                     .frame(width: 44, height: 44)
                 
-                if device.name.lowercased().contains("mac") {
-                    Image(systemName: "laptopcomputer")
-                        .font(.system(size: 20, weight: .light))
-                        .foregroundStyle(CRTheme.brandElectric)
-                } else {
-                    Image(systemName: "smartphone")
-                        .font(.system(size: 22, weight: .light))
-                        .foregroundStyle(CRTheme.brandElectric)
-                }
+                OSIcon(device.os, size: 20)
+                    .foregroundStyle(CRTheme.brandElectric)
             }
             
             VStack(alignment: .leading, spacing: 8) {
@@ -1118,18 +1110,7 @@ struct DeviceIdentityCard: View {
                     .foregroundStyle(isOnline ? CRTheme.ink : CRTheme.inkSoft)
                 
                 HStack(spacing: 6) {
-                    if device.name.lowercased().contains("mac") {
-                        Image(systemName: "macbook.and.iphone")
-                            .font(.system(size: 11))
-                    } else if let imgPath = Bundle.main.path(forResource: "AndroidLogo", ofType: "png"), let nsImg = NSImage(contentsOfFile: imgPath) {
-                        Image(nsImage: nsImg)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 12, height: 12)
-                    } else {
-                        Image(systemName: "smartphone")
-                            .font(.system(size: 11))
-                    }
+                    OSIcon(device.os, size: 11)
                     
                     Text(isOnline ? "Active" : "Offline")
                         .font(.system(size: 11, weight: .semibold))
@@ -1361,8 +1342,7 @@ struct DeviceListRow: View {
     var body: some View {
         HStack(spacing: 16) {
             // Leading: Device type icon
-            Image(systemName: device.name.lowercased().contains("mac") ? "laptopcomputer" : "smartphone")
-                .font(.system(size: 18, weight: .regular))
+            OSIcon(device.os, size: 18)
                 .foregroundStyle(CRTheme.brandElectric)
                 .frame(width: 24, alignment: .center)
             
