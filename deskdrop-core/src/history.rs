@@ -301,6 +301,46 @@ pub struct History {
     max_entries: usize,
 }
 
+/// Reads a history file, keeping whatever is intact. History is a cache of
+/// past copies: a damaged file must never stop the daemon from starting
+/// (it once did, and with it the whole app).
+///
+/// A file with trailing bytes after a complete list (two writers shared one
+/// temp file) keeps the list. A file that is not a list at all is moved
+/// aside as `history.corrupt-<time>.json` and history starts empty.
+fn parse_history(path: &Path, bytes: &[u8]) -> Vec<HistoryEntry> {
+    let mut stream = serde_json::Deserializer::from_slice(bytes).into_iter::<Vec<HistoryEntry>>();
+    match stream.next() {
+        Some(Ok(entries)) => {
+            if stream.byte_offset() < bytes.len()
+                && bytes[stream.byte_offset()..]
+                    .iter()
+                    .any(|b| !b.is_ascii_whitespace())
+            {
+                tracing::warn!(
+                    path = %path.display(),
+                    "history file had trailing bytes after the list; they were dropped"
+                );
+            }
+            entries
+        }
+        _ => {
+            let aside = path.with_file_name(format!("history.corrupt-{}.json", now_secs()));
+            match std::fs::rename(path, &aside) {
+                Ok(()) => tracing::warn!(
+                    path = %path.display(),
+                    saved = %aside.display(),
+                    "history file was unreadable; saved a copy and started empty"
+                ),
+                Err(e) => {
+                    tracing::warn!(error = %e, "history file was unreadable and could not be moved")
+                }
+            }
+            Vec::new()
+        }
+    }
+}
+
 impl History {
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         Self::load_with_limit(path, DEFAULT_ENTRIES)
@@ -314,9 +354,7 @@ impl History {
         if path.exists() {
             let bytes = std::fs::read(&path).context("reading history")?;
             if !bytes.is_empty() {
-                let loaded: Vec<HistoryEntry> =
-                    serde_json::from_slice(&bytes).context("parsing history")?;
-                for entry in loaded {
+                for entry in parse_history(&path, &bytes) {
                     next_id = next_id.max(entry.id + 1);
                     entries.push_back(entry);
                 }
@@ -603,7 +641,12 @@ impl History {
         }
         // Atomic write: serialise to a .tmp file then rename so a crash during
         // write never leaves the history file in a partially-written state.
-        let tmp_path = self.path.with_extension("tmp");
+        // One temp file per process: two daemons (an old one still shutting
+        // down, a new one starting) sharing one name interleaved their
+        // writes and left a file that would not parse.
+        let tmp_path = self
+            .path
+            .with_extension(format!("{}.tmp", std::process::id()));
 
         let persistable_entries: Vec<HistoryEntry> = self
             .entries
@@ -987,6 +1030,58 @@ fn shannon_entropy(value: &str) -> f64 {
 mod tests {
     use super::*;
     use tempfile::NamedTempFile;
+
+    fn saved_history(path: &Path, items: &[&str]) -> Vec<u8> {
+        let mut h = History::load_with_limit(path, 50).unwrap();
+        for text in items {
+            h.push_with_options(
+                &ClipboardContent::Text((*text).into()),
+                "local".into(),
+                1024,
+            )
+            .unwrap();
+        }
+        std::fs::read(path).unwrap()
+    }
+
+    #[test]
+    fn trailing_bytes_after_the_list_keep_the_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.json");
+        let mut bytes = saved_history(&path, &["one", "two", "three"]);
+        // What two writers sharing one temp file left behind: a longer
+        // earlier write's tail after a complete shorter one.
+        bytes.extend_from_slice(b"mestamp\":1790947606,\"source_device\":\"x\"}}]");
+        std::fs::write(&path, &bytes).unwrap();
+
+        let h = History::load_with_limit(&path, 50).unwrap();
+        assert_eq!(h.entries().len(), 3);
+        // Loading rewrote it clean.
+        assert!(History::load_with_limit(&path, 50).is_ok());
+        assert!(
+            serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()).is_ok()
+        );
+    }
+
+    #[test]
+    fn an_unreadable_file_is_set_aside_and_history_starts_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.json");
+        std::fs::write(&path, b"{ this is not a history list").unwrap();
+
+        let h = History::load_with_limit(&path, 50).unwrap();
+        assert!(h.entries().is_empty());
+        let saved: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("history.corrupt-")
+            })
+            .collect();
+        assert_eq!(saved.len(), 1, "the damaged file is kept for inspection");
+    }
 
     #[test]
     fn push_and_persist() {
