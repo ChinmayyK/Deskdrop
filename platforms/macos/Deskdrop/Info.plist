@@ -10,6 +10,8 @@
 	<string>Deskdrop</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.deskdrop.Deskdrop</string>
 	<key>CFBundleInfoDictionaryVersion</key>

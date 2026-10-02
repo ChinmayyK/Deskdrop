@@ -19,6 +19,7 @@ use windows_sys::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, WaitNamedPipeW, PIPE_READMODE_BYTE,
     PIPE_TYPE_BYTE, PIPE_WAIT,
 };
+use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
 use windows_sys::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
@@ -35,8 +36,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     SetMenuDefaultItem, ShowWindow, TrackPopupMenu, TranslateMessage, GW_OWNER, HICON,
     IDI_APPLICATION, IMAGE_ICON, LR_LOADFROMFILE, MF_SEPARATOR, MF_STRING, MSG, SM_CXSMICON,
     SM_CYSMICON, SW_RESTORE, SW_SHOWNORMAL, TPM_BOTTOMALIGN, TPM_NONOTIFY, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, WM_APP, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WNDCLASSEXW,
-    WS_OVERLAPPED,
+    TPM_RIGHTBUTTON, WM_APP, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP,
+    WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
 };
 
 const TRAY_PIPE: &str = r"\\.\pipe\Deskdrop_Tray_Pipe";
@@ -155,6 +156,19 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let line = *Box::from_raw(lparam as *mut String);
             handle_pipe_line(&line);
             0
+        }
+        // The user switched Windows between light and dark: swap the icon.
+        WM_SETTINGCHANGE => {
+            if lparam != 0 && wide_ptr_eq(lparam as *const u16, "ImmersiveColorSet") {
+                TRAY.with(|t| {
+                    if let Some(tray) = t.borrow_mut().as_mut() {
+                        tray.nid.uFlags = NIF_ICON;
+                        tray.nid.hIcon = load_icon();
+                        Shell_NotifyIconW(NIM_MODIFY, &tray.nid);
+                    }
+                });
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         _ => {
             let taskbar_created = TRAY.with(|t| t.borrow().as_ref().map(|t| t.taskbar_created));
@@ -485,14 +499,54 @@ fn kill_processes(exe_name: &str) {
     }
 }
 
-/// The tray icon from the app's Assets (shipped next to Deskdrop.exe), at the
-/// small-icon size for the current DPI, else the stock application icon.
+/// Whether the taskbar (and so the tray) is light. Windows keeps this apart
+/// from the apps' theme. Assumes light when the setting can't be read.
+fn taskbar_is_light() -> bool {
+    let key = wide(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+    let name = wide("SystemUsesLightTheme");
+    let mut data: u32 = 1;
+    let mut size: u32 = std::mem::size_of::<u32>() as u32;
+    let rc = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_DWORD,
+            null_mut(),
+            &mut data as *mut u32 as *mut _,
+            &mut size,
+        )
+    };
+    rc != 0 || data != 0
+}
+
+/// True when the NUL-terminated UTF-16 string at `p` equals `s`.
+unsafe fn wide_ptr_eq(mut p: *const u16, s: &str) -> bool {
+    for c in s.encode_utf16() {
+        if *p != c {
+            return false;
+        }
+        p = p.add(1);
+    }
+    *p == 0
+}
+
+/// The tray icon from the app's Assets (shipped next to Deskdrop.exe), in the
+/// logo that suits the taskbar's theme, at the small-icon size for the
+/// current DPI, else the stock application icon.
 fn load_icon() -> HICON {
     let Ok(exe) = std::env::current_exe() else {
         return unsafe { LoadIconW(null_mut(), IDI_APPLICATION) };
     };
     let dir = exe.parent().unwrap_or(Path::new("."));
+    let themed = if taskbar_is_light() {
+        "TrayIcon.ico"
+    } else {
+        "TrayIconDark.ico"
+    };
     let candidates = [
+        dir.join("Assets").join(themed),
+        dir.join("..").join("Assets").join(themed),
         dir.join("Assets").join("TrayIcon.ico"),
         dir.join("..").join("Assets").join("TrayIcon.ico"),
         dir.join("..").join("Assets").join("AppIcon.ico"),

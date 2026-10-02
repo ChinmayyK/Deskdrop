@@ -100,6 +100,7 @@ namespace Deskdrop.WinUI.Services
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
                 var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
                 var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+                if (appWindow != null) WindowIconHelper.Apply(appWindow, isDark);
                 var titleBar = appWindow?.TitleBar;
                 if (titleBar == null) return;
 

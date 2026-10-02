@@ -525,14 +525,17 @@ struct DeviceAvatar: View {
 
 struct CRAppIconMark: View {
     var size: CGFloat = 34
+    // The logo for the current appearance: the dark logo in dark mode.
+    @Environment(\.colorScheme) private var scheme
+    private var logoName: String { scheme == .dark ? "AppIconSourceDark" : "AppIconSource" }
     var body: some View {
         ZStack {
-            if let image = NSImage(named: NSImage.Name("AppIconSource")) {
+            if let image = NSImage(named: NSImage.Name(logoName)) {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size, height: size)
-            } else if let imagePath = Bundle.main.path(forResource: "AppIconSource", ofType: "png"),
+            } else if let imagePath = Bundle.main.path(forResource: logoName, ofType: "png"),
                       let image = NSImage(contentsOfFile: imagePath) {
                 Image(nsImage: image)
                     .resizable()

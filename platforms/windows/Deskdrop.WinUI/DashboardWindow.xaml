@@ -322,7 +322,7 @@
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="9"
                         VerticalAlignment="Center" Margin="16,0,0,0">
                 <Image Width="20" Height="20" Stretch="Uniform"
-                       Source="Assets/Square44x44Logo.scale-200.png" />
+                       Source="{ThemeResource BrandMarkSource}" />
                 <TextBlock Text="Deskdrop" Style="{StaticResource AppSectionTitle}"
                            FontSize="15" VerticalAlignment="Center" />
             </StackPanel>
