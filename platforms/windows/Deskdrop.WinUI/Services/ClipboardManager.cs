@@ -120,7 +120,7 @@ namespace Deskdrop.WinUI.Services
                                 (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(async () => {
                                     try { await SetClipboardImageAsync(bytes); }
                                     catch (Exception ex) { App.HandleError(ex); }
-                                    AddHistoryItem("Image", from, "🖼️", "");
+                                    AddHistoryItem("Image", from, "🖼️", "", CacheImage(bytes));
                                 });
                             }
                             break;
@@ -405,10 +405,11 @@ namespace Deskdrop.WinUI.Services
             }
         }
 
-        private void AddHistoryItem(string summary, string source, string icon, string fullText)
+        private void AddHistoryItem(string summary, string source, string icon, string fullText, string? path = null)
         {
             var item = new HistoryItem
             {
+                path = path ?? "",
                 Summary = summary.Length > 80 ? summary[..77] + "…" : summary,
                 FullText = fullText,
                 Source = source,
@@ -495,7 +496,7 @@ namespace Deskdrop.WinUI.Services
                     {
                         DaemonActions.RunFireAndForget("Push Image", () => DaemonClient.PushImage(png));
                     }
-                    AddHistoryItem("Image", "local", "🖼️", "");
+                    AddHistoryItem("Image", "local", "🖼️", "", CacheImage(png));
                 }
                 // Files copied in Explorer (StorageItems) are deliberately not sent:
                 // Ctrl+C between local folders must never broadcast a file to peers.
@@ -554,6 +555,44 @@ namespace Deskdrop.WinUI.Services
 
         // Puts received image bytes (PNG or JPEG) on the clipboard. Windows
         // also offers them to older apps as a device-independent bitmap.
+        // Images in history keep their bytes here, named by content hash, so
+        // clicking one copies it again. The oldest go past MaxCachedImages.
+        private const int MaxCachedImages = 100;
+        private static readonly string ImageCacheDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Deskdrop", "clipboard_cache");
+
+        private static string? CacheImage(byte[] bytes)
+        {
+            try
+            {
+                Directory.CreateDirectory(ImageCacheDir);
+                var isJpeg = bytes.Length > 2 && bytes[0] == 0xFF && bytes[1] == 0xD8;
+                var file = Path.Combine(ImageCacheDir, Convert.ToHexString(SHA256.HashData(bytes)) + (isJpeg ? ".jpg" : ".png"));
+                if (!File.Exists(file)) File.WriteAllBytes(file, bytes);
+                File.SetLastWriteTimeUtc(file, DateTime.UtcNow);
+                foreach (var old in new DirectoryInfo(ImageCacheDir).GetFiles()
+                             .OrderByDescending(f => f.LastWriteTimeUtc).Skip(MaxCachedImages))
+                {
+                    try { old.Delete(); } catch { }
+                }
+                return file;
+            }
+            catch (Exception ex) { App.HandleError(ex); return null; }
+        }
+
+        public static bool IsCachedImage(string? path) =>
+            !string.IsNullOrEmpty(path)
+            && path.StartsWith(ImageCacheDir, StringComparison.OrdinalIgnoreCase)
+            && File.Exists(path);
+
+        // A history image clicked: put it back on the clipboard.
+        public async Task CopyImageAsync(string path)
+        {
+            var bytes = await File.ReadAllBytesAsync(path);
+            await SetClipboardImageAsync(bytes);
+            NotificationHelper.ShowToast("Image copied", "Paste it anywhere");
+        }
+
         private async Task SetClipboardImageAsync(byte[] bytes)
         {
             // Not disposed: the clipboard reads the stream when an app pastes.

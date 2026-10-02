@@ -94,6 +94,12 @@ namespace Deskdrop.WinUI.Views
                         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
                     } catch (Exception ex) { App.HandleError(ex); }
                 }
+                else if (Deskdrop.WinUI.Services.ClipboardManager.IsCachedImage(item.path))
+                {
+                    // A clipboard image: copy it again, like text.
+                    var path = item.path;
+                    _ = App.Clipboard?.CopyImageAsync(path).ContinueWith(t => { if (t.Exception != null) App.HandleError(t.Exception); });
+                }
                 else if (!string.IsNullOrEmpty(item.path) && System.IO.File.Exists(item.path))
                 {
                     try {
