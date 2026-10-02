@@ -539,12 +539,14 @@ pub(super) fn register_session(
                                     .await;
                             }
                             Err(e) => {
-                                {
-                                    let mut mgr = dw_shared.file_transfers.lock().await;
-                                    if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
-                                        t.status = crate::file_transfer::TransferStatus::Failed;
-                                    }
-                                }
+                                // Drop it and its partial file. Marking it failed
+                                // and keeping it left it in the active list, and
+                                // the desktop apps showed it in progress for good.
+                                dw_shared
+                                    .file_transfers
+                                    .lock()
+                                    .await
+                                    .cancel_inbound(&transfer_id, &e);
                                 let hex_tid = hex::encode(transfer_id);
                                 dw_shared.activity.lock().await.record_file_transfer_failed(
                                     dw_peer_id,
