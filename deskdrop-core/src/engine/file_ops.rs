@@ -57,6 +57,8 @@ pub(crate) async fn read_outbound_chunks(
         // this chunk (either extension-excluded or the transfer already gave
         // up on compression), Some(true/false) otherwise.
         Vec<(u32, Vec<u8>, bool, Option<bool>)>,
+        // Checksum state after each chunk, see OutboundTransfer::record_hash_checkpoint.
+        Vec<(u32, sha2::Sha256)>,
     )>;
 
     // Determine if we should try LZ4 based on file extension, and whether
@@ -79,6 +81,7 @@ pub(crate) async fn read_outbound_chunks(
         use std::io::{Read, Seek};
 
         let mut chunk_data = Vec::with_capacity(instrs.len());
+        let mut checkpoints = Vec::with_capacity(instrs.len());
         let (mut f, mut hasher) = io_ctx.unwrap_or((None, sha2::Sha256::new())); // Memory chunks might not have io_ctx, but we'll return it anyway
 
         // After a resume, hash the delivered prefix before reading on.
@@ -110,6 +113,7 @@ pub(crate) async fn read_outbound_chunks(
             match instr {
                 crate::file_transfer::ChunkInstruction::Memory { chunk_index, data } => {
                     hasher.update(&data);
+                    checkpoints.push((chunk_index, hasher.clone()));
                     let sample_result = if try_compress {
                         let sample_len = data.len().min(4096);
                         if sample_len > 0 {
@@ -171,6 +175,7 @@ pub(crate) async fn read_outbound_chunks(
                             );
                         }
                         hasher.update(&buf);
+                        checkpoints.push((chunk_index, hasher.clone()));
                         let sample_result = if try_compress {
                             let sample_len = buf.len().min(4096);
                             if sample_len > 0 {
@@ -199,12 +204,12 @@ pub(crate) async fn read_outbound_chunks(
                 }
             }
         }
-        Ok((Some((f, hasher)), chunk_data))
+        Ok((Some((f, hasher)), chunk_data, checkpoints))
     })
     .await
     .unwrap();
 
-    let (io_ctx, chunk_data) = match res {
+    let (io_ctx, chunk_data, checkpoints) = match res {
         Ok(res) => res,
         Err(e) => {
             tracing::warn!(error = %e, "failed to read outbound file chunks");
@@ -246,6 +251,9 @@ pub(crate) async fn read_outbound_chunks(
         let t = mgr.get_outbound_mut(&transfer_id)?;
         if let Some((f, h)) = io_ctx {
             t.restore_io_context(f, h);
+        }
+        for (chunk, state) in checkpoints {
+            t.record_hash_checkpoint(chunk, state);
         }
         let fname = t.meta.file_name.clone();
         for (c_idx, data, compressed, sample_result) in chunk_data {

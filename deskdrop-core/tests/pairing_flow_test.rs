@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{start_pair, wait_for, Node};
+use common::{connect, start_pair, wait_for, Node};
 use deskdrop_core::engine::EngineEvent;
 use deskdrop_core::peer_manager::{PairingOutcome, PeerRecord};
 use std::time::{Duration, Instant};
@@ -20,16 +20,6 @@ async fn peer(node: &Node, id: Uuid) -> PeerRecord {
         .into_iter()
         .find(|p| p.id == id)
         .expect("peer in snapshot")
-}
-
-async fn connect(a: &Node, b: &Node) {
-    let port_b = b.engine.bound_port().await;
-    a.engine
-        .connect_to_peer("127.0.0.1".into(), port_b)
-        .await
-        .expect("connect");
-    // Let the responder finish registering its side of the session.
-    tokio::time::sleep(Duration::from_millis(200)).await;
 }
 
 /// Declining tells the requester and closes both sides, but is "not now":
