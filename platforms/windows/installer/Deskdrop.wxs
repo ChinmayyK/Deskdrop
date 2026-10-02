@@ -68,6 +68,7 @@
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="ApplicationProgramsFolder" Name="Deskdrop" />
     </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
   </Fragment>
 
   <!-- Files -->
@@ -104,12 +105,12 @@
 
     </ComponentGroup>
 
-    <!-- Start Menu shortcut -->
+    <!-- Start Menu and desktop shortcuts -->
     <ComponentGroup Id="Shortcuts" Directory="ApplicationProgramsFolder">
       <Component Id="StartMenuShortcut" Guid="d4e5f6a7-b8c9-0123-def0-234567890123">
         <Shortcut Id="AppShortcut"
                   Name="Deskdrop"
-                  Description="Proximity-Based Shared Clipboard"
+                  Description="Share your clipboard and files between your devices"
                   Target="[INSTALLFOLDER]Deskdrop.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="DeskdropIco" />
@@ -117,6 +118,18 @@
                       Directory="ApplicationProgramsFolder"
                       On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\Deskdrop" Name="installed"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <!-- Per-user install, so the shortcut goes on this user's desktop and a
+           HKCU value is its key path (a per-user component cannot use a file). -->
+      <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="e5f6a7b8-c9d0-1234-ef01-345678901234">
+        <Shortcut Id="DesktopAppShortcut"
+                  Name="Deskdrop"
+                  Description="Share your clipboard and files between your devices"
+                  Target="[INSTALLFOLDER]Deskdrop.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="DeskdropIco" />
+        <RegistryValue Root="HKCU" Key="Software\Deskdrop" Name="desktopShortcut"
                        Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
