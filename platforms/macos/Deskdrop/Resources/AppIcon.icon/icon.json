@@ -1,0 +1,41 @@
+{
+  "fill" : {
+    "solid" : "display-p3:0.99608,0.99608,0.99608,1.00000"
+  },
+  "fill-specializations" : [
+    {
+      "appearance" : "dark",
+      "value" : {
+        "solid" : "display-p3:0.09412,0.10196,0.12157,1.00000"
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "mark-light.png",
+          "image-name-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : "mark-dark.png"
+            }
+          ],
+          "name" : "mark"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [ "macOS" ]
+  }
+}

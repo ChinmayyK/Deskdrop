@@ -122,6 +122,13 @@ if [[ -f "${MACOS_DIR}/${SOURCE_DIR_NAME}/Resources/AndroidLogo.png" ]]; then
     cp "${MACOS_DIR}/${SOURCE_DIR_NAME}/Resources/AndroidLogo.png" "${APP_BUNDLE}/Contents/Resources/AndroidLogo.png"
 fi
 
+# The in-app logo (CRAppIconMark) in both themes.
+for logo in AppIconSource AppIconSourceDark; do
+    if [[ -f "${MACOS_DIR}/${SOURCE_DIR_NAME}/Resources/${logo}.png" ]]; then
+        cp "${MACOS_DIR}/${SOURCE_DIR_NAME}/Resources/${logo}.png" "${APP_BUNDLE}/Contents/Resources/${logo}.png"
+    fi
+done
+
 # Generate AppIcon.icns from the bundled source PNG.
 if [[ -f "${ICON_SRC}" ]]; then
     log "Generating app icon..."
@@ -135,6 +142,30 @@ if [[ -f "${ICON_SRC}" ]]; then
     done
     iconutil -c icns "${ICONSET_DIR}" -o "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
     rm -rf "${ICON_TMP_DIR}"
+fi
+
+# macOS 26 and later: an icon with a light and a dark appearance (Icon
+# Composer's .icon, compiled by actool into Assets.car). Older systems keep
+# the AppIcon.icns above. Skipped, not fatal, where actool is missing.
+ICON_BUNDLE="${MACOS_DIR}/${SOURCE_DIR_NAME}/Resources/AppIcon.icon"
+ACTOOL=""
+if xcrun --find actool >/dev/null 2>&1; then
+    ACTOOL="xcrun actool"
+elif [[ -x /Applications/Xcode.app/Contents/Developer/usr/bin/actool ]]; then
+    ACTOOL="env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun actool"
+fi
+if [[ -d "${ICON_BUNDLE}" && -n "${ACTOOL}" ]]; then
+    log "Compiling themed app icon..."
+    ICON_OUT="$(mktemp -d /tmp/deskdrop-appicon.XXXXXX)"
+    if ${ACTOOL} "${ICON_BUNDLE}" --compile "${ICON_OUT}" --platform macosx --target-device mac \
+           --minimum-deployment-target 26.0 --app-icon AppIcon --include-all-app-icons \
+           --output-partial-info-plist "${ICON_OUT}/partial.plist" >/dev/null 2>&1 \
+       && [[ -f "${ICON_OUT}/Assets.car" ]]; then
+        cp "${ICON_OUT}/Assets.car" "${APP_BUNDLE}/Contents/Resources/Assets.car"
+    else
+        log "actool could not build the themed icon; using AppIcon.icns only"
+    fi
+    rm -rf "${ICON_OUT}"
 fi
 
 # ── 5. Code sign ─────────────────────────────────────────────────────────────
