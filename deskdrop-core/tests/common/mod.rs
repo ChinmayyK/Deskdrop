@@ -54,6 +54,7 @@ pub async fn start_pair(tmp: &TempDir, a_trusts_b: bool, b_trusts_a: bool) -> (N
             peer_store_path: tmp.path().join(format!("peers{i}.json")),
             identity_path: tmp.path().join(format!("identity{i}.key")),
             data_dir: tmp.path().join(format!("data{i}")),
+            file_save_dir: Some(tmp.path().join(format!("received{i}"))),
             bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             enable_discovery: false,
             ..EngineConfig::default()
@@ -68,6 +69,16 @@ pub async fn start_pair(tmp: &TempDir, a_trusts_b: bool, b_trusts_a: bool) -> (N
     let b = nodes.pop().unwrap();
     let a = nodes.pop().unwrap();
     (a, b)
+}
+
+/// Connects A to B over localhost and lets B finish registering the session.
+pub async fn connect(a: &Node, b: &Node) {
+    let port_b = b.engine.bound_port().await;
+    a.engine
+        .connect_to_peer("127.0.0.1".into(), port_b)
+        .await
+        .expect("connect");
+    tokio::time::sleep(Duration::from_millis(200)).await;
 }
 
 pub async fn wait_for<F: Fn(&EngineEvent) -> bool>(

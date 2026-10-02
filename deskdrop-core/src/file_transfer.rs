@@ -676,7 +676,9 @@ impl InboundTransfer {
             self.status == TransferStatus::Transferring,
             "transfer is not active"
         );
-        anyhow::ensure!(!self.paused, "transfer is paused");
+        // Not refused while paused: pausing stops the sender, and chunks it
+        // had already sent still arrive. Dropping them left a gap that
+        // nothing re-requested, and the transfer failed on "missing chunks".
         anyhow::ensure!(data_len <= 8 * 1024 * 1024, "chunk size exceeds limit");
         anyhow::ensure!(
             chunk_index < self.total_chunks,
@@ -730,7 +732,9 @@ impl InboundTransfer {
             self.status == TransferStatus::Transferring,
             "transfer is not active"
         );
-        anyhow::ensure!(!self.paused, "transfer is paused");
+        // Not refused while paused: pausing stops the sender, and chunks it
+        // had already sent still arrive. Dropping them left a gap that
+        // nothing re-requested, and the transfer failed on "missing chunks".
         anyhow::ensure!(data.len() <= 8 * 1024 * 1024, "chunk size exceeds limit");
 
         anyhow::ensure!(

@@ -543,6 +543,10 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 let mut mgr = shared.file_transfers.lock().await;
                 if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
                     if t.target_device == Some(peer_id) || t.target_device.is_none() {
+                        // Same rewind as a local resume: restart after the
+                        // last chunk the receiver confirmed.
+                        let resume_chunk = t.last_acked_chunk.map(|c| c + 1).unwrap_or(0);
+                        t.resume_from(resume_chunk);
                         t.paused = false;
                         was_outbound = true;
                         bg_send_run = t.start_send_run();
