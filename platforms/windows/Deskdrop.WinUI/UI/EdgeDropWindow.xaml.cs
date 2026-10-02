@@ -105,9 +105,12 @@ namespace Deskdrop.WinUI.UI
                 if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
                 {
                     var items = await e.DataView.GetStorageItemsAsync();
-                    if (items.Count > 0 && items[0] is Windows.Storage.StorageFile file)
+                    // Every dropped file and folder; PushFile sends a folder whole.
+                    foreach (var item in items)
                     {
-                        DaemonActions.RunFireAndForget("Send File", () => DaemonClient.PushFile(target, file.Path));
+                        var path = item.Path;
+                        if (string.IsNullOrEmpty(path)) continue;
+                        DaemonActions.RunFireAndForget("Send File", () => DaemonClient.PushFile(target, path));
                     }
                 }
                 else if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
