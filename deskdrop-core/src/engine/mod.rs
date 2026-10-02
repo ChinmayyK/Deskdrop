@@ -58,7 +58,7 @@ mod types;
 
 use connection::*;
 pub(crate) use file_ops::*;
-pub use folder_ops::{FolderItem, FolderSend};
+pub use folder_ops::{FolderItem, FolderProgress, FolderSend};
 pub use health::HealthIssue;
 use listener::*;
 use peer_discovery::*;

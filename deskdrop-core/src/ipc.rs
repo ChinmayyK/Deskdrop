@@ -758,6 +758,7 @@ pub async fn handle_ipc_request(
                 "active_transfers": active_transfers,
                 "active_speed_tests": eng.active_speed_tests().await,
                 "health": eng.health().await,
+                "folders": eng.folders(),
                 "bind_ip": snap.bind_address.ip().to_string(),
                 "bind_port": snap.bind_address.port(),
             }))

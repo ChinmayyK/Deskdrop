@@ -1964,6 +1964,24 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_healthJson(
     }
 }
 
+/// Folder transfers in flight as JSON (`[FolderProgress]`).
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_foldersJson(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    let json = serde_json::to_string(&h.engine.folders()).unwrap_or_else(|_| "[]".to_string());
+    match env.new_string(json) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 // ── Call continuity JNI exports ───────────────────────────────────────────────
 
 #[no_mangle]

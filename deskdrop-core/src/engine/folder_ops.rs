@@ -27,6 +27,18 @@ pub struct FolderSend {
     pub total_bytes: u64,
 }
 
+/// A folder transfer in flight, for status screens.
+#[derive(Debug, Clone, Serialize)]
+pub struct FolderProgress {
+    pub batch_id: String,
+    pub folder_name: String,
+    pub peer_name: String,
+    pub file_count: u32,
+    pub done_count: u32,
+    pub failed_count: u32,
+    pub outbound: bool,
+}
+
 /// One file of a folder, for `Engine::send_folder_item`.
 pub struct FolderItem {
     pub path: PathBuf,
@@ -170,6 +182,24 @@ impl FolderTallies {
         self.decisions.insert(batch_id.to_string(), accept);
     }
 
+    pub(crate) fn progress(&self) -> Vec<FolderProgress> {
+        let mut out: Vec<_> = self
+            .folders
+            .iter()
+            .map(|(batch_id, t)| FolderProgress {
+                batch_id: batch_id.clone(),
+                folder_name: t.folder_name.clone(),
+                peer_name: t.peer_name.clone(),
+                file_count: t.total,
+                done_count: t.done,
+                failed_count: t.failed,
+                outbound: t.outbound,
+            })
+            .collect();
+        out.sort_by(|a, b| a.batch_id.cmp(&b.batch_id));
+        out
+    }
+
     /// Stop sending a folder: its unsent files are not sent.
     pub(crate) fn stop_sending(&mut self, batch_id: &str) {
         self.cancelled.insert(batch_id.to_string());
@@ -299,6 +329,11 @@ pub(crate) fn incoming_folder(meta: &FileTransferMetadata) -> Option<(String, St
 }
 
 impl Engine {
+    /// Folder transfers in flight, in both directions.
+    pub fn folders(&self) -> Vec<FolderProgress> {
+        self.shared.folders.lock().unwrap().progress()
+    }
+
     /// Send a folder and everything in it, a few files at a time, in the
     /// background. Returns once the folder has been read.
     pub async fn send_folder(&self, root: PathBuf, target: Option<Uuid>) -> Result<FolderSend> {
