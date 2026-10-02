@@ -171,6 +171,18 @@ namespace Deskdrop.WinUI.Views
                         }
                     }
                 }
+                else if (dataPackageView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Bitmap))
+                {
+                    var png = await Deskdrop.WinUI.Services.ClipboardManager.ReadClipboardPngAsync(dataPackageView);
+                    if (png != null)
+                    {
+                        var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(this.XamlRoot, mgr.ConnectedPeers);
+                        if (target != null)
+                        {
+                            mgr.SendPushImage(png, target.device_id);
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {

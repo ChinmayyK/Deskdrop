@@ -72,6 +72,12 @@ namespace Deskdrop.WinUI
             byte[] data, UIntPtr len);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int deskdrop_push_image_to(
+            IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string targetDeviceId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string mimeType,
+            byte[] data, UIntPtr len);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int deskdrop_push_file(
             IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
             byte[] data, UIntPtr len);
@@ -219,6 +225,15 @@ namespace Deskdrop.WinUI
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_event_notification_title(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_image_data(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern UIntPtr deskdrop_event_image_len(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_image_mime(IntPtr ev);
 
         public const uint ES_CONTINUOUS = 0x80000000;
         public const uint ES_SYSTEM_REQUIRED = 0x00000001;
