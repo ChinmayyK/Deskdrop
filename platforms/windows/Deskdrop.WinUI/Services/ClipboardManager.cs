@@ -197,6 +197,23 @@ namespace Deskdrop.WinUI.Services
                             });
                             break;
                         }
+                        // A phone's notification, mirrored. Nothing showed these
+                        // before: the event arrived as a bare "activity updated".
+                        case NativeCore.PB_EVENT_NOTIFICATION_RECEIVED:
+                        {
+                            var title = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_notification_title(ev)) ?? "";
+                            var body = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? "";
+                            var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "your phone";
+                            if (title.Length > 0 || body.Length > 0)
+                            {
+                                (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                    NotificationHelper.ShowToast(
+                                        title.Length > 0 ? title : $"Notification from {device}",
+                                        body.Length > 0 ? $"{body}\nFrom {device}" : $"From {device}");
+                                });
+                            }
+                            break;
+                        }
                         case NativeCore.PB_EVENT_WARNING:
                         {
                             var message = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_text(ev)) ?? "A device reported an issue";

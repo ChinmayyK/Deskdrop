@@ -475,6 +475,7 @@ class DeskdropService : Service() {
         serviceStartTime = System.currentTimeMillis()
         createNotificationChannels()
         registerPairingReceiver()
+        registerCallStateCallback()
         
         // Register SMS receiver (the Play build has no RECEIVE_SMS permission)
         if (BuildConfig.FULL_PERMISSIONS) {
@@ -552,6 +553,8 @@ class DeskdropService : Service() {
             // Re-read prefs and push them to the engine if possible.
             ACTION_SETTINGS_CHANGED -> {
                 applySettingsToEngine()
+                // Phone access may have just been granted along with Calls.
+                registerCallStateCallback()
                 return START_STICKY
             }
 
@@ -912,16 +915,6 @@ class DeskdropService : Service() {
                 }
             }
 
-            if (intent?.action == ACTION_PUSH_NOTIFICATION) {
-                if (engineHandle != 0L && hasConnectedPeers()) {
-                    val id = intent.getStringExtra(EXTRA_NOTIFICATION_ID) ?: ""
-                    val pkg = intent.getStringExtra(EXTRA_NOTIFICATION_PKG) ?: ""
-                    val title = intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: ""
-                    val text = intent.getStringExtra(EXTRA_NOTIFICATION_TEXT) ?: ""
-                    DeskdropJni.pushNotification(engineHandle, id, pkg, title, text)
-                }
-            }
-
             START_STICKY
         } catch (ex: Throwable) {
             Log.e(TAG, "onStartCommand failed", ex)
@@ -932,6 +925,7 @@ class DeskdropService : Service() {
     }
 
     override fun onDestroy() {
+        unregisterCallStateCallback()
         serviceScope.cancel()
         stopNsdDiscovery()
 
@@ -2686,6 +2680,38 @@ class DeskdropService : Service() {
     private var callStateReceiver: android.content.BroadcastReceiver? = null
     /** Last call state seen: "idle", "ringing", "offhook", or "outgoing" for a call this phone placed. */
     private var lastCallState = "idle"
+    private var lastCallNumber = ""
+    private var callStateCallback: android.telephony.TelephonyCallback? = null
+
+    /**
+     * Hears call state directly while the service runs. The manifest
+     * receiver alone missed calls on some phones; it stays for the caller's
+     * number, which this callback doesn't carry. Both feed onCallStateUpdate,
+     * which sends each change once.
+     */
+    private fun registerCallStateCallback() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || callStateCallback != null) return
+        if (!hasCallPermissions()) return
+        val callback = object : android.telephony.TelephonyCallback(),
+            android.telephony.TelephonyCallback.CallStateListener {
+            override fun onCallStateChanged(state: Int) {
+                if (prefs().getBoolean("call_continuity_enabled", false)) onCallStateUpdate(state, null)
+            }
+        }
+        runCatching {
+            getSystemService(android.telephony.TelephonyManager::class.java)
+                .registerTelephonyCallback(mainExecutor, callback)
+            callStateCallback = callback
+        }.onFailure { Log.w(TAG, "Call state callback unavailable", it) }
+    }
+
+    private fun unregisterCallStateCallback() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        callStateCallback?.let { cb ->
+            runCatching { getSystemService(android.telephony.TelephonyManager::class.java).unregisterTelephonyCallback(cb) }
+        }
+        callStateCallback = null
+    }
 
     private fun onCallStateUpdate(state: Int, incomingNumber: String?) {
         val stateStr = when (state) {
@@ -2710,15 +2736,21 @@ class DeskdropService : Service() {
         if (stateStr == "idle" && previous == "outgoing") return
 
         val number  = incomingNumber.orEmpty()
-        val contact = resolveContactName(number)
-        Log.i(TAG, "Call state: $stateStr number=$number contact=$contact")
+        // The callback and the receiver both report each change: send it
+        // once, and again only if the receiver brings the number.
+        if (stateStr == previous && (number.isEmpty() || number == lastCallNumber)) return
+        if (number.isNotEmpty()) lastCallNumber = number
+        if (stateStr == "idle") lastCallNumber = ""
+        val known = number.ifEmpty { lastCallNumber }
+        val contact = resolveContactName(known)
+        Log.i(TAG, "Call state: $stateStr number=$known contact=$contact")
         val h = engineHandle
         if (h != 0L) {
-            DeskdropJni.pushCallState(h, stateStr, number, contact)
+            DeskdropJni.pushCallState(h, stateStr, known, contact)
         }
         // Show/dismiss the Android-side call notification
         when (stateStr) {
-            "ringing" -> showIncomingCallNotification(number, contact)
+            "ringing" -> showIncomingCallNotification(known, contact)
             "idle", "offhook" -> notificationManager.cancel(NOTIF_ID_CALL)
         }
     }
