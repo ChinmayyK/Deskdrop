@@ -40,6 +40,16 @@
     <Icon Id="DeskdropIco" SourceFile="Assets\deskdrop.ico" />
     <Property Id="ARPPRODUCTICON" Value="DeskdropIco" />
     <Property Id="ARPHELPLINK"    Value="https://github.com/ChinmayyK/Deskdrop" />
+    <!-- Installed apps: the details pane under Settings > Apps. -->
+    <Property Id="ARPCOMMENTS"      Value="Share your clipboard, files and folders between your devices over your own network." />
+    <Property Id="ARPCONTACT"       Value="https://github.com/ChinmayyK/Deskdrop/issues" />
+    <Property Id="ARPURLINFOABOUT"  Value="https://github.com/ChinmayyK/Deskdrop" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/ChinmayyK/Deskdrop/releases" />
+
+    <!-- AUTOSTART=1 on the msiexec command line (IT deployment) starts
+         Deskdrop in the tray at sign-in. Off by default: the app's Settings
+         owns the choice for everyone else. -->
+    <Property Id="AUTOSTART" Value="0" />
 
     <Feature Id="ProductFeature" Title="Deskdrop" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
@@ -101,6 +111,18 @@
           Value="[ProductVersion]"
           Type="string"
           KeyPath="yes" />
+        <!-- Removes the install folder on uninstall once it is empty. The
+             app writes its settings and logs to %LocalAppData%\Deskdrop,
+             not here, and keeps them so a reinstall keeps its pairings. -->
+        <RemoveFolder Id="CleanupInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      </Component>
+
+      <!-- Sign-in entry when AUTOSTART=1, in the same place and form the
+           app's Settings toggle writes. Owned by the MSI, so uninstall
+           removes it. -->
+      <Component Id="Autostart" Guid="f6a7b8c9-d0e1-2345-f012-456789012345" Condition="AUTOSTART = 1">
+        <RegistryValue Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="Deskdrop"
+                       Type="string" Value="&quot;[INSTALLFOLDER]Deskdrop.exe&quot; --background" KeyPath="yes" />
       </Component>
 
     </ComponentGroup>
