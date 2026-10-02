@@ -399,6 +399,19 @@ final class DeskdropIPCClient {
         _ = try await send(cmd: cmd)
     }
 
+    /// Ask a connected device to open a link. The device answers with a
+    /// feedback event; the daemon opens links it receives itself.
+    func openUrlOnDevice(_ url: String, targetDeviceId: String) async throws {
+        _ = try await send(cmd: ["cmd": "open_url_on_device", "target_device": targetDeviceId, "url": url])
+    }
+
+    /// Tell a device whether we opened the link it sent.
+    func ackOpenUrlOnDevice(requesterDeviceId: String, success: Bool, error: String? = nil) async throws {
+        var cmd: [String: Any] = ["cmd": "ack_open_url_on_device", "requester_device": requesterDeviceId, "success": success]
+        if let error { cmd["error"] = error }
+        _ = try await send(cmd: cmd)
+    }
+
     /// Stop a folder transfer, sending or receiving.
     func cancelFolder(batchId: String) async throws {
         _ = try await send(cmd: ["cmd": "cancel_folder", "batch_id": batchId])

@@ -28,6 +28,9 @@ namespace Deskdrop.WinUI.Services
         }
 
         private readonly DispatcherTimer _timer;
+        // The UI thread's queue, taken here because the main window does not
+        // exist when Deskdrop starts in the background.
+        private readonly DispatcherQueue _queue = DispatcherQueue.GetForCurrentThread();
         private bool _wasLeftButtonDown = false;
         private UI.EdgeDropWindow? _dropZoneWindow;
         private readonly ClipboardManager _clipboardManager;
@@ -74,7 +77,7 @@ namespace Deskdrop.WinUI.Services
                     // User released the drag. Delay close slightly to allow drop event to process
                     System.Threading.Tasks.Task.Delay(500).ContinueWith(_ =>
                     {
-                        App.MainWindow?.DispatcherQueue?.TryEnqueue(HideDropZone);
+                        _queue.TryEnqueue(HideDropZone);
                     });
                 }
 

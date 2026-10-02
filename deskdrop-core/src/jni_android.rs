@@ -484,6 +484,14 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
+        crate::engine::EngineEvent::OpenUrlOnDeviceAckReceived {
+            error: Some(err), ..
+        } => {
+            return env
+                .new_string(err)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
         _ => {}
     }
     std::ptr::null_mut()
@@ -2244,6 +2252,66 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventSummaryOnly(
         }
         _ => 0,
     }
+}
+
+/// Asks `target_device_id` to open `url`. The answer arrives as an
+/// OPEN_URL_ON_DEVICE_ACK event (kind=39).
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_openUrlOnDevice(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    url: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Ok(target) = env.get_string(&target_device_id).map(String::from) else {
+        return -1;
+    };
+    let Ok(target) = uuid::Uuid::parse_str(&target) else {
+        return -1;
+    };
+    let Ok(url) = env.get_string(&url).map(String::from) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.open_url_on_device(target, url));
+    0
+}
+
+/// Tells `requester_device_id` whether this device opened the URL it asked
+/// for (OPEN_URL_ON_DEVICE_REQUESTED, kind=38). `error` may be null.
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_ackOpenUrlOnDevice(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    requester_device_id: JString,
+    success: jboolean,
+    error: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Ok(requester) = env.get_string(&requester_device_id).map(String::from) else {
+        return -1;
+    };
+    let Ok(requester) = uuid::Uuid::parse_str(&requester) else {
+        return -1;
+    };
+    let error: Option<String> = if error.is_null() {
+        None
+    } else {
+        env.get_string(&error).ok().map(String::from)
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(
+        h.engine
+            .ack_open_url_on_device(requester, success != 0, error),
+    );
+    0
 }
 
 /// Returns 1 if an OPEN_URL_ON_DEVICE_ACK event (kind=39) reports success,

@@ -38,14 +38,21 @@ namespace Deskdrop.WinUI.Services
         {
             var thread = new System.Threading.Thread(() =>
             {
+                // One server instance for the life of the loop, disconnected
+                // between commands, so the pipe never vanishes between two
+                // clients (the tray would see ERROR_FILE_NOT_FOUND and fall
+                // back to opening the main window). Rebuilt only after a fault.
+                NamedPipeServerStream? server = null;
                 while (!App.IsShuttingDown)
                 {
                     try
                     {
-                        using var server = new NamedPipeServerStream("Deskdrop_Main_Commands", PipeDirection.In);
+                        server ??= new NamedPipeServerStream("Deskdrop_Main_Commands", PipeDirection.In);
                         server.WaitForConnection();
-                        using var reader = new StreamReader(server);
-                        var line = reader.ReadLine();
+                        string? line;
+                        using (var reader = new StreamReader(server, leaveOpen: true))
+                            line = reader.ReadLine();
+                        server.Disconnect();
                         if (string.IsNullOrEmpty(line)) continue;
 
                         var queue = App.MainDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
@@ -72,6 +79,8 @@ namespace Deskdrop.WinUI.Services
                     }
                     catch
                     {
+                        server?.Dispose();
+                        server = null;
                         System.Threading.Thread.Sleep(1000);
                     }
                 }
