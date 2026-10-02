@@ -8,7 +8,11 @@ using Microsoft.UI.Dispatching;
 using Windows.ApplicationModel.DataTransfer;
 using Deskdrop.WinUI.Views;
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using Microsoft.UI.Xaml;
+using Windows.Graphics.Imaging;
+using Windows.Storage.Streams;
 
 namespace Deskdrop.WinUI.Services
 {
@@ -16,6 +20,14 @@ namespace Deskdrop.WinUI.Services
     {
         private readonly DispatcherQueue _dispatcher;
         private string _lastText = string.Empty;
+        // SHA-256 of the last image sent or received, as PNG bytes, so the
+        // same picture is never sent twice.
+        private string _lastImageHash = string.Empty;
+        // Setting a received image fires ContentChanged. Windows re-encodes
+        // the picture, so the bytes differ from what arrived; any bitmap seen
+        // this soon after is our own write, not a new copy.
+        private long _imageAppliedAtMs = long.MinValue / 2;
+        private const long ImageEchoWindowMs = 2000;
         private readonly DispatcherTimer _pollTimer;
 
         public ObservableCollection<HistoryItem> History { get; set; } = new ObservableCollection<HistoryItem>();
@@ -91,6 +103,24 @@ namespace Deskdrop.WinUI.Services
                                         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
                                     } catch (Exception ex) { App.HandleError(ex); }
                                     AddHistoryItem(text, from, "📝", text);
+                                });
+                            }
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_CLIPBOARD_IMAGE:
+                        {
+                            var ptr = NativeCore.deskdrop_event_image_data(ev);
+                            var len = (int)NativeCore.deskdrop_event_image_len(ev);
+                            var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
+                            if (ptr != IntPtr.Zero && len > 0)
+                            {
+                                // The event owns the bytes; copy them before it is freed.
+                                var bytes = new byte[len];
+                                Marshal.Copy(ptr, bytes, 0, len);
+                                (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(async () => {
+                                    try { await SetClipboardImageAsync(bytes); }
+                                    catch (Exception ex) { App.HandleError(ex); }
+                                    AddHistoryItem("Image", from, "🖼️", "");
                                 });
                             }
                             break;
@@ -373,6 +403,7 @@ namespace Deskdrop.WinUI.Services
                             return; // Filter out sensitive OTP/passwords/tokens
                         }
                         _lastText = text;
+                        _lastImageHash = string.Empty;
                         if (App.EngineHandle != IntPtr.Zero)
                         {
                             var handle = App.EngineHandle;
@@ -384,6 +415,31 @@ namespace Deskdrop.WinUI.Services
                         }
                         AddHistoryItem(text, "local", "📝", text);
                     }
+                }
+                else if (packageView.Contains(StandardDataFormats.Bitmap))
+                {
+                    // Copied images and Win+Shift+S screenshots.
+                    var png = await ReadClipboardPngAsync(packageView);
+                    if (png == null) return;
+                    var hash = Convert.ToHexString(SHA256.HashData(png));
+                    if (Environment.TickCount64 - _imageAppliedAtMs < ImageEchoWindowMs)
+                    {
+                        _lastImageHash = hash;
+                        return;
+                    }
+                    if (hash == _lastImageHash) return;
+                    _lastImageHash = hash;
+                    _lastText = string.Empty;
+                    if (App.EngineHandle != IntPtr.Zero)
+                    {
+                        var handle = App.EngineHandle;
+                        RunNativeOffUiThread(() => NativeCore.deskdrop_push_image(handle, "image/png", png, (UIntPtr)png.Length));
+                    }
+                    else
+                    {
+                        DaemonActions.RunFireAndForget("Push Image", () => DaemonClient.PushImage(png));
+                    }
+                    AddHistoryItem("Image", "local", "🖼️", "");
                 }
                 // Files copied in Explorer (StorageItems) are deliberately not sent:
                 // Ctrl+C between local folders must never broadcast a file to peers.
@@ -433,6 +489,45 @@ namespace Deskdrop.WinUI.Services
 
         public void PushLocalClipboard()
         {
+        }
+
+        // Puts received image bytes (PNG or JPEG) on the clipboard. Windows
+        // also offers them to older apps as a device-independent bitmap.
+        private async Task SetClipboardImageAsync(byte[] bytes)
+        {
+            // Not disposed: the clipboard reads the stream when an app pastes.
+            var stream = new InMemoryRandomAccessStream();
+            using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
+            {
+                writer.WriteBytes(bytes);
+                await writer.StoreAsync();
+                await writer.FlushAsync();
+                writer.DetachStream();
+            }
+            var package = new DataPackage();
+            package.SetBitmap(RandomAccessStreamReference.CreateFromStream(stream));
+            _imageAppliedAtMs = Environment.TickCount64;
+            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        }
+
+        // Reads the clipboard bitmap and encodes it as PNG, the format every
+        // Deskdrop platform puts on its own clipboard.
+        public static async Task<byte[]?> ReadClipboardPngAsync(DataPackageView view)
+        {
+            var reference = await view.GetBitmapAsync();
+            if (reference == null) return null;
+            using var source = await reference.OpenReadAsync();
+            var decoder = await BitmapDecoder.CreateAsync(source);
+            using var bitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+            using var output = new InMemoryRandomAccessStream();
+            var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, output);
+            encoder.SetSoftwareBitmap(bitmap);
+            await encoder.FlushAsync();
+            var bytes = new byte[output.Size];
+            using var reader = new DataReader(output.GetInputStreamAt(0));
+            await reader.LoadAsync((uint)output.Size);
+            reader.ReadBytes(bytes);
+            return bytes;
         }
 
         private bool IsSensitiveContent(string text)

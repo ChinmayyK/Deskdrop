@@ -1419,6 +1419,17 @@ namespace Deskdrop.WinUI
             DaemonActions.RunFireAndForget("Send", () => DaemonClient.PushTextTo(text, toDeviceId));
         }
 
+        public void SendPushImage(byte[] png, string toDeviceId)
+        {
+            var handle = App.EngineHandle;
+            if (handle == IntPtr.Zero) return;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { NativeCore.deskdrop_push_image_to(handle, toDeviceId, "image/png", png, (UIntPtr)png.Length); }
+                catch (Exception ex) { App.HandleError(ex); }
+            });
+        }
+
         private int _isRefreshRequested = 0;
 
         // Engine events (pairing accepted, peer connected, ...) call this the

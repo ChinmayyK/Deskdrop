@@ -172,6 +172,9 @@ namespace Deskdrop.WinUI
         public static JsonDocument? PushTextTo(string text, string targetDevice) =>
             Send(Req("push_text_to", ("text", text), ("target", targetDevice)));
 
+        public static JsonDocument? PushImage(byte[] png) =>
+            Send(Req("push_image", ("mime", "image/png"), ("data_base64", Convert.ToBase64String(png))));
+
         public static JsonDocument? PushClipboard(string? targetDeviceId = null) =>
             Send(Req("push_clipboard", ("target_device_id", targetDeviceId)));
 
