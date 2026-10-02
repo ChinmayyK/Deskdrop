@@ -244,16 +244,26 @@ public partial class App : Application
 
             try
             {
-                MainWindow = new DashboardWindow();
-                _window = MainWindow;
-                _window.Activate();
+                UpgradeStartupEntry();
+                if (IsBackgroundLaunch(activatedArgs))
+                {
+                    // Started at sign-in: stay in the tray, like the Mac app in
+                    // the menu bar. The tray or a second launch opens the window.
+                    TraceLog.Write("Background launch: engine and tray only, no window");
+                }
+                else
+                {
+                    MainWindow = new DashboardWindow();
+                    _window = MainWindow;
+                    _window.Activate();
 
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
-                ShowWindow(hwnd, 5 /* SW_SHOW */);
-                SetForegroundWindow(hwnd);
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow);
+                    ShowWindow(hwnd, 5 /* SW_SHOW */);
+                    SetForegroundWindow(hwnd);
 
-                TraceLog.Write("MainWindow created, activated, and displayed successfully");
-                ShowOnboarding(force: false);
+                    TraceLog.Write("MainWindow created, activated, and displayed successfully");
+                    ShowOnboarding(force: false);
+                }
             }
             catch (Exception ex)
             {
@@ -320,6 +330,36 @@ public partial class App : Application
     private void OnAppActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
     {
         ProcessActivationArgs(e);
+        // Opening Deskdrop again while it runs in the tray (it may have started
+        // hidden at sign-in) shows the window; a second process can't, since
+        // there may be no window yet for it to find.
+        if (e.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Launch && !IsBackgroundLaunch(e))
+            ShowMainWindowCommand?.Execute(null);
+    }
+
+    // "--background" (what the sign-in entry passes), "--startup" or
+    // "--minimized": start the engine and tray, but no window.
+    private static readonly string[] BackgroundFlags = { "--background", "--startup", "--minimized" };
+
+    private static bool IsBackgroundLaunch(Microsoft.Windows.AppLifecycle.AppActivationArguments? args)
+    {
+        string? line = (args?.Data as Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs)?.Arguments;
+        var words = (line ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Concat(Environment.GetCommandLineArgs().Skip(1));
+        return words.Any(w => BackgroundFlags.Contains(w.Trim('"'), StringComparer.OrdinalIgnoreCase));
+    }
+
+    // Older builds wrote the sign-in entry without --background, so every
+    // sign-in opened the dashboard. Rewrite it once if it's there.
+    private static void UpgradeStartupEntry()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+            if (key?.GetValue("Deskdrop") is string value && !value.Contains("--background"))
+                key.SetValue("Deskdrop", value.TrimEnd() + " --background");
+        }
+        catch (Exception ex) { App.HandleError(ex); }
     }
 
     // Shared dispatch for deskdrop://accept/{id} and deskdrop://reject/{id}
