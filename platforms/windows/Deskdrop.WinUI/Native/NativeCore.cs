@@ -53,6 +53,7 @@ namespace Deskdrop.WinUI
         public const int PB_EVENT_REMOTE_FILE_ACTION_REQUEST = 37;
         public const int PB_EVENT_OPEN_URL_ON_DEVICE_REQUESTED = 38;
         public const int PB_EVENT_OPEN_URL_ON_DEVICE_ACK = 39;
+        public const int PB_EVENT_NOTIFICATION_RECEIVED = 40;
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_start(
@@ -215,6 +216,9 @@ namespace Deskdrop.WinUI
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr deskdrop_event_call_contact_name(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr deskdrop_event_notification_title(IntPtr ev);
 
         public const uint ES_CONTINUOUS = 0x80000000;
         public const uint ES_SYSTEM_REQUIRED = 0x00000001;
