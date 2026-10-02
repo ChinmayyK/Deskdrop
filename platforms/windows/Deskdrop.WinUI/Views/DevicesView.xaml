@@ -170,10 +170,16 @@
 
                 <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
                         Opacity="{x:Bind IsOffline, Converter={StaticResource BoolToOpacityConverter}, ConverterParameter=0.55, Mode=OneWay}">
-                    <FontIcon Glyph="{x:Bind DeviceGlyph, Mode=OneWay}"
-                              FontSize="18"
-                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Path Data="{x:Bind DeviceLogo, Mode=OneWay}"
+                              Visibility="{x:Bind LogoVisibility, Mode=OneWay}"
+                              Width="17" Height="17" Stretch="Uniform"
+                              Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <FontIcon Glyph="{x:Bind DeviceGlyph, Mode=OneWay}"
+                                  Visibility="{x:Bind GlyphVisibility, Mode=OneWay}"
+                                  FontSize="18"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
                 </Border>
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
@@ -265,10 +271,16 @@
                         VerticalAlignment="Top"
                         Background="{ThemeResource AppDividerBrush}" />
                 <Border Grid.Column="0" Style="{StaticResource AppIconTile}">
-                    <FontIcon Glyph="{x:Bind DeviceGlyph, Mode=OneWay}"
-                              FontSize="18"
-                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Path Data="{x:Bind DeviceLogo, Mode=OneWay}"
+                              Visibility="{x:Bind LogoVisibility, Mode=OneWay}"
+                              Width="17" Height="17" Stretch="Uniform"
+                              Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <FontIcon Glyph="{x:Bind DeviceGlyph, Mode=OneWay}"
+                                  Visibility="{x:Bind GlyphVisibility, Mode=OneWay}"
+                                  FontSize="18"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
                 </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                     <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" Style="{StaticResource AppBodyStrong}" />

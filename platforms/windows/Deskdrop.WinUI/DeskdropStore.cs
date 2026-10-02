@@ -254,9 +254,9 @@ namespace Deskdrop.WinUI
         [System.Text.Json.Serialization.JsonPropertyName("id")]
         public string device_id { get => _device_id; set => SetProperty(ref _device_id, value); }
         private string _friendly_name = "";
-        public string friendly_name { get => _friendly_name; set { if (SetProperty(ref _friendly_name, value)) { OnPropertyChanged(nameof(DisplayName)); OnPropertyChanged(nameof(DeviceGlyph)); } } }
+        public string friendly_name { get => _friendly_name; set { if (SetProperty(ref _friendly_name, value)) { OnPropertyChanged(nameof(DisplayName)); OnPropertyChanged(nameof(DeviceGlyph)); NotifyLogo(); } } }
         private string? _platform;
-        public string? platform { get => _platform; set { if (SetProperty(ref _platform, value)) { OnPropertyChanged(nameof(DeviceIcon)); OnPropertyChanged(nameof(DeviceGlyph)); OnPropertyChanged(nameof(IsCameraCapable)); OnPropertyChanged(nameof(ShowCameraButton)); OnPropertyChanged(nameof(DetailLine)); } } }
+        public string? platform { get => _platform; set { if (SetProperty(ref _platform, value)) { OnPropertyChanged(nameof(DeviceIcon)); OnPropertyChanged(nameof(DeviceGlyph)); NotifyLogo(); OnPropertyChanged(nameof(IsCameraCapable)); OnPropertyChanged(nameof(ShowCameraButton)); OnPropertyChanged(nameof(DetailLine)); } } }
         private string _status = "";
         public string status { get => _status; set { if(SetProperty(ref _status, value)) NotifyPeerStateProperties(); } }
         private bool _is_trusted;
@@ -314,6 +314,16 @@ namespace Deskdrop.WinUI
         // Offline peers often have no platform yet; fall back to the name
         // ("Chinmay's MacBook Air") so a Mac doesn't get a phone glyph.
         public string DeviceGlyph => PlatformToGlyphConverter.ToGlyph(string.IsNullOrWhiteSpace(platform) ? friendly_name : platform);
+        // The OS logo; DeviceGlyph stands in while the OS is unknown.
+        public Microsoft.UI.Xaml.Media.Geometry? DeviceLogo => OsLogo.Geometry(platform, friendly_name);
+        public Visibility LogoVisibility => OsLogo.Data(platform, friendly_name) is null ? Visibility.Collapsed : Visibility.Visible;
+        public Visibility GlyphVisibility => OsLogo.Data(platform, friendly_name) is null ? Visibility.Visible : Visibility.Collapsed;
+        private void NotifyLogo()
+        {
+            OnPropertyChanged(nameof(DeviceLogo));
+            OnPropertyChanged(nameof(LogoVisibility));
+            OnPropertyChanged(nameof(GlyphVisibility));
+        }
         public string DeviceIcon => (platform ?? friendly_name).ToLowerInvariant() switch
         {
             var p when p.Contains("windows") => "Monitor",

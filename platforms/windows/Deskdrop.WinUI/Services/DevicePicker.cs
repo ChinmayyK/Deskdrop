@@ -109,9 +109,13 @@ namespace Deskdrop.WinUI.Services
                         <Border Grid.Column="0" Width="30" Height="30"
                                 CornerRadius="6"
                                 Background="{ThemeResource AppSurfaceSubtleBrush}">
-                            <FontIcon Glyph="&#xE8EA;" FontSize="14"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path Data="{Binding DeviceLogo}" Visibility="{Binding LogoVisibility}"
+                                      Width="14" Height="14" Stretch="Uniform"
+                                      Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <FontIcon Glyph="{Binding DeviceGlyph}" Visibility="{Binding GlyphVisibility}" FontSize="14"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="SemiBold" />
