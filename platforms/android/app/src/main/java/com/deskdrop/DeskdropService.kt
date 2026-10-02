@@ -1927,6 +1927,54 @@ class DeskdropService : Service() {
                     }
                 }
             }
+
+            DeskdropJni.CR_EVENT_OPEN_URL_ON_DEVICE_REQUESTED -> {
+                val requester = DeskdropJni.eventDeviceId(ev) ?: return
+                val from = DeskdropJni.eventDeviceName(ev) ?: "A device"
+                val url = DeskdropJni.eventText(ev).orEmpty()
+                handleOpenUrlRequest(requester, from, url)
+            }
+
+            DeskdropJni.CR_EVENT_OPEN_URL_ON_DEVICE_ACK -> {
+                if (!DeskdropJni.eventOpenUrlAckSuccess(ev)) {
+                    val why = DeskdropJni.eventText(ev) ?: "The other device could not open the link"
+                    Log.w(TAG, "Link was not opened: $why")
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(applicationContext, why, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    // A link from another device. Android stops a background service from
+    // starting the browser, so the link arrives as a notification: one tap
+    // opens it. Only web links are accepted; the sender is told either way.
+    private fun handleOpenUrlRequest(requesterId: String, from: String, url: String) {
+        val uri = try { android.net.Uri.parse(url.trim()) } catch (e: Exception) { null }
+        val scheme = uri?.scheme?.lowercase()
+        if (uri == null || (scheme != "http" && scheme != "https") || uri.host.isNullOrEmpty()) {
+            Log.w(TAG, "Refusing link from $from: not a web link")
+            DeskdropJni.ackOpenUrlOnDevice(engineHandle, requesterId, false, "Only web links can be opened")
+            return
+        }
+        try {
+            val openPi = PendingIntent.getActivity(
+                this, uri.hashCode(), Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val note = NotificationCompat.Builder(this, CHAN_ALERTS)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("$from sent a link")
+                .setContentText(uri.toString())
+                .setAutoCancel(true)
+                .setContentIntent(openPi)
+                .build()
+            notificationManager.notify(NOTIF_ID_FILE_BASE + (uri.hashCode() and 0xFFF), note)
+            DeskdropJni.ackOpenUrlOnDevice(engineHandle, requesterId, true, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not show the link from $from", e)
+            DeskdropJni.ackOpenUrlOnDevice(engineHandle, requesterId, false, "Could not show the link")
         }
     }
 
@@ -2870,6 +2918,9 @@ class DeskdropService : Service() {
         val files = listFolderTree(treeUri, rootId)
         if (files.isEmpty()) {
             Log.i(TAG, "Folder $folderName has no files to send")
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(applicationContext, "\"$folderName\" has no files to send", android.widget.Toast.LENGTH_LONG).show()
+            }
             return
         }
         val batchId = java.util.UUID.randomUUID().toString()

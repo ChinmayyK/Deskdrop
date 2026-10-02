@@ -40,6 +40,10 @@ object DeskdropJni {
     const val CR_EVENT_REMOTE_FILE_PULL_REQUEST = 32
     const val CR_EVENT_REMOTE_FILE_ACTION_REQUEST = 37
     const val CR_EVENT_REMOTE_FILES_RESPONSE   = 33
+    /** A peer asks this device to open a link; answer with [ackOpenUrlOnDevice]. */
+    const val CR_EVENT_OPEN_URL_ON_DEVICE_REQUESTED = 38
+    /** A peer answered a link this device asked it to open; see [eventOpenUrlAckSuccess]. */
+    const val CR_EVENT_OPEN_URL_ON_DEVICE_ACK  = 39
     const val CR_EVENT_SPEED_TEST_PROGRESS     = 35
     const val CR_EVENT_SPEED_TEST_COMPLETE     = 36
     /** Every file of a folder transfer finished; see [eventFolderCounts]. */
@@ -52,6 +56,9 @@ object DeskdropJni {
 
     // ── Clipboard push ────────────────────────────────────────────────────────
     @JvmStatic external fun pushText(handle: Long, text: String): Int
+    @JvmStatic external fun openUrlOnDevice(handle: Long, targetDeviceId: String, url: String): Int
+    @JvmStatic external fun ackOpenUrlOnDevice(handle: Long, requesterDeviceId: String, success: Boolean, error: String?): Int
+    @JvmStatic external fun eventOpenUrlAckSuccess(event: Long): Boolean
     @JvmStatic external fun pushImage(handle: Long, mimeType: String, data: ByteArray): Int
     @JvmStatic external fun pushFile(handle: Long, name: String, data: ByteArray): Int
     @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
