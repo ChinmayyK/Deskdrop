@@ -86,12 +86,6 @@ private struct RemoteExplorerPane: View {
     @State private var autoQuickLookFileId: UInt64? = nil
     
     // File Action States
-    @State private var fileToRename: IpcRemoteFileEntry? = nil
-    @State private var newFileName: String = ""
-    @State private var fileToDelete: IpcRemoteFileEntry? = nil
-    @State private var isDeletingBatch: Bool = false
-    @State private var isRenaming = false
-    @State private var isDeleting = false
     
     // Pagination State
     @State private var displayLimit: Int = 500
@@ -174,43 +168,6 @@ private struct RemoteExplorerPane: View {
         .onChange(of: searchQuery) { _ in
             // Debounce or just load on change
             loadFiles()
-        }
-        .alert("Rename File", isPresented: $isRenaming) {
-            TextField("New name", text: $newFileName)
-            Button("Rename", action: {
-                if let file = fileToRename, !newFileName.isEmpty {
-                    Task {
-                        try? await store.performRemoteFileAction(targetDevice: device.id, fileId: file.file_id, action: "rename", newName: newFileName)
-                        await MainActor.run { loadFiles() }
-                    }
-                }
-            })
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Enter a new name for the file.")
-        }
-        .alert("Delete File", isPresented: $isDeleting) {
-            Button("Delete", role: .destructive, action: {
-                if let file = fileToDelete {
-                    Task {
-                        try? await store.performRemoteFileAction(targetDevice: device.id, fileId: file.file_id, action: "delete")
-                        await MainActor.run { loadFiles() }
-                    }
-                }
-            })
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            if let file = fileToDelete {
-                Text("Are you sure you want to permanently delete \"\(file.display_name)\" from your Android device? This cannot be undone.")
-            }
-        }
-        .alert("Delete Multiple Files", isPresented: $isDeletingBatch) {
-            Button("Delete All", role: .destructive, action: {
-                deleteSelectedBatch()
-            })
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Are you sure you want to permanently delete \(selectedFiles.count) files from your Android device? This cannot be undone.")
         }
     }
     
@@ -858,9 +815,7 @@ struct SidebarRowView: View {
             Divider()
             
             Button("Rename") {
-                fileToRename = file
-                newFileName = file.display_name
-                isRenaming = true
+                askRename(file)
             }
             
             Button("Details") {
@@ -871,8 +826,7 @@ struct SidebarRowView: View {
             Divider()
             
             Button("Delete Remote File", role: .destructive) {
-                fileToDelete = file
-                isDeleting = true
+                askDelete(file)
             }
         }
     }
@@ -986,7 +940,7 @@ struct SidebarRowView: View {
             .buttonStyle(.plain)
             
             Button {
-                isDeletingBatch = true
+                askDeleteBatch()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "trash")
@@ -1285,6 +1239,53 @@ struct SidebarRowView: View {
         for file in toPull { pullFile(file) }
     }
     
+    // MARK: - Questions (the app's own modal)
+
+    private func askRename(_ file: IpcRemoteFileEntry) {
+        DeskdropModal.shared.input(
+            icon: "pencil",
+            title: "Rename file",
+            subtitle: "On \(device.name)",
+            placeholder: "New name",
+            initial: file.display_name,
+            confirm: "Rename"
+        ) { name in
+            Task {
+                try? await store.performRemoteFileAction(targetDevice: device.id, fileId: file.file_id, action: "rename", newName: name)
+                await MainActor.run { loadFiles() }
+            }
+        }
+    }
+
+    private func askDelete(_ file: IpcRemoteFileEntry) {
+        DeskdropModal.shared.confirm(
+            icon: "trash.fill",
+            title: "Delete \"\(file.display_name)\"?",
+            message: "It is removed from \(device.name) for good. This can't be undone.",
+            confirm: "Delete",
+            destructive: true
+        ) {
+            Task {
+                try? await store.performRemoteFileAction(targetDevice: device.id, fileId: file.file_id, action: "delete")
+                await MainActor.run { loadFiles() }
+            }
+        }
+    }
+
+    private func askDeleteBatch() {
+        let count = selectedFiles.count
+        guard count > 0 else { return }
+        DeskdropModal.shared.confirm(
+            icon: "trash.fill",
+            title: "Delete \(count) file\(count == 1 ? "" : "s")?",
+            message: "They are removed from \(device.name) for good. This can't be undone.",
+            confirm: "Delete \(count == 1 ? "file" : "all")",
+            destructive: true
+        ) {
+            deleteSelectedBatch()
+        }
+    }
+
     private func deleteSelectedBatch() {
         guard let files = result?.files else { return }
         let toDelete = files.filter { selectedFiles.contains($0.file_id) }
@@ -1574,7 +1575,7 @@ struct SidebarRowView: View {
             .buttonStyle(PBPrimaryButtonStyle(tint: CRTheme.brandElectric))
             
             Button {
-                isDeletingBatch = true
+                askDeleteBatch()
             } label: {
                 Label("Delete", systemImage: "trash.fill")
                     .font(.system(size: 13, weight: .bold))

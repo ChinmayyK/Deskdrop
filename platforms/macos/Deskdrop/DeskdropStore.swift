@@ -741,58 +741,46 @@ final class DeskdropStore: ObservableObject {
     }
 
     /// Send files when the caller has no specific device in mind. With one
-    /// connected device the files go straight to it; with several the user
-    /// picks one device (or all). Returns false when nothing was sent.
+    /// connected device they go straight to it; with several, the send
+    /// modal asks (all devices unless one is picked). `completion` says
+    /// whether anything was sent. Returns false when nothing can be sent.
     @discardableResult
-    func sendFilesChoosingTarget(urls: [URL]) -> Bool {
-        guard !urls.isEmpty else { return false }
+    func sendFilesChoosingTarget(urls: [URL], completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard !urls.isEmpty else { completion?(false); return false }
         let connected = connectedDevices
         guard connected.count > 1 else {
-            guard let only = connected.first else { return false }
+            guard let only = connected.first else { completion?(false); return false }
             sendFiles(urls: urls, to: only)
+            completion?(true)
             return true
         }
-        switch promptForSendTarget(fileCount: urls.count, devices: connected) {
-        case .cancelled:
-            return false
-        case .allDevices:
-            sendFiles(urls: urls, to: nil)
-        case .device(let device):
-            sendFiles(urls: urls, to: device)
-        }
+        presentSendModal(urls: urls, completion: completion)
         return true
     }
 
-    private enum SendTargetChoice {
-        case cancelled
-        case allDevices
-        case device(ManagedDevice)
-    }
-
-    private func promptForSendTarget(fileCount: Int, devices: [ManagedDevice]) -> SendTargetChoice {
-        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26), pullsDown: false)
-        for device in devices {
-            popup.addItem(withTitle: device.name)
+    /// The send modal: pick the device (all by default), then drop or choose
+    /// files and folders, or confirm `urls` already chosen.
+    func presentSendModal(urls: [URL]? = nil, completion: ((Bool) -> Void)? = nil) {
+        let devices = connectedDevices
+        guard !devices.isEmpty else {
+            showToast(title: "No Devices Connected", body: "Connect a device to send files or folders.", tint: CRTheme.inkSoft, systemImage: "wifi.slash")
+            completion?(false)
+            return
         }
-        popup.menu?.addItem(.separator())
-        popup.addItem(withTitle: "All Connected Devices")
-        let allIndex = popup.numberOfItems - 1
-        if let preferred = defaultTargetDevice, let index = devices.firstIndex(where: { $0.id == preferred.id }) {
-            popup.selectItem(at: index)
+        DeskdropModal.shared.present { [weak self] dismiss in
+            SendModalCard(
+                devices: devices,
+                urls: urls,
+                onSend: { chosen, target in
+                    dismiss()
+                    guard let self else { return }
+                    if let target { self.sendFiles(urls: chosen, to: target) }
+                    else { self.sendFiles(urls: chosen, toPeer: nil) }
+                    completion?(true)
+                },
+                onCancel: { dismiss(); completion?(false) }
+            )
         }
-
-        let alert = NSAlert()
-        alert.messageText = "Send \(fileCount) item\(fileCount == 1 ? "" : "s") to…"
-        alert.informativeText = "Choose which device receives the files."
-        alert.accessoryView = popup
-        alert.addButton(withTitle: "Send")
-        alert.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return .cancelled }
-
-        let index = popup.indexOfSelectedItem
-        if index == allIndex { return .allDevices }
-        return devices.indices.contains(index) ? .device(devices[index]) : .cancelled
     }
 
     private func processAndSend(url: URL, targetDeviceId: String?) async {

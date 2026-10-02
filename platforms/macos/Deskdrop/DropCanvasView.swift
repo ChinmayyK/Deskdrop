@@ -198,7 +198,8 @@ struct CanvasDropDelegate: DropDelegate {
         }
         
         group.notify(queue: .main) {
-            if store.sendFilesChoosingTarget(urls: urls) {
+            store.sendFilesChoosingTarget(urls: urls) { sent in
+                guard sent else { return }
                 store.showToast(
                     title: "Sending \(urls.count) file\(urls.count == 1 ? "" : "s")",
                     body: urls.map(\.lastPathComponent).joined(separator: ", "),

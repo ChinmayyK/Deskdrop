@@ -293,8 +293,6 @@ struct SidebarNavItem: View {
 struct CommandCenterView: View {
     @ObservedObject var store: DeskdropStore
     @State private var searchQuery = ""
-    @State private var showingFilePicker = false
-    @State private var pendingFileTarget: ManagedDevice?
     @State private var showingRemoteExplorer = false
 
     var body: some View {
@@ -409,16 +407,6 @@ struct CommandCenterView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item, .folder], allowsMultipleSelection: true) { result in
-            if case let .success(urls) = result {
-                if let target = pendingFileTarget {
-                    store.sendFiles(urls: urls, to: target)
-                } else {
-                    store.sendFilesChoosingTarget(urls: urls)
-                }
-                pendingFileTarget = nil
-            }
-        }
         .sheet(isPresented: $showingRemoteExplorer) {
             if let device = store.defaultTargetDevice {
                 RemoteExplorerView(store: store, device: device)
@@ -444,10 +432,7 @@ struct CommandCenterView: View {
 
     private var transferTile: some View {
         LaunchpadTile(title: "Files & folders", subtitle: "Send files or entire folders", icon: "paperplane.fill", color: CRTheme.brandElectric) {
-            if !store.connectedDevices.isEmpty {
-                pendingFileTarget = nil
-                showingFilePicker = true
-            }
+            store.presentSendModal()
         }
     }
     private var browseTile: some View {
