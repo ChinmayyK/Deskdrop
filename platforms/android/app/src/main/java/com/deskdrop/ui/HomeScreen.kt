@@ -102,6 +102,7 @@ fun HomeTab(
     onActionPairMagicLink: () -> Unit,
     onManualIp: () -> Unit,
     onActionSendFiles: (String?) -> Unit,
+    onActionSendFolder: (String?) -> Unit,
     onActionStreamCamera: () -> Unit,
     onApplyClipboard: (ActivityEntry) -> Unit,
     onActionPauseTransfer: (String) -> Unit,
@@ -214,6 +215,7 @@ fun HomeTab(
                         peer = peer,
                         speedTest = activeSpeedTests.find { it.peerId == peer.id },
                         onSendFiles = { onActionSendFiles(peer.id) },
+                        onSendFolder = { onActionSendFolder(peer.id) },
                         onSpeedTest = { onActionStartSpeedTest(peer.id) },
                         onRespond = { onRespondPairing(peer, it) },
                         onForget = { onForgetPeer(peer) }
@@ -594,6 +596,7 @@ internal fun DeviceRow(
     peer: PeerSnapshot,
     speedTest: SpeedTestProgress?,
     onSendFiles: () -> Unit,
+    onSendFolder: () -> Unit,
     onSpeedTest: () -> Unit,
     onRespond: (Boolean) -> Unit,
     onForget: () -> Unit
@@ -663,6 +666,7 @@ internal fun DeviceRow(
                 MenuItem(c, "Decline", Icons.Outlined.Close) { menuOpen = false; onRespond(false) }
             } else if (peer.isConnected) {
                 MenuItem(c, "Send files", Icons.Outlined.UploadFile) { menuOpen = false; onSendFiles() }
+                MenuItem(c, "Send folder", Icons.Outlined.DriveFolderUpload) { menuOpen = false; onSendFolder() }
                 MenuItem(c, "Test speed", Icons.Outlined.Speed) { menuOpen = false; onSpeedTest() }
             }
             MenuItem(c, "Forget device", Icons.Outlined.DeleteOutline, tint = c.danger) { menuOpen = false; onForget() }

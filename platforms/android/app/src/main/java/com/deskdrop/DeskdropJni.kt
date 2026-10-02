@@ -42,6 +42,8 @@ object DeskdropJni {
     const val CR_EVENT_REMOTE_FILES_RESPONSE   = 33
     const val CR_EVENT_SPEED_TEST_PROGRESS     = 35
     const val CR_EVENT_SPEED_TEST_COMPLETE     = 36
+    /** Every file of a folder transfer finished; see [eventFolderCounts]. */
+    const val CR_EVENT_FOLDER_TRANSFER_COMPLETE = 41
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun initContext(context: android.content.Context)
@@ -151,6 +153,31 @@ object DeskdropJni {
     @JvmStatic external fun getDeviceId(handle: Long): String?
     @JvmStatic external fun peersJson(handle: Long): String?
     @JvmStatic external fun healthJson(handle: Long): String?
+
+    // ── Folder transfers ─────────────────────────────────────────────────────
+    /** Folder transfers in flight: JSON array of {batch_id, folder_name, peer_name, file_count, done_count, failed_count, outbound}. */
+    @JvmStatic external fun foldersJson(handle: Long): String?
+    /** [files, failed] for a FOLDER_TRANSFER_COMPLETE event. */
+    @JvmStatic external fun eventFolderCounts(event: Long): IntArray?
+    /** True when a transfer event is for one file of a folder; the folder reports instead. */
+    @JvmStatic external fun eventTransferInFolder(event: Long): Boolean
+    /**
+     * Send one file of a folder from a detached descriptor (Rust closes it).
+     * Blocks while the folder already has its fill of files in flight, so call
+     * it from a background thread, file after file. Null means stop sending.
+     */
+    @JvmStatic external fun sendFolderItemFd(
+        handle: Long,
+        fd: Int,
+        relPath: String,
+        folderName: String,
+        targetDeviceId: String?,
+        batchId: String,
+        fileCount: Int
+    ): String?
+    /** Report the folder once its last files finish. Call after the last [sendFolderItemFd]. */
+    @JvmStatic external fun finishFolderSend(handle: Long, batchId: String)
+    @JvmStatic external fun cancelFolder(handle: Long, batchId: String): Int
     @JvmStatic external fun sendFilePath(
         handle: Long,
         path: String,

@@ -134,6 +134,10 @@ class DeskdropService : Service() {
         const val ACTION_DISCONNECT_ALL     = "com.deskdrop.DISCONNECT_ALL"
         const val ACTION_PUSH_TEXT          = "com.deskdrop.PUSH_TEXT"
         const val ACTION_PUSH_SHARED_URI    = "com.deskdrop.PUSH_SHARED_URI"
+        /** Send a folder picked with ACTION_OPEN_DOCUMENT_TREE (tree URI in EXTRA_SHARED_URI). */
+        const val ACTION_PUSH_FOLDER        = "com.deskdrop.PUSH_FOLDER"
+        /** Transfer ids of a whole folder's row: "folder:" + batch id. */
+        const val FOLDER_ROW_PREFIX         = "folder:"
         const val ACTION_SCAN_NOW           = "com.deskdrop.SCAN_NOW"
         const val ACTION_STATUS_CHANGED     = "com.deskdrop.STATUS_CHANGED"
         const val ACTION_SETTINGS_CHANGED   = "com.deskdrop.SETTINGS_CHANGED"  // re-read prefs live
@@ -770,7 +774,16 @@ class DeskdropService : Service() {
             ACTION_CANCEL_FILE_TRANSFER -> {
                 val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
                 if (engineHandle != 0L) {
-                    DeskdropJni.cancelFileTransfer(engineHandle, tid)
+                    if (tid.startsWith(FOLDER_ROW_PREFIX)) {
+                        val handle = engineHandle
+                        backgroundExecutor.execute {
+                            DeskdropJni.cancelFolder(handle, tid.removePrefix(FOLDER_ROW_PREFIX))
+                        }
+                        TransferManager.activeTransfers.remove(tid)
+                        TransferManager.publishActiveTransfers(force = true)
+                    } else {
+                        DeskdropJni.cancelFileTransfer(engineHandle, tid)
+                    }
                     notificationManager.cancel(transferNotifId(tid))
                 }
                 return START_STICKY
@@ -891,6 +904,14 @@ class DeskdropService : Service() {
                     intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: "",
                     intent.getStringExtra(EXTRA_NOTIFICATION_TEXT) ?: "",
                 )
+            }
+
+            if (intent?.action == ACTION_PUSH_FOLDER) {
+                val treeUri = intent.getStringExtra(EXTRA_SHARED_URI)?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                val targetDeviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID)
+                if (treeUri != null && engineHandle != 0L && hasConnectedPeers()) {
+                    backgroundExecutor.execute { sendFolderTree(treeUri, targetDeviceId) }
+                }
             }
 
             if (intent?.action == ACTION_PUSH_SHARED_URI) {
@@ -1310,6 +1331,18 @@ class DeskdropService : Service() {
                 )
                 val fileName  = DeskdropJni.eventTransferFileName(ev) ?: "file"
                 val totalBytes = DeskdropJni.eventTransferTotalBytes(ev)
+
+                if (DeskdropJni.eventTransferInFolder(ev)) {
+                    // One question per folder: the answer covers all of it.
+                    val folder = fileName.substringBefore('/')
+                    val peer = currentPeerSnapshots().firstOrNull { it.id == DeskdropJni.eventDeviceId(ev) }
+                    if (peer?.trusted == true && engineHandle != 0L) {
+                        DeskdropJni.acceptFileTransfer(engineHandle, tid)
+                    } else if (shouldAskAboutFolder("$from/$folder")) {
+                        showFileTransferIncomingNotification(from, folder, 0L, tid, isFolder = true)
+                    }
+                    return
+                }
                 
                 val isOutboundFeed = ActivityFeedManager.getFeedSnapshot().any { it.transferId == tid && it.kind == ActivityKind.FILE_SENT }
                 
@@ -1400,6 +1433,11 @@ class DeskdropService : Service() {
                     else -> existing?.isOutbound ?: TransferManager.pendingOutboundTransferIds.contains(tid)
                 }
                 
+                if (DeskdropJni.eventTransferInFolder(ev)) {
+                    onFolderItemProgress(name, isOutbound, peerName, speedBps)
+                    return
+                }
+
                 TransferManager.activeTransfers[tid] = TransferProgress(
                     id = tid, fileName = name, percent = percent, bytesReceived = bytesReceived, 
                     totalBytes = totalBytes, speedBps = speedBps, etaSecs = etaSecs, 
@@ -1432,6 +1470,16 @@ class DeskdropService : Service() {
                 )
                 val fileName = DeskdropJni.eventTransferFileName(ev) ?: "file"
                 val destPath = DeskdropJni.eventTransferDestPath(ev) ?: ""
+
+                if (DeskdropJni.eventTransferInFolder(ev)) {
+                    // Saved in place inside its folder; the folder reports once.
+                    if (destPath.isNotEmpty()) {
+                        android.media.MediaScannerConnection.scanFile(this, arrayOf(destPath), null, null)
+                    }
+                    TransferManager.activeTransfers.remove(tid)
+                    TransferManager.pendingOutboundTransferIds.remove(tid)
+                    return
+                }
                 
                 if (destPath.isEmpty()) {
                     // Outbound transfer completed!
@@ -1498,6 +1546,11 @@ class DeskdropService : Service() {
                 val tid  = DeskdropJni.eventTransferId(ev) ?: return
                 lastTransferNotifTimes.remove(tid)
                 lastTransferFeedTimes.remove(tid)
+                if (DeskdropJni.eventTransferInFolder(ev)) {
+                    TransferManager.activeTransfers.remove(tid)
+                    TransferManager.pendingOutboundTransferIds.remove(tid)
+                    return
+                }
                 val from = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
@@ -1506,6 +1559,16 @@ class DeskdropService : Service() {
                 cancelFileTransferNotification(tid)
                 TransferManager.activeTransfers.remove(tid)
                 TransferManager.publishActiveTransfers(force = true)
+            }
+
+            DeskdropJni.CR_EVENT_FOLDER_TRANSFER_COMPLETE -> {
+                val folder = DeskdropJni.eventTransferFileName(ev) ?: "Folder"
+                val destDir = DeskdropJni.eventTransferDestPath(ev).orEmpty()
+                val counts = DeskdropJni.eventFolderCounts(ev)
+                val total = counts?.getOrNull(0) ?: 0
+                val failed = counts?.getOrNull(1) ?: 0
+                val peer = DeskdropJni.eventDeviceName(ev) ?: "device"
+                onFolderComplete(folder, peer, total, failed, destDir)
             }
 
             DeskdropJni.CR_EVENT_FILE_TRANSFER_PAUSED -> {
@@ -1965,7 +2028,7 @@ class DeskdropService : Service() {
     // ── File transfer notifications ───────────────────────────────────────────
 
     private fun showFileTransferIncomingNotification(
-        from: String, fileName: String, totalBytes: Long, tid: String
+        from: String, fileName: String, totalBytes: Long, tid: String, isFolder: Boolean = false
     ) {
         val sizeStr = formatBytes(totalBytes)
 
@@ -1984,8 +2047,8 @@ class DeskdropService : Service() {
 
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Incoming file from $from")
-            .setContentText("$fileName ($sizeStr)")
+            .setContentTitle(if (isFolder) "Incoming folder from $from" else "Incoming file from $from")
+            .setContentText(if (isFolder) fileName else "$fileName ($sizeStr)")
             .addAction(0, "Accept", acceptPi)
             .addAction(0, "Reject", rejectPi)
             .setOngoing(true)
@@ -2088,8 +2151,11 @@ class DeskdropService : Service() {
             .setProgress(100, percent, false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(android.R.drawable.ic_media_pause, if (isPaused) "Resume" else "Pause", pauseResumePi)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPi)
+        // A folder pauses file by file in the engine; offer only Cancel.
+        if (!tid.startsWith(FOLDER_ROW_PREFIX)) {
+            builder.addAction(android.R.drawable.ic_media_pause, if (isPaused) "Resume" else "Pause", pauseResumePi)
+        }
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPi)
 
         notificationManager.notify(transferNotifId(tid), builder.build())
     }
@@ -2648,6 +2714,183 @@ class DeskdropService : Service() {
         }
 
         return contentResolver.openInputStream(uri)
+    }
+
+    // ── Folder transfers ─────────────────────────────────────────────────────
+    //
+    // A folder travels as a batch of file transfers; the engine paces them
+    // and reports the folder once (CR_EVENT_FOLDER_TRANSFER_COMPLETE). Here a
+    // folder in flight is one row and one notification, keyed by
+    // FOLDER_ROW_PREFIX + batch id.
+
+    private data class FolderInFlight(
+        val batchId: String,
+        val name: String,
+        val fileCount: Int,
+        val finished: Int,
+        val outbound: Boolean,
+    )
+
+    private fun foldersInFlight(): List<FolderInFlight> {
+        if (engineHandle == 0L) return emptyList()
+        val json = DeskdropJni.foldersJson(engineHandle) ?: return emptyList()
+        return runCatching {
+            val arr = org.json.JSONArray(json)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                FolderInFlight(
+                    batchId = o.getString("batch_id"),
+                    name = o.optString("folder_name", "Folder"),
+                    fileCount = o.optInt("file_count", 1),
+                    finished = o.optInt("done_count") + o.optInt("failed_count"),
+                    outbound = o.optBoolean("outbound"),
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private val folderAskedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private fun shouldAskAboutFolder(key: String): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val last = folderAskedAt[key]
+        if (last != null && now - last < 5 * 60_000L) return false
+        if (folderAskedAt.size > 64) folderAskedAt.clear()
+        folderAskedAt[key] = now
+        return true
+    }
+
+    private fun onFolderItemProgress(fileName: String, isOutbound: Boolean, peerName: String, speedBps: Long) {
+        val top = fileName.substringBefore('/')
+        val folder = foldersInFlight().firstOrNull { it.name == top && it.outbound == isOutbound } ?: return
+        val rowId = FOLDER_ROW_PREFIX + folder.batchId
+        val percent = if (folder.fileCount > 0) folder.finished * 100 / folder.fileCount else 0
+        val noun = if (folder.fileCount == 1) "file" else "files"
+        TransferManager.activeTransfers[rowId] = TransferProgress(
+            id = rowId,
+            fileName = "${folder.name} · ${folder.finished} of ${folder.fileCount} $noun",
+            percent = percent,
+            bytesReceived = folder.finished.toLong(),
+            totalBytes = folder.fileCount.toLong(),
+            speedBps = speedBps,
+            etaSecs = 0,
+            state = TransferState.PROGRESS,
+            peerName = peerName,
+            isOutbound = isOutbound,
+        )
+        TransferManager.publishActiveTransfers()
+        val now = System.currentTimeMillis()
+        if (now - (lastTransferNotifTimes[rowId] ?: 0L) < 500L) return
+        lastTransferNotifTimes[rowId] = now
+        val cancelPi = PendingIntent.getService(this, rowId.hashCode() + 2,
+            Intent(ACTION_CANCEL_FILE_TRANSFER).apply {
+                `package` = packageName
+                putExtra(EXTRA_TRANSFER_ID, rowId)
+            }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(if (isOutbound) "Sending ${folder.name}" else "Receiving ${folder.name}")
+            .setContentText("${folder.finished} of ${folder.fileCount} $noun")
+            .setProgress(folder.fileCount, folder.finished, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPi)
+            .build()
+        notificationManager.notify(transferNotifId(rowId), notif)
+    }
+
+    private fun onFolderComplete(folder: String, peer: String, total: Int, failed: Int, destDir: String) {
+        // Drop the rows of folders the engine no longer has in flight.
+        val live = foldersInFlight().map { FOLDER_ROW_PREFIX + it.batchId }.toSet()
+        TransferManager.activeTransfers.keys
+            .filter { it.startsWith(FOLDER_ROW_PREFIX) && it !in live }
+            .forEach { rowId ->
+                TransferManager.activeTransfers.remove(rowId)
+                lastTransferNotifTimes.remove(rowId)
+                notificationManager.cancel(transferNotifId(rowId))
+            }
+        TransferManager.publishActiveTransfers(force = true)
+
+        val noun = if (total == 1) "file" else "files"
+        val files = if (failed == 0) "$total $noun" else "${total - failed} of $total $noun"
+        val received = destDir.isNotEmpty()
+        addActivity(ActivityEntry(
+            deviceName = peer,
+            kind = if (received) ActivityKind.FILE_TRANSFER_COMPLETE else ActivityKind.FILE_SENT,
+            preview = "$folder ($files)",
+            progressPercent = 100,
+            destPath = destDir,
+        ))
+        val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(if (received) "Folder received from $peer" else "Folder sent to $peer")
+            .setContentText(if (received) "$folder ($files) · Downloads/Deskdrop" else "$folder ($files)")
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify(NOTIF_ID_FILE_BASE + ("folder/$folder".hashCode() and 0xFFF), notif)
+    }
+
+    /**
+     * Send a folder picked with the system folder picker. Walks the document
+     * tree, then hands the engine one file at a time; the engine keeps a few
+     * in flight and blocks the rest, so run this on a background thread.
+     */
+    private fun sendFolderTree(treeUri: Uri, targetDeviceId: String?) {
+        val handle = engineHandle
+        if (handle == 0L) return
+        val rootId = runCatching { android.provider.DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull() ?: return
+        val folderName = runCatching {
+            contentResolver.query(
+                android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId),
+                arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null
+            )?.use { if (it.moveToFirst()) it.getString(0) else null }
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Folder"
+
+        val files = listFolderTree(treeUri, rootId)
+        if (files.isEmpty()) {
+            Log.i(TAG, "Folder $folderName has no files to send")
+            return
+        }
+        val batchId = java.util.UUID.randomUUID().toString()
+        for ((docId, relPath) in files) {
+            val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+            val pfd = runCatching { contentResolver.openFileDescriptor(uri, "r") }.getOrNull() ?: continue
+            val tid = DeskdropJni.sendFolderItemFd(
+                handle, pfd.detachFd(), relPath, folderName, targetDeviceId, batchId, files.size
+            ) ?: break
+            TransferManager.pendingOutboundTransferIds.add(tid)
+        }
+        DeskdropJni.finishFolderSend(handle, batchId)
+    }
+
+    /** Every file under a document tree as (document id, path inside the folder). */
+    private fun listFolderTree(treeUri: Uri, rootId: String): List<Pair<String, String>> {
+        val skipped = setOf(".DS_Store", "Thumbs.db", "desktop.ini")
+        val out = mutableListOf<Pair<String, String>>()
+        val dirs = ArrayDeque(listOf(rootId to ""))
+        val columns = arrayOf(
+            android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+        )
+        while (dirs.isNotEmpty() && out.size < 10_000) {
+            val (dirId, prefix) = dirs.removeFirst()
+            val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, dirId)
+            val rows = runCatching {
+                contentResolver.query(children, columns, null, null, null)?.use { c ->
+                    buildList { while (c.moveToNext()) add(Triple(c.getString(0), c.getString(1) ?: "", c.getString(2) ?: "")) }
+                }
+            }.getOrNull() ?: continue
+            for ((id, name, mime) in rows.sortedBy { it.second }) {
+                if (name.isEmpty() || name in skipped || name.startsWith("._")) continue
+                if (mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) {
+                    dirs.addLast(id to "$prefix$name/")
+                } else {
+                    out.add(id to "$prefix$name")
+                }
+            }
+        }
+        return out
     }
 
     private fun cleanupStagedOutgoingFiles(dir: File) {

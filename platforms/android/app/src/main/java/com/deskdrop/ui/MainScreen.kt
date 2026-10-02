@@ -140,6 +140,7 @@ fun MainScreen(
     onActionAcceptTransfer: (String) -> Unit = {},
     onActionRejectTransfer: (String) -> Unit = {},
     onActionSendFiles: (String?) -> Unit,
+    onActionSendFolder: (String?) -> Unit,
     onDropFiles: (String, List<android.net.Uri>) -> Unit = { _, _ -> },
     onApplyClipboard: (ActivityEntry) -> Unit,
     onTrustPeer: (PeerSnapshot) -> Unit,
@@ -210,6 +211,7 @@ fun MainScreen(
                                 onActionPairMagicLink = onActionPairMagicLink,
                                 onManualIp = onManualIp,
                                 onActionSendFiles = onActionSendFiles,
+                                onActionSendFolder = onActionSendFolder,
                                 onActionStreamCamera = onActionStreamCamera,
                                 onApplyClipboard = onApplyClipboard,
                                 onActionPauseTransfer = onActionPauseTransfer,
@@ -252,6 +254,7 @@ fun MainScreen(
                                 onCancelPairing = onCancelPairing,
                                 onForgetPeer = onForgetPeer,
                                 onSendFiles = onActionSendFiles,
+                                onSendFolder = onActionSendFolder,
                                 onSpeedTest = onActionStartSpeedTest,
                                 onScanQr = onActionPairMagicLink,
                                 onManualIp = onManualIp
