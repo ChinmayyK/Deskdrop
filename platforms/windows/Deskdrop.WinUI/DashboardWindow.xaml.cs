@@ -383,7 +383,8 @@ namespace Deskdrop.WinUI
                 if (items == null || items.Count == 0) return;
 
                 var files = items.OfType<Windows.Storage.StorageFile>().ToList();
-                if (files.Count == 0) return;
+                var folders = items.OfType<Windows.Storage.StorageFolder>().ToList();
+                if (files.Count == 0 && folders.Count == 0) return;
 
                 var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync(
                     (this.Content as FrameworkElement)?.XamlRoot, mgr.ConnectedPeers);
@@ -395,6 +396,11 @@ namespace Deskdrop.WinUI
                     // matching fix note above in OnTitleBarSendClicked.
                     var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target.DeviceId;
                     DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
+                }
+                foreach (var folder in folders)
+                {
+                    var path = folder.Path; var targetId = target.DeviceId;
+                    DaemonActions.RunFireAndForget("Send Folder", () => DaemonClient.SendFolder(path, targetId));
                 }
                 NavigateTo("Transfers");
             }

@@ -164,6 +164,14 @@
                             <TextBlock Text="Downloads" />
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource AppSecondaryButton}" Padding="16,8"
+                            ToolTipService.ToolTip="Choose a folder to send, with everything in it"
+                            Click="OnSendFolderClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <FontIcon Glyph="&#xE8B7;" FontSize="13" />
+                            <TextBlock Text="Send folder" />
+                        </StackPanel>
+                    </Button>
                     <Button Style="{StaticResource AppPrimaryButton}" Padding="18,8"
                             ToolTipService.ToolTip="Choose files to send"
                             Click="OnSendFilesClicked">
