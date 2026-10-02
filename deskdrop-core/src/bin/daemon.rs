@@ -359,8 +359,11 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             )
             .await;
         }
-        EngineEvent::SystemHealthUpdated(state) => {
-            tracing::info!("[HEALTH] System state updated: {:?}", state);
+        EngineEvent::SystemHealthUpdated(issues) => {
+            tracing::info!(
+                "[HEALTH] issues: {:?}",
+                issues.iter().map(|i| i.kind).collect::<Vec<_>>()
+            );
         }
         EngineEvent::ClipboardDeliveryStatus {
             activity_id,
@@ -622,6 +625,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "peer_batteries":        peer_batteries,
                 "peer_networks":         peer_networks,
                 "peer_storages":         peer_storages,
+                "health":                state.engine.health().await,
             })))
         }
         // Re-trigger mDNS discovery — called by the Mac "Scan" button and
