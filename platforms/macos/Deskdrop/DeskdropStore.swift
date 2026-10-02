@@ -1118,7 +1118,7 @@ final class DeskdropStore: ObservableObject {
             // Decrement immediately so the menu bar badge updates without waiting for next poll.
             pendingClipboardCount = max(0, pendingClipboardCount - 1)
             // Apply to local pasteboard via ClipboardSetter (suppresses echo back to peers).
-            if let text = entry.text_preview {
+            if let text = await fullText(of: entry) {
                 applyClipboardLocally(text: text)
             }
         } catch {}
@@ -1157,11 +1157,22 @@ final class DeskdropStore: ObservableObject {
             }
             .sorted { $0.id < $1.id }
 
-        for entry in pendingMirror {
-            guard let text = entry.text_preview else { continue }
-            applyClipboardLocally(text: text)
-            lastMirroredAutoAppliedEntryId = entry.id
+        guard !pendingMirror.isEmpty else { return }
+        // Mark them now so the next poll doesn't apply them a second time.
+        lastMirroredAutoAppliedEntryId = pendingMirror.last!.id
+        Task { @MainActor in
+            for entry in pendingMirror {
+                if let text = await fullText(of: entry) { applyClipboardLocally(text: text) }
+            }
         }
+    }
+
+    /// A clipboard entry's whole text. The feed only carries a 400-character
+    /// preview, and writing that to the pasteboard cut long copies short; the
+    /// daemon keeps the full text of each received item by its id.
+    func fullText(of entry: IpcActivityEntry) async -> String? {
+        if let full = try? await ipc.incomingClipboardText(id: entry.id), !full.isEmpty { return full }
+        return entry.text_preview
     }
 
     // MARK: - Settings
