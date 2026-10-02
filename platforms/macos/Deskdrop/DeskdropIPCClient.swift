@@ -47,6 +47,18 @@ struct IpcStatusResponse: Codable {
     let peer_storages: [IpcPeerStorageState]?
     let active_transfers: [IpcFileTransferState]?
     let active_speed_tests: [IpcSpeedTestState]?
+    /// What stops sync right now, most fundamental first (engine::health).
+    let health: [IpcHealthIssue]?
+}
+
+struct IpcHealthIssue: Codable, Equatable, Identifiable {
+    /// "no_network", "listener_down", "sync_paused", "devices_not_found"
+    /// or "connection_blocked".
+    let kind: String
+    let title: String
+    let detail: String
+    let device_id: String?
+    var id: String { kind + (device_id ?? "") }
 }
 
 struct IpcSpeedTestState: Codable {

@@ -21,26 +21,33 @@ struct CommandCenterRootView: View {
             Divider().opacity(0.5)
             
             // Center Column: Main Workspace (Flexible)
-            ZStack(alignment: .bottom) {
-                // Content Router
-                Group {
-                    switch store.selectedSection {
-                    case .devices: 
-                        CommandCenterView(store: store)
-                    case .clipboard: 
-                        TimelineSectionView(store: store, density: density)
-                    case .transfers: 
-                        TransfersDashboardView(store: store)
-                    case .settings: 
-                        PreferencesView(store: store)
+            VStack(spacing: 0) {
+                if let issue = store.healthIssues.first {
+                    HealthBanner(issue: issue, store: store)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 14)
+                }
+                ZStack(alignment: .bottom) {
+                    // Content Router
+                    Group {
+                        switch store.selectedSection {
+                        case .devices: 
+                            CommandCenterView(store: store)
+                        case .clipboard: 
+                            TimelineSectionView(store: store, density: density)
+                        case .transfers: 
+                            TransfersDashboardView(store: store)
+                        case .settings: 
+                            PreferencesView(store: store)
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .id(store.selectedSection)
+                    .transition(.opacity)
+                    .animation(.crSpring, value: store.selectedSection)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .id(store.selectedSection)
-                .transition(.opacity)
-                .animation(.crSpring, value: store.selectedSection)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(CRTheme.surface)
             
             Divider().opacity(0.5)
