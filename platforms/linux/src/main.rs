@@ -347,8 +347,7 @@ fn notify(summary: &str, body: &str) {
     let _ = std::process::Command::new("notify-send")
         .args([
             "--app-name=Deskdrop",
-            // "--icon=edit-paste", // Original backup for rollback
-            "--icon=computer",
+            "--icon=deskdrop",
             "--urgency=normal",
             "--expire-time=3000",
             summary,

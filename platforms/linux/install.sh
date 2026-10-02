@@ -12,7 +12,7 @@ CLI_NAME="deskdrop-cli"
 INSTALL_DIR="$HOME/.local/bin"
 SERVICE_DIR="$HOME/.config/systemd/user"
 DESKTOP_DIR="$HOME/.local/share/applications"
-ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+ICON_DIR="$HOME/.local/share/icons/hicolor"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
@@ -30,6 +30,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     systemctl --user disable deskdrop.service 2>/dev/null || true
     rm -f "$SERVICE_DIR/deskdrop.service"
     rm -f "$DESKTOP_DIR/deskdrop.desktop"
+    find "$ICON_DIR" -name deskdrop.png -path '*/apps/*' -delete 2>/dev/null || true
     rm -f "$INSTALL_DIR/$BIN_NAME"
     rm -f "$INSTALL_DIR/$CLI_NAME"
     systemctl --user daemon-reload 2>/dev/null || true
@@ -89,6 +90,12 @@ echo "Installing systemd user service…"
 # Substitute actual binary path.
 sed "s|/usr/local/bin/deskdrop-gtk|$INSTALL_DIR/$BIN_NAME|g" \
     "$SCRIPT_DIR/deskdrop.service" > "$SERVICE_DIR/deskdrop.service"
+
+# Icons: the Deskdrop logo at each size the desktop asks for.
+echo "Installing icons…"
+mkdir -p "$ICON_DIR"
+cp -r "$SCRIPT_DIR/icons/hicolor/." "$ICON_DIR/"
+gtk-update-icon-cache -q -t "$ICON_DIR" 2>/dev/null || true
 
 # .desktop file.
 echo "Installing desktop entry…"
