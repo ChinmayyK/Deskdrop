@@ -222,18 +222,19 @@ internal fun SendSheet(
     onSend: (folder: Boolean, targetId: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var target by remember { mutableStateOf(connected.firstOrNull()?.id) }
-    val subtitle = if (connected.size == 1) "To ${connected[0].name}" else "Choose a device, then what to send"
+    // Every connected device unless the user picks one.
+    var target by remember { mutableStateOf<String?>(null) }
+    val subtitle = if (connected.size == 1) "To ${connected[0].name}" else "To all your devices, or pick one"
     DdSheet(c, icon = Icons.Outlined.DevicesOther, title = "Send", subtitle = subtitle, onDismiss = onDismiss) { close ->
         if (connected.size > 1) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                TargetChip(c, Icons.Outlined.DevicesOther, "All devices", selected = target == null) { target = null }
                 connected.forEach { peer ->
                     TargetChip(c, osIcon(peer.platform, peer.name), peer.name, selected = target == peer.id) { target = peer.id }
                 }
-                TargetChip(c, Icons.Outlined.DevicesOther, "All devices", selected = target == null) { target = null }
             }
             Spacer(Modifier.height(16.dp))
         }
