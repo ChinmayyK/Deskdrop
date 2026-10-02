@@ -115,33 +115,7 @@ impl Engine {
     }
 
     pub async fn pump_transfer_queue(&self) {
-        let to_start = {
-            let mgr = self.shared.file_transfers.lock().await;
-            mgr.get_inbound_to_start(5) // Max 5 active inbound transfers
-        };
-
-        for (tid, peer_id) in to_start {
-            let resume_from = {
-                let session = self.shared.peer_manager.live_session_id(peer_id);
-                let mut mgr = self.shared.file_transfers.lock().await;
-                mgr.accept_inbound_or_resume(&tid, session).unwrap_or(0)
-            };
-
-            let accept_msg = AppMessage::FileTransferAccept {
-                transfer_id: tid,
-                accepted: true,
-                resume_from_chunk: resume_from,
-                reject_reason: None,
-            };
-
-            let peers = self.shared.peer_manager.all_trusted_senders();
-            for (p_id, tx) in peers {
-                if p_id == peer_id {
-                    let _ = tx.try_send(accept_msg.clone());
-                    break;
-                }
-            }
-        }
+        pump_transfer_queue(&self.shared).await;
     }
 
     pub(super) async fn announce_outbound_file_transfer(
@@ -439,31 +413,56 @@ impl Engine {
 }
 
 pub(crate) async fn pump_transfer_queue(shared: &EngineShared) {
-    let to_start = {
-        let mgr = shared.file_transfers.lock().await;
+    // Choose and accept under one lock. Pumps run concurrently (every
+    // announce and completion starts one); choosing under one lock and
+    // accepting under another let two pumps pick the same queued transfer,
+    // so the sender got two accepts and sent the file twice, and the
+    // second copy failed ("transfer not found", "missing chunks").
+    let started: Vec<([u8; 16], Uuid, Result<u32>)> = {
+        let mut mgr = shared.file_transfers.lock().await;
         mgr.get_inbound_to_start(5) // Max 5 active inbound transfers
+            .into_iter()
+            .map(|(tid, peer_id)| {
+                let session = shared.peer_manager.live_session_id(peer_id);
+                (tid, peer_id, mgr.accept_inbound_or_resume(&tid, session))
+            })
+            .collect()
     };
 
-    for (tid, peer_id) in to_start {
-        let resume_from = {
-            let session = shared.peer_manager.live_session_id(peer_id);
-            let mut mgr = shared.file_transfers.lock().await;
-            mgr.accept_inbound_or_resume(&tid, session).unwrap_or(0)
-        };
-
-        let accept_msg = AppMessage::FileTransferAccept {
-            transfer_id: tid,
-            accepted: true,
-            resume_from_chunk: resume_from,
-            reject_reason: None,
-        };
-
-        let peers = shared.peer_manager.all_trusted_senders();
-        for (p_id, tx) in peers {
-            if p_id == peer_id {
-                let _ = tx.try_send(accept_msg.clone());
-                break;
+    for (tid, peer_id, accepted) in started {
+        let accept_msg = match accepted {
+            Ok(resume_from) => AppMessage::FileTransferAccept {
+                transfer_id: tid,
+                accepted: true,
+                resume_from_chunk: resume_from,
+                reject_reason: None,
+            },
+            // No disk space, cannot create the file: tell the sender now
+            // instead of accepting a transfer that can never be written.
+            Err(e) => {
+                shared
+                    .file_transfers
+                    .lock()
+                    .await
+                    .cancel_inbound(&tid, &e.to_string());
+                let _ = shared
+                    .event_tx
+                    .send(EngineEvent::FileTransferFailed {
+                        transfer_id: tid,
+                        from_device: peer_id,
+                        reason: e.to_string(),
+                    })
+                    .await;
+                AppMessage::FileTransferAccept {
+                    transfer_id: tid,
+                    accepted: false,
+                    resume_from_chunk: 0,
+                    reject_reason: Some(e.to_string()),
+                }
             }
+        };
+        if let Some(tx) = shared.peer_manager.sender(peer_id) {
+            let _ = tx.try_send(accept_msg);
         }
     }
 }
