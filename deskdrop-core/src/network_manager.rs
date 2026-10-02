@@ -170,16 +170,20 @@ pub fn detect_change(
     }
 }
 
+/// Watches the network and reports changes. Returns the change stream and
+/// a hint sender: a host that hears about a change first (Android's
+/// connectivity callback) sends on it to re-check now instead of at the
+/// next poll.
 pub fn spawn_network_monitor(
     bind_ip: Option<IpAddr>,
     port: u16,
     poll_interval: Duration,
-) -> Result<mpsc::Receiver<NetworkChangeEvent>> {
+) -> Result<(mpsc::Receiver<NetworkChangeEvent>, mpsc::Sender<()>)> {
     let mut previous = resolve_snapshot(bind_ip, port)?;
     let (change_tx, change_rx) = mpsc::channel(16);
     let (hint_tx, mut hint_rx) = mpsc::channel::<()>(16);
 
-    spawn_platform_change_hints(hint_tx);
+    spawn_platform_change_hints(hint_tx.clone());
 
     tokio::spawn(async move {
         let mut poll = tokio::time::interval(poll_interval);
@@ -212,7 +216,7 @@ pub fn spawn_network_monitor(
         }
     });
 
-    Ok(change_rx)
+    Ok((change_rx, hint_tx))
 }
 
 fn detect_primary_outbound_ip() -> Result<IpAddr> {
