@@ -61,6 +61,9 @@ struct IpcFolderProgress: Codable, Equatable {
     let done_count: Int
     let failed_count: Int
     let outbound: Bool
+    /// Whole folder done, 0...1, counting the bytes of files in flight.
+    let progress: Double?
+    let speed_bps: Int64?
 }
 
 struct IpcHealthIssue: Codable, Equatable, Identifiable {

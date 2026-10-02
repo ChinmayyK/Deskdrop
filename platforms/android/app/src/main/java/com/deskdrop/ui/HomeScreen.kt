@@ -124,13 +124,15 @@ fun HomeTab(
     // accepting theirs settles both.
     val pairingRequest = peers.firstOrNull { it.pairingRequested && !it.trusted }
     val outgoingRequest = peers.firstOrNull { it.outgoingPairingWaiting && !it.trusted }
-    val liveTransfer = activeTransfers.firstOrNull { !it.isPaused && it.state == TransferState.PROGRESS }
+    var sendFolder by remember { mutableStateOf(false) }
     var sendTargetChoices by remember { mutableStateOf<List<PeerSnapshot>?>(null) }
 
-    val sendFiles = {
-        // With several devices connected, ask which one gets the files
-        // instead of silently sending to all of them.
+    // Files & folders: with several devices connected, ask which one gets
+    // them instead of sending to all of them.
+    val startSend = { folder: Boolean ->
+        sendFolder = folder
         if (connected.size > 1) sendTargetChoices = connected
+        else if (folder) onActionSendFolder(connected.firstOrNull()?.id)
         else onActionSendFiles(connected.firstOrNull()?.id)
     }
 
@@ -140,14 +142,18 @@ fun HomeTab(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = PageGutter)
     ) {
+        // This phone's identity and link state. Peer names live in the
+        // device list and transfer rows, not up here.
         HomeTopBar(
             c = c,
             deviceName = deviceName,
+            connected = connected,
+            hasPeers = peers.isNotEmpty(),
             onScanQr = onActionPairMagicLink,
             onManualIp = onManualIp
         )
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
 
         if (pairingRequest != null) {
             PairingPanel(c, pairingRequest, onRespondPairing)
@@ -158,20 +164,33 @@ fun HomeTab(
                 HealthBanner(c, healthIssue, onHealthAction)
                 Spacer(Modifier.height(20.dp))
             }
-            StatusBlock(
-                c = c,
-                hasPeers = peers.isNotEmpty(),
-                connected = connected,
-                tagline = DeskdropTaglines.current(connectedCount = connected.size, isTransferring = liveTransfer != null),
-                onAddDevice = onReplayOnboarding
-            )
+            if (connected.isEmpty()) {
+                StatusBlock(c = c, hasPeers = peers.isNotEmpty(), onAddDevice = onReplayOnboarding)
+            }
         }
 
         if (peers.isNotEmpty()) {
             val enabled = connected.isNotEmpty()
             SectionHeader(c, "Send", if (enabled) null else "Connect a device first")
             Panel(c) {
-                ActionRow(c, Icons.Outlined.UploadFile, "Files", "Photos, documents, anything", enabled = enabled, onClick = sendFiles)
+                // Android's pickers choose files or one folder, never both, so
+                // the row opens the file picker and its folder button the
+                // folder picker: no extra question in between.
+                ActionRow(
+                    c, Icons.Outlined.UploadFile, "Files & folders", "Send files or entire folders",
+                    enabled = enabled,
+                    onClick = { startSend(false) },
+                    trailing = {
+                        IconButton(onClick = { startSend(true) }, enabled = enabled) {
+                            Icon(
+                                Icons.Outlined.DriveFolderUpload,
+                                contentDescription = "Send a folder",
+                                tint = c.accent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                )
                 Hairline(c)
                 val clip = quickContextText?.trim()?.replace('\n', ' ')?.takeIf { it.isNotBlank() }
                 ActionRow(
@@ -182,7 +201,7 @@ fun HomeTab(
                     onClick = if (clip == null) onActionPushClipboard else onActionSendQuickContext
                 )
                 Hairline(c)
-                ActionRow(c, Icons.Outlined.Videocam, "Camera", "Stream this camera to your computer", enabled = enabled, onClick = onActionStreamCamera)
+                ActionRow(c, Icons.Outlined.Videocam, "Camera", "Stream this camera to a device", enabled = enabled, onClick = onActionStreamCamera)
             }
         }
 
@@ -204,7 +223,7 @@ fun HomeTab(
 
         val listed = peers.filter { it.isListable }
         if (listed.isNotEmpty()) {
-            SectionHeader(c, "Devices", "${connected.size} of ${listed.size} online") {
+            SectionHeader(c, "Your devices", "${connected.size} of ${listed.size} online") {
                 onTabSelected(AppTab.Devices)
             }
             Panel(c) {
@@ -254,7 +273,7 @@ fun HomeTab(
             peers = choices,
             onPick = { target ->
                 sendTargetChoices = null
-                onActionSendFiles(target)
+                if (sendFolder) onActionSendFolder(target) else onActionSendFiles(target)
             },
             onDismiss = { sendTargetChoices = null }
         )
@@ -265,22 +284,50 @@ fun HomeTab(
 private fun HomeTopBar(
     c: DdColors,
     deviceName: String,
+    connected: List<PeerSnapshot>,
+    hasPeers: Boolean,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // No app name: the launcher already says it. This phone's name is what
-        // other devices list it as when pairing, so that is what's worth showing.
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            if (deviceName.isNotBlank()) {
-                Text("Visible as ", style = DdType.small, color = c.textMuted, maxLines = 1)
-                Text(deviceName, style = DdType.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // No app name: the launcher already says it. This phone's name is what
+            // other devices list it as when pairing, so that is what's worth showing.
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                if (deviceName.isNotBlank()) {
+                    Text("Visible as ", style = DdType.small, color = c.textMuted, maxLines = 1)
+                    Text(deviceName, style = DdType.title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
+            AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
         }
-        AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
+        if (hasPeers) {
+            Spacer(Modifier.height(6.dp))
+            LinkStatusLine(c, connected)
+        }
+    }
+}
+
+/** "● Connected  192.168.1.20 · synced 1h ago", or "○ Not connected". */
+@Composable
+private fun LinkStatusLine(c: DdColors, connected: List<PeerSnapshot>) {
+    val lead = connected.firstOrNull()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (lead != null) {
+            Box(Modifier.size(8.dp).background(c.live, CircleShape))
+            Spacer(Modifier.width(8.dp))
+            Text("Connected", style = DdType.label, color = c.live, maxLines = 1)
+            val synced = agoLabel(connected.mapNotNull { it.lastSyncSecs }.maxOrNull())
+            val meta = listOfNotNull(lead.ip, synced?.let { "synced $it" }).joinToString("  ·  ")
+            if (meta.isNotEmpty()) {
+                Spacer(Modifier.width(10.dp))
+                Text(meta, style = DdType.mono, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        } else {
+            Box(Modifier.size(8.dp).border(1.5.dp, c.textMuted, CircleShape))
+            Spacer(Modifier.width(8.dp))
+            Text("Not connected", style = DdType.label, color = c.textMuted, maxLines = 1)
+        }
     }
 }
 
@@ -312,60 +359,30 @@ internal fun healthActionLabel(kind: String): String? = when (kind) {
     else -> null
 }
 
+/** Nothing connected: how this phone reconnects, or how to link it. */
 @Composable
 private fun StatusBlock(
     c: DdColors,
     hasPeers: Boolean,
-    connected: List<PeerSnapshot>,
-    tagline: String,
     onAddDevice: () -> Unit
 ) {
-    val lead = connected.firstOrNull()
     Column(Modifier.fillMaxWidth()) {
-        when {
-            lead != null -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).background(c.live, CircleShape))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Connected", style = DdType.label, color = c.live)
-                    val synced = agoLabel(connected.mapNotNull { it.lastSyncSecs }.maxOrNull())
-                    val meta = listOfNotNull(lead.ip, synced?.let { "synced $it" }).joinToString("  ·  ")
-                    if (meta.isNotEmpty()) {
-                        Spacer(Modifier.width(10.dp))
-                        Text(meta, style = DdType.mono, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(linkedHeadline(connected), style = DdType.display, color = c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(6.dp))
-                Text(tagline, style = DdType.body, color = c.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            hasPeers -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).border(1.5.dp, c.textMuted, CircleShape))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Not connected", style = DdType.label, color = c.textMuted)
-                }
-                Spacer(Modifier.height(10.dp))
-                Text("Waiting for your computer", style = DdType.display, color = c.text)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Paired devices reconnect on their own when they're on the same Wi-Fi or hotspot.",
-                    style = DdType.body,
-                    color = c.textMuted
-                )
-            }
-            else -> {
-                Text("Link this phone to your computer", style = DdType.display, color = c.text)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Share your clipboard and send files over your own network. Nothing goes through a cloud.",
-                    style = DdType.body,
-                    color = c.textMuted
-                )
-                Spacer(Modifier.height(20.dp))
-                PillButton(c, "Pair a device", filled = true, onClick = onAddDevice)
-            }
+        if (hasPeers) {
+            Text(
+                "Paired devices reconnect on their own when they're on the same Wi-Fi or hotspot.",
+                style = DdType.body,
+                color = c.textMuted
+            )
+        } else {
+            Text("Link this phone to your computer", style = DdType.display, color = c.text)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Share your clipboard and send files over your own network. Nothing goes through a cloud.",
+                style = DdType.body,
+                color = c.textMuted
+            )
+            Spacer(Modifier.height(20.dp))
+            PillButton(c, "Pair a device", filled = true, onClick = onAddDevice)
         }
     }
 }
@@ -458,11 +475,6 @@ internal fun pairingWaitingLabel(peer: PeerSnapshot): String =
     peer.pairingPin?.let { "Accept on ${peer.name} · code $it" } ?: "Waiting for ${peer.name}"
 
 
-private fun linkedHeadline(connected: List<PeerSnapshot>): String = when (connected.size) {
-    1 -> connected[0].name
-    2 -> "${connected[0].name} & ${connected[1].name}"
-    else -> "${connected.size} devices"
-}
 
 
 @Composable
@@ -473,7 +485,8 @@ private fun ActionRow(
     detail: String,
     detailIsContent: Boolean = false,
     enabled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null
 ) {
     val haptic = LocalHapticFeedback.current
     Row(
@@ -505,7 +518,8 @@ private fun ActionRow(
             )
         }
         Spacer(Modifier.width(8.dp))
-        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
+        if (trailing != null) trailing()
+        else Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -559,13 +573,16 @@ private fun TransferRow(
                 )
             }
             Text("${(animated * 100).toInt()}%", style = DdType.mono, color = c.text)
-            IconButton(onClick = if (transfer.isPaused) onResume else onPause) {
-                Icon(
-                    if (transfer.isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
-                    contentDescription = if (transfer.isPaused) "Resume" else "Pause",
-                    tint = c.text,
-                    modifier = Modifier.size(20.dp)
-                )
+            // A folder pauses file by file in the engine; offer only Cancel.
+            if (!transfer.id.startsWith(com.deskdrop.DeskdropService.FOLDER_ROW_PREFIX)) {
+                IconButton(onClick = if (transfer.isPaused) onResume else onPause) {
+                    Icon(
+                        if (transfer.isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                        contentDescription = if (transfer.isPaused) "Resume" else "Pause",
+                        tint = c.text,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
             IconButton(onClick = onCancel) {
                 Icon(Icons.Rounded.Close, contentDescription = "Cancel", tint = c.textMuted, modifier = Modifier.size(20.dp))

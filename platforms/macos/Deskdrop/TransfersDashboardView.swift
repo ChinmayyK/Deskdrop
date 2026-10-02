@@ -179,6 +179,7 @@ struct ActiveTransferCard: View {
     }
     
     var sizeText: String {
+        if transfer.isDirectory { return transfer.itemLabel }
         let mbTotal = Double(transfer.totalBytes) / 1_048_576.0
         let mbRecv = Double(transfer.bytesReceived) / 1_048_576.0
         
@@ -196,6 +197,8 @@ struct ActiveTransferCard: View {
     }
     
     var percentText: String {
+        // A folder's bytes in flight say nothing about the whole folder.
+        if transfer.isDirectory { return transfer.exactPercentString }
         if transfer.totalBytes > 0 {
             let ratio = max(0, min(1, Double(transfer.bytesReceived) / Double(transfer.totalBytes)))
             return String(format: "%.1f%%", ratio * 100.0)

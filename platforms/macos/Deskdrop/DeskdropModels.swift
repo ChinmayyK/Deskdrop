@@ -185,6 +185,8 @@ struct FileTransferState: Identifiable, Equatable {
     var batchId: String? = nil
     /// Files of a folder already done; nil for single files.
     var doneCount: Int? = nil
+    /// Whole folder done, 0...1, from the engine; nil for single files.
+    var folderRatio: Double? = nil
     
     var bytesReceived: Int64 = 0
     var percent: Int = 0
@@ -195,6 +197,9 @@ struct FileTransferState: Identifiable, Equatable {
     var exactRatio: Double {
         // Only a few files of a folder are in flight at once, so a folder's
         // progress is files done, not bytes of the files in flight.
+        if isDirectory, let ratio = folderRatio {
+            return min(1.0, max(0.0, ratio))
+        }
         if isDirectory, let done = doneCount, itemCount > 0 {
             return min(1.0, Double(done) / Double(itemCount))
         }

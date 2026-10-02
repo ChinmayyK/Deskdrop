@@ -363,6 +363,78 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
+        // ---- Home: Send section and transfer rows ----
+
+        private async void OnHomeSendFilesClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync(this.XamlRoot, mgr.ConnectedPeers);
+                if (target == null) return; // user cancelled
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
+                picker.FileTypeFilter.Add("*");
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads;
+                var files = await picker.PickMultipleFilesAsync();
+                if (files == null || files.Count == 0) return;
+                foreach (var file in files)
+                {
+                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target.DeviceId;
+                    DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
+                }
+            }
+            catch (System.Exception ex) { App.HandleError(ex); }
+        }
+
+        private async void OnHomeSendFolderClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync(this.XamlRoot, mgr.ConnectedPeers);
+                if (target == null) return; // user cancelled
+                await SendFolderAsync(target.DeviceId);
+            }
+            catch (System.Exception ex) { App.HandleError(ex); }
+        }
+
+        private async void OnSendFolderToDeviceClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not PeerViewModel peer) return;
+            try { await SendFolderAsync(peer.device_id); }
+            catch (System.Exception ex) { App.HandleError(ex); }
+        }
+
+        private static async System.Threading.Tasks.Task SendFolderAsync(string? targetId)
+        {
+            var picker = new Windows.Storage.Pickers.FolderPicker();
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
+            picker.FileTypeFilter.Add("*");
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder == null) return;
+            var path = folder.Path;
+            DaemonActions.RunFireAndForget("Send Folder", () => DaemonClient.SendFolder(path, targetId));
+        }
+
+        private async void OnHomeSendClipboardClicked(object sender, RoutedEventArgs e)
+        {
+            try { await Deskdrop.WinUI.Services.ClipboardManager.SendLocalClipboardAsync(this.XamlRoot); }
+            catch (System.Exception ex) { App.HandleError(ex); }
+        }
+
+        private async void OnHomeBrowseClicked(object sender, RoutedEventArgs e)
+        {
+            var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(this.XamlRoot, mgr.ConnectedPeers);
+            if (target == null) return;
+            mgr.SelectedPeer = target;
+            DashboardWindow.Current?.NavigateTo("DevicePeer");
+        }
+
+        private void OnHomeCancelTransferClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is FileTransferState transfer)
+                mgr.CancelTransfer(transfer);
+        }
+
         private void OnTransferFilesTapped(object sender, RoutedEventArgs e)
         {
             DashboardWindow.Current?.NavigateTo("Transfers");

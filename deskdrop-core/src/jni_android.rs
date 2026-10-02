@@ -1975,7 +1975,8 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_foldersJson(
         return std::ptr::null_mut();
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
-    let json = serde_json::to_string(&h.engine.folders()).unwrap_or_else(|_| "[]".to_string());
+    let json = serde_json::to_string(&rt().block_on(h.engine.folders()))
+        .unwrap_or_else(|_| "[]".to_string());
     match env.new_string(json) {
         Ok(s) => s.into_raw(),
         Err(_) => std::ptr::null_mut(),

@@ -37,6 +37,11 @@ pub struct FolderProgress {
     pub done_count: u32,
     pub failed_count: u32,
     pub outbound: bool,
+    /// Whole folder done, 0..1: finished files plus the done part of the
+    /// files in flight, so big files move the bar while they travel.
+    pub progress: f64,
+    /// Combined speed of the files in flight, bytes per second.
+    pub speed_bps: u64,
 }
 
 /// One file of a folder, for `Engine::send_folder_item`.
@@ -72,9 +77,25 @@ pub(crate) struct FolderTallies {
 
 impl FolderTallies {
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn track(
         &mut self,
         transfer_id: [u8; 16],
+        batch_id: &str,
+        folder_name: &str,
+        total: u32,
+        peer_id: Uuid,
+        peer_name: &str,
+        outbound: bool,
+    ) {
+        self.begin(batch_id, folder_name, total, peer_id, peer_name, outbound);
+        self.items.insert(transfer_id, batch_id.to_string());
+    }
+
+    /// Start counting a folder, before any of its files is sent, so status
+    /// lists it at once with its full file count.
+    pub(crate) fn begin(
+        &mut self,
         batch_id: &str,
         folder_name: &str,
         total: u32,
@@ -108,7 +129,6 @@ impl FolderTallies {
                 },
             );
         }
-        self.items.insert(transfer_id, batch_id.to_string());
     }
 
     /// Count a file result, marking a failure as a folder item. Returns
@@ -194,6 +214,8 @@ impl FolderTallies {
                 done_count: t.done,
                 failed_count: t.failed,
                 outbound: t.outbound,
+                progress: (t.done + t.failed) as f64 / t.total.max(1) as f64,
+                speed_bps: 0,
             })
             .collect();
         out.sort_by(|a, b| a.batch_id.cmp(&b.batch_id));
@@ -330,8 +352,16 @@ pub(crate) fn incoming_folder(meta: &FileTransferMetadata) -> Option<(String, St
 
 impl Engine {
     /// Folder transfers in flight, in both directions.
-    pub fn folders(&self) -> Vec<FolderProgress> {
-        self.shared.folders.lock().unwrap().progress()
+    pub async fn folders(&self) -> Vec<FolderProgress> {
+        let mut folders = self.shared.folders.lock().unwrap().progress();
+        let mgr = self.shared.file_transfers.lock().await;
+        for f in &mut folders {
+            let (in_flight, speed) = mgr.folder_in_flight(&f.batch_id);
+            let finished = (f.done_count + f.failed_count) as f64;
+            f.progress = ((finished + in_flight) / f.file_count.max(1) as f64).min(1.0);
+            f.speed_bps = speed;
+        }
+        folders
     }
 
     /// Send a folder and everything in it, a few files at a time, in the
@@ -347,6 +377,15 @@ impl Engine {
             file_count: files.len() as u32,
             total_bytes: files.iter().map(|(_, _, size)| size).sum(),
         };
+        let (peer_id, peer_name) = self.target_label(target);
+        self.shared.folders.lock().unwrap().begin(
+            &summary.batch_id,
+            &summary.folder_name,
+            summary.file_count,
+            peer_id,
+            &peer_name,
+            true,
+        );
         let engine = self.clone();
         let send = summary.clone();
         tokio::spawn(async move {
@@ -409,17 +448,7 @@ impl Engine {
                 file_count,
             )
             .await?;
-        let (peer_id, peer_name) = match target {
-            Some(id) => (
-                id,
-                self.shared
-                    .peer_manager
-                    .get(id)
-                    .map(|p| p.friendly_name)
-                    .unwrap_or_else(|| "device".into()),
-            ),
-            None => (Uuid::nil(), "your devices".into()),
-        };
+        let (peer_id, peer_name) = self.target_label(target);
         self.shared.folders.lock().unwrap().track(
             transfer_id,
             batch_id,
@@ -499,6 +528,20 @@ impl Engine {
                 anyhow::bail!("the device disconnected");
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    }
+
+    fn target_label(&self, target: Option<Uuid>) -> (Uuid, String) {
+        match target {
+            Some(id) => (
+                id,
+                self.shared
+                    .peer_manager
+                    .get(id)
+                    .map(|p| p.friendly_name)
+                    .unwrap_or_else(|| "device".into()),
+            ),
+            None => (Uuid::nil(), "your devices".into()),
         }
     }
 

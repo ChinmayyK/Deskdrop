@@ -38,7 +38,7 @@ struct DevicesSectionView: View {
             }
             .padding(.horizontal, 20).padding(.bottom, 24)
         }
-        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item, .folder], allowsMultipleSelection: true) { result in
             if case let .success(urls) = result {
                 store.sendFiles(urls: urls, to: pendingFileTarget)
                 pendingFileTarget = nil
@@ -261,16 +261,16 @@ struct FileShareCard: View {
                     }
                     .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                 } else {
-                    Button("Send File") { chooseTarget(nil) }
+                    Button("Send Files & Folders") { chooseTarget(nil) }
                         .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
                 }
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("Quick File Transfer")
+                Text("Files & Folders")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(CRTheme.ink)
-                Text("Push documents, images, and clipboard content directly across your encrypted local network without cloud limits.")
+                Text("Send files or entire folders, and your clipboard, straight across your local network. Nothing goes through a cloud.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(CRTheme.inkSoft)
                     .lineSpacing(2)
@@ -446,7 +446,7 @@ struct DeviceCentricDashboardView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
-        .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item, .folder], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
                 store.sendFiles(urls: urls, to: pendingFileTarget)
                 pendingFileTarget = nil
@@ -591,7 +591,7 @@ struct CompactDeviceCard: View {
                             ModernDeviceCardButton(
                                 icon: "folder.fill",
                                 color: CRTheme.brandElectric,
-                                help: "Send Files",
+                                help: "Send files or folders",
                                 action: onSendFiles
                             )
                             

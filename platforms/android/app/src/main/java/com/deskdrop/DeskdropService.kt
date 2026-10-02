@@ -1434,7 +1434,7 @@ class DeskdropService : Service() {
                 }
                 
                 if (DeskdropJni.eventTransferInFolder(ev)) {
-                    onFolderItemProgress(name, isOutbound, peerName, speedBps)
+                    onFolderItemProgress(name, isOutbound, peerName)
                     return
                 }
 
@@ -1478,6 +1478,7 @@ class DeskdropService : Service() {
                     }
                     TransferManager.activeTransfers.remove(tid)
                     TransferManager.pendingOutboundTransferIds.remove(tid)
+                    onFolderItemProgress(fileName, destPath.isEmpty(), from, force = true)
                     return
                 }
                 
@@ -2729,6 +2730,9 @@ class DeskdropService : Service() {
         val fileCount: Int,
         val finished: Int,
         val outbound: Boolean,
+        /** Whole folder done, 0..1, counting bytes of files in flight. */
+        val progress: Double,
+        val speedBps: Long,
     )
 
     private fun foldersInFlight(): List<FolderInFlight> {
@@ -2744,6 +2748,8 @@ class DeskdropService : Service() {
                     fileCount = o.optInt("file_count", 1),
                     finished = o.optInt("done_count") + o.optInt("failed_count"),
                     outbound = o.optBoolean("outbound"),
+                    progress = o.optDouble("progress", 0.0),
+                    speedBps = o.optLong("speed_bps"),
                 )
             }
         }.getOrDefault(emptyList())
@@ -2760,18 +2766,32 @@ class DeskdropService : Service() {
         return true
     }
 
-    private fun onFolderItemProgress(fileName: String, isOutbound: Boolean, peerName: String, speedBps: Long) {
+    private val lastFolderRefreshMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * Refresh a folder's row and notification from the engine. Called on
+     * its files' progress (rate-limited) and whenever one finishes (always),
+     * so the count never lags behind the other device.
+     */
+    private fun onFolderItemProgress(fileName: String, isOutbound: Boolean, peerName: String, force: Boolean = false) {
         val top = fileName.substringBefore('/')
+        val key = "$top/$isOutbound"
+        val nowMs = android.os.SystemClock.elapsedRealtime()
+        if (!force && nowMs - (lastFolderRefreshMs[key] ?: 0L) < 250L) return
+        lastFolderRefreshMs[key] = nowMs
         val folder = foldersInFlight().firstOrNull { it.name == top && it.outbound == isOutbound } ?: return
         val rowId = FOLDER_ROW_PREFIX + folder.batchId
-        val percent = if (folder.fileCount > 0) folder.finished * 100 / folder.fileCount else 0
+        val percent = (folder.progress * 100).toInt().coerceIn(0, 100)
+        val speedBps = folder.speedBps
         val noun = if (folder.fileCount == 1) "file" else "files"
         TransferManager.activeTransfers[rowId] = TransferProgress(
             id = rowId,
             fileName = "${folder.name} · ${folder.finished} of ${folder.fileCount} $noun",
+            // No byte totals: the row's bar then follows `percent`, the
+            // engine's whole-folder progress.
             percent = percent,
-            bytesReceived = folder.finished.toLong(),
-            totalBytes = folder.fileCount.toLong(),
+            bytesReceived = 0,
+            totalBytes = 0,
             speedBps = speedBps,
             etaSecs = 0,
             state = TransferState.PROGRESS,
@@ -2780,7 +2800,7 @@ class DeskdropService : Service() {
         )
         TransferManager.publishActiveTransfers()
         val now = System.currentTimeMillis()
-        if (now - (lastTransferNotifTimes[rowId] ?: 0L) < 500L) return
+        if (!force && now - (lastTransferNotifTimes[rowId] ?: 0L) < 500L) return
         lastTransferNotifTimes[rowId] = now
         val cancelPi = PendingIntent.getService(this, rowId.hashCode() + 2,
             Intent(ACTION_CANCEL_FILE_TRANSFER).apply {
@@ -2790,8 +2810,8 @@ class DeskdropService : Service() {
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(if (isOutbound) "Sending ${folder.name}" else "Receiving ${folder.name}")
-            .setContentText("${folder.finished} of ${folder.fileCount} $noun")
-            .setProgress(folder.fileCount, folder.finished, false)
+            .setContentText("${folder.finished} of ${folder.fileCount} $noun · $percent%")
+            .setProgress(100, percent, false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPi)

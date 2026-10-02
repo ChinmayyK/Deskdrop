@@ -66,6 +66,8 @@ final class DeskdropStore: ObservableObject {
                         initial.fileName = folder.folder_name
                         initial.itemCount = folder.file_count
                         initial.doneCount = folder.done_count + folder.failed_count
+                        initial.folderRatio = folder.progress
+                        if let speed = folder.speed_bps { initial.speedBps = speed }
                     }
                     batches[bid] = initial
                 }
@@ -703,6 +705,41 @@ final class DeskdropStore: ObservableObject {
         }
     }
     
+    /// Send what this Mac last copied to the default device (all devices
+    /// when there is none), with a toast saying how it went.
+    func pushCurrentClipboard() {
+        guard connectedCount > 0 else {
+            showToast(
+                title: "No Devices Connected",
+                body: "Connect a device to push clipboard.",
+                tint: CRTheme.inkSoft,
+                systemImage: "wifi.slash",
+                ttl: 2.5
+            )
+            return
+        }
+        Task {
+            do {
+                try await ipc.sendClipboardCurrent(targetDeviceId: defaultTargetDevice?.id)
+                showToast(
+                    title: "Clipboard Synced",
+                    body: "Pushed to all connected devices.",
+                    tint: CRTheme.accentGreen,
+                    systemImage: "arrow.up.circle.fill",
+                    ttl: 2.0
+                )
+            } catch {
+                showToast(
+                    title: "Sync Failed",
+                    body: error.localizedDescription,
+                    tint: Color.red,
+                    systemImage: "exclamationmark.triangle",
+                    ttl: 3.0
+                )
+            }
+        }
+    }
+
     /// Send files when the caller has no specific device in mind. With one
     /// connected device the files go straight to it; with several the user
     /// picks one device (or all). Returns false when nothing was sent.

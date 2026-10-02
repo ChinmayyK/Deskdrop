@@ -33,7 +33,7 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         switch self {
         case .devices:       return "Overview"
         case .clipboard:     return "Activity"
-        case .transfers:     return "Files"
+        case .transfers:     return "Files & Folders"
         case .settings:      return "Configuration"
         }
     }

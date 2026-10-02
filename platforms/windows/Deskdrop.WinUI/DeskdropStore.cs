@@ -275,6 +275,8 @@ namespace Deskdrop.WinUI
         public bool explicit_disconnect { get => _explicit_disconnect; set { if(SetProperty(ref _explicit_disconnect, value)) NotifyPeerStateProperties(); } }
         private ulong? _last_seen;
         public ulong? last_seen { get => _last_seen; set { if (SetProperty(ref _last_seen, value)) OnPropertyChanged(nameof(LastSeenText)); } }
+        // Unix seconds of the last clipboard sync with this device.
+        public ulong? last_sync { get; set; }
         private string? _last_error;
         public string? last_error { get => _last_error; set { if (SetProperty(ref _last_error, value)) OnPropertyChanged(nameof(HasError)); } }
         private List<string> _ips = new();
@@ -595,6 +597,10 @@ namespace Deskdrop.WinUI
         private int? _done_count;
         [JsonIgnore]
         public int? DoneCount { get => _done_count; set { if (SetProperty(ref _done_count, value)) NotifyProgressProperties(); } }
+        // Whole folder done, 0..1, counting bytes of files in flight.
+        private double? _folder_progress;
+        [JsonIgnore]
+        public double? FolderProgress { get => _folder_progress; set { if (SetProperty(ref _folder_progress, value)) NotifyProgressProperties(); } }
         [JsonIgnore]
         public string? FirstItemId { get; set; }
         [JsonIgnore]
@@ -612,7 +618,9 @@ namespace Deskdrop.WinUI
         public bool IsDirectory => is_directory;
         public int ItemCount => item_count;
         // A folder's progress is files done: only a few are in flight at once.
-        public double PercentFloat => DoneCount is int done && item_count > 0
+        public double PercentFloat => FolderProgress is double p
+            ? Math.Clamp(p * 100, 0, 100)
+            : DoneCount is int done && item_count > 0
             ? Math.Min(100.0, (double)done / item_count * 100)
             : bytes_total > 0 ? ((double)bytes_received / bytes_total * 100) : 100.0;
         // JsonIgnore: "Percent"/"percent" collide under case-insensitive
@@ -1145,9 +1153,9 @@ namespace Deskdrop.WinUI
 
         public int PeerCount => Peers?.Count ?? 0;
         public bool HasPeers => Peers != null && Peers.Count > 0;
+        public bool HasConnectedPeers => ConnectedCount > 0;
         public bool HasNoPeers => !HasPeers;
         public int ConnectedCount => Peers?.Count(p => p.IsConnected) ?? 0;
-        public string HeroTagline => Deskdrop.WinUI.Services.DeskdropTaglines.Current(ConnectedCount, HasActiveTransfers);
         public int TrustedCount => Peers?.Count(p => p.is_trusted) ?? 0;
         public int AttentionCount => Peers?.Count(p => !p.is_trusted || p.pairingRequested || p.outgoingPairingWaiting) ?? 0;
         public int ActivityCount => ActivityFeed?.Count ?? 0;
@@ -1251,9 +1259,34 @@ namespace Deskdrop.WinUI
             get
             {
                 if (!IsDaemonRunning) return "Engine stopped";
-                if (ConnectedCount > 0) return $"{ConnectedCount} connected";
+                if (ConnectedCount > 0) return "Connected";
                 if (AttentionCount > 0) return "Ready to pair";
                 return "Looking for devices";
+            }
+        }
+
+        // This PC's name as other devices list it, for "Visible as".
+        private string _localDeviceName = Environment.MachineName;
+        public string LocalDeviceName
+        {
+            get => _localDeviceName;
+            private set => SetProperty(ref _localDeviceName, value);
+        }
+
+        // "192.168.1.20  ·  synced 1h ago" beside the status in the header.
+        public string IdentityMetaText
+        {
+            get
+            {
+                var connected = Peers?.Where(p => p.is_trusted && p.IsConnected).ToList() ?? new List<PeerViewModel>();
+                var lead = connected.FirstOrDefault();
+                if (lead == null) return "";
+                var synced = connected.Max(p => p.last_sync);
+                return string.Join("  ·  ", new[]
+                {
+                    string.IsNullOrEmpty(lead.PrimaryIpText) ? null : lead.PrimaryIpText,
+                    synced.HasValue ? $"synced {DeskdropFormatting.RelativeTimeFromUnixSeconds(synced.Value)}" : null,
+                }.Where(part => part != null));
             }
         }
 
@@ -1417,7 +1450,7 @@ namespace Deskdrop.WinUI
         // Each folder in flight is one row: its files' rows merge into it.
         private static List<FileTransferState> GroupFolders(List<FileTransferState> transfers, JsonElement status)
         {
-            var folders = new Dictionary<string, (string name, int total, int done)>();
+            var folders = new Dictionary<string, (string name, int total, int done, double? progress, long? speed)>();
             if (status.TryGetProperty("folders", out var f) && f.ValueKind == JsonValueKind.Array)
             {
                 foreach (var folder in f.EnumerateArray())
@@ -1428,7 +1461,9 @@ namespace Deskdrop.WinUI
                         folder.TryGetProperty("folder_name", out var n) ? n.GetString() ?? "Folder" : "Folder",
                         folder.TryGetProperty("file_count", out var c) ? c.GetInt32() : 1,
                         (folder.TryGetProperty("done_count", out var d) ? d.GetInt32() : 0)
-                            + (folder.TryGetProperty("failed_count", out var x) ? x.GetInt32() : 0));
+                            + (folder.TryGetProperty("failed_count", out var x) ? x.GetInt32() : 0),
+                        folder.TryGetProperty("progress", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDouble() : null,
+                        folder.TryGetProperty("speed_bps", out var sp) && sp.ValueKind == JsonValueKind.Number ? sp.GetInt64() : null);
                 }
             }
             var rows = new List<FileTransferState>();
@@ -1440,12 +1475,14 @@ namespace Deskdrop.WinUI
                 {
                     row.bytes_received += t.bytes_received;
                     row.bytes_total += t.bytes_total;
-                    row.speed_bps = (row.speed_bps ?? 0) + (t.speed_bps ?? 0);
+                    if (!row.FolderProgress.HasValue) row.speed_bps = (row.speed_bps ?? 0) + (t.speed_bps ?? 0);
                     // Waiting for an answer wins: the row must offer Accept.
                     if (t.status == "incoming") { row.status = t.status; row.FirstItemId = t.transfer_id; }
                     continue;
                 }
-                var info = folders.TryGetValue(t.batch_id, out var i) ? i : (t.file_name.Split('/')[0], t.item_count, 0);
+                var info = folders.TryGetValue(t.batch_id, out var i)
+                    ? i
+                    : (t.file_name.Split('/')[0], t.item_count, 0, (double?)null, (long?)null);
                 row = new FileTransferState
                 {
                     transfer_id = "folder:" + t.batch_id,
@@ -1457,9 +1494,10 @@ namespace Deskdrop.WinUI
                     is_outbound = t.is_outbound,
                     item_count = info.Item2,
                     DoneCount = info.Item3,
+                    FolderProgress = info.Item4,
                     bytes_received = t.bytes_received,
                     bytes_total = t.bytes_total,
-                    speed_bps = t.speed_bps,
+                    speed_bps = info.Item5 ?? t.speed_bps,
                     status = t.status,
                 };
                 byBatch[t.batch_id] = row;
@@ -1775,6 +1813,7 @@ namespace Deskdrop.WinUI
                             match.auto_connect = incoming.auto_connect;
                             match.explicit_disconnect = incoming.explicit_disconnect;
                             match.last_seen = incoming.last_seen;
+                            match.last_sync = incoming.last_sync;
                             match.last_error = incoming.last_error;
                             match.ips = incoming.ips;
                             match.fingerprint_display = incoming.fingerprint_display;
@@ -1808,6 +1847,12 @@ namespace Deskdrop.WinUI
                 }
 
                 ReadHealth(dataElem);
+                if (dataElem.TryGetProperty("local_device_name", out var nameElem)
+                    && nameElem.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(nameElem.GetString()))
+                {
+                    LocalDeviceName = nameElem.GetString()!;
+                }
 
                 if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
                 {
@@ -1832,6 +1877,7 @@ namespace Deskdrop.WinUI
                                 match.eta_secs = tr.eta_secs;
                                 match.item_count = tr.item_count;
                                 match.DoneCount = tr.DoneCount;
+                                match.FolderProgress = tr.FolderProgress;
                                 match.FirstItemId = tr.FirstItemId;
                                 existing.Remove(match);
                             }
@@ -1948,11 +1994,12 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(HasPeers));
             OnPropertyChanged(nameof(HasNoPeers));
             OnPropertyChanged(nameof(ConnectedCount));
-            OnPropertyChanged(nameof(HeroTagline));
+            OnPropertyChanged(nameof(HasConnectedPeers));
             OnPropertyChanged(nameof(TrustedCount));
             OnPropertyChanged(nameof(AttentionCount));
             OnPropertyChanged(nameof(HeaderStatusText));
             OnPropertyChanged(nameof(HeaderStatusBrush));
+            OnPropertyChanged(nameof(IdentityMetaText));
 
             SyncPeerProjection(KnownDevices, Peers.Where(p => p.IsKnown));
             SyncPeerProjection(NearbyDevices, Peers.Where(p => p.IsNearby));
@@ -2075,7 +2122,6 @@ namespace Deskdrop.WinUI
 
         private void NotifyTransferMetrics()
         {
-            OnPropertyChanged(nameof(HeroTagline));
             OnPropertyChanged(nameof(HasActiveTransfers));
             OnPropertyChanged(nameof(ActiveTransferCount));
             OnPropertyChanged(nameof(HasActiveSpeedTests));

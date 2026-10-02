@@ -158,31 +158,7 @@ namespace Deskdrop.WinUI.Views
         {
             try
             {
-                var dataPackageView = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-                if (dataPackageView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
-                {
-                    var text = await dataPackageView.GetTextAsync();
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(this.XamlRoot, mgr.ConnectedPeers);
-                        if (target != null)
-                        {
-                            mgr.SendPushText(text, target.device_id);
-                        }
-                    }
-                }
-                else if (dataPackageView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Bitmap))
-                {
-                    var png = await Deskdrop.WinUI.Services.ClipboardManager.ReadClipboardPngAsync(dataPackageView);
-                    if (png != null)
-                    {
-                        var target = await Deskdrop.WinUI.Services.DevicePicker.PickAsync(this.XamlRoot, mgr.ConnectedPeers);
-                        if (target != null)
-                        {
-                            mgr.SendPushImage(png, target.device_id);
-                        }
-                    }
-                }
+                await Deskdrop.WinUI.Services.ClipboardManager.SendLocalClipboardAsync(this.XamlRoot);
             }
             catch (Exception ex)
             {

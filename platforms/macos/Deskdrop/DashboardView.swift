@@ -246,7 +246,7 @@ struct ContinuityHeaderView: View {
                 HeaderActionButton(icon: "antenna.radiowaves.left.and.right", tooltip: "Scan Network") {
                     store.scanForDevices()
                 }
-                HeaderActionButton(icon: "paperplane.fill", tooltip: "Send File") {
+                HeaderActionButton(icon: "paperplane.fill", tooltip: "Send files or folders") {
                     // Triggers file picker
                 }
                 HeaderActionButton(icon: "qrcode", tooltip: "Show QR Code") {
