@@ -31,9 +31,13 @@ namespace Deskdrop.WinUI
             var n = (name ?? "").ToLowerInvariant();
             if (n.Contains("mac") || n.Contains("iphone") || n.Contains("ipad")) return Apple;
             if (PhoneWords.Any(n.Contains)) return Android;
-            if (n.StartsWith("desktop-") || n.StartsWith("laptop-")) return Windows;
+            if (n.StartsWith("desktop-") || n.StartsWith("laptop-") || IsWindowsComputerName(name)) return Windows;
             return null;
         }
+
+        /// <summary>Windows computer names are NetBIOS style: up to 15 capitals, digits and hyphens ("IF-655-CHINMAY").</summary>
+        private static bool IsWindowsComputerName(string? name) =>
+            System.Text.RegularExpressions.Regex.IsMatch((name ?? "").Trim(), "^(?=.*[A-Z])[A-Z0-9-]{1,15}$");
 
         /// <summary>
         /// A new Geometry on every call: one Geometry can only belong to one Path.

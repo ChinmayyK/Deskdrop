@@ -23,11 +23,18 @@ enum DeviceOS {
             self = .apple
         } else if phoneWords.contains(where: n.contains) {
             self = .android
-        } else if n.hasPrefix("desktop-") || n.hasPrefix("laptop-") {
+        } else if n.hasPrefix("desktop-") || n.hasPrefix("laptop-") || Self.isWindowsComputerName(name) {
             self = .windows
         } else {
             self = .unknown
         }
+    }
+
+    /// Windows computer names are NetBIOS style: up to 15 capitals, digits
+    /// and hyphens ("IF-655-CHINMAY").
+    private static func isWindowsComputerName(_ name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return trimmed.range(of: "^(?=.*[A-Z])[A-Z0-9-]{1,15}$", options: .regularExpression) != nil
     }
 
     var label: String {

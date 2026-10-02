@@ -25,10 +25,15 @@ internal fun deviceOs(platform: String?, name: String): DeviceOs {
     return when {
         listOf("mac", "iphone", "ipad").any { it in n } -> DeviceOs.Apple
         isPhoneName(name) -> DeviceOs.Android
-        n.startsWith("desktop-") || n.startsWith("laptop-") -> DeviceOs.Windows
+        n.startsWith("desktop-") || n.startsWith("laptop-") || isWindowsComputerName(name) -> DeviceOs.Windows
         else -> DeviceOs.Unknown
     }
 }
+
+/** Windows computer names are NetBIOS style: up to 15 capitals, digits and hyphens ("IF-655-CHINMAY"). */
+private val WINDOWS_COMPUTER_NAME = Regex("^(?=.*[A-Z])[A-Z0-9-]{1,15}$")
+
+private fun isWindowsComputerName(name: String) = WINDOWS_COMPUTER_NAME.matches(name.trim())
 
 internal fun osIcon(platform: String?, name: String): ImageVector = osIcon(deviceOs(platform, name))
 
