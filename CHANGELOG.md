@@ -7,7 +7,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ---
 
 ## [Unreleased]
+
+## [1.4.0] - 2026-10-02
+### Added
+- **All platforms:** Send whole folders. A folder keeps its tree on the other device, a second copy lands in "Name (2)", and each side shows one progress row and one notification per folder. Accepting, declining or cancelling one file answers for the whole folder.
+- **All platforms:** A health banner says what stops sync right now (no network, listener down, sync paused, devices not found, connection blocked) and the one thing to do about it.
+- **All platforms:** Each device shows its operating system's icon.
+- **Windows:** Clipboard images sync both ways, including Win+Shift+S screenshots. Images in history copy again when clicked.
+- **Windows:** Phone notifications and incoming calls show as Windows notifications.
+- **Windows:** The welcome guide opens on first run until a device is paired, and Settings can show it again. The installer adds a desktop shortcut.
+- **Android:** Pin activity items to the top; pinned items are never trimmed or cleared and survive restarts.
+- **Home screens:** Each app's home leads with this device's identity ("Visible as"), then Send (Files & folders, Clipboard, and Camera or Browse device), Transferring, Your devices and Recent.
+- **Modals:** Android, macOS and Windows each use one custom modal style for sending, pairing, device actions and questions. Sending defaults to all connected devices.
+
 ### Changed
+- **Older installs:** A device reinstalled or renamed no longer shows up as several paired devices; old copies of it are retired automatically.
+- **Pairing:** A device on an older version is told it needs an update instead of failing silently.
 - **Windows:** The system tray helper is now a native Rust exe (`platforms/windows/tray`, ~0.3 MB) instead of a WinForms app with its own self-contained .NET runtime (~110 MB). Same process name, pipes and menu.
 - **Windows:** Only English language resources ship; WinUI's built-in control text shows in English on other display languages.
 - **Windows:** The app targets .NET 10 and publishes with Native AOT: `Deskdrop.exe` is native code and no .NET runtime ships with it. Daemon requests are built as `JsonObject`s and all JSON reading goes through a source-generated `DeskdropJsonContext`, so nothing relies on reflection. The unused `System.Drawing.Common` package is removed.
@@ -18,6 +33,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Core (battery):** LAN discovery sweeps (~250 TCP connects each) pause while the device sleeps, and the steady UDP discovery beacon slows from every 15 s to every 60 s.
 
 ### Fixed
+- **Core:** Sending many files at once no longer loses about a third of them (a race accepted the same transfer twice).
+- **Core:** Pausing a large transfer near the end and resuming it no longer fails, and resuming no longer rehashes the whole file.
+- **macOS:** The transfer pill no longer stays on screen after a transfer finishes, and it counts a folder's files instead of the few in flight.
+- **Android:** Folder progress keeps in step with the other device instead of sitting still during big files.
+- **Android (Play build):** No longer asks for permissions Play restricts (all-files media, contacts, full-screen intents, battery exemption, background clipboard, accessibility); data shared with calls and notification mirroring is explained before it is turned on.
 - **Android:** The benchmark module failed to configure (`missingDimensionStrategy` outside `defaultConfig`), which broke every Android build after the `full`/`play` flavors were added.
 - **Windows:** The tray menu's "Rescan Network" now rescans. It used to post to a local HTTP port nothing listened on.
 - **Build:** A plain `dotnet build` no longer writes a stale 113 MB copy of the tray helper into `publish\`.
