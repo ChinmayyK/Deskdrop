@@ -335,12 +335,8 @@ struct CommandCenterView: View {
                         .foregroundStyle(CRTheme.ink)
                         .padding(.horizontal, 40)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 20) { sendTiles }
-                        VStack(spacing: 20) { sendTiles }
-                    }
-                    .padding(.horizontal, 40)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    LazyVGrid(columns: tileColumns, spacing: 12) { sendTiles }
+                        .padding(.horizontal, 40)
                 }
 
                 // 3. Transferring, before devices and history: what is
@@ -373,12 +369,8 @@ struct CommandCenterView: View {
                         .foregroundStyle(CRTheme.ink)
                         .padding(.horizontal, 40)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 20) { moreTiles }
-                        VStack(spacing: 20) { moreTiles }
-                    }
-                    .padding(.horizontal, 40)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    LazyVGrid(columns: tileColumns, spacing: 12) { moreTiles }
+                        .padding(.horizontal, 40)
                 }
 
                 // 5. Recent
@@ -435,6 +427,10 @@ struct CommandCenterView: View {
     }
     
     // MARK: Tiles
+    // Wide rows, three across when there is room and fewer when not, so a
+    // narrow window never stacks them into a tall column.
+    private let tileColumns = [GridItem(.adaptive(minimum: 200), spacing: 12)]
+
     @ViewBuilder private var sendTiles: some View {
         transferTile
         clipboardTile
@@ -508,34 +504,41 @@ struct LaunchpadTile: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 14) {
+            HStack(spacing: 12) {
                 ZStack {
-                    Circle().fill(color.opacity(0.12)).frame(width: 54, height: 54)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(color.opacity(0.12))
+                        .frame(width: 40, height: 40)
                     Image(systemName: icon)
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(color)
                 }
-                VStack(spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(CRTheme.ink)
                         .lineLimit(1)
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 11.5))
+                            .font(.system(size: 12))
                             .foregroundStyle(CRTheme.inkSoft)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
-                .padding(.horizontal, 10)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(CRTheme.inkSubtle)
             }
-            .frame(width: 180, height: 150)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
             .background(CRTheme.surfaceStrong)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CRTheme.stroke.opacity(0.5), lineWidth: 1))
-            .shadow(color: Color.black.opacity(hovered ? 0.08 : 0.02), radius: hovered ? 12 : 4, y: hovered ? 6 : 2)
-            .scaleEffect(hovered ? 1.02 : 1.0)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(CRTheme.stroke.opacity(0.5), lineWidth: 1))
+            .shadow(color: Color.black.opacity(hovered ? 0.08 : 0.02), radius: hovered ? 10 : 3, y: hovered ? 4 : 1)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered in

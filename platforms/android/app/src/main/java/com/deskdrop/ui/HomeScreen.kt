@@ -124,12 +124,11 @@ fun HomeTab(
     // accepting theirs settles both.
     val pairingRequest = peers.firstOrNull { it.pairingRequested && !it.trusted }
     val outgoingRequest = peers.firstOrNull { it.outgoingPairingWaiting && !it.trusted }
-    var chooseSendKind by remember { mutableStateOf(false) }
     var sendFolder by remember { mutableStateOf(false) }
     var sendTargetChoices by remember { mutableStateOf<List<PeerSnapshot>?>(null) }
 
-    // Files & folders: pick what to send, then (with several devices
-    // connected) which device gets it, instead of sending to all of them.
+    // Files & folders: with several devices connected, ask which one gets
+    // them instead of sending to all of them.
     val startSend = { folder: Boolean ->
         sendFolder = folder
         if (connected.size > 1) sendTargetChoices = connected
@@ -174,7 +173,24 @@ fun HomeTab(
             val enabled = connected.isNotEmpty()
             SectionHeader(c, "Send", if (enabled) null else "Connect a device first")
             Panel(c) {
-                ActionRow(c, Icons.Outlined.UploadFile, "Files & folders", "Send files or entire folders", enabled = enabled, onClick = { chooseSendKind = true })
+                // Android's pickers choose files or one folder, never both, so
+                // the row opens the file picker and its folder button the
+                // folder picker: no extra question in between.
+                ActionRow(
+                    c, Icons.Outlined.UploadFile, "Files & folders", "Send files or entire folders",
+                    enabled = enabled,
+                    onClick = { startSend(false) },
+                    trailing = {
+                        IconButton(onClick = { startSend(true) }, enabled = enabled) {
+                            Icon(
+                                Icons.Outlined.DriveFolderUpload,
+                                contentDescription = "Send a folder",
+                                tint = c.accent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                )
                 Hairline(c)
                 val clip = quickContextText?.trim()?.replace('\n', ' ')?.takeIf { it.isNotBlank() }
                 ActionRow(
@@ -260,16 +276,6 @@ fun HomeTab(
                 if (sendFolder) onActionSendFolder(target) else onActionSendFiles(target)
             },
             onDismiss = { sendTargetChoices = null }
-        )
-    }
-
-    if (chooseSendKind) {
-        SendKindDialog(
-            onPick = { folder ->
-                chooseSendKind = false
-                startSend(folder)
-            },
-            onDismiss = { chooseSendKind = false }
         )
     }
 }
@@ -479,7 +485,8 @@ private fun ActionRow(
     detail: String,
     detailIsContent: Boolean = false,
     enabled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null
 ) {
     val haptic = LocalHapticFeedback.current
     Row(
@@ -511,7 +518,8 @@ private fun ActionRow(
             )
         }
         Spacer(Modifier.width(8.dp))
-        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
+        if (trailing != null) trailing()
+        else Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -697,31 +705,6 @@ private fun EmptyRecent(c: DdColors) = EmptyBox(c, Icons.Outlined.History, "Copy
 
 // ---------------------------------------------------------------- dialogs
 
-
-/** Files or a whole folder: the two pickers behind "Files & folders". */
-@Composable
-private fun SendKindDialog(onPick: (folder: Boolean) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Send") },
-        text = {
-            Column {
-                TextButton(onClick = { onPick(false) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.UploadFile, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("Files", modifier = Modifier.weight(1f))
-                }
-                TextButton(onClick = { onPick(true) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.DriveFolderUpload, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("A folder, with everything in it", modifier = Modifier.weight(1f))
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
 
 /** Asks which connected device should receive files. `null` target means all devices. */
 @Composable
