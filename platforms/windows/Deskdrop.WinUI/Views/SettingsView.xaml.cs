@@ -91,6 +91,8 @@ namespace Deskdrop.WinUI.Views
             }
         }
 
+        private void OnReplayOnboardingClicked(object sender, RoutedEventArgs e) => App.ShowOnboarding(force: true);
+
         private async void OnRescanClicked(object sender, RoutedEventArgs e)
         {
             var resp = await Task.Run(() => DaemonClient.RescanPeers());

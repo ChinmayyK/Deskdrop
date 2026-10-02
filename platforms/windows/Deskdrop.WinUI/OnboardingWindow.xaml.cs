@@ -8,9 +8,23 @@ namespace Deskdrop.WinUI
 {
     public sealed partial class OnboardingWindow : Window
     {
-        public OnboardingWindow()
+        public OnboardingWindow(bool closeWhenPaired = true)
         {
             this.InitializeComponent();
+
+            // Done as soon as any device is paired: the dashboard behind takes over.
+            if (closeWhenPaired)
+            {
+                var watch = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                watch.Tick += (_, _) =>
+                {
+                    if (!DeskdropStore.Shared.HasKnownDevices) return;
+                    watch.Stop();
+                    this.Close();
+                };
+                watch.Start();
+                this.Closed += (_, _) => watch.Stop();
+            }
 
             if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
             {
@@ -63,14 +77,13 @@ namespace Deskdrop.WinUI
             catch (Exception ex) { App.HandleError(ex); }
         }
 
-        private void BtnFooterLeft_Click(object sender, RoutedEventArgs e)
-        {
-            this.Close();
-        }
+        // Skip and Get started both end the guide; the dashboard is already open.
+        private void BtnFooterLeft_Click(object sender, RoutedEventArgs e) => this.Close();
 
         private void BtnFooterRight_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
+            App.MainWindow?.Activate();
         }
     }
 }
