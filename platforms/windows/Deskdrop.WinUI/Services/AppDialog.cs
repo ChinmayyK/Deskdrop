@@ -30,20 +30,21 @@ namespace Deskdrop.WinUI.Services
         {
             var tint = danger ? "AppDangerBrush" : "AppAccentBrush";
             var well = danger ? "AppDangerSubtleBrush" : "AppAccentSubtleBrush";
-            var markup = $"""
+            var subtitleVisibility = string.IsNullOrEmpty(subtitle) ? "Collapsed" : "Visible";
+            var markup = $$"""
                 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" ColumnSpacing="14">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="44" Height="44" CornerRadius="12" Background="{{ThemeResource {well}}}">
-                        <FontIcon Glyph="{Escape(glyph)}" FontSize="19" Foreground="{{ThemeResource {tint}}}" />
+                    <Border Width="44" Height="44" CornerRadius="12" Background="{ThemeResource {{well}}}">
+                        <FontIcon Glyph="{{Escape(glyph)}}" FontSize="19" Foreground="{ThemeResource {{tint}}}" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                        <TextBlock Text="{Escape(title)}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Text="{Escape(subtitle ?? "")}" FontSize="12.5" TextWrapping="Wrap"
-                                   Foreground="{{ThemeResource TextFillColorSecondaryBrush}}"
-                                   Visibility="{(string.IsNullOrEmpty(subtitle) ? "Collapsed" : "Visible")}" />
+                        <TextBlock Text="{{Escape(title)}}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{{Escape(subtitle ?? "")}}" FontSize="12.5" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Visibility="{{subtitleVisibility}}" />
                     </StackPanel>
                 </Grid>
                 """;
@@ -57,26 +58,31 @@ namespace Deskdrop.WinUI.Services
         {
             var tint = danger ? "AppDangerBrush" : "AppAccentBrush";
             var well = danger ? "AppDangerSubtleBrush" : "AppAccentSubtleBrush";
-            var markup = $"""
+            var titleBrush = danger ? "AppDangerBrush" : "TextFillColorPrimaryBrush";
+            var detailVisibility = string.IsNullOrEmpty(detail) ? "Collapsed" : "Visible";
+            var trailGlyph = selected ? "&#xE73E;" : "&#xE76C;";
+            var trailBrush = selected ? "AppAccentBrush" : "TextFillColorTertiaryBrush";
+            var trailVisibility = danger ? "Collapsed" : "Visible";
+            var markup = $$"""
                 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="36" Height="36" CornerRadius="10" Background="{{ThemeResource {well}}}">
-                        <FontIcon Glyph="{Escape(glyph)}" FontSize="15" Foreground="{{ThemeResource {tint}}}" />
+                    <Border Width="36" Height="36" CornerRadius="10" Background="{ThemeResource {{well}}}">
+                        <FontIcon Glyph="{{Escape(glyph)}}" FontSize="15" Foreground="{ThemeResource {{tint}}}" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{Escape(title)}" FontSize="13.5" FontWeight="SemiBold"
-                                   Foreground="{{ThemeResource {(danger ? "AppDangerBrush" : "TextFillColorPrimaryBrush")}}}" />
-                        <TextBlock Text="{Escape(detail ?? "")}" FontSize="12" TextWrapping="Wrap"
-                                   Foreground="{{ThemeResource TextFillColorSecondaryBrush}}"
-                                   Visibility="{(string.IsNullOrEmpty(detail) ? "Collapsed" : "Visible")}" />
+                        <TextBlock Text="{{Escape(title)}}" FontSize="13.5" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource {{titleBrush}}}" />
+                        <TextBlock Text="{{Escape(detail ?? "")}}" FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Visibility="{{detailVisibility}}" />
                     </StackPanel>
-                    <FontIcon Grid.Column="2" Glyph="{(selected ? "&#xE73E;" : "&#xE76C;")}" FontSize="12"
-                              Foreground="{{ThemeResource {(selected ? "AppAccentBrush" : "TextFillColorTertiaryBrush")}}}"
-                              Visibility="{(danger ? "Collapsed" : "Visible")}" />
+                    <FontIcon Grid.Column="2" Glyph="{{trailGlyph}}" FontSize="12"
+                              Foreground="{ThemeResource {{trailBrush}}}"
+                              Visibility="{{trailVisibility}}" />
                 </Grid>
                 """;
             UIElement content;
