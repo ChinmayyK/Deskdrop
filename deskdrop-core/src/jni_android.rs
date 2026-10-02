@@ -484,7 +484,9 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventText(
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
-        crate::engine::EngineEvent::OpenUrlOnDeviceAckReceived { error: Some(err), .. } => {
+        crate::engine::EngineEvent::OpenUrlOnDeviceAckReceived {
+            error: Some(err), ..
+        } => {
             return env
                 .new_string(err)
                 .map(|s| s.into_raw())
@@ -2305,7 +2307,10 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_ackOpenUrlOnDevice(
         env.get_string(&error).ok().map(String::from)
     };
     let h = unsafe { &*(handle as *const AndroidHandle) };
-    rt().block_on(h.engine.ack_open_url_on_device(requester, success != 0, error));
+    rt().block_on(
+        h.engine
+            .ack_open_url_on_device(requester, success != 0, error),
+    );
     0
 }
 

@@ -608,7 +608,9 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
                     Ok(()) => (true, None),
                     Err(e) => (false, Some(e)),
                 };
-                engine.ack_open_url_on_device(from_device, success, error).await;
+                engine
+                    .ack_open_url_on_device(from_device, success, error)
+                    .await;
             });
         }
         EngineEvent::RemoteFilesQueryReceived { .. }
@@ -628,10 +630,16 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
 async fn open_url_for_peer(url: &str) -> std::result::Result<(), String> {
     let url = url.trim();
     let lower = url.to_ascii_lowercase();
-    if !(lower.starts_with("http://") || lower.starts_with("https://")) || url.contains(char::is_whitespace) {
+    if !(lower.starts_with("http://") || lower.starts_with("https://"))
+        || url.contains(char::is_whitespace)
+    {
         return Err("Only web links can be opened".into());
     }
-    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
     let url = url.to_string();
     let status = tokio::task::spawn_blocking(move || {
         std::process::Command::new(opener)
