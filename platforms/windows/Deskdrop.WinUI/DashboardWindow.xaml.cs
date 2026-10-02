@@ -224,7 +224,10 @@ namespace Deskdrop.WinUI
             }
             if (ContentFrame != null)
             {
-                ContentFrame.Margin = isDevicesPage ? new Thickness(0, 0, 0, 0) : new Thickness(0, 40, 0, 0);
+                // Every page starts below the title bar now: the search bar
+                // lives there, and Devices used to draw its header into that
+                // space.
+                ContentFrame.Margin = new Thickness(0, 40, 0, 0);
             }
 
             PageTitleText.Text = tag switch
@@ -236,6 +239,33 @@ namespace Deskdrop.WinUI
                 "Settings" => "Settings",
                 _ => "Devices",
             };
+        }
+
+        // ---- Search (title bar) ----
+
+        private void SearchBox_GotFocus(object sender, RoutedEventArgs e) =>
+            SearchBox.ItemsSource = Deskdrop.WinUI.Services.DashboardSearch.Find("", mgr, NavigateTo);
+
+        private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        {
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;
+            sender.ItemsSource = Deskdrop.WinUI.Services.DashboardSearch.Find(sender.Text, mgr, NavigateTo);
+        }
+
+        private void SearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+        {
+            // A clicked result, or Enter on the typed query (the first result).
+            var hit = args.ChosenSuggestion as Deskdrop.WinUI.Services.SearchHit
+                      ?? Deskdrop.WinUI.Services.DashboardSearch.Find(args.QueryText, mgr, NavigateTo).FirstOrDefault();
+            sender.Text = string.Empty;
+            sender.ItemsSource = null;
+            hit?.Run();
+        }
+
+        private void OnSearchAcceleratorInvoked(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args)
+        {
+            args.Handled = true;
+            SearchBox.Focus(FocusState.Keyboard);
         }
 
         public void NavigateTo(string tag)
