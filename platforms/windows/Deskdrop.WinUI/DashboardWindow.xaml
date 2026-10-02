@@ -281,6 +281,7 @@
             <Grid.KeyboardAccelerators>
                 <KeyboardAccelerator Modifiers="Control" Key="N" Invoked="OnPairAcceleratorInvoked" />
                 <KeyboardAccelerator Modifiers="Control" Key="O" Invoked="OnSendAcceleratorInvoked" />
+                <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnSearchAcceleratorInvoked" />
             </Grid.KeyboardAccelerators>
 
             <!--
@@ -325,6 +326,45 @@
                 <TextBlock Text="Deskdrop" Style="{StaticResource AppSectionTitle}"
                            FontSize="15" VerticalAlignment="Center" />
             </StackPanel>
+
+            <!-- Search, centred in the bar: pages, devices, clipboard items and
+                 transfers. Ctrl+F focuses it from anywhere in the window. -->
+            <Grid Grid.Column="1" Margin="24,0,12,0" VerticalAlignment="Center">
+                <AutoSuggestBox x:Name="SearchBox"
+                                MaxWidth="400"
+                                PlaceholderText="Search devices, clipboard, transfers"
+                                QueryIcon="Find"
+                                TextMemberPath="Title"
+                                UpdateTextOnSelect="False"
+                                AutomationProperties.Name="Search"
+                                ToolTipService.ToolTip="Search (Ctrl+F)"
+                                GotFocus="SearchBox_GotFocus"
+                                TextChanged="SearchBox_TextChanged"
+                                QuerySubmitted="SearchBox_QuerySubmitted">
+                    <AutoSuggestBox.ItemTemplate>
+                        <DataTemplate x:DataType="services:SearchHit">
+                            <Grid ColumnSpacing="12" Padding="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="30" Height="30" CornerRadius="8"
+                                        Background="{ThemeResource AppSurfaceSubtleBrush}">
+                                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind Title}" FontSize="13" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                    <TextBlock Text="{x:Bind Subtitle}" FontSize="11.5"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </AutoSuggestBox.ItemTemplate>
+                </AutoSuggestBox>
+            </Grid>
 
             <!-- Contextual page title. Collapsed on the Devices page - its
                  own in-content header (title, subtitle, actions) now covers
