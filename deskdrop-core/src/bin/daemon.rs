@@ -596,6 +596,21 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
         EngineEvent::FileTransferPaused { .. } | EngineEvent::FileTransferResumed { .. } => {
             // These are informational only; no feedback needed.
         }
+        #[cfg(unix)]
+        EngineEvent::OpenUrlOnDeviceRequested {
+            from_device, url, ..
+        } => {
+            // A trusted peer sent a link: open it here, then tell the peer.
+            let engine = state.engine.clone();
+            tokio::spawn(async move {
+                let result = open_url_for_peer(&url).await;
+                let (success, error) = match result {
+                    Ok(()) => (true, None),
+                    Err(e) => (false, Some(e)),
+                };
+                engine.ack_open_url_on_device(from_device, success, error).await;
+            });
+        }
         EngineEvent::RemoteFilesQueryReceived { .. }
         | EngineEvent::RemoteThumbnailRequestReceived { .. }
         | EngineEvent::RemoteFilePullRequestReceived { .. } => {
@@ -605,6 +620,35 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Opens a web link from a peer in the user's default browser. Only http and
+/// https links are opened; anything else (file:, app schemes) is refused.
+#[cfg(unix)]
+async fn open_url_for_peer(url: &str) -> std::result::Result<(), String> {
+    let url = url.trim();
+    let lower = url.to_ascii_lowercase();
+    if !(lower.starts_with("http://") || lower.starts_with("https://")) || url.contains(char::is_whitespace) {
+        return Err("Only web links can be opened".into());
+    }
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let url = url.to_string();
+    let status = tokio::task::spawn_blocking(move || {
+        std::process::Command::new(opener)
+            .arg(url)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+    })
+    .await
+    .map_err(|e| format!("Could not start the browser: {e}"))?
+    .map_err(|e| format!("Could not start the browser: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("The browser did not open the link".into())
+    }
 }
 
 async fn handle_request(state: DaemonState, req: IpcRequest) -> IpcResponse {
