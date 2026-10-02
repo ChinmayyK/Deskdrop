@@ -2787,9 +2787,11 @@ class DeskdropService : Service() {
         TransferManager.activeTransfers[rowId] = TransferProgress(
             id = rowId,
             fileName = "${folder.name} · ${folder.finished} of ${folder.fileCount} $noun",
+            // No byte totals: the row's bar then follows `percent`, the
+            // engine's whole-folder progress.
             percent = percent,
-            bytesReceived = folder.finished.toLong(),
-            totalBytes = folder.fileCount.toLong(),
+            bytesReceived = 0,
+            totalBytes = 0,
             speedBps = speedBps,
             etaSecs = 0,
             state = TransferState.PROGRESS,
