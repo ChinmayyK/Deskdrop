@@ -172,6 +172,10 @@ pub struct OutboundTransfer {
     /// loop left over from a dropped connection could read one more batch
     /// after a resume rewound `next_chunk`, skipping those chunks for good.
     send_run: u32,
+    /// Checksum state after each chunk the receiver has not confirmed yet,
+    /// so a resume can rewind to the last confirmed chunk without hashing
+    /// the whole delivered prefix again (most of a 12 GB file at 95%).
+    hash_checkpoints: std::collections::VecDeque<(u32, Sha256)>,
 }
 
 impl OutboundTransfer {
@@ -205,6 +209,7 @@ impl OutboundTransfer {
             consecutive_poor_compression: 0,
             rehash_chunks: 0,
             send_run: 0,
+            hash_checkpoints: Default::default(),
         }
     }
 
@@ -238,6 +243,7 @@ impl OutboundTransfer {
             consecutive_poor_compression: 0,
             rehash_chunks: 0,
             send_run: 0,
+            hash_checkpoints: Default::default(),
         })
     }
 
@@ -442,6 +448,23 @@ impl OutboundTransfer {
     pub fn on_chunk_ack(&mut self, last_confirmed: u32) {
         self.last_active_at = Instant::now();
         self.last_acked_chunk = Some(last_confirmed);
+        // Keep the confirmed chunk's own state: a resume restarts right after it.
+        while self
+            .hash_checkpoints
+            .front()
+            .is_some_and(|(chunk, _)| *chunk < last_confirmed)
+        {
+            self.hash_checkpoints.pop_front();
+        }
+    }
+
+    /// Records the checksum state right after `chunk` was hashed.
+    pub fn record_hash_checkpoint(&mut self, chunk: u32, state: Sha256) {
+        // Bounded in case acks stop arriving; 1024 states are about 110 KB.
+        if self.hash_checkpoints.len() >= 1024 {
+            self.hash_checkpoints.pop_front();
+        }
+        self.hash_checkpoints.push_back((chunk, state));
     }
 
     /// Claims the transfer for a new send loop; see `send_run`.
@@ -460,9 +483,22 @@ impl OutboundTransfer {
             self.started_at = Some(Instant::now());
         }
         self.next_chunk = chunk_index;
-        // Rebuild the running checksum from exactly the delivered prefix.
+        // Rebuild the running checksum from exactly the delivered prefix:
+        // from the saved state after the chunk before, when there is one.
+        let saved = chunk_index.checked_sub(1).and_then(|prev| {
+            self.hash_checkpoints
+                .iter()
+                .find(|(chunk, _)| *chunk == prev)
+                .map(|(_, state)| state.clone())
+        });
+        self.hash_checkpoints
+            .retain(|(chunk, _)| *chunk < chunk_index);
         let mut hasher = Sha256::new();
         match &self.source {
+            _ if saved.is_some() => {
+                hasher = saved.unwrap();
+                self.rehash_chunks = 0;
+            }
             OutboundSource::Memory(data) => {
                 let end = (chunk_index as usize * FILE_CHUNK_SIZE).min(data.len());
                 hasher.update(&data[..end]);
@@ -1633,6 +1669,44 @@ mod tests {
                 CompressionVerdict::SkipRestOfTransfer
             );
         }
+    }
+
+    #[test]
+    fn resume_rewinds_from_saved_checksum_state() {
+        let data: Vec<u8> = (0..(3 * FILE_CHUNK_SIZE + 10))
+            .map(|i| (i % 7) as u8)
+            .collect();
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("f.bin");
+        std::fs::write(&path, &data).unwrap();
+        let mut t = OutboundTransfer::from_path(path, None, make_meta(&data), None).unwrap();
+
+        // Send chunks 0..=2 as the send loop does; the receiver confirms 1.
+        let mut h = Sha256::new();
+        for chunk in 0..3u32 {
+            let start = chunk as usize * FILE_CHUNK_SIZE;
+            h.update(&data[start..start + FILE_CHUNK_SIZE]);
+            t.record_hash_checkpoint(chunk, h.clone());
+        }
+        t.on_chunk_ack(1);
+
+        t.resume_from(2);
+        assert_eq!(
+            t.take_rehash_bytes(),
+            0,
+            "resume must not re-read the delivered prefix"
+        );
+        let mut expected = Sha256::new();
+        expected.update(&data[..2 * FILE_CHUNK_SIZE]);
+        assert_eq!(
+            t.hasher.clone().unwrap().finalize(),
+            expected.finalize(),
+            "checksum state must cover exactly the delivered chunks"
+        );
+
+        // Without saved state (here: chunk 0), it falls back to re-reading.
+        t.resume_from(1);
+        assert_eq!(t.take_rehash_bytes(), FILE_CHUNK_SIZE as u64);
     }
 
     fn make_meta(data: &[u8]) -> FileTransferMetadata {
