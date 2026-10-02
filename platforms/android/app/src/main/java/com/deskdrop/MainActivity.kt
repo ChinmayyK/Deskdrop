@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
             )
         )
         super.onCreate(savedInstanceState)
+        ActivityFeedManager.attach(this)
         if (intent?.getBooleanExtra("benchmark", false) == true) {
             ActivityFeedManager.ACTIVITY_FEED_MAX = 20000
             for (i in 1..10000) {
@@ -407,7 +408,10 @@ class MainActivity : ComponentActivity() {
                     },
                     onDeleteActivity = { entry ->
                         ActivityFeedManager.removeFromFeed(entry.id)
-                        
+                    },
+                    onTogglePinActivity = { entry ->
+                        ActivityFeedManager.togglePin(entry.id)
+                        showSnack(if (entry.isPinned) "Unpinned" else "Pinned to the top")
                     },
                     onClearActivity = {
                         ActivityFeedManager.clearFeed()

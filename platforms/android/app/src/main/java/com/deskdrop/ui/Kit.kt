@@ -354,6 +354,7 @@ internal fun ActivityRow(
     onApply: () -> Unit,
     onResend: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    onTogglePin: (() -> Unit)? = null,
     showClockTime: Boolean = false
 ) {
     val haptic = LocalHapticFeedback.current
@@ -372,7 +373,7 @@ internal fun ActivityRow(
     }
     val showPreview = entry.preview.isNotBlank() &&
         entry.kind != ActivityKind.PEER_CONNECTED && entry.kind != ActivityKind.PEER_DISCONNECTED
-    val hasMenu = onResend != null || onDelete != null
+    val hasMenu = onResend != null || onDelete != null || onTogglePin != null
 
     Box {
         Row(
@@ -394,7 +395,13 @@ internal fun ActivityRow(
             IconWell(c, icon, size = 36)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, style = DdType.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (entry.isPinned) {
+                        Icon(Icons.Outlined.PushPin, contentDescription = "Pinned", tint = c.accent, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(5.dp))
+                    }
+                    Text(title, style = DdType.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 if (showPreview) {
                     Text(
                         entry.preview.trim().replace('\n', ' '),
@@ -421,6 +428,10 @@ internal fun ActivityRow(
                 subtitle = entry.preview.trim().replace('\n', ' ').take(80),
                 actions = buildList {
                     add(SheetAction(Icons.Outlined.ContentCopy, if (isLink) "Open link" else "Copy again", onClick = onApply))
+                    if (onTogglePin != null) add(
+                        if (entry.isPinned) SheetAction(Icons.Outlined.PushPin, "Unpin", "Let it age out with the rest", onClick = onTogglePin)
+                        else SheetAction(Icons.Outlined.PushPin, "Pin to the top", "Kept above everything else, never cleared", onClick = onTogglePin)
+                    )
                     if (onResend != null) add(SheetAction(Icons.Outlined.Replay, "Resend", onClick = onResend))
                     if (onDelete != null) add(SheetAction(Icons.Outlined.DeleteOutline, "Remove", danger = true, onClick = onDelete))
                 },

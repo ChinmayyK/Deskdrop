@@ -110,6 +110,7 @@ fun HomeTab(
     onActionCancelTransfer: (String) -> Unit,
     onForgetPeer: (PeerSnapshot) -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit,
+    onTogglePinActivity: (ActivityEntry) -> Unit = {},
     onResendActivity: (ActivityEntry) -> Unit,
     onReplayOnboarding: () -> Unit,
     onTabSelected: (AppTab) -> Unit,
@@ -235,7 +236,8 @@ fun HomeTab(
                             entry = entry,
                             onApply = { onApplyClipboard(entry) },
                             onResend = { onResendActivity(entry) },
-                            onDelete = { onDeleteActivity(entry) }
+                            onDelete = { onDeleteActivity(entry) },
+                            onTogglePin = { onTogglePinActivity(entry) }
                         )
                     }
                 }

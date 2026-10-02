@@ -476,6 +476,7 @@ class DeskdropService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        ActivityFeedManager.attach(this)
         serviceStartTime = System.currentTimeMillis()
         createNotificationChannels()
         registerPairingReceiver()

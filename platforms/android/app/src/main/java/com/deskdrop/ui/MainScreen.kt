@@ -166,6 +166,7 @@ fun MainScreen(
     onStorageSettingsClicked: () -> Unit = {},
     onNotificationSettingsClicked: () -> Unit = {},
     onDeleteActivity: (ActivityEntry) -> Unit = {},
+    onTogglePinActivity: (ActivityEntry) -> Unit = {},
     onClearActivity: () -> Unit = {},
     onResendActivity: (ActivityEntry) -> Unit = {},
     onReplayOnboarding: () -> Unit = {}
@@ -219,6 +220,7 @@ fun MainScreen(
                                 onActionCancelTransfer = onActionCancelTransfer,
                                 onForgetPeer = onForgetPeer,
                                 onDeleteActivity = onDeleteActivity,
+                                onTogglePinActivity = onTogglePinActivity,
                                 onResendActivity = onResendActivity,
                                 onReplayOnboarding = onReplayOnboarding,
                                 onTabSelected = { selectedTab ->
@@ -241,6 +243,7 @@ fun MainScreen(
                                 onApply = onApplyClipboard,
                                 onResend = onResendActivity,
                                 onDelete = onDeleteActivity,
+                                onTogglePin = onTogglePinActivity,
                                 onClearAll = onClearActivity
                             )
                             AppTab.Devices -> DevicesTab(
