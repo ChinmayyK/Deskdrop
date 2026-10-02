@@ -192,13 +192,31 @@
                       DragOver="OnContentDragOver"
                       DragLeave="OnContentDragLeave"
                       Drop="OnContentDrop">
-                    <Frame x:Name="ContentFrame" Background="Transparent" Margin="0,48,0,0">
-                        <Frame.ContentTransitions>
-                            <TransitionCollection>
-                                <NavigationThemeTransition />
-                            </TransitionCollection>
-                        </Frame.ContentTransitions>
-                    </Frame>
+                    <Grid Margin="0,48,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <!-- What stops sync right now (engine health), with its fix. -->
+                        <InfoBar Grid.Row="0" Margin="24,0,24,12"
+                                 Severity="Warning" IsClosable="False"
+                                 IsOpen="{x:Bind mgr.HasHealthIssue, Mode=OneWay}"
+                                 Title="{x:Bind mgr.HealthTitle, Mode=OneWay}"
+                                 Message="{x:Bind mgr.HealthDetail, Mode=OneWay}">
+                            <InfoBar.ActionButton>
+                                <Button Content="{x:Bind mgr.HealthActionLabel, Mode=OneWay}"
+                                        Visibility="{x:Bind mgr.HealthActionVisibility, Mode=OneWay}"
+                                        Click="OnHealthActionClick" />
+                            </InfoBar.ActionButton>
+                        </InfoBar>
+                        <Frame x:Name="ContentFrame" Grid.Row="1" Background="Transparent">
+                            <Frame.ContentTransitions>
+                                <TransitionCollection>
+                                    <NavigationThemeTransition />
+                                </TransitionCollection>
+                            </Frame.ContentTransitions>
+                        </Frame>
+                    </Grid>
 
                     <!--
                         Drop affordance for the whole content area. Dragging

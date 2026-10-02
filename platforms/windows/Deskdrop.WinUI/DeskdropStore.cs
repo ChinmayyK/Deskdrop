@@ -1157,6 +1157,64 @@ namespace Deskdrop.WinUI
                 }
             }
         }
+        // ── Health: the first issue from the daemon's list (engine::health) ──
+        private string? _healthKind;
+        private string _healthTitle = "";
+        private string _healthDetail = "";
+        public bool HasHealthIssue => _healthKind != null;
+        public string HealthTitle => _healthTitle;
+        public string HealthDetail => _healthDetail;
+        public string HealthActionLabel => _healthKind switch
+        {
+            "no_network" => "Network settings",
+            "sync_paused" => "Resume sync",
+            "devices_not_found" => "Search again",
+            "connection_blocked" => "Firewall settings",
+            _ => "",
+        };
+        public Visibility HealthActionVisibility => HealthActionLabel.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        private void ReadHealth(JsonElement status)
+        {
+            string? kind = null, title = "", detail = "";
+            if (status.TryGetProperty("health", out var health) && health.ValueKind == JsonValueKind.Array
+                && health.GetArrayLength() > 0)
+            {
+                var first = health[0];
+                kind = first.TryGetProperty("kind", out var k) ? k.GetString() : null;
+                title = first.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
+                detail = first.TryGetProperty("detail", out var d) ? d.GetString() ?? "" : "";
+            }
+            if (kind == _healthKind && title == _healthTitle && detail == _healthDetail) return;
+            _healthKind = kind;
+            _healthTitle = title;
+            _healthDetail = detail;
+            OnPropertyChanged(nameof(HasHealthIssue));
+            OnPropertyChanged(nameof(HealthTitle));
+            OnPropertyChanged(nameof(HealthDetail));
+            OnPropertyChanged(nameof(HealthActionLabel));
+            OnPropertyChanged(nameof(HealthActionVisibility));
+        }
+
+        public async void RunHealthAction()
+        {
+            switch (_healthKind)
+            {
+                case "no_network":
+                    await global::Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:network-status"));
+                    break;
+                case "sync_paused":
+                    SyncEnabled = true;
+                    break;
+                case "devices_not_found":
+                    DaemonActions.RunFireAndForget("Rescan", () => DaemonClient.RescanPeers());
+                    break;
+                case "connection_blocked":
+                    await global::Windows.System.Launcher.LaunchUriAsync(new Uri("windowsdefender://network"));
+                    break;
+            }
+        }
+
         private bool _syncEnabled = true;
         public bool SyncEnabled
         {
@@ -1656,6 +1714,8 @@ namespace Deskdrop.WinUI
                     StatusLine = Peers.Count == 0 ? "Running - no devices connected" : $"Connected to {ConnectedCount} device{(ConnectedCount == 1 ? "" : "s")}";
                     NotifyPeerMetrics();
                 }
+
+                ReadHealth(dataElem);
 
                 if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
                 {

@@ -9,6 +9,8 @@ namespace Deskdrop.WinUI
     {
         public static new DashboardWindow? Current { get; private set; }
         public DeskdropStore mgr => DeskdropStore.Shared;
+
+        private void OnHealthActionClick(object sender, RoutedEventArgs e) => mgr.RunHealthAction();
         public string localMachineName => Deskdrop.WinUI.Services.LocalSettingsStore.DeviceName;
         public System.Windows.Input.ICommand ShowMainWindowCommand => ((App)App.Current).ShowMainWindowCommand;
 
