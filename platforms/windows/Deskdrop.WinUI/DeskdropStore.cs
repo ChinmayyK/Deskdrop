@@ -595,6 +595,10 @@ namespace Deskdrop.WinUI
         private int? _done_count;
         [JsonIgnore]
         public int? DoneCount { get => _done_count; set { if (SetProperty(ref _done_count, value)) NotifyProgressProperties(); } }
+        // Whole folder done, 0..1, counting bytes of files in flight.
+        private double? _folder_progress;
+        [JsonIgnore]
+        public double? FolderProgress { get => _folder_progress; set { if (SetProperty(ref _folder_progress, value)) NotifyProgressProperties(); } }
         [JsonIgnore]
         public string? FirstItemId { get; set; }
         [JsonIgnore]
@@ -612,7 +616,9 @@ namespace Deskdrop.WinUI
         public bool IsDirectory => is_directory;
         public int ItemCount => item_count;
         // A folder's progress is files done: only a few are in flight at once.
-        public double PercentFloat => DoneCount is int done && item_count > 0
+        public double PercentFloat => FolderProgress is double p
+            ? Math.Clamp(p * 100, 0, 100)
+            : DoneCount is int done && item_count > 0
             ? Math.Min(100.0, (double)done / item_count * 100)
             : bytes_total > 0 ? ((double)bytes_received / bytes_total * 100) : 100.0;
         // JsonIgnore: "Percent"/"percent" collide under case-insensitive
@@ -1417,7 +1423,7 @@ namespace Deskdrop.WinUI
         // Each folder in flight is one row: its files' rows merge into it.
         private static List<FileTransferState> GroupFolders(List<FileTransferState> transfers, JsonElement status)
         {
-            var folders = new Dictionary<string, (string name, int total, int done)>();
+            var folders = new Dictionary<string, (string name, int total, int done, double? progress, long? speed)>();
             if (status.TryGetProperty("folders", out var f) && f.ValueKind == JsonValueKind.Array)
             {
                 foreach (var folder in f.EnumerateArray())
@@ -1428,7 +1434,9 @@ namespace Deskdrop.WinUI
                         folder.TryGetProperty("folder_name", out var n) ? n.GetString() ?? "Folder" : "Folder",
                         folder.TryGetProperty("file_count", out var c) ? c.GetInt32() : 1,
                         (folder.TryGetProperty("done_count", out var d) ? d.GetInt32() : 0)
-                            + (folder.TryGetProperty("failed_count", out var x) ? x.GetInt32() : 0));
+                            + (folder.TryGetProperty("failed_count", out var x) ? x.GetInt32() : 0),
+                        folder.TryGetProperty("progress", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDouble() : null,
+                        folder.TryGetProperty("speed_bps", out var sp) && sp.ValueKind == JsonValueKind.Number ? sp.GetInt64() : null);
                 }
             }
             var rows = new List<FileTransferState>();
@@ -1440,12 +1448,14 @@ namespace Deskdrop.WinUI
                 {
                     row.bytes_received += t.bytes_received;
                     row.bytes_total += t.bytes_total;
-                    row.speed_bps = (row.speed_bps ?? 0) + (t.speed_bps ?? 0);
+                    if (!row.FolderProgress.HasValue) row.speed_bps = (row.speed_bps ?? 0) + (t.speed_bps ?? 0);
                     // Waiting for an answer wins: the row must offer Accept.
                     if (t.status == "incoming") { row.status = t.status; row.FirstItemId = t.transfer_id; }
                     continue;
                 }
-                var info = folders.TryGetValue(t.batch_id, out var i) ? i : (t.file_name.Split('/')[0], t.item_count, 0);
+                var info = folders.TryGetValue(t.batch_id, out var i)
+                    ? i
+                    : (t.file_name.Split('/')[0], t.item_count, 0, (double?)null, (long?)null);
                 row = new FileTransferState
                 {
                     transfer_id = "folder:" + t.batch_id,
@@ -1457,9 +1467,10 @@ namespace Deskdrop.WinUI
                     is_outbound = t.is_outbound,
                     item_count = info.Item2,
                     DoneCount = info.Item3,
+                    FolderProgress = info.Item4,
                     bytes_received = t.bytes_received,
                     bytes_total = t.bytes_total,
-                    speed_bps = t.speed_bps,
+                    speed_bps = info.Item5 ?? t.speed_bps,
                     status = t.status,
                 };
                 byBatch[t.batch_id] = row;
@@ -1832,6 +1843,7 @@ namespace Deskdrop.WinUI
                                 match.eta_secs = tr.eta_secs;
                                 match.item_count = tr.item_count;
                                 match.DoneCount = tr.DoneCount;
+                                match.FolderProgress = tr.FolderProgress;
                                 match.FirstItemId = tr.FirstItemId;
                                 existing.Remove(match);
                             }
