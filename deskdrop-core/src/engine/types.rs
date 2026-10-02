@@ -547,6 +547,8 @@ pub(crate) struct EngineShared {
     /// Callers blocked on a remote files or thumbnail reply.
     pub(crate) remote_waiters: RemoteWaiters,
     pub(crate) started_at: Instant,
+    /// Asks the network monitor to re-check now (see `Engine::refresh_network`).
+    pub(crate) network_hint: Arc<std::sync::OnceLock<mpsc::Sender<()>>>,
 }
 
 /// Status reported between devices. The local half caches what this device

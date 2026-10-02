@@ -2169,6 +2169,9 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_notifyNetworkRestored(
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
     let engine = h.engine.clone();
+    // Re-read the network first: a new address means rebinding the listener
+    // and restarting discovery, which the poll would only notice in 15 s.
+    engine.refresh_network();
     rt().spawn(async move {
         engine.reconnect_all_peers().await;
     });

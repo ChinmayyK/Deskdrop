@@ -78,7 +78,8 @@ namespace Deskdrop.WinUI.Views
                 if (StartupToggle.IsOn)
                 {
                     var exePath = Environment.ProcessPath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "Deskdrop.exe");
-                    key.SetValue(StartupRegistryValueName, $"\"{exePath}\"");
+                    // --background: start in the tray at sign-in, without a window.
+                    key.SetValue(StartupRegistryValueName, $"\"{exePath}\" --background");
                 }
                 else
                 {

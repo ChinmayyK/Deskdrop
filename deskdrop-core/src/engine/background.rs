@@ -556,11 +556,12 @@ impl Engine {
     }
 
     pub(super) async fn spawn_network_monitor(&self) -> Result<()> {
-        let mut changes = network_manager::spawn_network_monitor(
+        let (mut changes, hint) = network_manager::spawn_network_monitor(
             self.shared.config.bind_ip,
             self.shared.config.port,
             self.shared.config.network_poll_interval,
         )?;
+        let _ = self.shared.network_hint.set(hint);
         let shared = self.shared.clone();
 
         // MED-02: task panics inside tokio::spawn are silently swallowed.

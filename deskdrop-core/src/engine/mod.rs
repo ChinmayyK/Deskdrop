@@ -182,6 +182,7 @@ impl Engine {
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_waiters: RemoteWaiters::default(),
             started_at: Instant::now(),
+            network_hint: Arc::default(),
         };
 
         let engine = Self {
@@ -344,6 +345,16 @@ impl Engine {
     /// Trigger a fresh mDNS browse query and restart the advertisement.
     /// Called by the Mac "Scan" button — surfaces peers that came online
     /// since the last browse.
+    /// The host saw the network change (Wi-Fi to Ethernet, another band,
+    /// a hotspot): re-read the interfaces now. A change rebinds the
+    /// listener, restarts discovery and reconnects peers at once instead of
+    /// at the next poll, which is 15 s on Android.
+    pub fn refresh_network(&self) {
+        if let Some(hint) = self.shared.network_hint.get() {
+            let _ = hint.try_send(());
+        }
+    }
+
     pub async fn rescan_peers(&self) {
         if let Some(tx) = &self.shared.discovery_tx {
             let state = self.shared.network_state.lock().await;

@@ -757,7 +757,8 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(is_outbound));
             OnPropertyChanged(nameof(TransferIcon));
 
-            try
+            // No window when Deskdrop started in the tray: no taskbar button to fill.
+            if (App.MainWindow != null) try
             {
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
                 if (status == "transferring" || status == "in_progress")
