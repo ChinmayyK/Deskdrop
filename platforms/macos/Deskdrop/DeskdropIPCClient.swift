@@ -337,6 +337,16 @@ final class DeskdropIPCClient {
         return resp.data ?? []
     }
 
+    /// The full text of a received clipboard item, by its activity id. The
+    /// feed's text_preview is cut at 400 characters; this is not.
+    func incomingClipboardText(id: Int64) async throws -> String? {
+        struct Payload: Codable { let type: String; let text: String? }
+        let raw = try await send(cmd: ["cmd": "incoming_clipboard", "id": id])
+        let resp = try await decode(IpcResponse<Payload>.self, from: raw)
+        guard let p = resp.data, p.type == "text" else { return nil }
+        return p.text
+    }
+
     // ── Timeline-first clipboard ──────────────────────────────────────────────
 
     /// Apply a remote clipboard item from the activity feed by its content hash.

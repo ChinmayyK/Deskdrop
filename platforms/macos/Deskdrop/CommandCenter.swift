@@ -741,8 +741,11 @@ struct LiveDevicePanel: View {
                                 ForEach(Array(recentClipboards.enumerated()), id: \.offset) { index, clip in
                                     if let text = clip.text_preview {
                                         Button {
-                                            NSPasteboard.general.clearContents()
-                                            NSPasteboard.general.setString(text, forType: .string)
+                                            Task { @MainActor in
+                                                let full = await store.fullText(of: clip) ?? text
+                                                NSPasteboard.general.clearContents()
+                                                NSPasteboard.general.setString(full, forType: .string)
+                                            }
                                         } label: {
                                             HStack {
                                                 Text(text)
