@@ -7,16 +7,23 @@ namespace Deskdrop.WinUI.Services
     public static class WindowIconHelper
     {
         private static readonly string IconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+        private static readonly string DarkIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIconDark.ico");
 
         // Unpackaged WinUI3 apps don't automatically pick up the exe's
         // embedded icon for window/titlebar/taskbar - it must be set
         // explicitly per AppWindow, otherwise it falls back to a generic
         // WinUI icon.
-        public static void Apply(AppWindow appWindow)
+        public static void Apply(AppWindow appWindow) => Apply(appWindow, isDark: false);
+
+        // The window, taskbar and Alt+Tab icon in the logo that matches the
+        // window's theme: the dark logo on a dark title bar.
+        public static void Apply(AppWindow appWindow, bool isDark)
         {
             try
             {
-                if (File.Exists(IconPath)) appWindow.SetIcon(IconPath);
+                var path = isDark ? DarkIconPath : IconPath;
+                if (!File.Exists(path)) path = IconPath;
+                if (File.Exists(path)) appWindow.SetIcon(path);
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
