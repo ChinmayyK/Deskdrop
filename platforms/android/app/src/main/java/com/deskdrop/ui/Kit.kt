@@ -498,7 +498,10 @@ private fun PairQrDialog(onDismiss: () -> Unit) {
 // ---------------------------------------------------------------- helpers
 
 internal fun isPhoneName(name: String) =
-    listOf("phone", "pixel", "galaxy", "oneplus", "nord", "android").any { name.contains(it, ignoreCase = true) }
+    listOf(
+        "phone", "pixel", "galaxy", "oneplus", "nord", "android", "realme", "redmi", "xiaomi", "poco",
+        "samsung", "motorola", "moto ", "vivo", "oppo", "iqoo", "infinix", "tecno", "huawei", "honor"
+    ).any { name.contains(it, ignoreCase = true) }
 
 internal fun relativeTime(timestampMs: Long): String {
     val secs = (System.currentTimeMillis() - timestampMs) / 1000

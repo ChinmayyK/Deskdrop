@@ -194,7 +194,7 @@ private fun PeerRow(
         ) {
             IconWell(
                 c,
-                if (isPhoneName(peer.name)) Icons.Outlined.Smartphone else Icons.Outlined.LaptopMac,
+                osIcon(peer.platform, peer.name),
                 tint = if (peer.isConnected) c.accent else c.textMuted,
                 background = if (peer.isConnected) c.accentSoft else c.surfaceSunk
             )

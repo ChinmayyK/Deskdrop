@@ -96,7 +96,7 @@ fun SettingsTab(
                 Spacer(Modifier.height(20.dp))
                 Panel(c) {
                     ListRow(
-                        c, Icons.Outlined.Smartphone, deviceName.ifBlank { "This phone" },
+                        c, osIcon(DeviceOs.Android), deviceName.ifBlank { "This phone" },
                         detail = when {
                             !isServiceRunning -> "Service stopped"
                             !isSyncEnabled -> "Sync paused · $ip"
@@ -182,7 +182,7 @@ fun SettingsTab(
                             if (i > 0) Hairline(c)
                             ListRow(
                                 c,
-                                if (isPhoneName(peer.name)) Icons.Outlined.Smartphone else Icons.Outlined.LaptopMac,
+                                osIcon(peer.platform, peer.name),
                                 peer.name,
                                 detail = if (peer.isConnected) "Connected" else "Offline",
                                 detailColor = if (peer.isConnected) c.live else c.textMuted,

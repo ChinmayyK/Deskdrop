@@ -600,7 +600,7 @@ internal fun DeviceRow(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    if (isPhoneName(peer.name)) Icons.Outlined.Smartphone else Icons.Outlined.LaptopMac,
+                    osIcon(peer.platform, peer.name),
                     contentDescription = null,
                     tint = if (peer.isConnected) c.accent else c.textMuted,
                     modifier = Modifier.size(20.dp)
