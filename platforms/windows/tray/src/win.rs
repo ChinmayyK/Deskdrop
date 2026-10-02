@@ -539,7 +539,11 @@ fn load_icon() -> HICON {
         return unsafe { LoadIconW(null_mut(), IDI_APPLICATION) };
     };
     let dir = exe.parent().unwrap_or(Path::new("."));
-    let themed = if taskbar_is_light() { "TrayIcon.ico" } else { "TrayIconDark.ico" };
+    let themed = if taskbar_is_light() {
+        "TrayIcon.ico"
+    } else {
+        "TrayIconDark.ico"
+    };
     let candidates = [
         dir.join("Assets").join(themed),
         dir.join("..").join("Assets").join(themed),
