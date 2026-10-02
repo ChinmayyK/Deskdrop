@@ -66,6 +66,8 @@ final class DeskdropStore: ObservableObject {
                         initial.fileName = folder.folder_name
                         initial.itemCount = folder.file_count
                         initial.doneCount = folder.done_count + folder.failed_count
+                        initial.folderRatio = folder.progress
+                        if let speed = folder.speed_bps { initial.speedBps = speed }
                     }
                     batches[bid] = initial
                 }

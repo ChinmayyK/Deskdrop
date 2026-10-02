@@ -118,15 +118,16 @@ private struct ToastOverlayPanelView: View {
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
             // Dynamic Island Transfers (Highest Priority)
-            if store.activeTransfers.count > 1 {
-                GroupedDynamicIslandTransferCard(transfers: store.activeTransfers, store: store)
+            // One card per folder, not per file in flight.
+            if store.batchedTransfers.count > 1 {
+                GroupedDynamicIslandTransferCard(transfers: store.batchedTransfers, store: store)
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.85)),
                         removal: .opacity.combined(with: .scale(scale: 0.95))
                     ))
                     .zIndex(1000)
             } else {
-                ForEach(store.activeTransfers) { transfer in
+                ForEach(store.batchedTransfers) { transfer in
                     DynamicIslandTransferCard(transfer: transfer, store: store)
                         .transition(.asymmetric(
                             insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.85)),
@@ -174,7 +175,7 @@ private struct DynamicIslandTransferCard: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             // Left Icon
-            Image(systemName: "arrow.down.doc.fill")
+            Image(systemName: transfer.isDirectory ? "folder.fill" : "arrow.down.doc.fill")
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundStyle(progressColor)
                 .frame(width: 20)
@@ -195,6 +196,11 @@ private struct DynamicIslandTransferCard: View {
                 
                 if case .queued = transfer.status {
                     Text("Queued... (\(transfer.fromDeviceName))")
+                        .font(.system(size: 12, weight: .medium, design: .default))
+                        .foregroundStyle(Color.primary.opacity(0.7))
+                        .lineLimit(1)
+                } else if transfer.isDirectory {
+                    Text("\(transfer.itemLabel) · \(transfer.fromDeviceName)")
                         .font(.system(size: 12, weight: .medium, design: .default))
                         .foregroundStyle(Color.primary.opacity(0.7))
                         .lineLimit(1)
@@ -248,6 +254,14 @@ private struct DynamicIslandTransferCard: View {
                     }
                     .buttonStyle(.plain)
                 }
+            } else if transfer.isDirectory {
+                // A folder pauses file by file in the engine; offer Cancel.
+                Button(action: { store.cancelFileTransfer(transfer) }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(0.4))
+                }
+                .buttonStyle(.plain)
             } else if case .transferring = transfer.status {
                 Button(action: { store.pauseFileTransfer(transfer) }) {
                     Image(systemName: "pause.circle.fill")
@@ -294,6 +308,11 @@ private struct GroupedDynamicIslandTransferCard: View {
     }
     
     var exactRatio: Double {
+        // Folders report their own progress; bytes of their files in
+        // flight say nothing about the whole folder.
+        if transfers.contains(where: { $0.isDirectory }) {
+            return transfers.reduce(0) { $0 + $1.exactRatio } / Double(max(1, transfers.count))
+        }
         let expected = totalBytesExpected
         if expected > 0 {
             return min(1.0, max(0.0, Double(totalBytesReceived) / Double(expected)))
@@ -318,7 +337,7 @@ private struct GroupedDynamicIslandTransferCard: View {
             // Content Column
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text("Receiving \(transfers.count) items")
+                    Text("\(transfers.count) transfers")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.primary)
                         .lineLimit(1)
@@ -354,8 +373,9 @@ private struct GroupedDynamicIslandTransferCard: View {
 
             // Cancel all button
             Button(action: {
+                // These are under way: cancel, not decline.
                 for t in transfers {
-                    store.rejectFileTransfer(t)
+                    store.cancelFileTransfer(t)
                 }
             }) {
                 Image(systemName: "xmark.circle.fill")
