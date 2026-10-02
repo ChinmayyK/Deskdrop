@@ -270,6 +270,9 @@ pub const PB_EVENT_SPEED_TEST_COMPLETE: c_int = 36;
 pub const PB_EVENT_REMOTE_FILE_ACTION_REQUEST: c_int = 37;
 pub const PB_EVENT_OPEN_URL_ON_DEVICE_REQUESTED: c_int = 38;
 pub const PB_EVENT_OPEN_URL_ON_DEVICE_ACK: c_int = 39;
+/// A notification mirrored from a phone: title via
+/// `deskdrop_event_notification_title`, body via `deskdrop_event_text`.
+pub const PB_EVENT_NOTIFICATION_RECEIVED: c_int = 40;
 
 /// Opaque event payload. Call `deskdrop_event_*` accessors to read fields.
 /// Must be freed with `deskdrop_free_event`.
@@ -366,7 +369,7 @@ pub unsafe extern "C" fn deskdrop_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::CallActionRequest { .. } => PB_EVENT_CALL_ACTION,
         EngineEvent::BatteryStateChanged { .. } => PB_EVENT_BATTERY_STATE_CHANGED,
         EngineEvent::NetworkStateChanged { .. } => PB_EVENT_NETWORK_STATE_CHANGED,
-        EngineEvent::NotificationReceived { .. } => PB_EVENT_ACTIVITY_UPDATED,
+        EngineEvent::NotificationReceived { .. } => PB_EVENT_NOTIFICATION_RECEIVED,
         EngineEvent::CameraStreamRequest { .. } => PB_EVENT_CAMERA_STREAM_REQUEST,
         EngineEvent::CameraStreamAccept { .. } => PB_EVENT_CAMERA_STREAM_ACCEPT,
         EngineEvent::CameraStreamStop { .. } => PB_EVENT_CAMERA_STREAM_STOP,
@@ -405,6 +408,7 @@ pub unsafe extern "C" fn deskdrop_event_text(event: *mut PbEvent) -> *const c_ch
         }
         EngineEvent::Warning(s) => Some(s.clone()),
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
+        EngineEvent::NotificationReceived { text, .. } => Some(text.clone()),
         EngineEvent::NetworkStateChanged { network_type, .. } => Some(network_type.clone()),
         EngineEvent::ActivityFeedUpdated { entries, .. } => serde_json::to_string(entries).ok(),
         EngineEvent::RemoteFilesResponseReceived {
@@ -464,6 +468,7 @@ pub unsafe extern "C" fn deskdrop_event_device_name(event: *mut PbEvent) -> *con
         EngineEvent::NetworkStateChanged { from_name, .. } => Some(from_name.clone()),
         EngineEvent::OpenUrlOnDeviceRequested { from_name, .. } => Some(from_name.clone()),
         EngineEvent::CallStateChanged { from_name, .. } => Some(from_name.clone()),
+        EngineEvent::NotificationReceived { from_name, .. } => Some(from_name.clone()),
         _ => None,
     };
     if let Some(n) = name {
@@ -1505,6 +1510,22 @@ pub unsafe extern "C" fn deskdrop_event_call_contact_name(event: *mut PbEvent) -
         EngineEvent::CallStateChanged { contact_name, .. } => {
             let name = contact_name.clone();
             e.cache_str(name)
+        }
+        _ => std::ptr::null(),
+    }
+}
+
+/// The title of a NOTIFICATION_RECEIVED event, or NULL.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_notification_title(event: *mut PbEvent) -> *const c_char {
+    if event.is_null() {
+        return std::ptr::null();
+    }
+    let e = &mut *event;
+    match &e.inner {
+        EngineEvent::NotificationReceived { title, .. } => {
+            let title = title.clone();
+            e.cache_str(title)
         }
         _ => std::ptr::null(),
     }
