@@ -182,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     // MARK: - Finder Service
     @objc func handleDropService(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
         guard store.connectedCount > 0 else {
-            store.showToast(title: "No Devices Connected", body: "Connect a device to send files.", tint: CRTheme.inkSoft, systemImage: "wifi.slash")
+            store.showToast(title: "No Devices Connected", body: "Connect a device to send files or folders.", tint: CRTheme.inkSoft, systemImage: "wifi.slash")
             return
         }
         
@@ -236,7 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             dropView.delegate  = self
             button.addSubview(dropView)
             menuBarDropView = dropView
-            button.toolTip  = "Deskdrop — Drag files here to send to your device"
+            button.toolTip  = "Deskdrop — Drag files or folders here to send to your device"
             
             button.window?.registerForDraggedTypes([
                 .fileURL,
@@ -898,36 +898,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// F24: Push the current Mac clipboard to all connected peers immediately.
     private func forcePushClipboard() {
-        guard store.connectedCount > 0 else {
-            store.showToast(
-                title: "No Devices Connected",
-                body: "Connect a device to push clipboard.",
-                tint: CRTheme.inkSoft,
-                systemImage: "wifi.slash",
-                ttl: 2.5
-            )
-            return
-        }
-        Task {
-            do {
-                try await DeskdropIPCClient.shared.sendClipboardCurrent(targetDeviceId: store.defaultTargetDevice?.id)
-                store.showToast(
-                    title: "Clipboard Synced",
-                    body: "Pushed to all connected devices.",
-                    tint: CRTheme.accentGreen,
-                    systemImage: "arrow.up.circle.fill",
-                    ttl: 2.0
-                )
-            } catch {
-                store.showToast(
-                    title: "Sync Failed",
-                    body: error.localizedDescription,
-                    tint: Color.red,
-                    systemImage: "exclamationmark.triangle",
-                    ttl: 3.0
-                )
-            }
-        }
+        store.pushCurrentClipboard()
     }
 
     // MARK: - Trust prompt
@@ -1242,7 +1213,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
             guard let store = self?.store, store.sendFilesChoosingTarget(urls: urls) else { return }
             // Brief visual feedback
             store.showToast(
-                title: "Sending \(urls.count) file\(urls.count == 1 ? "" : "s")",
+                title: "Sending \(urls.count) item\(urls.count == 1 ? "" : "s")",
                 body: urls.map(\.lastPathComponent).joined(separator: ", "),
                 tint: CRTheme.brandElectric,
                 systemImage: "arrow.up.doc.fill",

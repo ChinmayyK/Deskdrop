@@ -92,7 +92,7 @@ struct MenuBarPopoverView: View {
                     action: { onAction(.quickAccess) }
                 )
                 PopoverActionButton(
-                    title: "Send File",
+                    title: "Files & Folders",
                     icon: "paperplane.fill",
                     tint: CRTheme.brandCyan,
                     action: { onAction(.sendFile) }

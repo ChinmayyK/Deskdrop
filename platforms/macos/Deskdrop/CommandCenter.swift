@@ -110,7 +110,7 @@ struct CommandSidebarView: View {
             
             // Connected Devices List
             VStack(alignment: .leading, spacing: 6) {
-                Text("DEVICES")
+                Text("YOUR DEVICES")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(CRTheme.inkSubtle)
                     .padding(.horizontal, 16)
@@ -328,58 +328,62 @@ struct CommandCenterView: View {
                     // Dynamic Hero Header
                     DynamicHeroHeaderView(store: store)
                 
-                // 2. Launchpad (Quick Actions)
+                // 2. Send
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Launchpad")
+                    Text("Send")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(CRTheme.ink)
                         .padding(.horizontal, 40)
-                    
+
                     ViewThatFits(in: .horizontal) {
-                        // Wide (3-2)
-                        VStack(spacing: 20) {
-                            HStack(spacing: 20) {
-                                transferTile
-                                browseTile
-                                clipboardTile
-                            }
-                            HStack(spacing: 20) {
-                                speedTestTile
-                                settingsTile
-                            }
-                        }
-                        
-                        // Medium (2-2-1)
-                        VStack(spacing: 20) {
-                            HStack(spacing: 20) {
-                                transferTile
-                                browseTile
-                            }
-                            HStack(spacing: 20) {
-                                clipboardTile
-                                speedTestTile
-                            }
-                            HStack(spacing: 20) {
-                                settingsTile
-                            }
-                        }
-                        
-                        // Narrow (1 col)
-                        VStack(spacing: 20) {
-                            transferTile
-                            browseTile
-                            clipboardTile
-                            speedTestTile
-                            settingsTile
-                        }
+                        HStack(spacing: 20) { sendTiles }
+                        VStack(spacing: 20) { sendTiles }
                     }
                     .padding(.horizontal, 40)
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
-                
-                // 4. Recent Activity
+
+                // 3. Transferring, before devices and history: what is
+                // moving right now matters most.
+                if !store.batchedTransfers.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("Transferring")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundStyle(CRTheme.ink)
+                            Text("\(store.batchedTransfers.count)")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(CRTheme.inkSoft)
+                        }
+                        .padding(.horizontal, 40)
+
+                        VStack(spacing: 12) {
+                            ForEach(store.batchedTransfers) { transfer in
+                                ActiveTransferCard(transfer: transfer, store: store)
+                            }
+                        }
+                        .padding(.horizontal, 40)
+                    }
+                }
+
+                // 4. More
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Recent Activity")
+                    Text("More")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(CRTheme.ink)
+                        .padding(.horizontal, 40)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 20) { moreTiles }
+                        VStack(spacing: 20) { moreTiles }
+                    }
+                    .padding(.horizontal, 40)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
+
+                // 5. Recent
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Recent")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(CRTheme.ink)
                         .padding(.horizontal, 40)
@@ -387,7 +391,7 @@ struct CommandCenterView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         let recent = Array(store.activityFeed.filter { $0.isApplicable }.prefix(4))
                         if recent.isEmpty {
-                            Text("No recent activity.")
+                            Text("Copy something on either device, or send a file. It shows up here.")
                                 .font(.system(size: 14))
                                 .foregroundStyle(CRTheme.inkSoft)
                                 .padding(16)
@@ -413,7 +417,7 @@ struct CommandCenterView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.item, .folder], allowsMultipleSelection: true) { result in
             if case let .success(urls) = result {
                 if let target = pendingFileTarget {
                     store.sendFiles(urls: urls, to: target)
@@ -430,9 +434,20 @@ struct CommandCenterView: View {
         }
     }
     
-    // MARK: Launchpad Tile Definitions
+    // MARK: Tiles
+    @ViewBuilder private var sendTiles: some View {
+        transferTile
+        clipboardTile
+        browseTile
+    }
+    @ViewBuilder private var moreTiles: some View {
+        historyTile
+        speedTestTile
+        settingsTile
+    }
+
     private var transferTile: some View {
-        LaunchpadTile(title: "Transfer Files", icon: "paperplane.fill", color: CRTheme.brandElectric) {
+        LaunchpadTile(title: "Files & folders", subtitle: "Send files or entire folders", icon: "paperplane.fill", color: CRTheme.brandElectric) {
             if !store.connectedDevices.isEmpty {
                 pendingFileTarget = nil
                 showingFilePicker = true
@@ -440,19 +455,24 @@ struct CommandCenterView: View {
         }
     }
     private var browseTile: some View {
-        LaunchpadTile(title: "Browse Device", icon: "internaldrive.fill", color: CRTheme.brandViolet) {
+        LaunchpadTile(title: "Browse Device", subtitle: "Open files on a phone", icon: "internaldrive.fill", color: CRTheme.brandViolet) {
             if store.connectedDevices.first != nil {
                 showingRemoteExplorer = true
             }
         }
     }
     private var clipboardTile: some View {
-        LaunchpadTile(title: "Clipboard", icon: "doc.on.clipboard.fill", color: CRTheme.accentPink) {
+        LaunchpadTile(title: "Clipboard", subtitle: "Send what you last copied", icon: "doc.on.clipboard.fill", color: CRTheme.accentPink) {
+            store.pushCurrentClipboard()
+        }
+    }
+    private var historyTile: some View {
+        LaunchpadTile(title: "Clipboard history", subtitle: "Everything you copied", icon: "clock.arrow.circlepath", color: CRTheme.brandCyan) {
             withAnimation(.crSpring) { store.selectedSection = .clipboard }
         }
     }
     private var speedTestTile: some View {
-        LaunchpadTile(title: "Speed Test", icon: "gauge.with.dots.needle.bottom.50percent", color: CRTheme.brandCyan) {
+        LaunchpadTile(title: "Speed Test", subtitle: "Measure the link", icon: "gauge.with.dots.needle.bottom.50percent", color: CRTheme.brandCyan) {
             if let first = store.connectedDevices.first {
                 store.startSpeedTest(deviceId: first.id)
                 withAnimation(.crSpring) { store.selectedSection = .transfers }
@@ -460,7 +480,7 @@ struct CommandCenterView: View {
         }
     }
     private var settingsTile: some View {
-        LaunchpadTile(title: "Settings", icon: "gearshape.fill", color: CRTheme.inkSubtle) {
+        LaunchpadTile(title: "Settings", subtitle: nil, icon: "gearshape.fill", color: CRTheme.inkSubtle) {
             withAnimation(.crSpring) { store.selectedSection = .settings }
         }
     }
@@ -480,6 +500,7 @@ struct CommandCenterView: View {
 // Subcomponents
 struct LaunchpadTile: View {
     let title: String
+    let subtitle: String?
     let icon: String
     let color: Color
     let action: () -> Void
@@ -494,11 +515,22 @@ struct LaunchpadTile: View {
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(color)
                 }
-                Text(title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(CRTheme.ink)
+                VStack(spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(CRTheme.ink)
+                        .lineLimit(1)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(.horizontal, 10)
             }
-            .frame(width: 160, height: 140)
+            .frame(width: 180, height: 150)
             .background(CRTheme.surfaceStrong)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CRTheme.stroke.opacity(0.5), lineWidth: 1))
