@@ -390,10 +390,13 @@ async fn pairing_a_reinstalled_device_replaces_its_old_entry() {
         .unwrap();
     connect(&a, &b).await;
     let (a_id, b_id) = (a.id, b.id);
-    // Both ends of the handshake learn each other's version.
+    // Both ends of the handshake learn each other's version and OS.
     let current = Some(deskdrop_core::protocol::APP_VERSION.to_string());
     assert_eq!(peer(&a, b_id).await.app_version, current);
     assert_eq!(peer(&b, a_id).await.app_version, current);
+    let os = Some(deskdrop_core::network::MY_PLATFORM.to_string());
+    assert_eq!(peer(&a, b_id).await.platform, os);
+    assert_eq!(peer(&b, a_id).await.platform, os);
 
     b.engine.send_pairing_request(a_id).await;
     wait_for(

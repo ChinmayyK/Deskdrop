@@ -187,9 +187,11 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
         trusted,
         DiscoverySource::Mdns,
     )?;
-    shared
-        .peer_manager
-        .set_app_version(hs.peer_device_id, hs.peer_app_version);
+    shared.peer_manager.set_handshake_info(
+        hs.peer_device_id,
+        hs.peer_app_version,
+        hs.peer_platform,
+    );
 
     register_session(
         shared,
@@ -452,9 +454,11 @@ pub(super) async fn connect_once(
         trusted,
         discovery,
     )?;
-    shared
-        .peer_manager
-        .set_app_version(hs.peer_device_id, hs.peer_app_version);
+    shared.peer_manager.set_handshake_info(
+        hs.peer_device_id,
+        hs.peer_app_version,
+        hs.peer_platform,
+    );
 
     register_session(
         shared,
