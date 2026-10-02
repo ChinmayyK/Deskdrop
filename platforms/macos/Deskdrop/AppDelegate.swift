@@ -727,6 +727,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             fileBannerManager.show(title: title, body: body)
             sendSystemNotification(title: title, body: body)
             
+        case "folder_transfer_complete":
+            // One notification per folder, received or sent. text_preview
+            // carries "12 files" or "11 of 12 files".
+            let folderName = entry.file_name ?? "Folder"
+            let files = entry.text_preview ?? ""
+            if let dest = entry.dest_path {
+                let url = URL(fileURLWithPath: dest)
+                store.showToast(
+                    title: "Folder Received",
+                    body: files.isEmpty ? folderName : "\(folderName) · \(files)",
+                    tint: CRTheme.accentGreen,
+                    systemImage: "folder.fill",
+                    ttl: 6.0,
+                    primaryAction: ToastAction(title: "Show", role: .primary) {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                )
+                sendSystemNotification(title: "Folder Received", body: "\(folderName) from \(entry.device_name)")
+            } else {
+                store.showToast(
+                    title: "Folder Sent",
+                    body: files.isEmpty ? folderName : "\(folderName) · \(files)",
+                    tint: CRTheme.accentGreen,
+                    systemImage: "folder.fill",
+                    ttl: 4.0
+                )
+            }
+
         case "remote_notification":
             // Respect the user's toggle for Android Notification Mirroring
             let mirrorEnabled = UserDefaults.standard.object(forKey: "mirrorAndroidNotifications") as? Bool ?? true

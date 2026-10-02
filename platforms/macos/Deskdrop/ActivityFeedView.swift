@@ -437,6 +437,7 @@ struct ActivityEntryRow: View {
         case "file_transfer_started":  return "arrow.down.circle"
         case "file_transfer_complete": return "checkmark.circle.fill"
         case "file_transfer_failed":   return "xmark.circle"
+        case "folder_transfer_complete": return "folder.fill"
         case "peer_connected":         return "wifi"
         case "peer_disconnected":      return "wifi.slash"
         case "sync_paused":            return "pause.circle"
@@ -455,6 +456,7 @@ struct ActivityEntryRow: View {
         case "file_transfer_started": return "Transfer"
         case "file_transfer_complete":return "Complete"
         case "file_transfer_failed":  return "Failed"
+        case "folder_transfer_complete": return "Folder"
         case "peer_connected":        return "Connected"
         case "peer_disconnected":     return "Disconnected"
         case "sync_paused":           return "Paused"
@@ -467,7 +469,7 @@ struct ActivityEntryRow: View {
         switch entry.kind {
         case "remote_clipboard_available":
             return entry.applied_locally ? CRTheme.accentGreen : CRTheme.brandElectric
-        case "file_transfer_complete": return CRTheme.accentGreen
+        case "file_transfer_complete", "folder_transfer_complete": return CRTheme.accentGreen
         case "file_transfer_failed":   return CRTheme.accentRed
         case "peer_connected":         return CRTheme.accentGreen
         case "peer_disconnected":      return CRTheme.inkSoft
@@ -510,7 +512,7 @@ struct FileTransferBanner: View {
                     Text(transfer.fileName)
                         .font(.system(size: 13, weight: .semibold)).foregroundStyle(CRTheme.ink).lineLimit(1)
                     if transfer.isDirectory {
-                        Text("\(transfer.itemCount) items")
+                        Text(transfer.itemLabel)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(CRTheme.inkSoft)
                             .padding(.horizontal, 5)
@@ -579,8 +581,11 @@ struct FileTransferBanner: View {
             }
         case .transferring:
             HStack(spacing: 7) {
-                Button("Pause") { store.pauseFileTransfer(transfer) }
-                    .buttonStyle(CRSecondaryButtonStyle())
+                // A folder pauses file by file in the engine; offer only Cancel.
+                if !transfer.isDirectory {
+                    Button("Pause") { store.pauseFileTransfer(transfer) }
+                        .buttonStyle(CRSecondaryButtonStyle())
+                }
                 Button("Cancel") { store.cancelFileTransfer(transfer) }
                     .buttonStyle(CRDestructiveButtonStyle())
             }

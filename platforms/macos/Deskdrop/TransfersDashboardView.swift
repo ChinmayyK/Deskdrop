@@ -6,7 +6,7 @@ struct TransfersDashboardView: View {
     @Environment(\.colorScheme) var colorScheme
     
     var historyItems: [IpcActivityEntry] {
-        store.activityFeed.filter { $0.kind == "file_transfer_complete" || $0.kind == "file_transfer_started" }
+        store.activityFeed.filter { $0.kind == "file_transfer_complete" || $0.kind == "file_transfer_started" || $0.kind == "folder_transfer_complete" }
     }
     
     @State private var quickLookURL: URL?
@@ -233,7 +233,7 @@ struct ActiveTransferCard: View {
                             .truncationMode(.middle)
                         
                         if transfer.isDirectory {
-                            Text("\(transfer.itemCount) items")
+                            Text(transfer.itemLabel)
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(CRTheme.inkSoft)
                                 .padding(.horizontal, 6)
@@ -268,7 +268,9 @@ struct ActiveTransferCard: View {
                         actionButton(icon: "checkmark", label: "Accept", color: .green) { store.acceptFileTransfer(transfer) }
                         actionButton(icon: "xmark", label: "Reject", color: .red) { store.rejectFileTransfer(transfer) }
                     } else if case .transferring = transfer.status {
-                        actionButton(icon: "pause.fill", label: "Pause") { store.pauseFileTransfer(transfer) }
+                        if !transfer.isDirectory {
+                            actionButton(icon: "pause.fill", label: "Pause") { store.pauseFileTransfer(transfer) }
+                        }
                         actionButton(icon: "xmark", label: "Cancel") { store.cancelFileTransfer(transfer) }
                     } else if case .paused = transfer.status {
                         actionButton(icon: "play.fill", label: "Resume") { store.resumeFileTransfer(transfer) }

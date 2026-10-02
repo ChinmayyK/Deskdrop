@@ -183,6 +183,8 @@ struct FileTransferState: Identifiable, Equatable {
     var isDirectory: Bool = false
     var itemCount: Int = 1
     var batchId: String? = nil
+    /// Files of a folder already done; nil for single files.
+    var doneCount: Int? = nil
     
     var bytesReceived: Int64 = 0
     var percent: Int = 0
@@ -191,13 +193,28 @@ struct FileTransferState: Identifiable, Equatable {
     var status: FileTransferStatus = .incoming
 
     var exactRatio: Double {
+        // Only a few files of a folder are in flight at once, so a folder's
+        // progress is files done, not bytes of the files in flight.
+        if isDirectory, let done = doneCount, itemCount > 0 {
+            return min(1.0, Double(done) / Double(itemCount))
+        }
         if totalBytes > 0 {
             return min(1.0, max(0.0, Double(bytesReceived) / Double(totalBytes)))
         }
         return Double(percent) / 100.0
     }
 
+    /// "37 of 121 files" for a folder in flight, else "121 items".
+    var itemLabel: String {
+        let noun = itemCount == 1 ? "file" : "files"
+        if let done = doneCount { return "\(done) of \(itemCount) \(noun)" }
+        return "\(itemCount) items"
+    }
+
     var exactPercentString: String {
+        if isDirectory, doneCount != nil {
+            return "\(Int((exactRatio * 100).rounded()))%"
+        }
         if totalBytes > 0 {
             return String(format: "%.1f%%", exactRatio * 100.0)
         }

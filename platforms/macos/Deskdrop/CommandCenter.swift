@@ -469,6 +469,7 @@ struct CommandCenterView: View {
         switch kind {
         case "clipboard": return "doc.on.clipboard"
         case "file_transfer_started", "file_transfer_complete": return "paperplane.fill"
+        case "folder_transfer_complete": return "folder.fill"
         case "app_installed": return "app.dashed"
         case "photo_synced": return "photo"
         default: return "bolt.fill"
