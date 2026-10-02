@@ -571,6 +571,32 @@ namespace Deskdrop.WinUI.Services
             global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
         }
 
+        // Sends this PC's clipboard (text, or an image) to a device the user
+        // picks. Shared by the home screen and the Clipboard page.
+        public static async Task SendLocalClipboardAsync(XamlRoot? xamlRoot)
+        {
+            var store = DeskdropStore.Shared;
+            var view = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+            if (view.Contains(StandardDataFormats.Text))
+            {
+                var text = await view.GetTextAsync();
+                if (string.IsNullOrEmpty(text)) return;
+                var target = await DevicePicker.PickAsync(xamlRoot, store.ConnectedPeers);
+                if (target != null) store.SendPushText(text, target.device_id);
+            }
+            else if (view.Contains(StandardDataFormats.Bitmap))
+            {
+                var png = await ReadClipboardPngAsync(view);
+                if (png == null) return;
+                var target = await DevicePicker.PickAsync(xamlRoot, store.ConnectedPeers);
+                if (target != null) store.SendPushImage(png, target.device_id);
+            }
+            else
+            {
+                NotificationHelper.ShowToast("Nothing to send", "Copy some text or an image first.");
+            }
+        }
+
         // Reads the clipboard bitmap and encodes it as PNG, the format every
         // Deskdrop platform puts on its own clipboard.
         public static async Task<byte[]?> ReadClipboardPngAsync(DataPackageView view)

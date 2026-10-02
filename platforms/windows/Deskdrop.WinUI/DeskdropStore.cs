@@ -275,6 +275,8 @@ namespace Deskdrop.WinUI
         public bool explicit_disconnect { get => _explicit_disconnect; set { if(SetProperty(ref _explicit_disconnect, value)) NotifyPeerStateProperties(); } }
         private ulong? _last_seen;
         public ulong? last_seen { get => _last_seen; set { if (SetProperty(ref _last_seen, value)) OnPropertyChanged(nameof(LastSeenText)); } }
+        // Unix seconds of the last clipboard sync with this device.
+        public ulong? last_sync { get; set; }
         private string? _last_error;
         public string? last_error { get => _last_error; set { if (SetProperty(ref _last_error, value)) OnPropertyChanged(nameof(HasError)); } }
         private List<string> _ips = new();
@@ -1151,9 +1153,9 @@ namespace Deskdrop.WinUI
 
         public int PeerCount => Peers?.Count ?? 0;
         public bool HasPeers => Peers != null && Peers.Count > 0;
+        public bool HasConnectedPeers => ConnectedCount > 0;
         public bool HasNoPeers => !HasPeers;
         public int ConnectedCount => Peers?.Count(p => p.IsConnected) ?? 0;
-        public string HeroTagline => Deskdrop.WinUI.Services.DeskdropTaglines.Current(ConnectedCount, HasActiveTransfers);
         public int TrustedCount => Peers?.Count(p => p.is_trusted) ?? 0;
         public int AttentionCount => Peers?.Count(p => !p.is_trusted || p.pairingRequested || p.outgoingPairingWaiting) ?? 0;
         public int ActivityCount => ActivityFeed?.Count ?? 0;
@@ -1257,9 +1259,34 @@ namespace Deskdrop.WinUI
             get
             {
                 if (!IsDaemonRunning) return "Engine stopped";
-                if (ConnectedCount > 0) return $"{ConnectedCount} connected";
+                if (ConnectedCount > 0) return "Connected";
                 if (AttentionCount > 0) return "Ready to pair";
                 return "Looking for devices";
+            }
+        }
+
+        // This PC's name as other devices list it, for "Visible as".
+        private string _localDeviceName = Environment.MachineName;
+        public string LocalDeviceName
+        {
+            get => _localDeviceName;
+            private set => SetProperty(ref _localDeviceName, value);
+        }
+
+        // "192.168.1.20  ·  synced 1h ago" beside the status in the header.
+        public string IdentityMetaText
+        {
+            get
+            {
+                var connected = Peers?.Where(p => p.is_trusted && p.IsConnected).ToList() ?? new List<PeerViewModel>();
+                var lead = connected.FirstOrDefault();
+                if (lead == null) return "";
+                var synced = connected.Max(p => p.last_sync);
+                return string.Join("  ·  ", new[]
+                {
+                    string.IsNullOrEmpty(lead.PrimaryIpText) ? null : lead.PrimaryIpText,
+                    synced.HasValue ? $"synced {DeskdropFormatting.RelativeTimeFromUnixSeconds(synced.Value)}" : null,
+                }.Where(part => part != null));
             }
         }
 
@@ -1786,6 +1813,7 @@ namespace Deskdrop.WinUI
                             match.auto_connect = incoming.auto_connect;
                             match.explicit_disconnect = incoming.explicit_disconnect;
                             match.last_seen = incoming.last_seen;
+                            match.last_sync = incoming.last_sync;
                             match.last_error = incoming.last_error;
                             match.ips = incoming.ips;
                             match.fingerprint_display = incoming.fingerprint_display;
@@ -1819,6 +1847,12 @@ namespace Deskdrop.WinUI
                 }
 
                 ReadHealth(dataElem);
+                if (dataElem.TryGetProperty("local_device_name", out var nameElem)
+                    && nameElem.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(nameElem.GetString()))
+                {
+                    LocalDeviceName = nameElem.GetString()!;
+                }
 
                 if (dataElem.TryGetProperty("active_transfers", out var transfersElem))
                 {
@@ -1960,11 +1994,12 @@ namespace Deskdrop.WinUI
             OnPropertyChanged(nameof(HasPeers));
             OnPropertyChanged(nameof(HasNoPeers));
             OnPropertyChanged(nameof(ConnectedCount));
-            OnPropertyChanged(nameof(HeroTagline));
+            OnPropertyChanged(nameof(HasConnectedPeers));
             OnPropertyChanged(nameof(TrustedCount));
             OnPropertyChanged(nameof(AttentionCount));
             OnPropertyChanged(nameof(HeaderStatusText));
             OnPropertyChanged(nameof(HeaderStatusBrush));
+            OnPropertyChanged(nameof(IdentityMetaText));
 
             SyncPeerProjection(KnownDevices, Peers.Where(p => p.IsKnown));
             SyncPeerProjection(NearbyDevices, Peers.Where(p => p.IsNearby));
@@ -2087,7 +2122,6 @@ namespace Deskdrop.WinUI
 
         private void NotifyTransferMetrics()
         {
-            OnPropertyChanged(nameof(HeroTagline));
             OnPropertyChanged(nameof(HasActiveTransfers));
             OnPropertyChanged(nameof(ActiveTransferCount));
             OnPropertyChanged(nameof(HasActiveSpeedTests));
