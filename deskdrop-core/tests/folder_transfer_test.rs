@@ -96,6 +96,13 @@ async fn a_folder_arrives_whole_and_a_second_copy_lands_beside_it() {
     for (round, expected_dir) in [(0, "Trip"), (1, "Trip (2)")] {
         let send = a.engine.send_folder(src.clone(), Some(b.id)).await.unwrap();
         assert_eq!(send.file_count, 121, "clutter is not sent");
+        if round == 0 {
+            // The folder shows up in status at once, counting every file.
+            let listed = a.engine.folders().await;
+            assert_eq!(listed.len(), 1);
+            assert_eq!(listed[0].file_count, 121);
+            assert!((0.0..=1.0).contains(&listed[0].progress));
+        }
         let (sent, received) = tokio::join!(folder_result(&mut a), folder_result(&mut b));
 
         assert!(sent.outbound && !received.outbound);

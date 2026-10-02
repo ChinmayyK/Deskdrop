@@ -652,7 +652,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 "peer_networks":         peer_networks,
                 "peer_storages":         peer_storages,
                 "health":                state.engine.health().await,
-                "folders":               state.engine.folders(),
+                "folders":               state.engine.folders().await,
             })))
         }
         // Re-trigger mDNS discovery — called by the Mac "Scan" button and

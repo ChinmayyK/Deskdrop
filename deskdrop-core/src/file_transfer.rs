@@ -1428,6 +1428,31 @@ impl FileTransferManager {
             .collect()
     }
 
+    /// Progress of a folder's files in flight: the sum of each one's
+    /// done fraction (0..1), and their combined speed.
+    pub fn folder_in_flight(&self, batch_id: &str) -> (f64, u64) {
+        let in_batch = |m: &FileTransferMetadata| m.batch_id.as_deref() == Some(batch_id);
+        let fraction = |done: u64, size: u64| {
+            if size == 0 {
+                0.0
+            } else {
+                (done as f64 / size as f64).min(1.0)
+            }
+        };
+        let mut sum = 0.0;
+        let mut speed = 0;
+        for t in self.inbound.values().filter(|t| in_batch(&t.meta)) {
+            sum += fraction(t.bytes_received, t.meta.size_bytes);
+            speed += t.current_speed_bps.unwrap_or(0);
+        }
+        for t in self.outbound.values().filter(|t| in_batch(&t.meta)) {
+            let acked = t.last_acked_chunk.map(|i| i as u64 + 1).unwrap_or(0);
+            sum += fraction(acked * FILE_CHUNK_SIZE as u64, t.meta.size_bytes);
+            speed += t.current_speed_bps.unwrap_or(0);
+        }
+        (sum, speed)
+    }
+
     pub fn folder_of(&self, tid: &TransferId) -> Option<String> {
         self.inbound
             .get(tid)
