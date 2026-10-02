@@ -87,7 +87,7 @@ namespace Deskdrop.WinUI.Views
             var input = new TextBox { Text = currentName, SelectionStart = 0, SelectionLength = currentName.Length };
             var dialog = new ContentDialog
             {
-                Title = "Rename Device",
+                Title = Services.AppDialog.Header("\uE8AC", "Rename device", "How it shows on your other devices"),
                 Content = input,
                 PrimaryButtonText = "Rename",
                 CloseButtonText = "Cancel",
@@ -122,7 +122,7 @@ namespace Deskdrop.WinUI.Views
             var input = new TextBox { PlaceholderText = "https://example.com" };
             var dialog = new ContentDialog
             {
-                Title = $"Open link on {peer.DisplayName}",
+                Title = Services.AppDialog.Header("\uE71B", $"Open link on {peer.DisplayName}", "It opens in that device's browser"),
                 Content = input,
                 PrimaryButtonText = "Open",
                 CloseButtonText = "Cancel",
@@ -365,12 +365,15 @@ namespace Deskdrop.WinUI.Views
 
         // ---- Home: Send section and transfer rows ----
 
-        private async void OnHomeSendFilesClicked(object sender, RoutedEventArgs e)
+        // Files & folders: one dialog for where (all devices unless one is
+        // picked) and what (files, or a folder), then the matching picker.
+        private async void OnHomeSendClicked(object sender, RoutedEventArgs e)
         {
             try
             {
-                var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync(this.XamlRoot, mgr.ConnectedPeers);
-                if (target == null) return; // user cancelled
+                var choice = await Deskdrop.WinUI.Services.AppDialog.ShowSendAsync(this.XamlRoot, mgr.ConnectedPeers);
+                if (choice is not { } c) return;
+                if (c.Folder) { await SendFolderAsync(c.Target); return; }
                 var picker = new Windows.Storage.Pickers.FileOpenPicker();
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
                 picker.FileTypeFilter.Add("*");
@@ -379,20 +382,9 @@ namespace Deskdrop.WinUI.Views
                 if (files == null || files.Count == 0) return;
                 foreach (var file in files)
                 {
-                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = target.DeviceId;
+                    var path = file.Path; var name = file.Name; var mime = file.ContentType; var targetId = c.Target;
                     DaemonActions.RunFireAndForget("Send File", () => DaemonClient.SendFilePath(path, name, mime, targetId));
                 }
-            }
-            catch (System.Exception ex) { App.HandleError(ex); }
-        }
-
-        private async void OnHomeSendFolderClicked(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync(this.XamlRoot, mgr.ConnectedPeers);
-                if (target == null) return; // user cancelled
-                await SendFolderAsync(target.DeviceId);
             }
             catch (System.Exception ex) { App.HandleError(ex); }
         }

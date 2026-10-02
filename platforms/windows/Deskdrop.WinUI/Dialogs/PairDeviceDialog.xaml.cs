@@ -43,6 +43,7 @@ namespace Deskdrop.WinUI
         public PairDeviceDialog()
         {
             this.InitializeComponent();
+            Title = Services.AppDialog.Header("\uE8D7", "Pair a new device", "Scan this code from Deskdrop on your phone");
 
             // Track pairing progress while the sheet is open so the status
             // line reflects reality rather than a fixed "waiting" message.

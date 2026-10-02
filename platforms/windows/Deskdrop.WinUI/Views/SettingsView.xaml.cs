@@ -127,7 +127,7 @@ namespace Deskdrop.WinUI.Views
                 var noun = count == 1 ? "device" : "devices";
                 var dialog = new ContentDialog
                 {
-                    Title = $"Forget {count} paired {noun}?",
+                    Title = Services.AppDialog.Header("\uE74D", $"Forget {count} paired {noun}?", "Every device will need pairing again", danger: true),
                     Content = "Deskdrop will clear its pairing keys on this PC. "
                             + "Every device will need to be paired again before it can connect.",
                     PrimaryButtonText = "Forget all",

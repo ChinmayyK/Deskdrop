@@ -17,6 +17,13 @@
                 <ResourceDictionary Source="ms-appx:///Theme/Controls.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- One look for every ContentDialog, XAML or code: rounder, roomier. -->
+            <Style x:Key="AppDialogStyle" TargetType="ContentDialog" BasedOn="{StaticResource DefaultContentDialogStyle}">
+                <Setter Property="CornerRadius" Value="20" />
+                <Setter Property="Padding" Value="24,22,24,20" />
+            </Style>
+            <Style TargetType="ContentDialog" BasedOn="{StaticResource AppDialogStyle}" />
+
             <!-- Global Converters -->
             <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
             <local:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibilityConverter"/>

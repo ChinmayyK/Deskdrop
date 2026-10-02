@@ -401,32 +401,19 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <!-- Windows' pickers choose files or one folder, never both:
-                                 the tile opens the file picker, the folder button
-                                 beside its chevron the folder picker. -->
-                            <Grid Grid.Column="0">
-                                <Button Style="{StaticResource AppActionTile}"
-                                        IsEnabled="{x:Bind mgr.HasConnectedPeers, Mode=OneWay}"
-                                        AutomationProperties.Name="Send files"
-                                        Click="OnHomeSendFilesClicked">
-                                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,40,0">
-                                        <FontIcon Glyph="&#xE898;" FontSize="18" Foreground="{ThemeResource AppAccentBrush}" />
-                                        <StackPanel>
-                                            <TextBlock Text="Files &amp; folders" Style="{StaticResource AppBodyStrong}" />
-                                            <TextBlock Text="Send files or entire folders" Style="{StaticResource AppSecondary}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
+                            <Button Grid.Column="0" Style="{StaticResource AppActionTile}"
+                                    IsEnabled="{x:Bind mgr.HasConnectedPeers, Mode=OneWay}"
+                                    AutomationProperties.Name="Send files or folders"
+                                    Click="OnHomeSendClicked">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <FontIcon Glyph="&#xE898;" FontSize="18" Foreground="{ThemeResource AppAccentBrush}" />
+                                    <StackPanel>
+                                        <TextBlock Text="Files &amp; folders" Style="{StaticResource AppBodyStrong}" />
+                                        <TextBlock Text="Send files or entire folders" Style="{StaticResource AppSecondary}"
+                                                   TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
-                                </Button>
-                                <Button Style="{StaticResource AppIconButton}"
-                                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"
-                                        IsEnabled="{x:Bind mgr.HasConnectedPeers, Mode=OneWay}"
-                                        ToolTipService.ToolTip="Send a folder"
-                                        AutomationProperties.Name="Send a folder"
-                                        Click="OnHomeSendFolderClicked">
-                                    <FontIcon Glyph="&#xE8B7;" FontSize="15" Foreground="{ThemeResource AppAccentBrush}" />
-                                </Button>
-                            </Grid>
+                                </StackPanel>
+                            </Button>
                             <Button Grid.Column="1" Style="{StaticResource AppActionTile}"
                                     IsEnabled="{x:Bind mgr.HasConnectedPeers, Mode=OneWay}"
                                     AutomationProperties.Name="Send clipboard"
