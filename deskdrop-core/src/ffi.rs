@@ -9,7 +9,7 @@
 
 #![allow(clippy::missing_safety_doc)]
 
-use crate::engine::{Engine, EngineConfig, EngineEvent};
+use crate::engine::{Engine, EngineConfig, EngineEvent, SyncTarget};
 use crate::protocol::ClipboardContent;
 use serde_json::json;
 use std::ffi::{CStr, CString};
@@ -159,6 +159,35 @@ pub unsafe extern "C" fn deskdrop_push_image(
         h.engine
             .push_clipboard(ClipboardContent::Image { mime, data: bytes }),
     ) as c_int
+}
+
+/// Push raw image bytes to one peer.
+///
+/// # Safety
+/// `target` and `mime` must be valid C strings; `data` must point to `len`
+/// valid bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_push_image_to(
+    handle: *mut DeskdropHandle,
+    target: *const c_char,
+    mime: *const c_char,
+    data: *const u8,
+    len: usize,
+) -> c_int {
+    if handle.is_null() || target.is_null() || mime.is_null() || data.is_null() {
+        return -1;
+    }
+    let Ok(id) = uuid::Uuid::parse_str(&CStr::from_ptr(target).to_string_lossy()) else {
+        return -1;
+    };
+    let mime = CStr::from_ptr(mime).to_string_lossy().into_owned();
+    let bytes = std::slice::from_raw_parts(data, len).to_vec();
+    let h = &*handle;
+    let report = runtime().block_on(h.engine.push_clipboard_to(
+        ClipboardContent::Image { mime, data: bytes },
+        SyncTarget::Device(id),
+    ));
+    report.delivered_count() as c_int
 }
 
 /// Push a file to all peers.
@@ -1452,6 +1481,56 @@ pub unsafe extern "C" fn deskdrop_event_remote_thumbnail_len(event: *const PbEve
     0
 }
 
+/// Image bytes of a CLIPBOARD_IMAGE event. Lifetime: until
+/// `deskdrop_free_event`. Length via `deskdrop_event_image_len`.
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_image_data(event: *const PbEvent) -> *const u8 {
+    if event.is_null() {
+        return std::ptr::null();
+    }
+    if let EngineEvent::ClipboardReceived { content, .. } = &(*event).inner {
+        if let ClipboardContent::Image { data, .. } = &**content {
+            if !data.is_empty() {
+                return data.as_ptr();
+            }
+        }
+    }
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_image_len(event: *const PbEvent) -> usize {
+    if event.is_null() {
+        return 0;
+    }
+    if let EngineEvent::ClipboardReceived { content, .. } = &(*event).inner {
+        if let ClipboardContent::Image { data, .. } = &**content {
+            return data.len();
+        }
+    }
+    0
+}
+
+/// MIME type of a CLIPBOARD_IMAGE event, e.g. "image/png".
+#[no_mangle]
+pub unsafe extern "C" fn deskdrop_event_image_mime(event: *mut PbEvent) -> *const c_char {
+    if event.is_null() {
+        return std::ptr::null();
+    }
+    let e = &mut *event;
+    let mime = match &e.inner {
+        EngineEvent::ClipboardReceived { content, .. } => match &**content {
+            ClipboardContent::Image { mime, .. } => Some(mime.clone()),
+            _ => None,
+        },
+        _ => None,
+    };
+    match mime {
+        Some(m) => e.cache_str(m),
+        None => std::ptr::null(),
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn deskdrop_event_remote_error(event: *mut PbEvent) -> *const c_char {
     let e = &mut *event;
@@ -1694,6 +1773,49 @@ mod tests {
             assert_eq!(res2, 1);
 
             deskdrop_stop(handle);
+        }
+    }
+
+    #[test]
+    fn image_event_exposes_bytes_and_mime() {
+        let data = vec![0x89, b'P', b'N', b'G', 1, 2, 3];
+        let mut event = PbEvent {
+            inner: EngineEvent::ClipboardReceived {
+                from_device: uuid::Uuid::new_v4(),
+                from_name: "Phone".into(),
+                content: std::sync::Arc::new(ClipboardContent::Image {
+                    mime: "image/png".into(),
+                    data: data.clone(),
+                }),
+                auto_applied: true,
+                relay_path: Vec::new(),
+                activity_id: 1,
+            },
+            cached_strings: Vec::new(),
+        };
+        unsafe {
+            let ev = &mut event as *mut PbEvent;
+            assert_eq!(deskdrop_event_type(ev), PB_EVENT_CLIPBOARD_IMAGE);
+            let len = deskdrop_event_image_len(ev);
+            let ptr = deskdrop_event_image_data(ev);
+            assert_eq!(std::slice::from_raw_parts(ptr, len), data.as_slice());
+            let mime = CStr::from_ptr(deskdrop_event_image_mime(ev));
+            assert_eq!(mime.to_str().unwrap(), "image/png");
+            assert!(deskdrop_event_text(ev).is_null());
+        }
+    }
+
+    #[test]
+    fn image_accessors_are_empty_for_text_events() {
+        let mut event = PbEvent {
+            inner: EngineEvent::Warning("x".into()),
+            cached_strings: Vec::new(),
+        };
+        unsafe {
+            let ev = &mut event as *mut PbEvent;
+            assert!(deskdrop_event_image_data(ev).is_null());
+            assert_eq!(deskdrop_event_image_len(ev), 0);
+            assert!(deskdrop_event_image_mime(ev).is_null());
         }
     }
 }
