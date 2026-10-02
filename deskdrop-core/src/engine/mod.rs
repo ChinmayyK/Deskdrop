@@ -44,6 +44,7 @@ mod background;
 pub(crate) mod clipboard;
 mod connection;
 pub(crate) mod file_ops;
+mod health;
 mod listener;
 mod peer_discovery;
 mod remote_ops;
@@ -56,6 +57,7 @@ mod types;
 
 use connection::*;
 pub(crate) use file_ops::*;
+pub use health::HealthIssue;
 use listener::*;
 use peer_discovery::*;
 pub(crate) use remote_ops::*;
@@ -136,6 +138,7 @@ impl Engine {
             network_state: Arc::new(Mutex::new(RuntimeNetworkState {
                 bind_addr,
                 active_interface,
+                listener_error: None,
             })),
             listener_tx: listener_tx.clone(),
             discovery_tx: discovery_pair.as_ref().map(|(tx, _)| tx.clone()),
@@ -172,6 +175,7 @@ impl Engine {
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_waiters: RemoteWaiters::default(),
+            started_at: Instant::now(),
         };
 
         let engine = Self {
@@ -265,6 +269,7 @@ impl Engine {
         engine.spawn_peer_pruner();
         engine.spawn_sensitive_history_pruner();
         engine.spawn_auto_reconnector();
+        engine.spawn_health_monitor();
 
         // Spawn UDP broadcast beacon and listener for resilient discovery.
         // Off with discovery: test engines beaconed onto the real LAN, and

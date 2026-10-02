@@ -1620,6 +1620,8 @@ class DeskdropService : Service() {
                 persistStatus()
             }
 
+            DeskdropJni.CR_EVENT_SYSTEM_HEALTH_UPDATED -> persistStatus()
+
             // A request expired, was withdrawn by the other device, or lost
             // its session. Whatever is on screen for it is stale now.
             DeskdropJni.CR_EVENT_PAIRING_CHANGED -> {
@@ -3913,6 +3915,7 @@ class DeskdropService : Service() {
             .putInt("connected_count", connectedPeerIds.size)
             .putStringSet("connected_names", connectedPeerIds.values.toSet())
             .putString(PREF_PEER_SNAPSHOTS_JSON, rawPeerJson)
+            .putString(PREF_HEALTH_JSON, if (engineHandle != 0L) DeskdropJni.healthJson(engineHandle) ?: "[]" else "[]")
         // Store last-sync times so the dashboard can show "Last sync: 2m ago" per peer.
         peerLastSync.forEach { (name, ts) ->
             editor.putLong("last_sync_${name.take(32)}", ts)

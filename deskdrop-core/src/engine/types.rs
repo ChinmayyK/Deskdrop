@@ -4,22 +4,6 @@
 use super::*;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub enum SystemHealthState {
-    Ready,
-    NoPeers,
-    DiscoveryInProgress,
-    NeedsLocalNetworkPermission,
-    NeedsNotificationsPermission,
-    BatteryRestricted,
-    DaemonStopped,
-    FirewallOrNetworkBlocked,
-    TrustPending,
-    SyncPaused,
-    DeliveryQueued,
-    ActionRequired(String),
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub enum DeliveryStatus {
     Queued,
     Sent,
@@ -88,7 +72,8 @@ pub enum EngineEvent {
         device_name: String,
         platform: Option<String>,
     },
-    SystemHealthUpdated(SystemHealthState),
+    /// The list from `Engine::health` changed.
+    SystemHealthUpdated(Vec<HealthIssue>),
     ClipboardDeliveryStatus {
         activity_id: u64,
         status: DeliveryStatus,
@@ -409,6 +394,8 @@ pub struct EngineStatus {
 pub(crate) struct RuntimeNetworkState {
     pub(crate) bind_addr: SocketAddr,
     pub(crate) active_interface: Option<NetworkInterfaceInfo>,
+    /// Set while the listener is down after a failed rebind.
+    pub(crate) listener_error: Option<String>,
 }
 
 #[derive(Debug)]
@@ -539,6 +526,7 @@ pub(crate) struct EngineShared {
     pub qr_auth_token: Arc<Mutex<Option<QrAuthToken>>>,
     /// Callers blocked on a remote files or thumbnail reply.
     pub(crate) remote_waiters: RemoteWaiters,
+    pub(crate) started_at: Instant,
 }
 
 /// Status reported between devices. The local half caches what this device

@@ -169,6 +169,9 @@ pub struct PeerRecord {
     /// When this peer last disconnected (enables adaptive probe scheduling).
     #[serde(default)]
     pub last_disconnect_at: Option<u64>,
+    /// When a connection to this peer last failed (with `last_error`).
+    #[serde(default)]
+    pub last_failure_at: Option<u64>,
 
     // ── Computed fields (for UI serialization) ───────────────────────────────
     #[serde(default)]
@@ -219,6 +222,7 @@ impl Default for PeerRecord {
             discovery_sources: Vec::new(),
             addr_history: Vec::new(),
             last_disconnect_at: None,
+            last_failure_at: None,
             lifecycle_state: None,
             fingerprint_display: None,
             first_seen: None,
@@ -437,6 +441,11 @@ impl PeerManager {
         self.store.iter().map(|p| p.value().clone()).collect()
     }
 
+    #[cfg(test)]
+    pub(crate) fn replace_for_test(&self, record: PeerRecord) {
+        self.store.insert(record.id, record);
+    }
+
     pub fn get(&self, device_id: Uuid) -> Option<PeerRecord> {
         self.store.get(&device_id).map(|p| p.value().clone())
     }
@@ -531,6 +540,7 @@ impl PeerManager {
                     success_count: 1,
                 }],
                 last_disconnect_at: None,
+                last_failure_at: None,
                 lifecycle_state: None,
                 fingerprint_display: None,
                 first_seen: None,
@@ -763,6 +773,7 @@ impl PeerManager {
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Failed;
                 entry.last_error = Some(reason);
+                entry.last_failure_at = Some(now_secs());
             }
         }
         self.save()
@@ -779,6 +790,7 @@ impl PeerManager {
                         entry.port = live_endpoint.port();
                         entry.status = PeerConnectionState::Connected;
                         entry.last_error = Some(reason);
+                        entry.last_failure_at = Some(now_secs());
                     }
                 }
                 return self.save();
@@ -803,6 +815,7 @@ impl PeerManager {
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.status = PeerConnectionState::Failed;
                 entry.last_error = Some(reason);
+                entry.last_failure_at = Some(now_secs());
             }
         }
         self.save()

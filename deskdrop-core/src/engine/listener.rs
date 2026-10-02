@@ -20,9 +20,12 @@ pub(super) fn spawn_listener_supervisor(
 
                     match bind_server_with_retry(addr).await {
                         Ok(server) => {
-                            if let Ok(local_addr) = server.local_addr() {
+                            {
                                 let mut state = shared.network_state.lock().await;
-                                state.bind_addr = local_addr;
+                                if let Ok(local_addr) = server.local_addr() {
+                                    state.bind_addr = local_addr;
+                                }
+                                state.listener_error = None;
                             }
                             let shared_clone = shared.clone();
                             listener_task = Some(tokio::spawn(async move {
@@ -35,6 +38,10 @@ pub(super) fn spawn_listener_supervisor(
                                 error = %err,
                                 "listener rebind failed after network change"
                             );
+                            // The old listener is gone; until a rebind works,
+                            // nothing can connect in (see engine::health).
+                            shared.network_state.lock().await.listener_error =
+                                Some(err.to_string());
                             // AddrNotAvailable here means the interface address
                             // this rebind targeted has already gone stale (the
                             // network changed again mid-transition) — the next

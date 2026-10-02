@@ -203,6 +203,14 @@ async fn cmd_status() -> Result<()> {
             data["bytes_received"].as_u64().unwrap_or(0) / 1024
         );
         println!("  Uptime:   {}", fmt_dur(uptime));
+        // What stops sync right now (engine::health).
+        for issue in data["health"].as_array().into_iter().flatten() {
+            println!(
+                "\n  ! {}\n    {}",
+                issue["title"].as_str().unwrap_or(""),
+                issue["detail"].as_str().unwrap_or("")
+            );
+        }
         return Ok(());
     }
 

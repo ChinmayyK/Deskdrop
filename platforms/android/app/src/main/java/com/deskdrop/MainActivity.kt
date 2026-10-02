@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private val deviceId = mutableStateOf("")
     private val peers = mutableStateOf<List<PeerSnapshot>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
+    private val healthIssues = mutableStateOf<List<HealthIssue>>(emptyList())
     private val isDarkMode = mutableStateOf(false)
     private val hasCompletedOnboarding = mutableStateOf(false)
     private val toastMessage = mutableStateOf("")
@@ -248,6 +249,8 @@ class MainActivity : ComponentActivity() {
                         peers = peers.value.toImmutableList(),
                         feed = feedState.toImmutableList(),
                         ambientStatus = ambientStatus.value,
+                        healthIssue = healthIssues.value.firstOrNull(),
+                        onHealthAction = ::onHealthAction,
                         activeTransfers = activeTransfers.toImmutableList(),
                         activeSpeedTests = activeSpeedTests.toImmutableList(),
                         onSyncEnabledChange = {
@@ -596,7 +599,42 @@ class MainActivity : ComponentActivity() {
         peers.value = allPeers
 
         val isConnected = allPeers.any { it.isConnected }
+        healthIssues.value = withBatteryCheck(prefs.healthIssues(), allPeers)
         ambientStatus.value = if (isConnected) "Secure Connection  •  LAN Active" else "Looking for network..."
+    }
+
+    /**
+     * The engine can't see Android's battery limits. When paired devices
+     * can't be found and the phone may be pausing Deskdrop, say that first:
+     * it's the likelier cause.
+     */
+    private fun withBatteryCheck(engineIssues: List<HealthIssue>, allPeers: List<PeerSnapshot>): List<HealthIssue> {
+        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        val notFound = engineIssues.indexOfFirst { it.kind == "devices_not_found" }
+        if (notFound < 0 || pm.isIgnoringBatteryOptimizations(packageName)) return engineIssues
+        val battery = HealthIssue(
+            "battery_restricted",
+            "Android may be pausing Deskdrop",
+            "To save battery your phone can stop Deskdrop in the background, and your devices can't reach it. Let it run in the background.",
+            null
+        )
+        return engineIssues.toMutableList().apply { add(notFound, battery) }
+    }
+
+    private fun onHealthAction(issue: HealthIssue) {
+        when (issue.kind) {
+            "no_network" -> runCatching { startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)) }
+            "sync_paused" -> {
+                isSyncEnabled.value = true
+                saveBooleanPref("sync_enabled", true)
+            }
+            "devices_not_found", "connection_blocked" -> sendAction(DeskdropService.ACTION_SCAN_NOW)
+            "listener_down" -> {
+                stopService(Intent(this, DeskdropService::class.java))
+                launchService()
+            }
+            "battery_restricted" -> openBatterySettings()
+        }
     }
 
     private fun showSnack(message: String) {

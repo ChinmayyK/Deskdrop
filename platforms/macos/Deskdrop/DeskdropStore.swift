@@ -37,6 +37,7 @@ final class DeskdropStore: ObservableObject {
     // ── Activity feed ─────────────────────────────────────────────────────────
     @Published var activityFeed: [IpcActivityEntry] = []
     @Published var activeTransfers: [FileTransferState] = []
+    @Published var healthIssues: [IpcHealthIssue] = []
     
     var batchedTransfers: [FileTransferState] {
         var batches: [String: FileTransferState] = [:]
@@ -364,6 +365,8 @@ final class DeskdropStore: ObservableObject {
             }
 
             pendingClipboardCount = s.pending_clipboard_count ?? 0
+            let health = s.health ?? []
+            if health != healthIssues { healthIssues = health }
             if let fp = s.local_fingerprint { localFingerprint = fp }
             if let id = s.local_device_id { localDeviceId = id }
             if let name = s.local_device_name { localDeviceName = name }

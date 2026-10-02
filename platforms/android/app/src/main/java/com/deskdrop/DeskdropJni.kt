@@ -34,6 +34,7 @@ object DeskdropJni {
     const val CR_EVENT_OUTGOING_PAIRING_WAITING = 29
     /** A pairing request started, ended or changed without another event saying so. Re-read peers. */
     const val CR_EVENT_PAIRING_CHANGED         = 40
+    const val CR_EVENT_SYSTEM_HEALTH_UPDATED   = 26
     const val CR_EVENT_REMOTE_FILES_QUERY      = 30
     const val CR_EVENT_REMOTE_THUMBNAIL_REQUEST = 31
     const val CR_EVENT_REMOTE_FILE_PULL_REQUEST = 32
@@ -149,6 +150,7 @@ object DeskdropJni {
      */
     @JvmStatic external fun getDeviceId(handle: Long): String?
     @JvmStatic external fun peersJson(handle: Long): String?
+    @JvmStatic external fun healthJson(handle: Long): String?
     @JvmStatic external fun sendFilePath(
         handle: Long,
         path: String,

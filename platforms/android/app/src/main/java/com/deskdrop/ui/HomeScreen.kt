@@ -2,6 +2,8 @@
 
 package com.deskdrop.ui
 
+import com.deskdrop.HealthIssue
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -111,7 +113,9 @@ fun HomeTab(
     onReplayOnboarding: () -> Unit,
     onTabSelected: (AppTab) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
-    onCancelPairing: (PeerSnapshot) -> Unit
+    onCancelPairing: (PeerSnapshot) -> Unit,
+    healthIssue: HealthIssue? = null,
+    onHealthAction: (HealthIssue) -> Unit = {}
 ) {
     val c = remember(isDark) { DdColors(isDark) }
     val connected = peers.filter { it.isConnected }
@@ -149,6 +153,10 @@ fun HomeTab(
         } else if (outgoingRequest != null) {
             OutgoingPairingPanel(c, outgoingRequest, onCancelPairing)
         } else {
+            if (healthIssue != null) {
+                HealthBanner(c, healthIssue, onHealthAction)
+                Spacer(Modifier.height(20.dp))
+            }
             StatusBlock(
                 c = c,
                 hasPeers = peers.isNotEmpty(),
@@ -277,6 +285,31 @@ private fun HomeTopBar(
 // ---------------------------------------------------------------- status
 
 /** Who this phone is linked to, said plainly. */
+/** What stops sync right now, and the one thing to do about it. */
+@Composable
+private fun HealthBanner(c: DdColors, issue: HealthIssue, onAction: (HealthIssue) -> Unit) {
+    Panel(c) {
+        Column(Modifier.padding(16.dp)) {
+            Text(issue.title, style = DdType.label, color = c.text)
+            Spacer(Modifier.height(4.dp))
+            Text(issue.detail, style = DdType.small, color = c.textMuted)
+            healthActionLabel(issue.kind)?.let { label ->
+                Spacer(Modifier.height(12.dp))
+                PillButton(c, label, filled = true, compact = true) { onAction(issue) }
+            }
+        }
+    }
+}
+
+internal fun healthActionLabel(kind: String): String? = when (kind) {
+    "no_network" -> "Wi-Fi settings"
+    "sync_paused" -> "Resume sync"
+    "devices_not_found", "connection_blocked" -> "Search again"
+    "listener_down" -> "Restart Deskdrop"
+    "battery_restricted" -> "Allow"
+    else -> null
+}
+
 @Composable
 private fun StatusBlock(
     c: DdColors,
