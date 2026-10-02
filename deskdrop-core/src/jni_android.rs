@@ -403,6 +403,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventType(
         FileTransferProgress { .. } => 13,
         FileTransferComplete { .. } => 14,
         FileTransferFailed { .. } => 15,
+        FolderTransferComplete { .. } => 41,
         FileTransferPaused { .. } => 20,
         FileTransferResumed { .. } => 21,
         ActivityFeedUpdated { .. } => 16,
@@ -539,6 +540,7 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventDeviceName(
         PeerConnected { device_name, .. } => Some(device_name.as_str()),
         PeerDisconnected { device_name, .. } => device_name.as_deref(),
         OpenUrlOnDeviceRequested { from_name, .. } => Some(from_name.as_str()),
+        FolderTransferComplete { peer_name, .. } => Some(peer_name.as_str()),
         _ => None,
     };
     name.and_then(|n| env.new_string(n).ok())
@@ -773,6 +775,9 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferFileName(
         crate::engine::EngineEvent::FileTransferComplete { file_name, .. } => {
             Some(file_name.as_str())
         }
+        crate::engine::EngineEvent::FolderTransferComplete { folder_name, .. } => {
+            Some(folder_name.as_str())
+        }
         _ => None,
     };
     name.and_then(|s| env.new_string(s).ok())
@@ -968,13 +973,175 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferDestPath(
         return std::ptr::null_mut();
     }
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
-    if let crate::engine::EngineEvent::FileTransferComplete { dest_path, .. } = ev {
-        env.new_string(dest_path.to_string_lossy())
+    let path = match ev {
+        crate::engine::EngineEvent::FileTransferComplete { dest_path, .. } => {
+            dest_path.to_string_lossy().into_owned()
+        }
+        crate::engine::EngineEvent::FolderTransferComplete { dest_dir, .. } => dest_dir
+            .as_ref()
+            .map(|d| d.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        _ => return std::ptr::null_mut(),
+    };
+    env.new_string(path)
+        .ok()
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+// ── Folder transfers ─────────────────────────────────────────────────────────
+
+/// Files in a folder-complete event's folder (`[0]`) and how many of them
+/// did not arrive (`[1]`).
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventFolderCounts(
+    env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jni::sys::jintArray {
+    if event == 0 {
+        return std::ptr::null_mut();
+    }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    let crate::engine::EngineEvent::FolderTransferComplete {
+        file_count,
+        failed_count,
+        ..
+    } = ev
+    else {
+        return std::ptr::null_mut();
+    };
+    let Ok(arr) = env.new_int_array(2) else {
+        return std::ptr::null_mut();
+    };
+    let _ = env.set_int_array_region(&arr, 0, &[*file_count as jint, *failed_count as jint]);
+    arr.into_raw()
+}
+
+/// True when a transfer event is for one file of a folder transfer; the
+/// folder-complete event (41) reports those instead.
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_eventTransferInFolder(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jboolean {
+    if event == 0 {
+        return 0;
+    }
+    use crate::engine::EngineEvent::*;
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    let in_folder = match ev {
+        FileTransferIncoming { file_name, .. }
+        | FileTransferProgress { file_name, .. }
+        | FileTransferComplete { file_name, .. } => crate::file_transfer::is_folder_item(file_name),
+        FileTransferFailed { in_folder, .. } => *in_folder,
+        _ => false,
+    };
+    in_folder as jboolean
+}
+
+/// Send one file of a folder from a detached descriptor (Rust closes it).
+/// Blocks while the folder already has its fill of files in flight, so
+/// call it from a background thread, one file after another, then call
+/// `finishFolderSend`. Returns the transfer id, or null when the folder
+/// send should stop (cancelled, device gone).
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_sendFolderItemFd(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    fd: jint,
+    rel_path: JString,
+    folder_name: JString,
+    target_device_id: JString,
+    batch_id: JString,
+    file_count: jint,
+) -> jstring {
+    use std::os::fd::FromRawFd;
+    if fd < 0 {
+        return std::ptr::null_mut();
+    }
+    let file = unsafe { std::fs::File::from_raw_fd(fd) };
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let mut string = |s: &JString| -> Option<String> { env.get_string(s).ok().map(Into::into) };
+    let (Some(rel_path), Some(folder_name), Some(batch_id)) =
+        (string(&rel_path), string(&folder_name), string(&batch_id))
+    else {
+        return std::ptr::null_mut();
+    };
+    let target_device = if target_device_id.is_null() {
+        None
+    } else {
+        match string(&target_device_id).and_then(|raw| uuid::Uuid::parse_str(&raw).ok()) {
+            Some(id) => Some(id),
+            None => return std::ptr::null_mut(),
+        }
+    };
+    let item = crate::engine::FolderItem {
+        path: std::path::PathBuf::from(&rel_path),
+        opened: Some(file),
+        rel_path,
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.send_folder_item(
+        item,
+        target_device,
+        &batch_id,
+        &folder_name,
+        file_count.max(1) as u32,
+    )) {
+        Ok(tid) => env
+            .new_string(hex::encode(tid))
             .ok()
             .map(|s| s.into_raw())
-            .unwrap_or(std::ptr::null_mut())
-    } else {
-        std::ptr::null_mut()
+            .unwrap_or(std::ptr::null_mut()),
+        Err(e) => {
+            tracing::warn!(error = %e, "folder item not sent");
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Report a folder send once its last files finish. Returns at once.
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_finishFolderSend(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    batch_id: JString,
+) {
+    if handle == 0 {
+        return;
+    }
+    let Ok(batch_id) = env.get_string(&batch_id).map(String::from) else {
+        return;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.finish_folder_send(batch_id));
+}
+
+/// Stop a folder transfer in either direction.
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_cancelFolder(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    batch_id: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Ok(batch_id) = env.get_string(&batch_id).map(String::from) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.cancel_folder(&batch_id)) {
+        Ok(()) => 0,
+        Err(_) => -1,
     }
 }
 
@@ -1791,6 +1958,24 @@ pub extern "system" fn Java_com_deskdrop_DeskdropJni_healthJson(
     let h = unsafe { &*(handle as *const AndroidHandle) };
     let issues = rt().block_on(h.engine.health());
     let json = serde_json::to_string(&issues).unwrap_or_else(|_| "[]".to_string());
+    match env.new_string(json) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Folder transfers in flight as JSON (`[FolderProgress]`).
+#[no_mangle]
+pub extern "system" fn Java_com_deskdrop_DeskdropJni_foldersJson(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    let json = serde_json::to_string(&h.engine.folders()).unwrap_or_else(|_| "[]".to_string());
     match env.new_string(json) {
         Ok(s) => s.into_raw(),
         Err(_) => std::ptr::null_mut(),

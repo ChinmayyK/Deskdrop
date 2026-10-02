@@ -601,8 +601,10 @@ impl InboundTransfer {
         }
     }
 
-    /// Accept the transfer, setting up paths.
-    pub fn accept(&mut self, save_dir: &Path) -> Result<()> {
+    /// Accept the transfer, setting up paths. `folder_root` replaces the
+    /// top folder of a folder item, so a second copy of a folder lands
+    /// beside the first instead of merging into it.
+    pub fn accept(&mut self, save_dir: &Path, folder_root: Option<&str>) -> Result<()> {
         let (safe_name, sub_dirs) = if self.meta.batch_id.is_some() {
             // For batched directory transfers, preserve relative structure but sanitize parts.
             let parts: Vec<&str> = self.meta.file_name.split('/').collect();
@@ -612,6 +614,9 @@ impl InboundTransfer {
                 if !sanitized.is_empty() {
                     dirs.push(sanitized);
                 }
+            }
+            if let (Some(root), Some(first)) = (folder_root, dirs.first_mut()) {
+                *first = root.to_string();
             }
             let name = sanitize_file_name(parts.last().unwrap_or(&self.meta.file_name.as_str()));
             (name, dirs)
@@ -953,6 +958,8 @@ pub struct FileTransferManager {
     inbound: HashMap<[u8; 16], InboundTransfer>,
     outbound: HashMap<[u8; 16], OutboundTransfer>,
     save_dir: PathBuf,
+    /// Top folder chosen for each incoming folder, by batch id.
+    folder_roots: HashMap<String, String>,
 }
 
 impl FileTransferManager {
@@ -961,6 +968,7 @@ impl FileTransferManager {
             inbound: HashMap::new(),
             outbound: HashMap::new(),
             save_dir,
+            folder_roots: HashMap::new(),
         }
     }
 
@@ -1092,9 +1100,41 @@ impl FileTransferManager {
         }
     }
 
+    /// The top folder for an incoming folder item: the sender's folder
+    /// name, or "Name (2)" and so on when that folder already exists here.
+    /// Every item of one folder gets the same answer.
+    fn folder_root_for(&mut self, tid: &TransferId) -> Option<String> {
+        let meta = &self.inbound.get(tid)?.meta;
+        let batch_id = meta.batch_id.clone()?;
+        let (top, rest) = meta.file_name.split_once('/')?;
+        if rest.is_empty() {
+            return None;
+        }
+        if let Some(root) = self.folder_roots.get(&batch_id) {
+            return Some(root.clone());
+        }
+        let name = sanitize_file_name(top);
+        let root = (1..=999)
+            .map(|i| {
+                if i == 1 {
+                    name.clone()
+                } else {
+                    format!("{name} ({i})")
+                }
+            })
+            .find(|candidate| !self.save_dir.join(candidate).exists())
+            .unwrap_or(name);
+        if self.folder_roots.len() >= 256 {
+            self.folder_roots.clear();
+        }
+        self.folder_roots.insert(batch_id, root.clone());
+        Some(root)
+    }
+
     pub fn accept_inbound(&mut self, tid: &TransferId) -> Result<u32> {
+        let root = self.folder_root_for(tid);
         let transfer = self.inbound.get_mut(tid).context("unknown transfer")?;
-        transfer.accept(&self.save_dir)?;
+        transfer.accept(&self.save_dir, root.as_deref())?;
         // Return resume_from_chunk (0 for new transfers).
         Ok(0)
     }
@@ -1107,10 +1147,11 @@ impl FileTransferManager {
         tid: &TransferId,
         session: Option<u64>,
     ) -> Result<u32> {
+        let root = self.folder_root_for(tid);
         let transfer = self.inbound.get_mut(tid).context("unknown transfer")?;
         transfer.owner_session = session;
         if transfer.dest_path.is_none() {
-            transfer.accept(&self.save_dir)?;
+            transfer.accept(&self.save_dir, root.as_deref())?;
             return Ok(0);
         }
         transfer.reopen_for_resume()
@@ -1368,9 +1409,43 @@ impl FileTransferManager {
     pub fn all_outbound(&self) -> Vec<&OutboundTransfer> {
         self.outbound.values().collect()
     }
+
+    /// Outbound items of a folder still being sent.
+    pub fn outbound_in_folder(&self, batch_id: &str) -> Vec<TransferId> {
+        self.outbound
+            .values()
+            .filter(|t| t.meta.batch_id.as_deref() == Some(batch_id))
+            .map(|t| t.transfer_id)
+            .collect()
+    }
+
+    /// Inbound items of a folder still being received.
+    pub fn inbound_in_folder(&self, batch_id: &str) -> Vec<TransferId> {
+        self.inbound
+            .values()
+            .filter(|t| t.meta.batch_id.as_deref() == Some(batch_id))
+            .map(|t| t.transfer_id)
+            .collect()
+    }
+
+    pub fn folder_of(&self, tid: &TransferId) -> Option<String> {
+        self.inbound
+            .get(tid)
+            .map(|t| &t.meta)
+            .or_else(|| self.outbound.get(tid).map(|t| &t.meta))
+            .and_then(|m| m.batch_id.clone())
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// True for one file of a folder transfer, whose name is its path inside
+/// the folder ("Photos/2024/a.jpg"). A single file's name never contains a
+/// separator. Hosts and the activity feed report such files once per
+/// folder (`EngineEvent::FolderTransferComplete`), not one by one.
+pub fn is_folder_item(file_name: &str) -> bool {
+    file_name.contains('/')
+}
 
 /// Strip path traversal components and directory separators from a
 /// sender-supplied file name so it can never escape `save_dir` (MED-04).

@@ -212,6 +212,14 @@ pub enum IpcRequest {
         #[serde(default)]
         item_count: u32,
     },
+    /// Send a folder and everything in it. Replies with the batch id and
+    /// the number of files.
+    SendFolder {
+        path: String,
+        target_device: Option<String>,
+    },
+    /// Stop a folder transfer, in either direction, by batch id.
+    CancelFolder { batch_id: String },
     /// Accept an incoming file transfer.
     AcceptFileTransfer { transfer_id: String },
     /// Reject an incoming file transfer.
@@ -750,6 +758,7 @@ pub async fn handle_ipc_request(
                 "active_transfers": active_transfers,
                 "active_speed_tests": eng.active_speed_tests().await,
                 "health": eng.health().await,
+                "folders": eng.folders(),
                 "bind_ip": snap.bind_address.ip().to_string(),
                 "bind_port": snap.bind_address.port(),
             }))
@@ -1252,6 +1261,26 @@ pub async fn handle_ipc_request(
                 Err(e) => IpcResponse::err(e.to_string()),
             },
             Err(_) => IpcResponse::err("invalid transfer id"),
+        },
+        IpcRequest::SendFolder {
+            path,
+            target_device,
+        } => {
+            let tgt = match target_device {
+                Some(ref s) => match crate::ipc::parse_uuid(s) {
+                    Ok(id) => Some(id),
+                    Err(_) => return IpcResponse::err("invalid target device id"),
+                },
+                None => None,
+            };
+            match eng.send_folder(std::path::PathBuf::from(path), tgt).await {
+                Ok(send) => IpcResponse::ok(serde_json::json!(send)),
+                Err(e) => IpcResponse::err(e.to_string()),
+            }
+        }
+        IpcRequest::CancelFolder { batch_id } => match eng.cancel_folder(&batch_id).await {
+            Ok(_) => IpcResponse::ok_empty(),
+            Err(e) => IpcResponse::err(e.to_string()),
         },
         IpcRequest::CancelFileTransfer { transfer_id } => {
             match crate::ipc::parse_transfer_id(&transfer_id) {

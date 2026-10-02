@@ -39,6 +39,7 @@ fun DevicesTab(
     onCancelPairing: (PeerSnapshot) -> Unit,
     onForgetPeer: (PeerSnapshot) -> Unit,
     onSendFiles: (String?) -> Unit,
+    onSendFolder: (String?) -> Unit,
     onSpeedTest: (String) -> Unit,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit
@@ -93,6 +94,7 @@ fun DevicesTab(
                                 speedTest = activeSpeedTests.find { it.peerId == peer.id },
                                 onPrimary = { if (peer.isConnected) onDisconnectPeer(peer) else onConnectPeer(peer) },
                                 onSendFiles = { onSendFiles(peer.id) },
+                                onSendFolder = { onSendFolder(peer.id) },
                                 onSpeedTest = { onSpeedTest(peer.id) },
                                 onForget = { onForgetPeer(peer) }
                             )
@@ -115,6 +117,7 @@ fun DevicesTab(
                                 speedTest = null,
                                 onPrimary = { onSendPairingRequest(peer) },
                                 onSendFiles = {},
+                                onSendFolder = {},
                                 onSpeedTest = {},
                                 onForget = { onForgetPeer(peer) }
                             )
@@ -159,6 +162,7 @@ private fun PeerRow(
     speedTest: SpeedTestProgress?,
     onPrimary: () -> Unit,
     onSendFiles: () -> Unit,
+    onSendFolder: () -> Unit,
     onSpeedTest: () -> Unit,
     onForget: () -> Unit
 ) {
@@ -224,6 +228,7 @@ private fun PeerRow(
         ) {
             if (peer.isConnected) {
                 MenuItem(c, "Send files", Icons.Outlined.UploadFile) { menuOpen = false; onSendFiles() }
+                MenuItem(c, "Send folder", Icons.Outlined.DriveFolderUpload) { menuOpen = false; onSendFolder() }
                 MenuItem(c, "Test speed", Icons.Outlined.Speed) { menuOpen = false; onSpeedTest() }
                 MenuItem(c, "Disconnect", Icons.Outlined.LinkOff) { menuOpen = false; onPrimary() }
             }

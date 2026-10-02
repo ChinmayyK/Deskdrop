@@ -38,6 +38,7 @@ final class DeskdropStore: ObservableObject {
     @Published var activityFeed: [IpcActivityEntry] = []
     @Published var activeTransfers: [FileTransferState] = []
     @Published var healthIssues: [IpcHealthIssue] = []
+    @Published var folderProgress: [String: IpcFolderProgress] = [:]
     
     var batchedTransfers: [FileTransferState] {
         var batches: [String: FileTransferState] = [:]
@@ -60,6 +61,12 @@ final class DeskdropStore: ObservableObject {
                     var initial = t
                     // For the UI, the folder name is the first component of the relative path
                     initial.fileName = t.fileName.components(separatedBy: "/").first ?? t.fileName
+                    initial.isDirectory = true
+                    if let folder = folderProgress[bid] {
+                        initial.fileName = folder.folder_name
+                        initial.itemCount = folder.file_count
+                        initial.doneCount = folder.done_count + folder.failed_count
+                    }
                     batches[bid] = initial
                 }
             } else {
@@ -367,6 +374,8 @@ final class DeskdropStore: ObservableObject {
             pendingClipboardCount = s.pending_clipboard_count ?? 0
             let health = s.health ?? []
             if health != healthIssues { healthIssues = health }
+            let folders = Dictionary((s.folders ?? []).map { ($0.batch_id, $0) }, uniquingKeysWith: { a, _ in a })
+            if folders != folderProgress { folderProgress = folders }
             if let fp = s.local_fingerprint { localFingerprint = fp }
             if let id = s.local_device_id { localDeviceId = id }
             if let name = s.local_device_name { localDeviceName = name }
@@ -750,43 +759,21 @@ final class DeskdropStore: ObservableObject {
     }
 
     private func processAndSend(url: URL, targetDeviceId: String?) async {
-        let result = await Task.detached { () -> ([URL], String)? in
-            var isDir: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return nil }
-            if !isDir.boolValue { return ([], "") }
-            
-            let batchId = UUID().uuidString
-            guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey]) else { return nil }
-            
-            var fileUrls: [URL] = []
-            if let urls = enumerator.allObjects as? [URL] {
-                for fileURL in urls {
-                    var isSubDir: ObjCBool = false
-                    if FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isSubDir) && !isSubDir.boolValue {
-                        fileUrls.append(fileURL)
-                    }
-                }
+        let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+        do {
+            if isFolder {
+                try await ipc.sendFolder(url: url, targetDeviceId: targetDeviceId)
+            } else {
+                _ = try await ipc.sendFile(url: url, targetDeviceId: targetDeviceId)
             }
-            return (fileUrls, batchId)
-        }.value
-
-        guard let (fileUrls, batchId) = result else { return }
-
-        if !batchId.isEmpty {
-            let totalCount = fileUrls.count
-            for fileUrl in fileUrls {
-                let relativePath = url.lastPathComponent + "/" + fileUrl.path.replacingOccurrences(of: url.path + "/", with: "")
-                _ = try? await ipc.sendFile(
-                    url: fileUrl,
-                    targetDeviceId: targetDeviceId,
-                    relativePath: relativePath,
-                    batchId: batchId,
-                    isDirectory: true,
-                    itemCount: totalCount
-                )
-            }
-        } else {
-            _ = try? await ipc.sendFile(url: url, targetDeviceId: targetDeviceId)
+        } catch {
+            showToast(
+                title: "Couldn't send \(url.lastPathComponent)",
+                body: error.localizedDescription,
+                tint: CRTheme.accentRed,
+                systemImage: "exclamationmark.triangle",
+                ttl: 5.0
+            )
         }
     }
 
@@ -1082,7 +1069,7 @@ final class DeskdropStore: ObservableObject {
                     }
                     
                     switch entry.kind {
-                    case "remote_clipboard_available", "file_transfer_complete", "remote_notification":
+                    case "remote_clipboard_available", "file_transfer_complete", "folder_transfer_complete", "remote_notification":
                         NotificationCenter.default.post(name: NSNotification.Name("deskdropActivityReceived"), object: entry)
                     default:
                         break
@@ -1205,6 +1192,11 @@ final class DeskdropStore: ObservableObject {
         Task { try? await ipc.rejectFileTransfer(transferId: t.id); activeTransfers.removeAll { $0.id == t.id } }
     }
     @MainActor func cancelFileTransfer(_ t: FileTransferState) {
+        // A folder row stands for the whole folder: stop all of it.
+        if t.isDirectory, let batchId = t.batchId {
+            Task { try? await ipc.cancelFolder(batchId: batchId); activeTransfers.removeAll { $0.batchId == batchId } }
+            return
+        }
         Task { try? await ipc.cancelFileTransfer(transferId: t.id); activeTransfers.removeAll { $0.id == t.id } }
     }
 

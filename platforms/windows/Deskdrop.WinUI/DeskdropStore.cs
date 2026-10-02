@@ -589,6 +589,16 @@ namespace Deskdrop.WinUI
         public bool is_directory { get => _is_directory; set { if (SetProperty(ref _is_directory, value)) OnPropertyChanged(nameof(IsDirectory)); } }
         private int _item_count = 1;
         public int item_count { get => _item_count; set { if (SetProperty(ref _item_count, value)) OnPropertyChanged(nameof(ItemCount)); } }
+        public string? batch_id { get; set; }
+        // Folder rows only: files done so far, and the folder's first file
+        // in flight (accepting or declining it answers for the folder).
+        private int? _done_count;
+        [JsonIgnore]
+        public int? DoneCount { get => _done_count; set { if (SetProperty(ref _done_count, value)) NotifyProgressProperties(); } }
+        [JsonIgnore]
+        public string? FirstItemId { get; set; }
+        [JsonIgnore]
+        public bool IsFolderRow => DoneCount.HasValue;
         private bool _is_outbound;
         public bool is_outbound
         {
@@ -601,7 +611,10 @@ namespace Deskdrop.WinUI
         public string FileName => file_name;
         public bool IsDirectory => is_directory;
         public int ItemCount => item_count;
-        public double PercentFloat => bytes_total > 0 ? ((double)bytes_received / bytes_total * 100) : 100.0;
+        // A folder's progress is files done: only a few are in flight at once.
+        public double PercentFloat => DoneCount is int done && item_count > 0
+            ? Math.Min(100.0, (double)done / item_count * 100)
+            : bytes_total > 0 ? ((double)bytes_received / bytes_total * 100) : 100.0;
         // JsonIgnore: "Percent"/"percent" collide under case-insensitive
         // matching, which was silently throwing on every ActiveTransfers
         // deserialization (see UpdateStateFromDaemon) - `percent` is the
@@ -609,7 +622,9 @@ namespace Deskdrop.WinUI
         [JsonIgnore]
         public int Percent => percent;
         public string PercentText => $"{PercentFloat:0.0}%";
-        public string SizeText => bytes_total > 0 ? $"{DeskdropFormatting.FormatBytes(bytes_received)} / {DeskdropFormatting.FormatBytes(bytes_total)}" : DeskdropFormatting.FormatBytes(bytes_received);
+        public string SizeText => DoneCount is int done
+            ? $"{done} of {item_count} {(item_count == 1 ? "file" : "files")}"
+            : bytes_total > 0 ? $"{DeskdropFormatting.FormatBytes(bytes_received)} / {DeskdropFormatting.FormatBytes(bytes_total)}" : DeskdropFormatting.FormatBytes(bytes_received);
         public string SpeedText => speed_bps.HasValue && speed_bps.Value > 0 ? $"{DeskdropFormatting.FormatBytes(speed_bps.Value)}/s" : "";
         public string EtaText => eta_secs.HasValue && eta_secs.Value > 0 ? $"{eta_secs.Value}s remaining" : "";
         public string StatusText
@@ -1399,6 +1414,72 @@ namespace Deskdrop.WinUI
             DaemonActions.RunFireAndForget("Forget Device", () => DaemonClient.ForgetDevice(deviceId));
         }
 
+        // Each folder in flight is one row: its files' rows merge into it.
+        private static List<FileTransferState> GroupFolders(List<FileTransferState> transfers, JsonElement status)
+        {
+            var folders = new Dictionary<string, (string name, int total, int done)>();
+            if (status.TryGetProperty("folders", out var f) && f.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var folder in f.EnumerateArray())
+                {
+                    var id = folder.TryGetProperty("batch_id", out var b) ? b.GetString() : null;
+                    if (string.IsNullOrEmpty(id)) continue;
+                    folders[id] = (
+                        folder.TryGetProperty("folder_name", out var n) ? n.GetString() ?? "Folder" : "Folder",
+                        folder.TryGetProperty("file_count", out var c) ? c.GetInt32() : 1,
+                        (folder.TryGetProperty("done_count", out var d) ? d.GetInt32() : 0)
+                            + (folder.TryGetProperty("failed_count", out var x) ? x.GetInt32() : 0));
+                }
+            }
+            var rows = new List<FileTransferState>();
+            var byBatch = new Dictionary<string, FileTransferState>();
+            foreach (var t in transfers)
+            {
+                if (string.IsNullOrEmpty(t.batch_id) || !t.file_name.Contains('/')) { rows.Add(t); continue; }
+                if (byBatch.TryGetValue(t.batch_id, out var row))
+                {
+                    row.bytes_received += t.bytes_received;
+                    row.bytes_total += t.bytes_total;
+                    row.speed_bps = (row.speed_bps ?? 0) + (t.speed_bps ?? 0);
+                    // Waiting for an answer wins: the row must offer Accept.
+                    if (t.status == "incoming") { row.status = t.status; row.FirstItemId = t.transfer_id; }
+                    continue;
+                }
+                var info = folders.TryGetValue(t.batch_id, out var i) ? i : (t.file_name.Split('/')[0], t.item_count, 0);
+                row = new FileTransferState
+                {
+                    transfer_id = "folder:" + t.batch_id,
+                    batch_id = t.batch_id,
+                    FirstItemId = t.transfer_id,
+                    from_device = t.from_device,
+                    file_name = info.Item1,
+                    is_directory = true,
+                    is_outbound = t.is_outbound,
+                    item_count = info.Item2,
+                    DoneCount = info.Item3,
+                    bytes_received = t.bytes_received,
+                    bytes_total = t.bytes_total,
+                    speed_bps = t.speed_bps,
+                    status = t.status,
+                };
+                byBatch[t.batch_id] = row;
+                rows.Add(row);
+            }
+            return rows;
+        }
+
+        public void CancelTransfer(FileTransferState t)
+        {
+            if (t.IsFolderRow && !string.IsNullOrEmpty(t.batch_id))
+            {
+                var batchId = t.batch_id;
+                DaemonActions.RunFireAndForget("Cancel Folder", () => DaemonClient.CancelFolder(batchId));
+                return;
+            }
+            var id = t.transfer_id;
+            DaemonActions.RunFireAndForget("Cancel Transfer", () => DaemonClient.CancelFileTransfer(id));
+        }
+
         public void AcceptTransfer(string transferId)
         {
             DaemonActions.RunFireAndForget("Accept Transfer", () => DaemonClient.AcceptFileTransfer(transferId));
@@ -1733,6 +1814,7 @@ namespace Deskdrop.WinUI
                     var transfers = JsonSerializer.Deserialize(transfersElem.GetRawText(), DeskdropJsonContext.Default.ListFileTransferState);
                     if (transfers != null)
                     {
+                        transfers = GroupFolders(transfers, dataElem);
                         var existing = ActiveTransfers.ToList();
                         foreach (var tr in transfers)
                         {
@@ -1748,6 +1830,9 @@ namespace Deskdrop.WinUI
                                 match.destination = tr.destination;
                                 match.speed_bps = tr.speed_bps;
                                 match.eta_secs = tr.eta_secs;
+                                match.item_count = tr.item_count;
+                                match.DoneCount = tr.DoneCount;
+                                match.FirstItemId = tr.FirstItemId;
                                 existing.Remove(match);
                             }
                             else

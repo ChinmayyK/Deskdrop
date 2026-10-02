@@ -92,6 +92,19 @@ class MainActivity : ComponentActivity() {
         targetDeviceIdForNextSend = null
     }
 
+    private val folderPickerLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            val intent = Intent(this, DeskdropService::class.java).apply {
+                action = DeskdropService.ACTION_PUSH_FOLDER
+                putExtra(DeskdropService.EXTRA_SHARED_URI, uri.toString())
+                targetDeviceIdForNextSend?.let { putExtra(DeskdropService.EXTRA_TARGET_DEVICE_ID, it) }
+            }
+            ContextCompat.startForegroundService(this, intent)
+            showSnack("Sending folder...")
+        }
+        targetDeviceIdForNextSend = null
+    }
+
     private val feedRefreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     private val statusReceiver = object : BroadcastReceiver() {
@@ -480,6 +493,10 @@ class MainActivity : ComponentActivity() {
                     onActionSendFiles = { targetId ->
                         targetDeviceIdForNextSend = targetId
                         filePickerLauncher.launch("*/*")
+                    },
+                    onActionSendFolder = { targetId ->
+                        targetDeviceIdForNextSend = targetId
+                        folderPickerLauncher.launch(null)
                     },
                     onDropFiles = { targetId, uris ->
                         if (uris.isNotEmpty()) {

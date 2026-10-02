@@ -17,7 +17,7 @@ namespace Deskdrop.WinUI.Views
         {
             if ((sender as FrameworkElement)?.DataContext is FileTransferState transfer)
             {
-                mgr.AcceptTransfer(transfer.transfer_id);
+                mgr.AcceptTransfer(transfer.FirstItemId ?? transfer.transfer_id);
             }
         }
 
@@ -25,16 +25,36 @@ namespace Deskdrop.WinUI.Views
         {
             if ((sender as FrameworkElement)?.DataContext is FileTransferState transfer)
             {
-                mgr.RejectTransfer(transfer.transfer_id);
+                mgr.RejectTransfer(transfer.FirstItemId ?? transfer.transfer_id);
             }
         }
 
-        private async void OnCancelClicked(object sender, RoutedEventArgs e)
+        private void OnCancelClicked(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is FileTransferState transfer)
             {
-                var resp = await Task.Run(() => DaemonClient.CancelFileTransfer(transfer.transfer_id));
-                DaemonActions.ReportIfFailed("Cancel Transfer", resp);
+                mgr.CancelTransfer(transfer);
+            }
+        }
+
+        private async void OnSendFolderClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FolderPicker();
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.FileTypeFilter.Add("*");
+                var folder = await picker.PickSingleFolderAsync();
+                if (folder == null) return;
+                var target = await Deskdrop.WinUI.Services.DevicePicker.PickSendTargetAsync(this.XamlRoot, mgr.ConnectedPeers);
+                if (target == null) return; // user cancelled
+                var path = folder.Path; var targetId = target.DeviceId;
+                DaemonActions.RunFireAndForget("Send Folder", () => DaemonClient.SendFolder(path, targetId));
+            }
+            catch (System.Exception ex)
+            {
+                App.HandleError(ex);
             }
         }
 

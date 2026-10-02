@@ -49,6 +49,18 @@ struct IpcStatusResponse: Codable {
     let active_speed_tests: [IpcSpeedTestState]?
     /// What stops sync right now, most fundamental first (engine::health).
     let health: [IpcHealthIssue]?
+    /// Folder transfers in flight, with how many of their files are done.
+    let folders: [IpcFolderProgress]?
+}
+
+struct IpcFolderProgress: Codable, Equatable {
+    let batch_id: String
+    let folder_name: String
+    let peer_name: String
+    let file_count: Int
+    let done_count: Int
+    let failed_count: Int
+    let outbound: Bool
 }
 
 struct IpcHealthIssue: Codable, Equatable, Identifiable {
@@ -364,6 +376,19 @@ final class DeskdropIPCClient {
         let raw = try await send(cmd: cmd)
         let resp = try await decode(IpcResponse<String>.self, from: raw)
         return resp.data ?? ""
+    }
+
+    /// Send a folder and everything in it. The engine walks it and sends a
+    /// few files at a time; the folder's files share one batch id.
+    func sendFolder(url: URL, targetDeviceId: String?) async throws {
+        var cmd: [String: Any] = ["cmd": "send_folder", "path": url.path]
+        if let t = targetDeviceId { cmd["target_device"] = t }
+        _ = try await send(cmd: cmd)
+    }
+
+    /// Stop a folder transfer, sending or receiving.
+    func cancelFolder(batchId: String) async throws {
+        _ = try await send(cmd: ["cmd": "cancel_folder", "batch_id": batchId])
     }
 
     func acceptFileTransfer(transferId: String) async throws {

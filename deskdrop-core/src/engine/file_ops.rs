@@ -234,6 +234,7 @@ pub(crate) async fn read_outbound_chunks(
             let _ = shared
                 .event_tx
                 .send(EngineEvent::FileTransferFailed {
+                    in_folder: false,
                     transfer_id,
                     from_device: target.unwrap_or_default(),
                     reason,

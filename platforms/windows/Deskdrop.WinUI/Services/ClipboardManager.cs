@@ -131,6 +131,22 @@ namespace Deskdrop.WinUI.Services
                             var fileName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
                             var from = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown";
                             var transferId = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_id(ev)) ?? "";
+                            if (NativeCore.deskdrop_event_transfer_in_folder(ev) != 0)
+                            {
+                                // One question per folder: the answer covers all of it.
+                                var folder = fileName.Split('/')[0];
+                                if (!ShouldAskAboutFolder(from + "/" + folder)) break;
+                                (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                    NotificationHelper.ShowToastWithActions(
+                                        $"Incoming folder from {from}",
+                                        folder,
+                                        null,
+                                        $"deskdrop://accept/{transferId}",
+                                        $"deskdrop://reject/{transferId}"
+                                    );
+                                });
+                                break;
+                            }
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                 AddHistoryItem(fileName, from, "📎", fileName);
                                 NotificationHelper.ShowToastWithActions(
@@ -161,8 +177,32 @@ namespace Deskdrop.WinUI.Services
                         // drains them every 30ms) - they just had no handler wired up,
                         // so the app ran silently for anything but clipboard/file-offer/
                         // camera-call while minimized to the tray.
+                        case NativeCore.PB_EVENT_FOLDER_TRANSFER_COMPLETE:
+                        {
+                            var folder = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "Folder";
+                            var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown device";
+                            var destDir = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_dest_path(ev));
+                            var total = NativeCore.deskdrop_event_folder_file_count(ev);
+                            var failed = NativeCore.deskdrop_event_folder_failed_count(ev);
+                            var noun = total == 1 ? "file" : "files";
+                            var files = failed == 0 ? $"{total} {noun}" : $"{total - failed} of {total} {noun}";
+                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                if (!string.IsNullOrEmpty(destDir))
+                                {
+                                    NotificationHelper.ShowToast("Folder Received", $"{folder} ({files}) from {device}");
+                                    AddHistoryItem(folder, device, "📁", destDir);
+                                }
+                                else
+                                {
+                                    NotificationHelper.ShowToast("Folder Sent", $"{folder} ({files}) to {device}");
+                                }
+                            });
+                            break;
+                        }
                         case NativeCore.PB_EVENT_FILE_TRANSFER_COMPLETE:
                         {
+                            // A folder's files report once, as the folder.
+                            if (NativeCore.deskdrop_event_transfer_in_folder(ev) != 0) break;
                             var fileName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
                             var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown device";
                             var destPath = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_dest_path(ev));
@@ -176,6 +216,7 @@ namespace Deskdrop.WinUI.Services
                         }
                         case NativeCore.PB_EVENT_FILE_TRANSFER_FAILED:
                         {
+                            if (NativeCore.deskdrop_event_transfer_in_folder(ev) != 0) break;
                             var fileName = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_transfer_file_name(ev)) ?? "File";
                             var device = NativeCore.PtrToUtf8String(NativeCore.deskdrop_event_device_name(ev)) ?? "Unknown device";
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
@@ -337,6 +378,21 @@ namespace Deskdrop.WinUI.Services
         private const int MaxHistoryItems = 100;
         private readonly Dictionary<string, long> _lastWarningToastMs = new();
 
+        // Each folder's files are offered a few at a time; ask once.
+        private readonly Dictionary<string, long> _folderAskedMs = new();
+
+        private bool ShouldAskAboutFolder(string key)
+        {
+            var now = Environment.TickCount64;
+            lock (_folderAskedMs)
+            {
+                if (_folderAskedMs.TryGetValue(key, out var last) && now - last < WarningToastWindowMs) return false;
+                if (_folderAskedMs.Count > 64) _folderAskedMs.Clear();
+                _folderAskedMs[key] = now;
+                return true;
+            }
+        }
+
         private bool ShouldToastWarning(string message)
         {
             var now = Environment.TickCount64;
@@ -469,6 +525,11 @@ namespace Deskdrop.WinUI.Services
 
         public void PushFile(string path, string? targetDevice = null)
         {
+            if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+            {
+                DaemonActions.RunFireAndForget("Send Folder", () => DaemonClient.SendFolder(path, targetDevice));
+                return;
+            }
             if (!string.IsNullOrEmpty(path) && File.Exists(path))
             {
                 string name = Path.GetFileName(path);

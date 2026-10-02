@@ -35,8 +35,19 @@ namespace Deskdrop.WinUI
             return Send(req);
         }
 
+        // A folder goes whole: the engine walks it and sends a few files at
+        // a time, all sharing one batch id.
+        public static JsonDocument? SendFolder(string path, string? targetDevice) =>
+            Send(Req("send_folder", ("path", path), ("target_device", targetDevice)));
+
+        public static JsonDocument? CancelFolder(string batchId) =>
+            Send(Req("cancel_folder", ("batch_id", batchId)));
+
+        // A file or a folder.
         public static JsonDocument? PushFile(string targetDevice, string path)
         {
+            if (System.IO.Directory.Exists(path))
+                return SendFolder(path, string.IsNullOrEmpty(targetDevice) ? null : targetDevice);
             var fileName = System.IO.Path.GetFileName(path);
             return SendFilePath(path, fileName, "application/octet-stream", string.IsNullOrEmpty(targetDevice) ? null : targetDevice);
         }

@@ -85,6 +85,10 @@ struct TimelineItem: Identifiable {
             self.typeLabel = "Image"
             self.iconName  = "photo"
             self.title     = "Image from \(entry.device_name)"
+        case "folder_transfer_complete":
+            self.typeLabel = "Folder"
+            self.iconName  = "folder.fill"
+            self.title     = entry.file_name ?? entry.summary
         case "file_transfer_complete", "file_transfer_started":
             self.typeLabel = "File"
             self.iconName  = "doc.fill"
