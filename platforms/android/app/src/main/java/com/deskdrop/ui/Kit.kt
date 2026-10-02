@@ -354,6 +354,7 @@ internal fun ActivityRow(
     onApply: () -> Unit,
     onResend: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    onTogglePin: (() -> Unit)? = null,
     showClockTime: Boolean = false
 ) {
     val haptic = LocalHapticFeedback.current
@@ -372,7 +373,7 @@ internal fun ActivityRow(
     }
     val showPreview = entry.preview.isNotBlank() &&
         entry.kind != ActivityKind.PEER_CONNECTED && entry.kind != ActivityKind.PEER_DISCONNECTED
-    val hasMenu = onResend != null || onDelete != null
+    val hasMenu = onResend != null || onDelete != null || onTogglePin != null
 
     Box {
         Row(
@@ -394,7 +395,13 @@ internal fun ActivityRow(
             IconWell(c, icon, size = 36)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, style = DdType.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (entry.isPinned) {
+                        Icon(Icons.Outlined.PushPin, contentDescription = "Pinned", tint = c.accent, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(5.dp))
+                    }
+                    Text(title, style = DdType.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 if (showPreview) {
                     Text(
                         entry.preview.trim().replace('\n', ' '),
@@ -413,16 +420,23 @@ internal fun ActivityRow(
             )
         }
 
-        if (hasMenu) {
-            DropdownMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                modifier = Modifier.background(c.surface)
-            ) {
-                MenuItem(c, if (isLink) "Open link" else "Copy again", Icons.Outlined.ContentCopy) { menuOpen = false; onApply() }
-                if (onResend != null) MenuItem(c, "Resend", Icons.Outlined.Replay) { menuOpen = false; onResend() }
-                if (onDelete != null) MenuItem(c, "Remove", Icons.Outlined.DeleteOutline, tint = c.danger) { menuOpen = false; onDelete() }
-            }
+        if (hasMenu && menuOpen) {
+            ActionSheet(
+                c,
+                icon = Icons.Outlined.History,
+                title = entry.deviceName,
+                subtitle = entry.preview.trim().replace('\n', ' ').take(80),
+                actions = buildList {
+                    add(SheetAction(Icons.Outlined.ContentCopy, if (isLink) "Open link" else "Copy again", onClick = onApply))
+                    if (onTogglePin != null) add(
+                        if (entry.isPinned) SheetAction(Icons.Outlined.PushPin, "Unpin", "Let it age out with the rest", onClick = onTogglePin)
+                        else SheetAction(Icons.Outlined.PushPin, "Pin to the top", "Kept above everything else, never cleared", onClick = onTogglePin)
+                    )
+                    if (onResend != null) add(SheetAction(Icons.Outlined.Replay, "Resend", onClick = onResend))
+                    if (onDelete != null) add(SheetAction(Icons.Outlined.DeleteOutline, "Remove", danger = true, onClick = onDelete))
+                },
+                onDismiss = { menuOpen = false }
+            )
         }
     }
 }
@@ -433,36 +447,44 @@ internal fun ActivityRow(
  */
 @Composable
 internal fun AddDeviceButton(c: DdColors, onScanQr: () -> Unit, onManualIp: () -> Unit) {
-    var menuOpen by remember { mutableStateOf(false) }
+    var sheetOpen by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
-    Box {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(c.surface)
-                .border(1.dp, c.line, CircleShape)
-                .crPressScale(0.92f) { menuOpen = true }
-                .semantics { contentDescription = "Add device"; role = Role.Button },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = c.text, modifier = Modifier.size(22.dp))
-        }
-        DropdownMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false },
-            modifier = Modifier.background(c.surface)
-        ) {
-            MenuItem(c, "Show my pairing code", Icons.Outlined.QrCode2) { menuOpen = false; showQr = true }
-            MenuItem(c, "Scan a pairing code", Icons.Outlined.QrCodeScanner) { menuOpen = false; onScanQr() }
-            MenuItem(c, "Connect by IP address", Icons.Outlined.Lan) { menuOpen = false; onManualIp() }
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(c.surface)
+            .border(1.dp, c.line, CircleShape)
+            .crPressScale(0.92f) { sheetOpen = true }
+            .semantics { contentDescription = "Add device"; role = Role.Button },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Rounded.Add, contentDescription = null, tint = c.text, modifier = Modifier.size(22.dp))
+    }
+    if (sheetOpen) {
+        DdSheet(
+            c, icon = Icons.Rounded.Add, title = "Add a device",
+            subtitle = "Pair a computer or another phone",
+            onDismiss = { sheetOpen = false }
+        ) { close ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SheetOption(c, Icons.Outlined.QrCode2, "Show my pairing code", "Scan it from Deskdrop on your computer") {
+                    close { showQr = true }
+                }
+                SheetOption(c, Icons.Outlined.QrCodeScanner, "Scan a pairing code", "Point the camera at the code on your computer") {
+                    close(onScanQr)
+                }
+                SheetOption(c, Icons.Outlined.Lan, "Connect by IP address", "For networks where devices can't find each other") {
+                    close(onManualIp)
+                }
+            }
         }
     }
-    if (showQr) PairQrDialog(onDismiss = { showQr = false })
+    if (showQr) PairQrSheet(c, onDismiss = { showQr = false })
 }
 
 @Composable
-private fun PairQrDialog(onDismiss: () -> Unit) {
+private fun PairQrSheet(c: DdColors, onDismiss: () -> Unit) {
     val uri = remember { "deskdrop://${getLocalIpAddress()}:47823" }
     val bitmap by produceState<android.graphics.Bitmap?>(null, uri) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
@@ -477,22 +499,34 @@ private fun PairQrDialog(onDismiss: () -> Unit) {
             }.getOrNull()
         }
     }
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Scan from your computer", style = DdType.title) },
-        text = {
-            Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
+    DdSheet(
+        c, icon = Icons.Outlined.QrCode2, title = "Scan from your computer",
+        subtitle = "Deskdrop on your computer → Add device → Scan",
+        onDismiss = onDismiss
+    ) { close ->
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(PanelShape)
+                .background(Color.White)
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(Modifier.fillMaxWidth(0.8f).aspectRatio(1f), contentAlignment = Alignment.Center) {
                 bitmap?.let {
                     androidx.compose.foundation.Image(
                         it.asImageBitmap(),
                         contentDescription = "Pairing QR code",
                         modifier = Modifier.fillMaxSize()
                     )
-                } ?: Text("Generating…", style = DdType.small)
+                } ?: Text("Generating…", style = DdType.small, color = Color.Black)
             }
-        },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Done") } }
-    )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(uri, style = DdType.mono, color = c.textMuted, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Spacer(Modifier.height(18.dp))
+        PillButton(c, "Done", filled = true, modifier = Modifier.fillMaxWidth()) { close {} }
+    }
 }
 
 // ---------------------------------------------------------------- helpers

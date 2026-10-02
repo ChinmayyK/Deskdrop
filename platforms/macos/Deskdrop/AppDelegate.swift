@@ -186,10 +186,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return
         }
         
-        if let urls = pboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
-           store.sendFilesChoosingTarget(urls: urls) {
-            for url in urls {
-                store.showToast(title: "Sending to device", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
+        if let urls = pboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            store.sendFilesChoosingTarget(urls: urls) { [weak self] sent in
+                guard sent, let store = self?.store else { return }
+                for url in urls {
+                    store.showToast(title: "Sending to device", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
+                }
             }
         }
     }
@@ -912,19 +914,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     // next pending request (if any) to flow through the Combine pipeline.
 
     private func presentTrustPrompt(for detail: DeviceDetailSnapshot) {
-        let alert = NSAlert()
-        alert.messageText     = "Trust \(detail.effectiveName)?"
-        alert.informativeText = """
-        Device name: \(detail.deviceName)
-        Fingerprint:
-        \(detail.fingerprint)
-
-        Only trust devices you control.
-        """
-        alert.addButton(withTitle: "Trust")
-        alert.addButton(withTitle: "Reject")
-        alert.alertStyle = .warning
-
         let device = ManagedDevice(peer: PeerViewModel(
             id: detail.deviceId, displayName: detail.deviceName,
             platform: nil, trusted: false, remembered: false, connected: false,
@@ -934,7 +923,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             explicitDisconnect: false,
             lastSeen: detail.lastSeen, lastDiscoveryAt: nil, lastSync: nil, ip: nil
         ))
-
         let respond: (Bool) -> Void = { [weak self] approved in
             guard let self else { return }
             if approved { self.store.trust(device) }
@@ -942,32 +930,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             // Allow the next pending trust request to surface.
             self.store.pendingTrustRequest = nil
         }
-
-        // Attach as a sheet if the dashboard is visible — non-blocking.
-        if let window = dashboardController?.window, window.isVisible {
-            NSApp.activate(ignoringOtherApps: true)
-            alert.beginSheetModal(for: window) { response in
-                respond(response == .alertFirstButtonReturn)
-            }
-        } else {
-            // Dashboard is hidden: bring it forward and show the sheet,
-            // then use a window-level sheet so we still don't block the run loop.
-            NSApp.activate(ignoringOtherApps: true)
-            openDashboard()
-            // Give the window a tick to become key before attaching the sheet.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                guard let window = self?.dashboardController?.window else {
-                    // Fallback: no window available, use non-blocking alert.
-                    alert.buttons[0].target = nil
-                    let r = alert.runModal()   // last resort only
-                    respond(r == .alertFirstButtonReturn)
-                    return
-                }
-                alert.beginSheetModal(for: window) { response in
-                    respond(response == .alertFirstButtonReturn)
-                }
-            }
-        }
+        // Non-blocking: the modal is its own panel, so clipboard events,
+        // pings and UI updates keep flowing while it is up.
+        DeskdropModal.shared.confirm(
+            icon: "checkmark.shield.fill",
+            tint: CRTheme.accentOrange,
+            title: "Trust \(detail.effectiveName)?",
+            message: "Device name: \(detail.deviceName)\nFingerprint: \(detail.fingerprint)\n\nOnly trust devices you control.",
+            confirm: "Trust",
+            cancel: "Reject",
+            onConfirm: { respond(true) },
+            onCancel: { respond(false) }
+        )
     }
 
     // MARK: - Actions
@@ -986,15 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     @objc private func scanDevices()        { store.scanForDevices() }
 
     @objc private func sendFileFromMenu() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseFiles          = true
-        panel.canChooseDirectories    = true
-        panel.prompt                  = "Send"
-        panel.message                 = "Choose files or folders to send to connected devices"
-        if panel.runModal() == .OK, !panel.urls.isEmpty {
-            store.sendFilesChoosingTarget(urls: panel.urls)
-        }
+        store.presentSendModal()
     }
 
     @objc private func pushClipboardFromMenu() {
@@ -1087,24 +1053,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     @objc private func connectManually() {
-        let alert = NSAlert()
-        alert.messageText     = "Connect to Device by IP"
-        alert.informativeText = "Enter the IP address of the device running Deskdrop.\nMac IP: \(Self.localWiFiIP() ?? "unknown")"
-        alert.addButton(withTitle: "Connect")
-        alert.addButton(withTitle: "Cancel")
-
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 22))
-        input.placeholderString = "192.168.x.x"
-        input.bezelStyle        = .roundedBezel
-        alert.accessoryView     = input
-        alert.window.initialFirstResponder = input
-
-        // Menu bar apps are not frontmost; without this the alert opens behind other windows.
-        NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let host = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !host.isEmpty else { return }
-        store.connectManual(host: host)
+        DeskdropModal.shared.input(
+            icon: "network",
+            title: "Connect by IP address",
+            subtitle: "For networks where devices can't find each other. This Mac: \(Self.localWiFiIP() ?? "unknown")",
+            placeholder: "192.168.x.x",
+            confirm: "Connect"
+        ) { [weak self] host in
+            self?.store.connectManual(host: host)
+        }
     }
 
     private static func localWiFiIP() -> String? {
@@ -1210,15 +1167,17 @@ extension AppDelegate: MenuBarDropViewDelegate {
     func menuBarDropView(_ view: MenuBarDropView, didReceiveFiles urls: [URL]) {
         // Defer past the drag session: choosing a target may show a modal prompt.
         DispatchQueue.main.async { [weak self] in
-            guard let store = self?.store, store.sendFilesChoosingTarget(urls: urls) else { return }
-            // Brief visual feedback
-            store.showToast(
-                title: "Sending \(urls.count) item\(urls.count == 1 ? "" : "s")",
-                body: urls.map(\.lastPathComponent).joined(separator: ", "),
-                tint: CRTheme.brandElectric,
-                systemImage: "arrow.up.doc.fill",
-                ttl: 3.5
-            )
+            guard let store = self?.store else { return }
+            store.sendFilesChoosingTarget(urls: urls) { sent in
+                guard sent else { return }
+                store.showToast(
+                    title: "Sending \(urls.count) item\(urls.count == 1 ? "" : "s")",
+                    body: urls.map(\.lastPathComponent).joined(separator: ", "),
+                    tint: CRTheme.brandElectric,
+                    systemImage: "arrow.up.doc.fill",
+                    ttl: 3.5
+                )
+            }
         }
     }
 
@@ -1384,8 +1343,10 @@ extension AppDelegate: MenuBarDropViewDelegate {
             ttl: 8.0,
             primaryAction: ToastAction(title: "Send", role: .primary) { [weak self] in
                 Task { @MainActor [weak self] in
-                    guard let store = self?.store, store.sendFilesChoosingTarget(urls: [url]) else { return }
-                    store.showToast(title: "Sent", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill")
+                    guard let store = self?.store else { return }
+                    store.sendFilesChoosingTarget(urls: [url]) { sent in
+                        if sent { store.showToast(title: "Sent", body: url.lastPathComponent, tint: CRTheme.accentBlue, systemImage: "paperplane.fill") }
+                    }
                 }
             }
         )

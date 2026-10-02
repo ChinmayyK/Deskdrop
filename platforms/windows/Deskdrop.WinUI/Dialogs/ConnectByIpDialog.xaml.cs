@@ -31,6 +31,7 @@ namespace Deskdrop.WinUI
         public ConnectByIpDialog()
         {
             this.InitializeComponent();
+            Title = Services.AppDialog.Header("\uE968", "Connect by IP address", "For networks where devices can't find each other");
 
             var ownAddresses = LocalIPv4Addresses();
             OwnAddressText.Text = ownAddresses.Count == 0

@@ -48,7 +48,7 @@ namespace Deskdrop.WinUI.Services
             {
                 var dialog = new ContentDialog
                 {
-                    Title = $"{peer.DisplayName} wants to pair",
+                    Title = AppDialog.Header("\uE8D7", $"{peer.DisplayName} wants to pair", "Accept only if the code matches"),
                     Content = BuildContent(peer),
                     PrimaryButtonText = "Accept",
                     SecondaryButtonText = "Decline",
@@ -102,7 +102,7 @@ namespace Deskdrop.WinUI.Services
             var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.8 };
             var dialog = new ContentDialog
             {
-                Title = $"Pair with {peer.DisplayName}",
+                Title = AppDialog.Header("\uE8D7", $"Pair with {peer.DisplayName}", "Waiting for the other device"),
                 Content = BuildCodePanel(peer, $"Accept the request on {peer.DisplayName} if it shows this code.", status),
                 CloseButtonText = "Cancel request",
                 DefaultButton = ContentDialogButton.Primary,

@@ -533,7 +533,7 @@ namespace Deskdrop.WinUI.Views
             var input = new TextBox { Text = item.display_name, SelectionStart = 0, SelectionLength = item.display_name.Length };
             var dialog = new ContentDialog
             {
-                Title = "Rename",
+                Title = Services.AppDialog.Header("\uE8AC", "Rename", $"On {peer.DisplayName}"),
                 Content = input,
                 PrimaryButtonText = "Rename",
                 CloseButtonText = "Cancel",
@@ -565,7 +565,7 @@ namespace Deskdrop.WinUI.Views
 
             var dialog = new ContentDialog
             {
-                Title = "Delete this item?",
+                Title = Services.AppDialog.Header("\uE74D", "Delete this item?", "This can't be undone", danger: true),
                 Content = $"\"{item.display_name}\" will be permanently deleted from {peer.DisplayName}. This can't be undone.",
                 PrimaryButtonText = "Delete",
                 CloseButtonText = "Cancel",

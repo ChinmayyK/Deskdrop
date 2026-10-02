@@ -253,6 +253,7 @@ public partial class App : Application
                 SetForegroundWindow(hwnd);
 
                 TraceLog.Write("MainWindow created, activated, and displayed successfully");
+                ShowOnboarding(force: false);
             }
             catch (Exception ex)
             {
@@ -290,6 +291,32 @@ public partial class App : Application
             TraceLog.Flush();
         }
     }
+    private const string OnboardingDoneKey = "HasCompletedOnboarding";
+    private static OnboardingWindow? _onboarding;
+
+    // First run: the welcome guide over the dashboard, so a new user sees how
+    // to pair instead of an empty page. Once done (finished, skipped, or a
+    // device paired) it stays away unless Settings asks for it again. People
+    // who paired before this guide existed never see it: it closes itself as
+    // soon as the dashboard reports a paired device.
+    public static void ShowOnboarding(bool force)
+    {
+        try
+        {
+            if (!force && Deskdrop.WinUI.Services.LocalSettingsStore.GetBool(OnboardingDoneKey, false)) return;
+            if (_onboarding != null) { _onboarding.Activate(); return; }
+            var window = new OnboardingWindow(closeWhenPaired: !force);
+            window.Closed += (_, _) =>
+            {
+                Deskdrop.WinUI.Services.LocalSettingsStore.SetBool(OnboardingDoneKey, true);
+                _onboarding = null;
+            };
+            _onboarding = window;
+            window.Activate();
+        }
+        catch (Exception ex) { App.HandleError(ex); }
+    }
+
     private void OnAppActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments e)
     {
         ProcessActivationArgs(e);

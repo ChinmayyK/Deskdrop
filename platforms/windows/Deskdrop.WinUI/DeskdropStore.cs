@@ -2266,7 +2266,9 @@ namespace Deskdrop.WinUI {
         // cross-platform surfaces; on Windows we want Segoe Fluent so the
         // icon set stays internally consistent. Built from a code point so
         // this file stays pure ASCII.
-        public string Glyph => is_text ? char.ConvertFromUtf32(0xE8C8) : char.ConvertFromUtf32(0xE8A5);
+        public string Glyph => is_text
+            ? char.ConvertFromUtf32(0xE8C8)
+            : char.ConvertFromUtf32(Deskdrop.WinUI.Services.ClipboardManager.IsCachedImage(path) ? 0xEB9F : 0xE8A5);
         public bool HasPath => !string.IsNullOrWhiteSpace(path);
         public string PinTooltip => IsPinned ? "Unpin from the top" : "Pin to the top";
 

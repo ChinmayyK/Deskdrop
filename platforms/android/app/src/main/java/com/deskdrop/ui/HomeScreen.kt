@@ -110,6 +110,7 @@ fun HomeTab(
     onActionCancelTransfer: (String) -> Unit,
     onForgetPeer: (PeerSnapshot) -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit,
+    onTogglePinActivity: (ActivityEntry) -> Unit = {},
     onResendActivity: (ActivityEntry) -> Unit,
     onReplayOnboarding: () -> Unit,
     onTabSelected: (AppTab) -> Unit,
@@ -124,17 +125,8 @@ fun HomeTab(
     // accepting theirs settles both.
     val pairingRequest = peers.firstOrNull { it.pairingRequested && !it.trusted }
     val outgoingRequest = peers.firstOrNull { it.outgoingPairingWaiting && !it.trusted }
-    var sendFolder by remember { mutableStateOf(false) }
-    var sendTargetChoices by remember { mutableStateOf<List<PeerSnapshot>?>(null) }
+    var showSendSheet by remember { mutableStateOf(false) }
 
-    // Files & folders: with several devices connected, ask which one gets
-    // them instead of sending to all of them.
-    val startSend = { folder: Boolean ->
-        sendFolder = folder
-        if (connected.size > 1) sendTargetChoices = connected
-        else if (folder) onActionSendFolder(connected.firstOrNull()?.id)
-        else onActionSendFiles(connected.firstOrNull()?.id)
-    }
 
     Column(
         modifier = Modifier
@@ -173,23 +165,10 @@ fun HomeTab(
             val enabled = connected.isNotEmpty()
             SectionHeader(c, "Send", if (enabled) null else "Connect a device first")
             Panel(c) {
-                // Android's pickers choose files or one folder, never both, so
-                // the row opens the file picker and its folder button the
-                // folder picker: no extra question in between.
                 ActionRow(
                     c, Icons.Outlined.UploadFile, "Files & folders", "Send files or entire folders",
                     enabled = enabled,
-                    onClick = { startSend(false) },
-                    trailing = {
-                        IconButton(onClick = { startSend(true) }, enabled = enabled) {
-                            Icon(
-                                Icons.Outlined.DriveFolderUpload,
-                                contentDescription = "Send a folder",
-                                tint = c.accent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
+                    onClick = { showSendSheet = true }
                 )
                 Hairline(c)
                 val clip = quickContextText?.trim()?.replace('\n', ' ')?.takeIf { it.isNotBlank() }
@@ -257,7 +236,8 @@ fun HomeTab(
                             entry = entry,
                             onApply = { onApplyClipboard(entry) },
                             onResend = { onResendActivity(entry) },
-                            onDelete = { onDeleteActivity(entry) }
+                            onDelete = { onDeleteActivity(entry) },
+                            onTogglePin = { onTogglePinActivity(entry) }
                         )
                     }
                 }
@@ -268,14 +248,12 @@ fun HomeTab(
         Spacer(Modifier.height(140.dp))
     }
 
-    sendTargetChoices?.let { choices ->
-        SendTargetDialog(
-            peers = choices,
-            onPick = { target ->
-                sendTargetChoices = null
-                if (sendFolder) onActionSendFolder(target) else onActionSendFiles(target)
-            },
-            onDismiss = { sendTargetChoices = null }
+    if (showSendSheet) {
+        SendSheet(
+            c = c,
+            connected = connected,
+            onSend = { folder, target -> if (folder) onActionSendFolder(target) else onActionSendFiles(target) },
+            onDismiss = { showSendSheet = false }
         )
     }
 }
@@ -485,8 +463,7 @@ private fun ActionRow(
     detail: String,
     detailIsContent: Boolean = false,
     enabled: Boolean,
-    onClick: () -> Unit,
-    trailing: (@Composable () -> Unit)? = null
+    onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     Row(
@@ -518,8 +495,7 @@ private fun ActionRow(
             )
         }
         Spacer(Modifier.width(8.dp))
-        if (trailing != null) trailing()
-        else Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
+        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -673,20 +649,25 @@ internal fun DeviceRow(
             Icon(Icons.Rounded.MoreHoriz, contentDescription = "Options for ${peer.name}", tint = c.textMuted, modifier = Modifier.size(20.dp))
         }
 
-        DropdownMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false },
-            modifier = Modifier.background(c.surface)
-        ) {
-            if (peer.pairingRequested && !peer.trusted) {
-                MenuItem(c, "Accept pairing", Icons.Outlined.Check, tint = c.live) { menuOpen = false; onRespond(true) }
-                MenuItem(c, "Decline", Icons.Outlined.Close) { menuOpen = false; onRespond(false) }
-            } else if (peer.isConnected) {
-                MenuItem(c, "Send files", Icons.Outlined.UploadFile) { menuOpen = false; onSendFiles() }
-                MenuItem(c, "Send folder", Icons.Outlined.DriveFolderUpload) { menuOpen = false; onSendFolder() }
-                MenuItem(c, "Test speed", Icons.Outlined.Speed) { menuOpen = false; onSpeedTest() }
-            }
-            MenuItem(c, "Forget device", Icons.Outlined.DeleteOutline, tint = c.danger) { menuOpen = false; onForget() }
+        if (menuOpen) {
+            ActionSheet(
+                c,
+                icon = osIcon(peer.platform, peer.name),
+                title = peer.name,
+                subtitle = status,
+                actions = buildList {
+                    if (peer.pairingRequested && !peer.trusted) {
+                        add(SheetAction(Icons.Outlined.Check, "Accept pairing") { onRespond(true) })
+                        add(SheetAction(Icons.Outlined.Close, "Decline") { onRespond(false) })
+                    } else if (peer.isConnected) {
+                        add(SheetAction(Icons.Outlined.UploadFile, "Send files", "Photos, videos, documents, anything", onClick = onSendFiles))
+                        add(SheetAction(Icons.Outlined.DriveFolderUpload, "Send a folder", "Everything in it, subfolders included", onClick = onSendFolder))
+                        add(SheetAction(Icons.Outlined.Speed, "Test speed", "How fast this link is right now", onClick = onSpeedTest))
+                    }
+                    add(SheetAction(Icons.Outlined.DeleteOutline, "Forget device", danger = true, onClick = onForget))
+                },
+                onDismiss = { menuOpen = false }
+            )
         }
     }
 }
@@ -705,33 +686,6 @@ private fun EmptyRecent(c: DdColors) = EmptyBox(c, Icons.Outlined.History, "Copy
 
 // ---------------------------------------------------------------- dialogs
 
-
-/** Asks which connected device should receive files. `null` target means all devices. */
-@Composable
-private fun SendTargetDialog(
-    peers: List<PeerSnapshot>,
-    onPick: (String?) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Send to which device?") },
-        text = {
-            Column {
-                peers.forEach { peer ->
-                    TextButton(onClick = { onPick(peer.id) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(peer.name, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-                TextButton(onClick = { onPick(null) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("All connected devices", modifier = Modifier.fillMaxWidth())
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
 
 // ---------------------------------------------------------------- helpers
 

@@ -44,13 +44,15 @@ fun ActivityTab(
     onApply: (ActivityEntry) -> Unit,
     onResend: (ActivityEntry) -> Unit,
     onDelete: (ActivityEntry) -> Unit,
+    onTogglePin: (ActivityEntry) -> Unit = {},
     onClearAll: () -> Unit = {}
 ) {
     val c = rememberDdColors(isDark)
     var filter by rememberSaveable { mutableStateOf(ActivityFilter.All) }
     val groups = remember(feed, filter) {
+        // Pinned entries get their own group on top; the rest by day.
         feed.filter { e -> filter.kinds?.contains(e.kind) ?: true }
-            .groupBy { dayLabel(it.timestamp) }
+            .groupBy { if (it.isPinned) "Pinned" else dayLabel(it.timestamp) }
             .toList()
     }
 
@@ -119,6 +121,7 @@ fun ActivityTab(
                                     onApply = { onApply(entry) },
                                     onResend = { onResend(entry) },
                                     onDelete = { onDelete(entry) },
+                                    onTogglePin = { onTogglePin(entry) },
                                     showClockTime = true
                                 )
                             }

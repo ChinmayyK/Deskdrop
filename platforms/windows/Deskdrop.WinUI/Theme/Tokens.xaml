@@ -94,6 +94,11 @@
             <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F6FA" />
             <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#FFFFFF" />
+            <!-- Every ContentDialog: the app's raised surface and a quiet footer. -->
+            <SolidColorBrush x:Key="ContentDialogBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#E4E5EA" />
+            <SolidColorBrush x:Key="ContentDialogSeparatorBorderBrush" Color="#00000000" />
             <SolidColorBrush x:Key="AppSurfaceSubtleBrush" Color="#F1F2F5" />
             <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#0A000000" />
             <SolidColorBrush x:Key="AppSurfacePressedBrush" Color="#14000000" />
@@ -198,6 +203,10 @@
             <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0E0E11" />
             <SolidColorBrush x:Key="AppSurfaceBrush" Color="#16161A" />
             <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#1E1E23" />
+            <SolidColorBrush x:Key="ContentDialogBackground" Color="#131316" />
+            <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#131316" />
+            <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#26262C" />
+            <SolidColorBrush x:Key="ContentDialogSeparatorBorderBrush" Color="#00000000" />
             <SolidColorBrush x:Key="AppSurfaceSubtleBrush" Color="#1C1C21" />
             <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#0FFFFFFF" />
             <SolidColorBrush x:Key="AppSurfacePressedBrush" Color="#1AFFFFFF" />
