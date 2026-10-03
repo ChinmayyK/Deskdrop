@@ -416,6 +416,31 @@ impl Engine {
         });
     }
 
+    /// Ends a call its phone stopped reporting (see `CALL_LEASE`), so every
+    /// desktop drops it even if the phone's "idle" was lost.
+    pub(super) fn spawn_call_lease_watch(&self) {
+        let shared = self.shared.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                let stale = shared
+                    .device_status
+                    .active_call
+                    .lock()
+                    .await
+                    .as_ref()
+                    .filter(|c| c.expired())
+                    .map(|c| c.device_id);
+                if let Some(device) = stale {
+                    tracing::info!("call from {device} not heard of for a while; ending it");
+                    super::telemetry::clear_call_from(&shared, device).await;
+                }
+            }
+        });
+    }
+
     pub(super) fn spawn_sensitive_history_pruner(&self) {
         let history = self.shared.history.clone();
         let settings = self.shared.settings.clone();
