@@ -155,6 +155,8 @@ class DeskdropService : Service() {
         const val ACTION_TRUST_PEER_FROM_QR = "com.deskdrop.TRUST_PEER_FROM_QR"
         const val ACTION_REJECT_PEER = "com.deskdrop.REJECT_PEER"
         const val ACTION_HANDLE_CALL_STATE = "com.deskdrop.HANDLE_CALL_STATE"
+        /** How often a live call's state is repeated to peers; matches CALL_REFRESH in the core. */
+        private const val CALL_REFRESH_MS = 10_000L
         const val ACTION_FORGET_PEER        = "com.deskdrop.FORGET_PEER"
         const val ACTION_SEND_PAIRING_REQUEST = "com.deskdrop.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "com.deskdrop.RESPOND_TO_PAIRING"
@@ -948,6 +950,7 @@ class DeskdropService : Service() {
 
     override fun onDestroy() {
         unregisterCallStateCallback()
+        stopCallRefresh()
         serviceScope.cancel()
         stopNsdDiscovery()
 
@@ -1718,6 +1721,8 @@ class DeskdropService : Service() {
                 connectedPeerIds[deviceId] = name
                 persistStatus()
                 updateForegroundNotification()
+                // The peer may still show a call that ended while it was away.
+                resyncIdleCallState(delayMs = 1_500)
                 sendBroadcast(Intent("com.deskdrop.CLOSE_PAIRING_UI").apply {
                     setPackage(packageName)
                     putExtra(PairingActivity.EXTRA_DEVICE_ID, deviceId)
@@ -1784,6 +1789,8 @@ class DeskdropService : Service() {
                 val action = DeskdropJni.eventCallAction(ev) ?: return
                 Log.i(TAG, "Remote call action received: $action")
                 handleRemoteCallAction(action)
+                // If the call was already over, nothing else tells the peer so.
+                if (action == "accept" || action == "decline") resyncIdleCallState(delayMs = 1_500)
             }
 
             DeskdropJni.CR_EVENT_BATTERY_STATE_CHANGED -> {
@@ -3063,11 +3070,60 @@ class DeskdropService : Service() {
         if (h != 0L) {
             DeskdropJni.pushCallState(h, stateStr, known, contact)
         }
+        // Keep peers' copy of a live call alive; they drop one not heard of
+        // for a while (CALL_LEASE in the core), so a lost "idle" cannot stick.
+        if (stateStr == "idle") stopCallRefresh() else startCallRefresh()
         // Show/dismiss the Android-side call notification
         when (stateStr) {
             "ringing" -> showIncomingCallNotification(known, contact)
             "idle", "offhook" -> notificationManager.cancel(NOTIF_ID_CALL)
         }
+    }
+
+    /**
+     * Sends "idle" when the phone has no call, bypassing the once-per-change
+     * check. A peer keeps the last state it heard, so an "idle" it missed
+     * (a reconnect, this service restarting mid-call) left a call showing on
+     * it forever. Runs on the main thread, like the call callback.
+     */
+    private val callRefreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val callRefresh = object : Runnable {
+        override fun run() {
+            val h = engineHandle
+            val tm = getSystemService(android.telephony.TelephonyManager::class.java)
+            @Suppress("DEPRECATION")
+            val state = runCatching { tm?.callState }.getOrNull()
+            if (state == android.telephony.TelephonyManager.CALL_STATE_IDLE || lastCallState == "idle" || lastCallState == "outgoing") {
+                // The call ended without a callback saying so.
+                resyncIdleCallState(delayMs = 0)
+                return
+            }
+            if (h != 0L) DeskdropJni.pushCallState(h, lastCallState, lastCallNumber, resolveContactName(lastCallNumber))
+            callRefreshHandler.postDelayed(this, CALL_REFRESH_MS)
+        }
+    }
+
+    private fun startCallRefresh() {
+        callRefreshHandler.removeCallbacks(callRefresh)
+        callRefreshHandler.postDelayed(callRefresh, CALL_REFRESH_MS)
+    }
+
+    private fun stopCallRefresh() = callRefreshHandler.removeCallbacks(callRefresh)
+
+    private fun resyncIdleCallState(delayMs: Long) {
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            if (!prefs().getBoolean("call_continuity_enabled", false) || !hasCallPermissions()) return@postDelayed
+            val tm = getSystemService(android.telephony.TelephonyManager::class.java) ?: return@postDelayed
+            @Suppress("DEPRECATION")
+            val state = runCatching { tm.callState }.getOrNull() ?: return@postDelayed
+            if (state != android.telephony.TelephonyManager.CALL_STATE_IDLE) return@postDelayed
+            stopCallRefresh()
+            lastCallState = "idle"
+            lastCallNumber = ""
+            notificationManager.cancel(NOTIF_ID_CALL)
+            val h = engineHandle
+            if (h != 0L) DeskdropJni.pushCallState(h, "idle", "", "")
+        }, delayMs)
     }
 
     private fun handleCallStateIntent(intent: Intent?) {

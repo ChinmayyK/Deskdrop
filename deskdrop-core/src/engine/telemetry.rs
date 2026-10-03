@@ -32,6 +32,12 @@ impl crate::engine::Engine {
             action,
             target_device
         );
+        // Declining here ends the call for this device whatever the phone
+        // reports next: if the call already ended there, the phone has
+        // nothing new to send and the banner would never go away.
+        if action == "decline" {
+            clear_call_from(&self.shared, target_device).await;
+        }
         let msg = AppMessage::CallAction {
             action,
             origin_device: self.shared.config.device_id,
@@ -62,7 +68,8 @@ impl crate::engine::Engine {
     /// Get the current active phone call state, if any.
     /// Returns None when no call is in progress.
     pub async fn active_call(&self) -> Option<ActiveCallState> {
-        self.shared.device_status.active_call.lock().await.clone()
+        let call = self.shared.device_status.active_call.lock().await.clone();
+        call.filter(|c| !c.expired())
     }
 
     /// Push this device's battery status to all connected trusted peers.
@@ -247,5 +254,30 @@ impl crate::engine::Engine {
             .iter()
             .map(|r| r.value().clone())
             .collect()
+    }
+}
+
+/// Forgets the call `device` reported, if it is the active one, and tells the
+/// UI the call is over. Used when this device declines it and when `device`
+/// disconnects, so a lost "idle" from the phone cannot leave a call showing.
+pub(crate) async fn clear_call_from(shared: &EngineShared, device: Uuid) {
+    let ended = {
+        let mut call = shared.device_status.active_call.lock().await;
+        match call.as_ref() {
+            Some(c) if c.device_id == device => call.take(),
+            _ => None,
+        }
+    };
+    if let Some(c) = ended {
+        let _ = shared
+            .event_tx
+            .send(EngineEvent::CallStateChanged {
+                from_device: c.device_id,
+                from_name: c.device_name,
+                state: "idle".into(),
+                number: c.number,
+                contact_name: c.contact_name,
+            })
+            .await;
     }
 }

@@ -436,6 +436,22 @@ pub struct ActiveCallState {
     pub state: String,
     pub number: String,
     pub contact_name: String,
+    /// When the phone last reported this call. A phone repeats a live call's
+    /// state every [`CALL_REFRESH`]; a call not heard of for [`CALL_LEASE`]
+    /// is over, whether or not its "idle" ever arrived.
+    #[serde(skip)]
+    pub(crate) heard_at: std::time::Instant,
+}
+
+/// How often a phone repeats the state of a call that is still going.
+pub const CALL_REFRESH: Duration = Duration::from_secs(10);
+/// How long a call stays shown without being heard of again.
+pub const CALL_LEASE: Duration = Duration::from_secs(35);
+
+impl ActiveCallState {
+    pub(crate) fn expired(&self) -> bool {
+        self.heard_at.elapsed() > CALL_LEASE
+    }
 }
 
 /// Battery level from a connected peer device (F20).

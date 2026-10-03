@@ -90,6 +90,7 @@ impl Engine {
 
         // Drain pending RPC waiters immediately on explicit disconnect
         drain_remote_waiters(&self.shared, device_id).await;
+        super::telemetry::clear_call_from(&self.shared, device_id).await;
 
         let session = self.shared.peer_manager.shutdown_peer_session(device_id)?;
         if let Some(session) = session {
