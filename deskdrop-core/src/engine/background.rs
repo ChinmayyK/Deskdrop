@@ -45,9 +45,11 @@ impl Engine {
             // ── AirDrop-style startup burst ──────────────────────────────────
             // Send 3 rapid beacons in the first 300ms so peers discover us
             // almost instantly, then fall back to the regular interval.
-            for _ in 0..3 {
-                let _ = socket.send_to(&payload, broadcast_addr).await;
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            if network_manager::has_local_network() {
+                for _ in 0..3 {
+                    let _ = socket.send_to(&payload, broadcast_addr).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
             }
 
             // Beacon fast for a short window after start, or after the last
@@ -79,6 +81,11 @@ impl Engine {
                     BEACON_STEADY_INTERVAL
                 };
                 tokio::time::sleep(wait).await;
+                // On mobile data alone no device can hear us; broadcasting
+                // would only go out over cellular and wake its radio.
+                if !network_manager::has_local_network() {
+                    continue;
+                }
                 // Send to limited broadcast address.
                 if let Err(err) = socket.send_to(&payload, broadcast_addr).await {
                     tracing::trace!(error = %err, "failed to send UDP beacon");
@@ -87,7 +94,8 @@ impl Engine {
                 // delivery on networks that filter limited broadcast.
                 if let Ok(ifaces) = if_addrs::get_if_addrs() {
                     for iface in ifaces {
-                        if iface.is_loopback() {
+                        if iface.is_loopback() || network_manager::looks_like_cellular(&iface.name)
+                        {
                             continue;
                         }
                         if let if_addrs::IfAddr::V4(v4) = &iface.addr {
@@ -518,6 +526,12 @@ impl Engine {
                 std::collections::HashMap::new();
             loop {
                 interval.tick().await;
+                // Known peers live on a local network. With mobile data alone
+                // a dial goes out over cellular to an address it cannot reach;
+                // the network monitor reconnects at once when Wi-Fi returns.
+                if !network_manager::has_local_network() {
+                    continue;
+                }
                 let peers = shared.peer_manager.list();
                 let sleeping = shared
                     .local_sleeping
