@@ -519,6 +519,8 @@ final class DeskdropStore: ObservableObject {
         } catch {
             ipcFailureCount += 1
             isRunning       = false
+            // Without the daemon a call can be neither followed nor acted on.
+            if activeCall != nil { activeCall = nil }
             statusLine      = ipcFailureCount >= 3
                 ? "Daemon not running"
                 : "Reconnecting to daemon…"
