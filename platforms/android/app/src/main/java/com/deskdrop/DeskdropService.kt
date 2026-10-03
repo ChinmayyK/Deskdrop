@@ -4081,11 +4081,7 @@ class DeskdropService : Service() {
         // Rebuilt on every peer change and service command; decode once.
         val largeIcon = cachedLargeIcon ?: android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_round).also { cachedLargeIcon = it }
 
-        val description = if (connectedPeerIds.isEmpty()) {
-            "Scanning LAN for devices..."
-        } else {
-            "Connected to ${connectedPeerIds.size} device(s)"
-        }
+        val description = foregroundStatusText()
 
         val pushClipboardIntent = Intent(this, DeskdropService::class.java).apply {
             action = ACTION_PUSH_CLIPBOARD
@@ -4097,15 +4093,15 @@ class DeskdropService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHAN_SERVICE)
-            .setContentTitle(if (syncEnabled) "Deskdrop is Active" else "Deskdrop is Paused")
+            // Calm and still: no running timer, no "active" wording, so a
+            // service that mostly waits does not look like busy work.
+            .setContentTitle("Deskdrop")
             .setContentText(description)
-            .setSubText("Background Sync")
-            .setShowWhen(syncEnabled)
-            .setWhen(if (syncEnabled) serviceStartTime else 0L)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(description))
+            .setSubText(if (syncEnabled) "Uses almost no battery" else null)
+            .setShowWhen(false)
             .setSmallIcon(R.drawable.ic_cr_activity)
             .setLargeIcon(largeIcon)
-            .setColor(android.graphics.Color.parseColor("#F59E0B")) // Amber accent
+            .setColor(android.graphics.Color.parseColor("#3D7BFF")) // Brand blue
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
@@ -4131,6 +4127,7 @@ class DeskdropService : Service() {
     }
 
     private fun startForegroundCompat(notification: Notification) {
+        postedNotificationState = notificationState()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIF_ID_SERVICE, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } else {
@@ -4138,17 +4135,31 @@ class DeskdropService : Service() {
         }
     }
 
+    /** What the service notification last showed; see [updateForegroundNotification]. */
+    private var postedNotificationState: String? = null
+
+    /**
+     * Re-posts the service notification only when what it shows changed.
+     * Each post briefly wakes the phone, and callers fire on every peer and
+     * service event, most of which change nothing visible.
+     */
     private fun updateForegroundNotification() {
+        val state = notificationState()
+        if (state == postedNotificationState) return
+        postedNotificationState = state
         getSystemService(NotificationManager::class.java)
             .notify(NOTIF_ID_SERVICE, buildForegroundNotification())
     }
 
+    private fun notificationState(): String =
+        "${isSyncEnabled()}|${foregroundStatusText()}"
+
     private fun foregroundStatusText(): String {
-        if (!isSyncEnabled()) return "Sync paused · tap to manage"
+        if (!isSyncEnabled()) return "Paused · tap to manage"
         return when (connectedPeerIds.size) {
-            0    -> "Active · no devices nearby"
-            1    -> "Active · ${connectedPeerIds.values.first()}"
-            else -> "Active · ${connectedPeerIds.size} devices connected"
+            0    -> "Ready · waiting for your devices"
+            1    -> "Connected to ${connectedPeerIds.values.first()}"
+            else -> "Connected to ${connectedPeerIds.size} devices"
         }
     }
 
