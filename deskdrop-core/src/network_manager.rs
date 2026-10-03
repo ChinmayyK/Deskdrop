@@ -286,6 +286,28 @@ fn looks_like_usb_tether(name: &str) -> bool {
         || name.contains("bridge")
 }
 
+/// Whether this device is on a network other devices can share: Wi-Fi,
+/// Ethernet, a hotspot it hosts or joins, USB tethering. Mobile data alone is
+/// not one, and sending discovery or reconnects over it only wakes the
+/// cellular radio (battery, and data on metered plans).
+pub fn has_local_network() -> bool {
+    list_interfaces()
+        .map(|ifaces| any_local_network(&ifaces))
+        .unwrap_or(true)
+}
+
+fn any_local_network(ifaces: &[NetworkInterfaceInfo]) -> bool {
+    ifaces.iter().any(|iface| {
+        // Every interface, even one that is down, can carry an IPv6
+        // link-local address; it says nothing about a usable network.
+        let routable = match iface.ip {
+            IpAddr::V4(_) => true,
+            IpAddr::V6(v6) => v6.is_unique_local(),
+        };
+        routable && !looks_like_cellular(&iface.name)
+    })
+}
+
 /// Mobile-data interfaces as Android names them (Qualcomm `rmnet*`,
 /// MediaTek `ccmni*`, 464XLAT `v4-rmnet*`, generic `pdp*`).
 pub fn looks_like_cellular(name: &str) -> bool {
@@ -479,6 +501,33 @@ fn linux_netlink_change_hints(tx: mpsc::Sender<()>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn iface(name: &str, ip: &str) -> NetworkInterfaceInfo {
+        NetworkInterfaceInfo {
+            name: name.into(),
+            ip: ip.parse().unwrap(),
+            is_primary: false,
+        }
+    }
+
+    #[test]
+    fn mobile_data_alone_is_not_a_local_network() {
+        assert!(!any_local_network(&[]));
+        assert!(!any_local_network(&[
+            iface("rmnet_data0", "10.45.2.7"),
+            iface("v4-rmnet_data0", "192.0.0.4"),
+            iface("wlan0", "fe80::1"),
+        ]));
+        assert!(any_local_network(&[
+            iface("rmnet_data0", "10.45.2.7"),
+            iface("wlan0", "192.168.29.21"),
+        ]));
+        // A hotspot this phone hosts, while it is itself on mobile data.
+        assert!(any_local_network(&[
+            iface("rmnet_data0", "10.45.2.7"),
+            iface("ap0", "192.168.43.1"),
+        ]));
+    }
 
     #[test]
     fn candidate_ipv4_filter_rejects_loopback() {
