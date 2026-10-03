@@ -53,3 +53,26 @@ async fn a_disconnecting_phone_takes_its_call_with_it() {
     desk.engine.disconnect_peer(phone.id).await.unwrap();
     call_shown(&desk, false).await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_call_the_phone_stops_reporting_ends_by_itself() {
+    let tmp = TempDir::new().unwrap();
+    let (phone, desk) = start_pair(&tmp, true, true).await;
+    connect(&phone, &desk).await;
+
+    phone
+        .engine
+        .push_call_state("ringing".into(), "+10000000000".into(), "Mum".into())
+        .await;
+    call_shown(&desk, true).await;
+
+    // Still connected, but the phone never says the call ended.
+    let lease = deskdrop_core::engine::CALL_LEASE;
+    timeout(lease + Duration::from_secs(10), async {
+        while desk.engine.active_call().await.is_some() {
+            sleep(Duration::from_millis(250)).await;
+        }
+    })
+    .await
+    .expect("call outlived its lease");
+}

@@ -24,11 +24,23 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             {
                 return Flow::Continue;
             }
-            // Persist in shared state for IPC status polling.
-            {
+            // Persist in shared state for IPC status polling. A repeat of
+            // the same state only renews the call's lease (see CALL_LEASE).
+            let changed = {
                 let mut call = shared.device_status.active_call.lock().await;
+                let repeat = call.as_ref().is_some_and(|c| {
+                    c.device_id == origin_device
+                        && c.state == state
+                        && c.number == number
+                        && c.contact_name == contact_name
+                });
                 if state == "idle" {
-                    *call = None;
+                    call.take().is_some()
+                } else if repeat {
+                    if let Some(c) = call.as_mut() {
+                        c.heard_at = std::time::Instant::now();
+                    }
+                    false
                 } else {
                     *call = Some(ActiveCallState {
                         device_id: origin_device,
@@ -36,8 +48,13 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                         state: state.clone(),
                         number: number.clone(),
                         contact_name: contact_name.clone(),
+                        heard_at: std::time::Instant::now(),
                     });
+                    true
                 }
+            };
+            if !changed {
+                return Flow::Continue;
             }
             let _ = shared
                 .event_tx

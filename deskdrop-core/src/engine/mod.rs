@@ -280,6 +280,7 @@ impl Engine {
 
         engine.spawn_network_monitor().await?;
         engine.spawn_peer_pruner();
+        engine.spawn_call_lease_watch();
         engine.spawn_sensitive_history_pruner();
         engine.spawn_auto_reconnector();
         engine.spawn_health_monitor();

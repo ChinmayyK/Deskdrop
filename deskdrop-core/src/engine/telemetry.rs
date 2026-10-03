@@ -68,7 +68,8 @@ impl crate::engine::Engine {
     /// Get the current active phone call state, if any.
     /// Returns None when no call is in progress.
     pub async fn active_call(&self) -> Option<ActiveCallState> {
-        self.shared.device_status.active_call.lock().await.clone()
+        let call = self.shared.device_status.active_call.lock().await.clone();
+        call.filter(|c| !c.expired())
     }
 
     /// Push this device's battery status to all connected trusted peers.
