@@ -66,7 +66,7 @@ namespace Deskdrop.WinUI.Services
                                 {
                                     _clipboardManager.PushFile(e.FullPath);
                                     
-                                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() => {
+                                    App.MainDispatcherQueue?.TryEnqueue(() => {
                                         NotificationHelper.ShowToast("Screenshot Synced", "Sent screenshot to your device.");
                                     });
                                 }
