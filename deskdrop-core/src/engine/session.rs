@@ -758,6 +758,9 @@ pub(super) fn register_session(
                     .await;
 
                 shared.dedup.lock().await.remove_peer(peer_id);
+                // A call this peer was relaying ends with it: its "idle" can
+                // no longer arrive.
+                super::telemetry::clear_call_from(&shared, peer_id).await;
 
                 {
                     // A reconnect can register a new session and resume the
