@@ -1576,7 +1576,7 @@ namespace Deskdrop.WinUI
 
                     // First poll is done - the UI can stop showing skeletons
                     // and start trusting "no devices" to mean no devices.
-                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() => HasLoadedOnce = true);
+                    App.MainDispatcherQueue?.TryEnqueue(() => HasLoadedOnce = true);
                 }
 
                 // A request that arrived between the loop's last check and
@@ -1591,7 +1591,7 @@ namespace Deskdrop.WinUI
             {
                 bool isRunning = DaemonClient.IsDaemonRunning();
                 
-                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                App.MainDispatcherQueue?.TryEnqueue(() =>
                 {
                     try { IsDaemonRunning = isRunning; } catch (Exception ex) { App.HandleError(ex); }
                 });
@@ -1622,7 +1622,7 @@ namespace Deskdrop.WinUI
                         if (settingsDataElem.TryGetProperty("require_tofu_confirmation", out var tofuElem))
                         {
                             bool tofu = tofuElem.GetBoolean();
-                            App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                            App.MainDispatcherQueue?.TryEnqueue(() =>
                             {
                                 // Set the backing field directly (not the public setter) so
                                 // loading the daemon's current value doesn't turn around and
@@ -1639,7 +1639,7 @@ namespace Deskdrop.WinUI
                         if (settingsDataElem.TryGetProperty("sync_enabled", out var syncElem))
                         {
                             bool sync = syncElem.GetBoolean();
-                            App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                            App.MainDispatcherQueue?.TryEnqueue(() =>
                             {
                                 if (_syncEnabled != sync)
                                 {
@@ -1655,7 +1655,7 @@ namespace Deskdrop.WinUI
             catch (Exception ex)
             {
                 // Handle failure gracefully
-                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                App.MainDispatcherQueue?.TryEnqueue(() =>
                 {
                     StatusLine = $"Error connecting to daemon: {ex.Message}";
                 });
@@ -1667,7 +1667,7 @@ namespace Deskdrop.WinUI
             var entries = DeserializeList(dataElem, "entries", DeskdropJsonContext.Default.ListActivityEntry);
             if (entries != null)
             {
-                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                App.MainDispatcherQueue?.TryEnqueue(() =>
                 {
                     try
                     {
@@ -1724,7 +1724,7 @@ namespace Deskdrop.WinUI
             var clips = DeserializeList(dataElem, "clipboards", DeskdropJsonContext.Default.ListPendingClipboard);
             if (clips != null)
             {
-                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                App.MainDispatcherQueue?.TryEnqueue(() =>
                 {
                     try
                     {
@@ -1786,7 +1786,7 @@ namespace Deskdrop.WinUI
                 }
             }
 
-            App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+            App.MainDispatcherQueue?.TryEnqueue(() =>
             {
                 try
                 {

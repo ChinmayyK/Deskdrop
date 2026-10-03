@@ -169,7 +169,7 @@ namespace Deskdrop.WinUI.Views
                         resp = JsonSerializer.Deserialize(dataEl.GetRawText(), DeskdropJsonContext.Default.RemoteFileListResponse);
                     }
                     
-                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                    App.MainDispatcherQueue?.TryEnqueue(() =>
                     {
                         if (myGeneration != _loadGeneration) return;
                         RemoteFiles.Clear();
@@ -664,7 +664,7 @@ namespace Deskdrop.WinUI.Views
                 return;
             }
 
-            App.MainWindow?.DispatcherQueue?.TryEnqueue(async () =>
+            App.MainDispatcherQueue?.TryEnqueue(async () =>
             {
                 try
                 {
